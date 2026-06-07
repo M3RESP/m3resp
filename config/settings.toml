@@ -1,0 +1,20 @@
+
+# Default path settings for input (data) and output
+[paths.data]
+base = "./data"
+annotations = "${paths.data.base}/annotations"
+interim = "${paths.data.base}/interim"
+processed = "${paths.data.base}/processed"
+source = "${paths.data.base}/source"
+
+[paths.output]
+base = "./output"
+figures = "${paths.output.base}/figures"
+tables = "${paths.output.base}/tables"
+reports = "${paths.output.base}/reports"
+
+[paths]
+run_identifier = "${paths.output.base}/.run_identifier"
+
+[run_identifier]
+format = "run{:04d}"

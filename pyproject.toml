@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = ""
+description = ""
+dynamic = ["version"]
+requires-python = ">= 3.11"
+dependencies = ["omegaconf>=2.3.0"]
+authors = []
+
+[tool.hatch.version]
+path = "src/__version__.py"
+
+[tool.hatch.build]
+sources = ["src"]
+
+[tool.hatch.build.targets.wheel]
+include = ["src/**"]

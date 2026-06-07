@@ -1,0 +1,5 @@
+# Ignore local config files
+*.local.toml
+
+# Do not ignore template files
+!*.template

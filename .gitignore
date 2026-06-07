@@ -1,0 +1,7 @@
+data/*
+output/*
+.venv/*
+.conda/*
+*.lock
+**/__pycache__
+.*
