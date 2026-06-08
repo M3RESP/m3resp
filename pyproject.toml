@@ -3,18 +3,70 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = ""
-description = ""
+name = "m3resp"
+description = "Multimodal respiratory processing for EIT, EMG, and ventilator signals"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+  { name = "M3Resp contributors" },
+]
+keywords = ["respiration", "EIT", "EMG", "multimodal", "biomedical"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+dependencies = [
+  "numpy",
+  "pandas",
+]
 dynamic = ["version"]
-requires-python = ">= 3.11"
-dependencies = ["omegaconf>=2.3.0"]
-authors = []
+
+[project.optional-dependencies]
+eit = [
+  "eitprocessing",
+]
+emg = [
+  "resurfemg",
+]
+all = [
+  "eitprocessing",
+  "resurfemg",
+]
+dev = [
+  "pytest",
+  "pytest-cov",
+  "ruff",
+  "mypy",
+]
+
+[project.urls]
+Homepage = "https://github.com/M3Resp-org/m3resp"
+Repository = "https://github.com/M3Resp-org/m3resp"
+Issues = "https://github.com/M3Resp-org/m3resp/issues"
 
 [tool.hatch.version]
-path = "src/__version__.py"
+path = "src/m3resp/__init__.py"
 
 [tool.hatch.build]
 sources = ["src"]
 
 [tool.hatch.build.targets.wheel]
-include = ["src/**"]
+packages = ["src/m3resp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+packages = ["m3resp"]

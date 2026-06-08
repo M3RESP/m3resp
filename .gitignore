@@ -5,5 +5,8 @@ output/*
 *.lock
 **/__pycache__
 .*
+# !.github/
+# !.github/**
 
+# Ignore planning files
 plan.md
