@@ -1,0 +1,27 @@
+# M3Resp examples – shared configuration
+# All file paths are relative to the repository root.
+# Toggle modules on/off to activate or skip processing steps.
+
+modules:
+  eit:  true   # Electrical Impedance Tomography
+  emg:  true   # Electromyography (respiratory muscles)
+  vent: true   # Ventilator waveform (used with EMG module)
+
+eit:
+  file:   data/source/draeger_synthetic_draeger_20Hz.bin
+  vendor: draeger  # draeger | timpel | sentec | simulated
+
+emg:
+  file: data/source/emg_data_synth_quiet_breathing.Poly5
+
+vent:
+  file: data/source/vent_data_synth_quiet_breathing.Poly5
+
+alignment:
+  method: manual_offset
+  manual_offset_seconds: 0.0
+
+output:
+  combined: output/multimodal-summary
+  eit_only: output/eit-summary
+  emg_only: output/emg-summary
