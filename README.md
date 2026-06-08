@@ -29,6 +29,22 @@ pip install -e ".[emg]"
 pip install -e ".[all,dev]"
 ```
 
+These commands install this repository in editable mode with optional dependency
+groups:
+
+- `pip install -e ...` installs the local checkout in editable mode, so Python
+  imports the code from this working tree and local source changes are available
+  immediately without reinstalling the package.
+- `".[eit]"` means "install the current package plus the `eit` optional
+  dependencies". In this project, that adds the EIT integration package
+  `eitprocessing`.
+- `".[emg]"` means "install the current package plus the `emg` optional
+  dependencies". In this project, that adds the EMG integration package
+  `resurfemg` and `ipywidgets`.
+- `".[all,dev]"` combines optional groups. It installs all modality integrations
+  (`eitprocessing`, `resurfemg`, and `ipywidgets`) plus development tools such as
+  `pytest`, `pytest-cov`, `ruff`, and `mypy`.
+
 During Stage 1, the optional modality integrations install from the M3Resp
 organization forks:
 
@@ -89,11 +105,11 @@ M3RESP/
 └── m3resp
 ```
 
-Dependency direction should stay one-way:
+Dependency direction for Stage 1 remains one-way:
 
 ```text
 m3resp -> eitprocessing
 m3resp -> resurfemg
 ```
 
-`eitprocessing` and `resurfemg` should not depend on `m3resp`.
+`eitprocessing` and `resurfemg` do not depend on `m3resp`.
