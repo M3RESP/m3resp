@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from m3resp import BreathEvent, M3Session
@@ -39,5 +40,5 @@ def test_detection_alignment_and_export(tmp_path):
     output_dir = session.export_summary(tmp_path)
 
     assert synchronized["eit_breaths"][0].start_time == 1.5
-    assert (output_dir / "summary.json").exists()
-    assert (output_dir / "eit_breaths.csv").exists()
+    assert os.path.exists(os.path.join(output_dir, "summary.json"))
+    assert os.path.exists(os.path.join(output_dir, "eit_breaths.csv"))
