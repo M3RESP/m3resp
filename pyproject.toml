@@ -34,10 +34,12 @@ eit = [
 ]
 emg = [
   "resurfemg @ git+https://github.com/M3RESP/ReSurfEMG.git@m3resp-integration",
+  "ipywidgets",
 ]
 all = [
   "eitprocessing @ git+https://github.com/M3RESP/eitprocessing.git@m3resp-integration",
   "resurfemg @ git+https://github.com/M3RESP/ReSurfEMG.git@m3resp-integration",
+  "ipywidgets",
 ]
 dev = [
   "pytest",
@@ -53,6 +55,9 @@ Issues = "https://github.com/M3RESP/m3resp/issues"
 
 [tool.hatch.version]
 path = "src/m3resp/__init__.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build]
 sources = ["src"]
