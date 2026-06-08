@@ -29,6 +29,21 @@ pip install -e ".[emg]"
 pip install -e ".[all,dev]"
 ```
 
+During Stage 1, the optional modality integrations install from the M3Resp
+organization forks:
+
+```text
+eitprocessing @ git+https://github.com/M3Resp-org/eitprocessing.git@main
+resurfemg @ git+https://github.com/M3Resp-org/ReSurfEMG.git@main
+```
+
+To use another branch, change the branch name after `@` in
+[pyproject.toml](pyproject.toml). For example:
+
+```text
+git+https://github.com/M3Resp-org/eitprocessing.git@feature-branch
+```
+
 ## Example
 
 ```python
