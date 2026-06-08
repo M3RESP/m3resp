@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: EIT-specific issues
+    url: https://github.com/M3Resp-org/eitprocessing/issues
+    about: Use this for bugs or features specific to eitprocessing.
+  - name: EMG-specific issues
+    url: https://github.com/M3Resp-org/ReSurfEMG/issues
+    about: Use this for bugs or features specific to ReSurfEMG.
