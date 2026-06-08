@@ -30,14 +30,14 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 eit = [
-  "eitprocessing @ git+https://github.com/M3Resp-org/eitprocessing.git@main",
+  "eitprocessing @ git+https://github.com/M3RESP/eitprocessing.git@m3resp-integration",
 ]
 emg = [
-  "resurfemg @ git+https://github.com/M3Resp-org/ReSurfEMG.git@main",
+  "resurfemg @ git+https://github.com/M3RESP/ReSurfEMG.git@m3resp-integration",
 ]
 all = [
-  "eitprocessing @ git+https://github.com/M3Resp-org/eitprocessing.git@main",
-  "resurfemg @ git+https://github.com/M3Resp-org/ReSurfEMG.git@main",
+  "eitprocessing @ git+https://github.com/M3RESP/eitprocessing.git@m3resp-integration",
+  "resurfemg @ git+https://github.com/M3RESP/ReSurfEMG.git@m3resp-integration",
 ]
 dev = [
   "pytest",
@@ -47,9 +47,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/M3Resp-org/m3resp"
-Repository = "https://github.com/M3Resp-org/m3resp"
-Issues = "https://github.com/M3Resp-org/m3resp/issues"
+Homepage = "https://github.com/M3RESP/m3resp"
+Repository = "https://github.com/M3RESP/m3resp"
+Issues = "https://github.com/M3RESP/m3resp/issues"
 
 [tool.hatch.version]
 path = "src/m3resp/__init__.py"
