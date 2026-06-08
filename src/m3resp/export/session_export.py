@@ -33,7 +33,9 @@ def export_session_summary(session: Any, output_dir: str | Path) -> Path:
             _write_csv(output_path / f"{name}.csv", events_to_rows(events))
 
     if session.parameters:
-        _write_csv(output_path / "parameters.csv", parameters_to_rows(session.parameters))
+        _write_csv(
+            output_path / "parameters.csv", parameters_to_rows(session.parameters)
+        )
 
     return output_path
 
@@ -57,6 +59,12 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 def _jsonable(value: Any) -> Any:
     if is_dataclass(value):
         return _jsonable(asdict(value))
+    if hasattr(value, "shape") and hasattr(value, "dtype"):
+        return {
+            "type": type(value).__name__,
+            "shape": list(value.shape),
+            "dtype": str(value.dtype),
+        }
     if isinstance(value, dict):
         return {key: _jsonable(item) for key, item in value.items()}
     if isinstance(value, list):

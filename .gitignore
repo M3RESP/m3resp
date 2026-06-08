@@ -6,6 +6,6 @@ plan/*
 *.lock
 **/__pycache__
 .*
+!.pre-commit-config.yaml
 # !.github/
 # !.github/**
-

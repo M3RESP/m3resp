@@ -80,6 +80,22 @@ session.align_modalities(method="manual_offset", offset_seconds=0.0)
 session.export_summary("results/")
 ```
 
+## Development Checks
+
+Install the local pre-commit hooks once after installing the development extra:
+
+```bash
+pip install -e ".[dev]"
+pre-commit install
+```
+
+The hooks run Ruff linting and Ruff formatting automatically before each commit.
+You can run the same checks manually with:
+
+```bash
+pre-commit run --all-files
+```
+
 ## Stage 1 Scope
 
 Stage 1 provides:

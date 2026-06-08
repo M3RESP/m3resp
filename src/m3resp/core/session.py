@@ -11,8 +11,8 @@ from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.core.metadata import SessionMetadata
 from m3resp.core.provenance import ProvenanceRecord, record
 from m3resp.export.session_export import export_session_summary
-from m3resp.modalities.eit import EITRecording
-from m3resp.modalities.emg import EMGRecording
+from m3resp.modalities.eit import EITRecording, load as load_eit_recording
+from m3resp.modalities.emg import EMGRecording, load as load_emg_recording
 from m3resp.synchronization.alignment import align_events_manual_offset
 
 
@@ -28,6 +28,8 @@ class M3Session:
         self.eit_adapter = eit_adapter or EITProcessingAdapter()
         self.emg_adapter = emg_adapter or ReSurfEMGAdapter()
 
+        self.eit: EITRecording | None = None
+        self.emg: EMGRecording | None = None
         self.raw: dict[str, Any] = {}
         self.processed: dict[str, Any] = {}
         self.events: dict[str, Any] = {}
@@ -36,21 +38,30 @@ class M3Session:
         self.metadata = _coerce_metadata(metadata)
         self.provenance: list[ProvenanceRecord] = []
 
-    def load_eit(self, path: str | Path, vendor: str | None = None, **kwargs: Any) -> Any:
+    def load_eit(
+        self, path: str | Path, vendor: str | None = None, **kwargs: Any
+    ) -> Any:
         """Load EIT data and store it under `raw["eit"]`."""
 
-        data = self.eit_adapter.load(str(path), vendor=vendor, **kwargs)
-        self.raw["eit"] = EITRecording(data=data, path=Path(path), vendor=vendor)
+        recording = load_eit_recording(
+            path,
+            vendor=vendor,
+            adapter=self.eit_adapter,
+            **kwargs,
+        )
+        self.eit = recording
+        self.raw["eit"] = recording
         self._record("load_eit", "eit", path=str(path), vendor=vendor)
-        return data
+        return recording.data
 
     def load_emg(self, path: str | Path, **kwargs: Any) -> Any:
         """Load EMG data and store it under `raw["emg"]`."""
 
-        data = self.emg_adapter.load(str(path), **kwargs)
-        self.raw["emg"] = EMGRecording(data=data, path=Path(path))
+        recording = load_emg_recording(path, adapter=self.emg_adapter, **kwargs)
+        self.emg = recording
+        self.raw["emg"] = recording
         self._record("load_emg", "emg", path=str(path))
-        return data
+        return recording.data
 
     def preprocess_eit(self, **kwargs: Any) -> Any:
         """Run a provided or upstream EIT preprocessing function."""
@@ -58,7 +69,9 @@ class M3Session:
         recording = self._require_raw("eit")
         preprocess = kwargs.pop("preprocess", None)
         if preprocess is None:
-            self.processed["eit"] = recording.data
+            self.processed["eit"] = self.eit_adapter.preprocess(
+                recording.data, **kwargs
+            )
         else:
             self.processed["eit"] = preprocess(recording.data, **kwargs)
         self._record("preprocess_eit", "eit", **kwargs)
@@ -69,6 +82,11 @@ class M3Session:
 
         recording = self._require_raw("emg")
         self.processed["emg"] = self.emg_adapter.preprocess(recording.data, **kwargs)
+        if self.emg is not None and isinstance(self.processed["emg"], dict):
+            self.emg.filtered = self.processed["emg"].get("filtered")
+            self.emg.envelope = self.processed["emg"].get("envelope")
+            self.emg.channel = self.processed["emg"].get("channel")
+            self.emg.fs = self.processed["emg"].get("fs")
         self._record("preprocess_emg", "emg", **kwargs)
         return self.processed["emg"]
 
@@ -87,6 +105,19 @@ class M3Session:
         self.events["emg_breaths"] = self.emg_adapter.detect_breaths(data, **kwargs)
         self._record("detect_emg_breaths", "emg", **kwargs)
         return self.events["emg_breaths"]
+
+    def postprocess_emg(self, **kwargs: Any) -> Any:
+        """Run EMG postprocessing through the adapter."""
+
+        data = self.processed.get("emg") or self._require_raw("emg").data
+        events = self.events.get("emg_breaths")
+        self.parameters["emg_postprocessing"] = self.emg_adapter.postprocess(
+            data,
+            events=events,
+            **kwargs,
+        )
+        self._record("postprocess_emg", "emg", **kwargs)
+        return self.parameters["emg_postprocessing"]
 
     def align_modalities(
         self, method: str = "manual_offset", offset_seconds: float = 0.0

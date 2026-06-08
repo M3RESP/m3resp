@@ -61,8 +61,18 @@ def plot_session_overview(
 
     eit_axes = [ax for ax, row in zip(axes, rows, strict=True) if row[0] == "eit"]
     emg_axes = [ax for ax, row in zip(axes, rows, strict=True) if row[0] == "emg"]
-    _plot_events(emg_axes, session.events.get("emg_breaths", []), color="tab:red", label="EMG breath")
-    _plot_events(eit_axes, session.events.get("eit_breaths", []), color="tab:green", label="EIT breath")
+    _plot_events(
+        emg_axes,
+        session.events.get("emg_breaths", []),
+        color="tab:red",
+        label="EMG breath",
+    )
+    _plot_events(
+        eit_axes,
+        session.events.get("eit_breaths", []),
+        color="tab:green",
+        label="EIT breath",
+    )
 
     axes[-1].set_xlabel("Time (s)")
     _deduplicate_legends(axes)
@@ -84,7 +94,9 @@ def plot_eit_processing_summary(session: M3Session):
     if not isinstance(processed, dict):
         raise ValueError("No processed EIT dictionary found on the session.")
 
-    signal = processed.get("filtered_global_impedance") or processed.get("raw_global_impedance")
+    signal = processed.get("filtered_global_impedance") or processed.get(
+        "raw_global_impedance"
+    )
     if signal is None:
         raise ValueError("No EIT global impedance signal found in processed EIT data.")
 
@@ -94,7 +106,12 @@ def plot_eit_processing_summary(session: M3Session):
     ax_signal.plot(signal.time, signal.values, linewidth=1)
     ax_signal.set(title="EIT global impedance", xlabel="Time (s)", ylabel=signal.label)
     ax_signal.grid(True, alpha=0.25)
-    _plot_events([ax_signal], session.events.get("eit_breaths", []), color="tab:green", label="EIT breath")
+    _plot_events(
+        [ax_signal],
+        session.events.get("eit_breaths", []),
+        color="tab:green",
+        label="EIT breath",
+    )
     _deduplicate_legends([ax_signal])
 
     _plot_sparse(ax_tiv, processed.get("continuous_tiv"), "Continuous TIV", "TIV")
@@ -125,14 +142,22 @@ def _get_eit_rows(
     if waveform not in continuous_data:
         return rows
 
-    rows.append(("eit", "EIT raw global impedance", *_continuous_series(continuous_data[waveform])))
+    rows.append(
+        (
+            "eit",
+            "EIT raw global impedance",
+            *_continuous_series(continuous_data[waveform]),
+        )
+    )
 
     processed = session.processed.get("eit")
     if isinstance(processed, dict):
         filtered = processed.get("filtered_global_impedance")
         raw = processed.get("raw_global_impedance")
         if filtered is not None and filtered is not raw:
-            rows.append(("eit", "EIT filtered global impedance", *_continuous_series(filtered)))
+            rows.append(
+                ("eit", "EIT filtered global impedance", *_continuous_series(filtered))
+            )
 
     return rows
 
@@ -168,11 +193,29 @@ def _get_emg_rows(
     envelope = processed.get("envelope")
 
     if raw is not None:
-        rows.append(("emg", f"EMG raw ({label})", _time_for(raw, fs), np.asarray(raw), unit))
+        rows.append(
+            ("emg", f"EMG raw ({label})", _time_for(raw, fs), np.asarray(raw), unit)
+        )
     if filtered is not None:
-        rows.append(("emg", f"EMG filtered ({label})", _time_for(filtered, fs), np.asarray(filtered), unit))
+        rows.append(
+            (
+                "emg",
+                f"EMG filtered ({label})",
+                _time_for(filtered, fs),
+                np.asarray(filtered),
+                unit,
+            )
+        )
     if envelope is not None:
-        rows.append(("emg", f"EMG envelope ({label})", _time_for(envelope, fs), np.asarray(envelope), unit))
+        rows.append(
+            (
+                "emg",
+                f"EMG envelope ({label})",
+                _time_for(envelope, fs),
+                np.asarray(envelope),
+                unit,
+            )
+        )
 
     return rows
 
@@ -201,7 +244,9 @@ def _plot_events(
         for ax in axes:
             ax.axvspan(event.start_time, event.end_time, color=color, alpha=0.08)
             if event.peak_time is not None:
-                ax.axvline(event.peak_time, color=color, alpha=0.45, linewidth=1, label=label)
+                ax.axvline(
+                    event.peak_time, color=color, alpha=0.45, linewidth=1, label=label
+                )
 
 
 def _plot_sparse(ax: Any, sparse: Any, title: str, ylabel: str) -> None:

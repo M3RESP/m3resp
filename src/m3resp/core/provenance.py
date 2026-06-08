@@ -19,7 +19,9 @@ class ProvenanceRecord:
     )
 
 
-def record(action: str, modality: str | None = None, **parameters: Any) -> ProvenanceRecord:
+def record(
+    action: str, modality: str | None = None, **parameters: Any
+) -> ProvenanceRecord:
     """Create a provenance record with UTC timestamp."""
 
     return ProvenanceRecord(action=action, modality=modality, parameters=parameters)
