@@ -1,5 +1,6 @@
 data/*
 output/*
+plan/*
 .venv/*
 .conda/*
 *.lock
@@ -8,5 +9,3 @@ output/*
 # !.github/
 # !.github/**
 
-# Ignore planning files
-plan.md
