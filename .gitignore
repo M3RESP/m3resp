@@ -5,3 +5,5 @@ output/*
 *.lock
 **/__pycache__
 .*
+
+plan.md
