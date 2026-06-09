@@ -1,7 +1,7 @@
 # M3Resp
 
 M3Resp is the umbrella integration package for multimodal respiratory
-processing across EIT, EMG, and later ventilator signals.
+processing across EIT, EMG, and ventilator signals.
 
 Stage 1 keeps the existing scientific packages independent:
 

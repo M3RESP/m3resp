@@ -7,6 +7,7 @@ from importlib import import_module
 from typing import Any
 
 from m3resp.core.events import BreathEvent
+from m3resp.core.events import coerce_breath_events
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
 
 POSTPROCESSING_FUNCTIONS: dict[str, tuple[str, ...]] = {
@@ -90,14 +91,14 @@ class ReSurfEMGAdapter:
         detector = kwargs.pop("detector", None)
         if detector is not None:
             detections = detector(signal, **kwargs)
-            return _coerce_breath_events(
+            return coerce_breath_events(
                 detections,
                 modality="emg",
                 source="resurfemg",
             )
 
         detections = self._detect_breaths_default(signal, **kwargs)
-        return _coerce_breath_events(
+        return coerce_breath_events(
             detections,
             modality="emg",
             source="resurfemg.detect_emg_breaths",
@@ -779,44 +780,3 @@ def _category_for_function(function_name: str) -> str | None:
         if function_name in functions:
             return category
     return None
-
-
-def _coerce_breath_events(
-    detections: Sequence[Any], modality: str, source: str
-) -> list[BreathEvent]:
-    events: list[BreathEvent] = []
-    for item in detections:
-        if isinstance(item, BreathEvent):
-            events.append(item)
-            continue
-
-        if isinstance(item, dict):
-            events.append(
-                BreathEvent(
-                    modality=modality,
-                    start_time=float(item["start_time"]),
-                    end_time=float(item["end_time"]),
-                    peak_time=(
-                        None
-                        if item.get("peak_time") is None
-                        else float(item["peak_time"])
-                    ),
-                    source=item.get("source", source),
-                    confidence=item.get("confidence"),
-                    metadata=item.get("metadata", {}),
-                )
-            )
-            continue
-
-        start_time, end_time, *rest = item
-        peak_time = rest[0] if rest else None
-        events.append(
-            BreathEvent(
-                modality=modality,
-                start_time=float(start_time),
-                end_time=float(end_time),
-                peak_time=None if peak_time is None else float(peak_time),
-                source=source,
-            )
-        )
-    return events

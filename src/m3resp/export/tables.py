@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, is_dataclass
 from typing import Any
 
-from m3resp.core.events import BreathEvent, Event
+from m3resp.core.events import BreathEvent, Event, event_to_dict
 
 
 def events_to_rows(events: list[Event] | list[BreathEvent]) -> list[dict[str, Any]]:
@@ -13,10 +12,7 @@ def events_to_rows(events: list[Event] | list[BreathEvent]) -> list[dict[str, An
 
     rows: list[dict[str, Any]] = []
     for event in events:
-        if is_dataclass(event):
-            rows.append(asdict(event))
-        else:
-            rows.append(dict(event))
+        rows.append(event_to_dict(event))
     return rows
 
 
