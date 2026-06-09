@@ -42,3 +42,15 @@ def test_detection_alignment_and_export(tmp_path):
     assert synchronized["eit_breaths"][0].start_time == 1.5
     assert os.path.exists(os.path.join(output_dir, "summary.json"))
     assert os.path.exists(os.path.join(output_dir, "eit_breaths.csv"))
+
+
+def test_session_event_helpers_keep_events_dict_as_backing_store():
+    session = M3Session()
+    events = [BreathEvent("emg", 0.0, 1.0, peak_time=0.5)]
+
+    stored = session.add_events("emg_breaths", events)
+
+    assert stored == events
+    assert session.events["emg_breaths"] == events
+    assert session.get_events("emg_breaths") == events
+    assert session.get_events("missing", default=[]) == []

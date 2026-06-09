@@ -94,7 +94,8 @@ class M3Session:
         """Detect EIT breaths and store normalized events."""
 
         data = self.processed.get("eit") or self._require_raw("eit").data
-        self.events["eit_breaths"] = self.eit_adapter.detect_breaths(data, **kwargs)
+        events = self.eit_adapter.detect_breaths(data, **kwargs)
+        self.add_events("eit_breaths", events)
         self._record("detect_eit_breaths", "eit", **kwargs)
         return self.events["eit_breaths"]
 
@@ -102,9 +103,21 @@ class M3Session:
         """Detect EMG breaths and store normalized events."""
 
         data = self.processed.get("emg") or self._require_raw("emg").data
-        self.events["emg_breaths"] = self.emg_adapter.detect_breaths(data, **kwargs)
+        events = self.emg_adapter.detect_breaths(data, **kwargs)
+        self.add_events("emg_breaths", events)
         self._record("detect_emg_breaths", "emg", **kwargs)
         return self.events["emg_breaths"]
+
+    def add_events(self, name: str, events: Any) -> list[Any]:
+        """Store a named event list while keeping `session.events` as backing data."""
+
+        self.events[name] = list(events)
+        return self.events[name]
+
+    def get_events(self, name: str, default: Any = None) -> Any:
+        """Return a named event list from `session.events`."""
+
+        return self.events.get(name, default)
 
     def postprocess_emg(self, **kwargs: Any) -> Any:
         """Run EMG postprocessing through the adapter."""

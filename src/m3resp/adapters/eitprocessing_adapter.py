@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from typing import Any
 
 from m3resp.core.events import BreathEvent
+from m3resp.core.events import coerce_breath_events
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
 
 
@@ -263,14 +264,14 @@ class EITProcessingAdapter:
                     "custom detections."
                 )
             detections = _breath_intervals_to_dicts(data["breath_intervals"])
-            return _coerce_breath_events(
+            return coerce_breath_events(
                 detections,
                 modality="eit",
                 source="eitprocessing.BreathDetection",
             )
 
         detections = detector(data, **kwargs)
-        return _coerce_breath_events(detections, modality="eit", source="eitprocessing")
+        return coerce_breath_events(detections, modality="eit", source="eitprocessing")
 
     def compute_tiv(self, sequence: Any, **kwargs: Any) -> Any:
         """Compute tidal impedance variation when an upstream function is provided."""
@@ -308,44 +309,3 @@ def _breath_intervals_to_dicts(breath_intervals: Any) -> list[dict[str, Any]]:
         }
         for breath in breath_intervals.values
     ]
-
-
-def _coerce_breath_events(
-    detections: Sequence[Any], modality: str, source: str
-) -> list[BreathEvent]:
-    events: list[BreathEvent] = []
-    for item in detections:
-        if isinstance(item, BreathEvent):
-            events.append(item)
-            continue
-
-        if isinstance(item, dict):
-            events.append(
-                BreathEvent(
-                    modality=modality,
-                    start_time=float(item["start_time"]),
-                    end_time=float(item["end_time"]),
-                    peak_time=(
-                        None
-                        if item.get("peak_time") is None
-                        else float(item["peak_time"])
-                    ),
-                    source=item.get("source", source),
-                    confidence=item.get("confidence"),
-                    metadata=item.get("metadata", {}),
-                )
-            )
-            continue
-
-        start_time, end_time, *rest = item
-        peak_time = rest[0] if rest else None
-        events.append(
-            BreathEvent(
-                modality=modality,
-                start_time=float(start_time),
-                end_time=float(end_time),
-                peak_time=None if peak_time is None else float(peak_time),
-                source=source,
-            )
-        )
-    return events
