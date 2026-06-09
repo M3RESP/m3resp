@@ -62,13 +62,43 @@ git+https://github.com/M3RESP/eitprocessing.git@feature-branch
 
 ## Example
 
+Run the configured workflow from YAML:
+
+```bash
+python examples/workflow.py
+```
+
+Or call the same wrapper from Python:
+
 ```python
+import os
+
+from m3resp.workflows import run_workflow
+
+result = run_workflow(config=os.path.join("examples", "config.yaml"))
+
+session = result.session
+print(result.summary)
+print(result.output_dir)
+```
+
+The configured workflow uses `examples/config.yaml` for modality toggles, input
+files, alignment settings, and output directories. `run_workflow` selects the
+workflow from `modules`: EIT+EMG runs the combined workflow, EIT-only runs the
+EIT workflow, and EMG-only runs the EMG workflow. `vent` is used with EMG
+postprocessing when EMG is enabled.
+
+For lower-level control, use `M3Session` directly:
+
+```python
+import os
+
 from m3resp import M3Session
 
 session = M3Session()
 
-session.load_eit("path/to/eit_file", vendor="sentec")
-session.load_emg("path/to/emg_file")
+session.load_eit(os.path.join("path", "to", "eit_file"), vendor="sentec")
+session.load_emg(os.path.join("path", "to", "emg_file"))
 
 session.preprocess_eit()
 session.preprocess_emg()
@@ -77,7 +107,7 @@ session.detect_eit_breaths()
 session.detect_emg_breaths()
 
 session.align_modalities(method="manual_offset", offset_seconds=0.0)
-session.export_summary("results/")
+session.export_summary(os.path.join("results"))
 ```
 
 ## Development Checks
