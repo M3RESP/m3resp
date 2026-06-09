@@ -286,6 +286,7 @@ class ReSurfEMGAdapter:
         baseline_percentile: float = 33.0,
         slope_window_seconds: float = 0.5,
         aub_window_seconds: float = 5.0,
+        selected_functions: dict[str, dict[str, bool]] | None = None,
     ) -> dict[str, Any]:
         try:
             import numpy as np
@@ -302,27 +303,49 @@ class ReSurfEMGAdapter:
         fs = float(processed_emg["fs"])
         window_samples = max(1, int(baseline_window_seconds * fs))
         step_samples = max(1, int(baseline_step_seconds * fs))
+        selected = _normalize_selected_postprocessing(selected_functions)
+        enabled = selected.__contains__
 
-        moving_baseline = self.run_postprocessing_function(
-            "baseline",
-            "moving_baseline",
-            envelope,
-            window_samples,
-            step_samples,
-            set_percentile=baseline_percentile,
-        )
-        slopesum_baseline = self.run_postprocessing_function(
-            "baseline",
-            "slopesum_baseline",
-            envelope,
-            window_samples,
-            step_samples,
-            fs,
-            set_percentile=baseline_percentile,
-            ma_window=max(1, int(fs // 2)),
-            perc_window=max(1, int(fs)),
-        )
-        baseline = slopesum_baseline[0]
+        computed: dict[str, Any] = {
+            "baseline": {},
+            "event_detection": {},
+            "features": {},
+            "quality_assessment": {},
+        }
+        skipped: dict[str, str] = {}
+
+        baseline = None
+        if enabled(("baseline", "moving_baseline")):
+            moving_baseline = self.run_postprocessing_function(
+                "baseline",
+                "moving_baseline",
+                envelope,
+                window_samples,
+                step_samples,
+                set_percentile=baseline_percentile,
+            )
+            computed["baseline"]["moving_baseline"] = moving_baseline
+            baseline = moving_baseline
+
+        if enabled(("baseline", "slopesum_baseline")):
+            slopesum_baseline = self.run_postprocessing_function(
+                "baseline",
+                "slopesum_baseline",
+                envelope,
+                window_samples,
+                step_samples,
+                fs,
+                set_percentile=baseline_percentile,
+                ma_window=max(1, int(fs // 2)),
+                perc_window=max(1, int(fs)),
+            )
+            computed["baseline"]["slopesum_baseline"] = {
+                "baseline": slopesum_baseline[0],
+                "running_mean": slopesum_baseline[1],
+                "running_std": slopesum_baseline[2],
+                "series": slopesum_baseline[3],
+            }
+            baseline = slopesum_baseline[0]
 
         peak_indices = _peak_indices_from_events(events, fs)
         peak_indices_array = np.asarray(peak_indices, dtype=int)
@@ -334,66 +357,63 @@ class ReSurfEMGAdapter:
             fs=ventilator_fs,
         )
 
-        computed: dict[str, Any] = {
-            "baseline": {
-                "moving_baseline": moving_baseline,
-                "slopesum_baseline": {
-                    "baseline": slopesum_baseline[0],
-                    "running_mean": slopesum_baseline[1],
-                    "running_std": slopesum_baseline[2],
-                    "series": slopesum_baseline[3],
-                },
-            },
-            "event_detection": {},
-            "features": {},
-            "quality_assessment": {},
-        }
-        skipped: dict[str, str] = {}
-
         ventilator_breath_indices = np.asarray([], dtype=int)
         if ventilator_signals is not None:
             v_vent = ventilator_signals["volume"]
             p_vent = ventilator_signals["pressure"]
             vent_fs = float(ventilator_signals["fs"])
             vent_width_samples = max(1, int(ventilator_breath_width_seconds * vent_fs))
-            ventilator_breath_indices = np.asarray(
-                self.run_postprocessing_function(
-                    "event_detection",
-                    "detect_ventilator_breath",
-                    v_vent,
-                    0,
-                    len(v_vent) - 1,
-                    vent_width_samples,
-                ),
-                dtype=int,
-            )
-            computed["event_detection"]["detect_ventilator_breath"] = (
-                ventilator_breath_indices
-            )
-
-            if peep is None:
-                peep = float(np.nanmedian(p_vent))
-            pocc_indices = np.asarray(
-                self.run_postprocessing_function(
-                    "event_detection",
-                    "find_occluded_breaths",
-                    p_vent,
-                    vent_fs,
-                    peep,
-                ),
-                dtype=int,
-            )
-            computed["event_detection"]["find_occluded_breaths"] = pocc_indices
-            computed["quality_assessment"]["detect_non_consecutive_manoeuvres"] = (
-                self.run_postprocessing_function(
-                    "quality_assessment",
-                    "detect_non_consecutive_manoeuvres",
-                    ventilator_breath_indices,
-                    pocc_indices,
+            if enabled(("event_detection", "detect_ventilator_breath")):
+                ventilator_breath_indices = np.asarray(
+                    self.run_postprocessing_function(
+                        "event_detection",
+                        "detect_ventilator_breath",
+                        v_vent,
+                        0,
+                        len(v_vent) - 1,
+                        vent_width_samples,
+                    ),
+                    dtype=int,
                 )
-            )
+                computed["event_detection"]["detect_ventilator_breath"] = (
+                    ventilator_breath_indices
+                )
 
-            if len(ventilator_breath_indices) >= 2:
+            pocc_indices = np.asarray([], dtype=int)
+            if enabled(("event_detection", "find_occluded_breaths")):
+                if peep is None:
+                    peep = float(np.nanmedian(p_vent))
+                pocc_indices = np.asarray(
+                    self.run_postprocessing_function(
+                        "event_detection",
+                        "find_occluded_breaths",
+                        p_vent,
+                        vent_fs,
+                        peep,
+                    ),
+                    dtype=int,
+                )
+                computed["event_detection"]["find_occluded_breaths"] = pocc_indices
+
+            if enabled(("quality_assessment", "detect_non_consecutive_manoeuvres")):
+                if len(ventilator_breath_indices) and len(pocc_indices):
+                    computed["quality_assessment"][
+                        "detect_non_consecutive_manoeuvres"
+                    ] = self.run_postprocessing_function(
+                        "quality_assessment",
+                        "detect_non_consecutive_manoeuvres",
+                        ventilator_breath_indices,
+                        pocc_indices,
+                    )
+                else:
+                    skipped["quality_assessment.detect_non_consecutive_manoeuvres"] = (
+                        "Needs ventilator breath and manoeuvre indices."
+                    )
+
+            if (
+                enabled(("quality_assessment", "evaluate_respiratory_rates"))
+                and len(ventilator_breath_indices) >= 2
+            ):
                 computed["quality_assessment"]["ventilator_respiratory_rate"] = (
                     self.run_postprocessing_function(
                         "features",
@@ -416,120 +436,181 @@ class ReSurfEMGAdapter:
                 }
             )
 
-        if len(peak_indices_array):
-            computed["event_detection"]["onoffpeak_baseline_crossing"] = (
-                self.run_postprocessing_function(
-                    "event_detection",
-                    "onoffpeak_baseline_crossing",
-                    envelope,
-                    baseline,
-                    peak_indices_array,
+        start_indices = None
+        end_indices = None
+        if len(peak_indices_array) and baseline is not None:
+            if enabled(("event_detection", "onoffpeak_baseline_crossing")):
+                computed["event_detection"]["onoffpeak_baseline_crossing"] = (
+                    self.run_postprocessing_function(
+                        "event_detection",
+                        "onoffpeak_baseline_crossing",
+                        envelope,
+                        baseline,
+                        peak_indices_array,
+                    )
                 )
-            )
+                start_indices, end_indices, *_ = computed["event_detection"][
+                    "onoffpeak_baseline_crossing"
+                ]
             slope_window_samples = max(1, int(slope_window_seconds * fs))
-            computed["event_detection"]["onoffpeak_slope_extrapolation"] = (
-                self.run_postprocessing_function(
-                    "event_detection",
-                    "onoffpeak_slope_extrapolation",
-                    envelope,
-                    fs,
-                    peak_indices_array,
-                    slope_window_samples,
+            if enabled(("event_detection", "onoffpeak_slope_extrapolation")):
+                computed["event_detection"]["onoffpeak_slope_extrapolation"] = (
+                    self.run_postprocessing_function(
+                        "event_detection",
+                        "onoffpeak_slope_extrapolation",
+                        envelope,
+                        fs,
+                        peak_indices_array,
+                        slope_window_samples,
+                    )
                 )
-            )
-            start_indices, end_indices, *_ = computed["event_detection"][
-                "onoffpeak_baseline_crossing"
-            ]
 
-            computed["features"]["time_to_peak"] = self.run_postprocessing_function(
-                "features", "time_to_peak", envelope, start_indices, end_indices
-            )
-            computed["features"]["pseudo_slope"] = self.run_postprocessing_function(
-                "features", "pseudo_slope", envelope, start_indices, end_indices
-            )
-            computed["features"]["amplitude"] = self.run_postprocessing_function(
-                "features", "amplitude", envelope, peak_indices_array, baseline
-            )
-            computed["features"]["time_product"] = self.run_postprocessing_function(
-                "features",
-                "time_product",
-                envelope,
-                fs,
-                start_indices,
-                end_indices,
-                baseline,
-            )
-            computed["features"]["area_under_baseline"] = (
-                self.run_postprocessing_function(
-                    "features",
-                    "area_under_baseline",
-                    envelope,
-                    fs,
-                    peak_indices_array,
-                    start_indices,
-                    end_indices,
-                    max(1, int(aub_window_seconds * fs)),
-                    baseline,
+            if start_indices is not None and end_indices is not None:
+                if enabled(("features", "time_to_peak")):
+                    computed["features"]["time_to_peak"] = (
+                        self.run_postprocessing_function(
+                            "features",
+                            "time_to_peak",
+                            envelope,
+                            start_indices,
+                            end_indices,
+                        )
+                    )
+                if enabled(("features", "pseudo_slope")):
+                    computed["features"]["pseudo_slope"] = (
+                        self.run_postprocessing_function(
+                            "features",
+                            "pseudo_slope",
+                            envelope,
+                            start_indices,
+                            end_indices,
+                        )
+                    )
+                if enabled(("features", "amplitude")):
+                    computed["features"]["amplitude"] = (
+                        self.run_postprocessing_function(
+                            "features",
+                            "amplitude",
+                            envelope,
+                            peak_indices_array,
+                            baseline,
+                        )
+                    )
+                if enabled(("features", "time_product")):
+                    computed["features"]["time_product"] = (
+                        self.run_postprocessing_function(
+                            "features",
+                            "time_product",
+                            envelope,
+                            fs,
+                            start_indices,
+                            end_indices,
+                            baseline,
+                        )
+                    )
+                if enabled(("features", "area_under_baseline")):
+                    computed["features"]["area_under_baseline"] = (
+                        self.run_postprocessing_function(
+                            "features",
+                            "area_under_baseline",
+                            envelope,
+                            fs,
+                            peak_indices_array,
+                            start_indices,
+                            end_indices,
+                            max(1, int(aub_window_seconds * fs)),
+                            baseline,
+                        )
+                    )
+            else:
+                skipped["features"] = (
+                    "Needs event_detection.onoffpeak_baseline_crossing."
                 )
-            )
-            if len(peak_indices_array) >= 2:
+
+            if (
+                enabled(("features", "respiratory_rate"))
+                and len(peak_indices_array) >= 2
+            ):
                 computed["features"]["respiratory_rate"] = (
                     self.run_postprocessing_function(
                         "features", "respiratory_rate", peak_indices_array, fs
                     )
                 )
-            else:
+            elif enabled(("features", "respiratory_rate")):
                 skipped["features.respiratory_rate"] = "Needs at least two EMG breaths."
 
-            time_products = computed["features"]["time_product"]
-            aubs = computed["features"]["area_under_baseline"][0]
-            computed["quality_assessment"]["snr_pseudo"] = (
-                self.run_postprocessing_function(
-                    "quality_assessment",
-                    "snr_pseudo",
-                    envelope,
-                    peak_indices_array,
-                    baseline,
-                    fs,
+            if enabled(("quality_assessment", "snr_pseudo")):
+                computed["quality_assessment"]["snr_pseudo"] = (
+                    self.run_postprocessing_function(
+                        "quality_assessment",
+                        "snr_pseudo",
+                        envelope,
+                        peak_indices_array,
+                        baseline,
+                        fs,
+                    )
                 )
-            )
-            computed["quality_assessment"]["percentage_under_baseline"] = (
-                self.run_postprocessing_function(
-                    "quality_assessment",
-                    "percentage_under_baseline",
-                    envelope,
-                    fs,
-                    peak_indices_array,
-                    start_indices,
-                    end_indices,
-                    baseline,
+            if (
+                enabled(("quality_assessment", "percentage_under_baseline"))
+                and start_indices is not None
+                and end_indices is not None
+            ):
+                computed["quality_assessment"]["percentage_under_baseline"] = (
+                    self.run_postprocessing_function(
+                        "quality_assessment",
+                        "percentage_under_baseline",
+                        envelope,
+                        fs,
+                        peak_indices_array,
+                        start_indices,
+                        end_indices,
+                        baseline,
+                    )
                 )
-            )
-            computed["quality_assessment"]["detect_local_high_aub"] = (
-                self.run_postprocessing_function(
-                    "quality_assessment", "detect_local_high_aub", aubs
+            if (
+                enabled(("quality_assessment", "detect_local_high_aub"))
+                and "area_under_baseline" in computed["features"]
+            ):
+                aubs = computed["features"]["area_under_baseline"][0]
+                computed["quality_assessment"]["detect_local_high_aub"] = (
+                    self.run_postprocessing_function(
+                        "quality_assessment", "detect_local_high_aub", aubs
+                    )
                 )
-            )
-            computed["quality_assessment"]["detect_extreme_time_products"] = (
-                self.run_postprocessing_function(
-                    "quality_assessment",
-                    "detect_extreme_time_products",
-                    time_products,
+            if (
+                enabled(("quality_assessment", "detect_extreme_time_products"))
+                and "time_product" in computed["features"]
+            ):
+                time_products = computed["features"]["time_product"]
+                computed["quality_assessment"]["detect_extreme_time_products"] = (
+                    self.run_postprocessing_function(
+                        "quality_assessment",
+                        "detect_extreme_time_products",
+                        time_products,
+                    )
                 )
-            )
-            computed["quality_assessment"]["evaluate_bell_curve_error"] = (
-                self.run_postprocessing_function(
-                    "quality_assessment",
-                    "evaluate_bell_curve_error",
-                    peak_indices_array,
-                    start_indices,
-                    end_indices,
-                    envelope,
-                    fs,
-                    time_products,
+            if (
+                enabled(("quality_assessment", "evaluate_bell_curve_error"))
+                and start_indices is not None
+                and end_indices is not None
+                and "time_product" in computed["features"]
+            ):
+                time_products = computed["features"]["time_product"]
+                computed["quality_assessment"]["evaluate_bell_curve_error"] = (
+                    self.run_postprocessing_function(
+                        "quality_assessment",
+                        "evaluate_bell_curve_error",
+                        peak_indices_array,
+                        start_indices,
+                        end_indices,
+                        envelope,
+                        fs,
+                        time_products,
+                    )
                 )
-            )
-            if len(ventilator_breath_indices):
+            if enabled(("quality_assessment", "evaluate_event_timing")) and len(
+                ventilator_breath_indices
+            ):
                 paired_count = min(
                     len(peak_indices_array), len(ventilator_breath_indices)
                 )
@@ -542,7 +623,10 @@ class ReSurfEMGAdapter:
                         / float(ventilator_signals["fs"]),
                     )
                 )
-                if len(ventilator_breath_indices) >= 2:
+                if (
+                    enabled(("quality_assessment", "evaluate_respiratory_rates"))
+                    and len(ventilator_breath_indices) >= 2
+                ):
                     rr_vent = computed["quality_assessment"][
                         "ventilator_respiratory_rate"
                     ][0]
@@ -555,17 +639,18 @@ class ReSurfEMGAdapter:
                             rr_vent,
                         )
                     )
-                else:
+                elif enabled(("quality_assessment", "evaluate_respiratory_rates")):
                     skipped["quality_assessment.evaluate_respiratory_rates"] = (
                         "Needs at least two ventilator breaths."
                     )
-            else:
+            elif enabled(("quality_assessment", "evaluate_event_timing")):
                 skipped["quality_assessment.evaluate_event_timing"] = (
                     "Needs ventilator breath timing."
                 )
-                skipped["quality_assessment.evaluate_respiratory_rates"] = (
-                    "Needs ventilator respiratory rate."
-                )
+                if enabled(("quality_assessment", "evaluate_respiratory_rates")):
+                    skipped["quality_assessment.evaluate_respiratory_rates"] = (
+                        "Needs ventilator respiratory rate."
+                    )
         else:
             for name in (
                 "onoffpeak_baseline_crossing",
@@ -582,20 +667,24 @@ class ReSurfEMGAdapter:
                 "detect_extreme_time_products",
                 "evaluate_bell_curve_error",
             ):
-                skipped[name] = "Needs detected EMG breath peaks."
-            skipped["quality_assessment.evaluate_event_timing"] = (
-                "Needs detected EMG breath peaks."
-            )
-            skipped["quality_assessment.evaluate_respiratory_rates"] = (
-                "Needs detected EMG breath peaks."
-            )
+                category = _category_for_function(name)
+                if category is not None and enabled((category, name)):
+                    skipped[f"{category}.{name}"] = (
+                        "Needs detected EMG breath peaks and baseline."
+                    )
+            if enabled(("quality_assessment", "evaluate_event_timing")):
+                skipped["quality_assessment.evaluate_event_timing"] = (
+                    "Needs detected EMG breath peaks."
+                )
+            if enabled(("quality_assessment", "evaluate_respiratory_rates")):
+                skipped["quality_assessment.evaluate_respiratory_rates"] = (
+                    "Needs detected EMG breath peaks."
+                )
 
-        skipped.update(
-            {
-                "quality_assessment.pocc_quality": "Needs Pocc ventilator inputs.",
-                "quality_assessment.interpeak_dist": "Needs ECG peak indices.",
-            }
-        )
+        if enabled(("quality_assessment", "pocc_quality")):
+            skipped["quality_assessment.pocc_quality"] = "Needs Pocc ventilator inputs."
+        if enabled(("quality_assessment", "interpeak_dist")):
+            skipped["quality_assessment.interpeak_dist"] = "Needs ECG peak indices."
 
         return {
             "available": self.available_postprocessing(),
@@ -664,6 +753,32 @@ def _peak_indices_from_events(
     return [
         int(event.peak_time * fs) for event in events if event.peak_time is not None
     ]
+
+
+def _normalize_selected_postprocessing(
+    selected_functions: dict[str, dict[str, bool]] | None,
+) -> set[tuple[str, str]]:
+    if selected_functions is None:
+        return {
+            (category, function_name)
+            for category, functions in POSTPROCESSING_FUNCTIONS.items()
+            for function_name in functions
+        }
+
+    selected: set[tuple[str, str]] = set()
+    for category, functions in POSTPROCESSING_FUNCTIONS.items():
+        configured = selected_functions.get(category, {})
+        for function_name in functions:
+            if configured.get(function_name, False):
+                selected.add((category, function_name))
+    return selected
+
+
+def _category_for_function(function_name: str) -> str | None:
+    for category, functions in POSTPROCESSING_FUNCTIONS.items():
+        if function_name in functions:
+            return category
+    return None
 
 
 def _coerce_breath_events(
