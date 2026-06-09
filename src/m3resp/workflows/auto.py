@@ -43,3 +43,9 @@ def run_workflow(
         eit_adapter=eit_adapter,
         emg_adapter=emg_adapter,
     )
+
+
+def run(CONFIG_PATH) -> WorkflowResult:
+    """Run the workflow selected by the YAML module flags."""
+
+    return run_workflow(config=CONFIG_PATH)

@@ -6,6 +6,7 @@ from typing import Any
 
 from m3resp import BreathEvent, M3Session, load_workflow_config
 from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
+from m3resp.workflows import auto as auto_workflows
 from m3resp.workflows import (
     WorkflowResult,
     run_eit_workflow,
@@ -464,6 +465,24 @@ def test_auto_workflow_selects_multimodal_when_eit_and_emg_enabled(tmp_path):
     assert select_workflow(config_path, root=tmp_path) == "multimodal"
     assert result.output_dir == Path(os.path.join(tmp_path, "output", "combined"))
     assert "synchronized" in result.session.processed
+
+
+def test_auto_run_delegates_to_config_path(monkeypatch, tmp_path):
+    config_path = write_config(tmp_path)
+    sentinel = object()
+    calls: dict[str, Any] = {}
+
+    def fake_run_workflow(*, config: Path) -> object:
+        calls["config"] = config
+        return sentinel
+
+    monkeypatch.setattr(auto_workflows, "CONFIG_PATH", config_path)
+    monkeypatch.setattr(auto_workflows, "run_workflow", fake_run_workflow)
+
+    result = auto_workflows.run()
+
+    assert result is sentinel
+    assert calls["config"] == config_path
 
 
 def test_auto_workflow_selects_eit_when_only_eit_primary_enabled(tmp_path):

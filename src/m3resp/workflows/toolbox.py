@@ -52,6 +52,15 @@ def configure_workflow_logging() -> None:
     )
 
 
+def get_config_path(default_config_path: str) -> str:
+    """Ask for a workflow config path, defaulting to the provided path."""
+
+    config_path = input(
+        f"Enter a config path [press enter for default:{default_config_path}]: "
+    ).strip()
+    return os.path.normpath(config_path) if config_path else default_config_path
+
+
 def log_workflow_summary(
     title: str,
     output_dir: Path,
