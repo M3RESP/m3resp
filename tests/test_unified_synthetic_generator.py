@@ -1,0 +1,382 @@
+from __future__ import annotations
+
+import importlib.util
+import os
+import re
+import sys
+import types
+
+import numpy as np
+import pytest
+
+
+MODULE_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)),
+    "notebooks",
+    "examples",
+    "synthetic_data_generators",
+    "unified_generator.py",
+)
+
+
+def load_generator_module():
+    spec = importlib.util.spec_from_file_location("unified_generator", MODULE_PATH)
+    module = importlib.util.module_from_spec(spec)
+    assert spec is not None
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_eit_only_generation_writes_draeger_and_portable_exports(tmp_path):
+    generator = load_generator_module()
+    config = generator.SyntheticGeneratorConfig(
+        duration_seconds=2.0,
+        output_dir=str(tmp_path),
+        basename="eit_case",
+        timestamp_output_dir=False,
+        generate_eit=True,
+        generate_emg=False,
+        generate_ventilator=False,
+        write_native_outputs=False,
+        eit=generator.EITGeneratorConfig(sample_frequency_hz=20.0),
+    )
+
+    dataset = generator.generate_synthetic_dataset(config)
+
+    assert dataset.eit is not None
+    assert dataset.emg is None
+    assert dataset.ventilator is None
+    assert dataset.eit.array.shape == (40, 32, 32)
+    assert dataset.eit.sample_frequency == 20.0
+    assert dataset.eit.units == ["a.u."]
+    assert dataset.eit.metadata["frame_size_bytes"] == 4358
+    assert os.path.exists(dataset.eit.paths["npy"])
+    assert os.path.exists(dataset.eit.paths["csv"])
+    assert os.path.exists(dataset.eit.paths["components_npz"])
+    assert os.path.exists(dataset.eit.paths["native"])
+    assert "drift" in dataset.eit.metadata["component_labels"]
+    assert os.path.getsize(dataset.eit.paths["native"]) == 40 * 4358
+    assert os.path.exists(os.path.join(str(tmp_path), "eit_case_metadata.json"))
+
+
+def test_drift_disabled_and_enabled_are_deterministic():
+    generator = load_generator_module()
+    time = np.arange(0, 10, 0.5)
+
+    disabled = generator.generate_drift(time, generator.DriftConfig(enabled=False))
+    enabled = generator.generate_drift(
+        time,
+        generator.DriftConfig(enabled=True, amplitude=0.5, kind="sinusoidal"),
+    )
+    enabled_again = generator.generate_drift(
+        time,
+        generator.DriftConfig(enabled=True, amplitude=0.5, kind="sinusoidal"),
+    )
+
+    assert np.allclose(disabled, 0.0)
+    assert not np.allclose(enabled, 0.0)
+    assert np.allclose(enabled, enabled_again)
+
+
+def test_emg_and_ventilator_generation_calls_resurfemg_with_config(
+    monkeypatch,
+    tmp_path,
+):
+    generator = load_generator_module()
+    calls = {}
+
+    def simulate_raw_emg(**kwargs):
+        calls.setdefault("emg", []).append(kwargs)
+        return np.full(int(kwargs["fs_emg"] * kwargs["t_end"]), kwargs["emg_amp"])
+
+    def simulate_ventilator_data(**kwargs):
+        calls["ventilator"] = kwargs
+        n_samples = int(kwargs["fs_vent"] * kwargs["t_end"])
+        return np.vstack(
+            [
+                np.full(n_samples, kwargs["dp"]),
+                np.arange(n_samples, dtype=float),
+                np.zeros(n_samples, dtype=float),
+            ]
+        ), np.full(n_samples, kwargs["p_mus_amp"])
+
+    synthetic_data = types.ModuleType("resurfemg.pipelines.synthetic_data")
+    synthetic_data.simulate_raw_emg = simulate_raw_emg
+    synthetic_data.simulate_ventilator_data = simulate_ventilator_data
+    pipelines = types.ModuleType("resurfemg.pipelines")
+    resurfemg = types.ModuleType("resurfemg")
+    monkeypatch.setitem(sys.modules, "resurfemg", resurfemg)
+    monkeypatch.setitem(sys.modules, "resurfemg.pipelines", pipelines)
+    monkeypatch.setitem(
+        sys.modules,
+        "resurfemg.pipelines.synthetic_data",
+        synthetic_data,
+    )
+
+    config = generator.SyntheticGeneratorConfig(
+        duration_seconds=1.0,
+        output_dir=str(tmp_path),
+        basename="emg_vent",
+        timestamp_output_dir=False,
+        generate_eit=False,
+        generate_emg=True,
+        generate_ventilator=True,
+        write_native_outputs=False,
+        respiratory=generator.RespiratoryPatternConfig(
+            respiratory_rate_bpm=22.0,
+            ie_ratio=0.5,
+            occlusion_times_seconds=(0.25, 0.75),
+        ),
+        emg=generator.EMGGeneratorConfig(
+            sample_frequency_hz=10.0,
+            channel_amplitudes_uv=(0.2, 5.0),
+            drift_amplitude_uv=7.0,
+            noise_amplitude_uv=0.1,
+            heart_rate_bpm=80.0,
+        ),
+        ventilator=generator.VentilatorGeneratorConfig(
+            sample_frequency_hz=5.0,
+            driving_pressure_cm_h2o=12.0,
+            muscle_pressure_amplitude_cm_h2o=3.0,
+        ),
+    )
+
+    dataset = generator.generate_synthetic_dataset(config)
+
+    assert dataset.emg is not None
+    assert dataset.ventilator is not None
+    assert dataset.emg.array.shape == (2, 10)
+    assert dataset.ventilator.array.shape == (3, 5)
+    assert len(calls["emg"]) == 2
+    assert calls["emg"][0]["fs_emg"] == 10.0
+    assert calls["emg"][0]["rr"] == 22.0
+    assert calls["emg"][0]["ie_ratio"] == 0.5
+    assert calls["emg"][0]["drift_amp"] == 7.0
+    assert calls["emg"][0]["noise_amp"] == 0.1
+    assert np.allclose(calls["emg"][0]["t_p_occs"], np.asarray([0.25, 0.75]))
+    assert calls["ventilator"]["fs_vent"] == 5.0
+    assert calls["ventilator"]["rr"] == 22.0
+    assert calls["ventilator"]["dp"] == 12.0
+    assert calls["ventilator"]["p_mus_amp"] == 3.0
+    assert os.path.exists(dataset.emg.paths["npy"])
+    assert os.path.exists(dataset.emg.paths["csv"])
+    assert "native" not in dataset.emg.paths
+    assert "native" not in dataset.ventilator.paths
+
+
+def test_resurfemg_length_mismatch_retries_and_normalizes_signal(
+    monkeypatch,
+    tmp_path,
+):
+    generator = load_generator_module()
+    calls = []
+
+    def simulate_raw_emg(**kwargs):
+        calls.append(kwargs)
+        if kwargs["ecg_acceleration"] != 1.0:
+            raise ValueError(
+                "operands could not be broadcast together with shapes (10,) (8,)"
+            )
+        return np.arange(8, dtype=float)
+
+    synthetic_data = types.ModuleType("resurfemg.pipelines.synthetic_data")
+    synthetic_data.simulate_raw_emg = simulate_raw_emg
+    pipelines = types.ModuleType("resurfemg.pipelines")
+    resurfemg = types.ModuleType("resurfemg")
+    monkeypatch.setitem(sys.modules, "resurfemg", resurfemg)
+    monkeypatch.setitem(sys.modules, "resurfemg.pipelines", pipelines)
+    monkeypatch.setitem(
+        sys.modules,
+        "resurfemg.pipelines.synthetic_data",
+        synthetic_data,
+    )
+
+    config = generator.SyntheticGeneratorConfig(
+        duration_seconds=1.0,
+        output_dir=str(tmp_path),
+        basename="retry_case",
+        timestamp_output_dir=False,
+        generate_eit=False,
+        generate_emg=True,
+        generate_ventilator=False,
+        write_native_outputs=False,
+        emg=generator.EMGGeneratorConfig(
+            sample_frequency_hz=10.0,
+            channel_amplitudes_uv=(5.0,),
+            ecg_acceleration=1.6,
+        ),
+    )
+
+    dataset = generator.generate_synthetic_dataset(config)
+
+    assert len(calls) == 2
+    assert calls[0]["ecg_acceleration"] == 1.6
+    assert calls[1]["ecg_acceleration"] == 1.0
+    assert dataset.emg.array.shape == (1, 10)
+    assert dataset.emg.array[0, -1] == 7
+
+
+def test_yaml_config_loader_builds_typed_config(tmp_path):
+    generator = load_generator_module()
+    config_path = os.path.join(str(tmp_path), "synthetic.yaml")
+    output_dir = os.path.join("relative", "output")
+    with open(config_path, "w", encoding="utf-8") as file_obj:
+        file_obj.write(
+            "\n".join(
+                [
+                    "duration_seconds: 3.0",
+                    "seed: 7",
+                    f"output_dir: {output_dir}",
+                    "basename: yaml_case",
+                    "timestamp_output_dir: false",
+                    "generate_eit: false",
+                    "generate_emg: true",
+                    "generate_ventilator: false",
+                    "write_native_outputs: false",
+                    "respiratory:",
+                    "  respiratory_rate_bpm: 18.0",
+                    "  occlusion_times_seconds:",
+                    "    - 1.0",
+                    "    - 2.0",
+                    "emg:",
+                    "  sample_frequency_hz: 1000",
+                    "  channel_amplitudes_uv:",
+                    "    - 4.0",
+                ]
+            )
+        )
+
+    config = generator.load_synthetic_generator_config(config_path)
+
+    assert config.duration_seconds == 3.0
+    assert config.seed == 7
+    assert config.basename == "yaml_case"
+    assert config.timestamp_output_dir is False
+    assert config.output_dir == os.path.normpath(
+        os.path.join(str(tmp_path), output_dir)
+    )
+    assert config.respiratory.occlusion_times_seconds == (1.0, 2.0)
+    assert config.emg.channel_amplitudes_uv == (4.0,)
+
+
+def test_main_loads_yaml_path(monkeypatch, tmp_path, capsys):
+    generator = load_generator_module()
+    config_path = os.path.join(str(tmp_path), "custom.yaml")
+    loaded_paths = []
+
+    def fake_load(path):
+        loaded_paths.append(path)
+        return generator.SyntheticGeneratorConfig(
+            output_dir=str(tmp_path),
+            basename="main_case",
+            timestamp_output_dir=False,
+            generate_eit=False,
+            generate_emg=False,
+            generate_ventilator=False,
+            write_native_outputs=False,
+        )
+
+    def fake_generate(config):
+        return generator.SyntheticDataset(
+            provenance={
+                "output_root": config.output_dir,
+                "output_dir": config.output_dir,
+            }
+        )
+
+    monkeypatch.setattr(generator, "load_synthetic_generator_config", fake_load)
+    monkeypatch.setattr(generator, "generate_synthetic_dataset", fake_generate)
+
+    generator.main(config_path)
+    output = capsys.readouterr().out
+
+    assert loaded_paths == [config_path]
+    assert "custom.yaml" in output
+
+
+def test_timestamp_output_directory_creates_run_folder(tmp_path):
+    generator = load_generator_module()
+    config = generator.SyntheticGeneratorConfig(
+        duration_seconds=1.0,
+        output_dir=str(tmp_path),
+        basename="timestamp_case",
+        timestamp_output_dir=True,
+        generate_eit=False,
+        generate_emg=False,
+        generate_ventilator=False,
+        write_native_outputs=False,
+    )
+
+    dataset = generator.generate_synthetic_dataset(config)
+
+    output_dir = dataset.provenance["output_dir"]
+    assert os.path.dirname(output_dir) == str(tmp_path)
+    assert re.match(r"\d{8}_\d{6}(?:_\d{2})?$", os.path.basename(output_dir))
+    assert os.path.exists(os.path.join(output_dir, "timestamp_case_metadata.json"))
+
+
+def test_missing_resurfemg_raises_clear_error(monkeypatch, tmp_path):
+    generator = load_generator_module()
+    original_import_module = generator.importlib.import_module
+
+    def raise_import_error(module_name):
+        if module_name == "resurfemg.pipelines.synthetic_data":
+            raise ImportError("missing resurfemg")
+        return original_import_module(module_name)
+
+    monkeypatch.setattr(generator.importlib, "import_module", raise_import_error)
+
+    config = generator.SyntheticGeneratorConfig(
+        duration_seconds=1.0,
+        output_dir=str(tmp_path),
+        timestamp_output_dir=False,
+        generate_eit=False,
+        generate_emg=True,
+        generate_ventilator=False,
+    )
+
+    with pytest.raises(RuntimeError, match="requires the optional dependency"):
+        generator.generate_synthetic_dataset(config)
+
+
+def test_native_emg_request_warns_without_claiming_native_path(
+    monkeypatch,
+    tmp_path,
+):
+    generator = load_generator_module()
+
+    def simulate_raw_emg(**kwargs):
+        return np.zeros(int(kwargs["fs_emg"] * kwargs["t_end"]))
+
+    synthetic_data = types.ModuleType("resurfemg.pipelines.synthetic_data")
+    synthetic_data.simulate_raw_emg = simulate_raw_emg
+    pipelines = types.ModuleType("resurfemg.pipelines")
+    resurfemg = types.ModuleType("resurfemg")
+    monkeypatch.setitem(sys.modules, "resurfemg", resurfemg)
+    monkeypatch.setitem(sys.modules, "resurfemg.pipelines", pipelines)
+    monkeypatch.setitem(
+        sys.modules,
+        "resurfemg.pipelines.synthetic_data",
+        synthetic_data,
+    )
+
+    config = generator.SyntheticGeneratorConfig(
+        duration_seconds=1.0,
+        output_dir=str(tmp_path),
+        basename="native_missing",
+        timestamp_output_dir=False,
+        generate_eit=False,
+        generate_emg=True,
+        generate_ventilator=False,
+        write_native_outputs=True,
+        emg=generator.EMGGeneratorConfig(sample_frequency_hz=10.0),
+    )
+
+    with pytest.warns(RuntimeWarning, match="Native EMG/Ventilator output"):
+        generator.generate_synthetic_dataset(config)
+
+    assert os.path.exists(os.path.join(str(tmp_path), "native_missing_emg.npy"))
+    assert os.path.exists(os.path.join(str(tmp_path), "native_missing_emg.csv"))
+    assert not os.path.exists(os.path.join(str(tmp_path), "native_missing_emg.Poly5"))
