@@ -23,8 +23,10 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
 dependencies = [
+  "loguru",
   "numpy",
   "pandas",
+  "PyYAML",
 ]
 dynamic = ["version"]
 
