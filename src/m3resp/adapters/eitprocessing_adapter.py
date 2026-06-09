@@ -64,11 +64,18 @@ class EITProcessingAdapter:
         subject_type: str = "adult",
         welch_window_seconds: float = 30.0,
         filter_mode: str = "mdn",
+        filter_enabled: bool = True,
         lowpass_hz: float = 1.0,
         highpass_hz: float = 0.05,
         filter_order: int = 4,
         breath_min_duration_seconds: float = 2 / 3,
+        compute_rates: bool = True,
+        compute_breath_intervals: bool = True,
+        compute_continuous_tiv: bool = True,
+        compute_eeli: bool = True,
         compute_pixel_tiv: bool = True,
+        include_filtered_data: bool = True,
+        include_global_impedance: bool = True,
     ) -> dict[str, Any]:
         """Run the Stage 1 EIT preprocessing pipeline through `eitprocessing`."""
 
@@ -88,22 +95,45 @@ class EITProcessingAdapter:
 
         _require_eit_sequence(sequence)
 
-        raw_eit = self.get_raw_eit(sequence)
-        raw_global_impedance = self.get_global_impedance(sequence)
+        if not compute_breath_intervals and (
+            compute_continuous_tiv or compute_eeli or compute_pixel_tiv
+        ):
+            raise ValueError(
+                "EIT TIV, EELI, and pixel TIV require breath intervals. "
+                "Enable eit.processing.outputs.breath_intervals or disable "
+                "the dependent EIT outputs."
+            )
 
-        rate_detector = RateDetection(subject_type, welch_window=welch_window_seconds)
-        rate_captures: dict[str, Any] = {}
-        respiratory_rate_hz, heart_rate_hz = rate_detector.apply(
-            raw_eit,
-            captures=rate_captures,
-            suppress_length_warnings=True,
-            suppress_edge_case_warning=True,
+        raw_eit = self.get_raw_eit(sequence)
+        normalized_filter_mode = "none" if not filter_enabled else filter_mode.lower()
+        if normalized_filter_mode not in {"mdn", "lowpass", "bandpass", "none"}:
+            raise ValueError(
+                "filter_mode must be one of: 'mdn', 'lowpass', 'bandpass', 'none'."
+            )
+
+        raw_global_impedance = (
+            self.get_global_impedance(sequence) if include_global_impedance else None
         )
+
+        rate_detector = None
+        rate_captures: dict[str, Any] = {}
+        respiratory_rate_hz = None
+        heart_rate_hz = None
+        rates_required = compute_rates or normalized_filter_mode == "mdn"
+        if rates_required:
+            rate_detector = RateDetection(
+                subject_type, welch_window=welch_window_seconds
+            )
+            respiratory_rate_hz, heart_rate_hz = rate_detector.apply(
+                raw_eit,
+                captures=rate_captures,
+                suppress_length_warnings=True,
+                suppress_edge_case_warning=True,
+            )
 
         filter_captures: dict[str, Any] = {}
         filtered_eit = raw_eit
         filtered_global_impedance = raw_global_impedance
-        normalized_filter_mode = filter_mode.lower()
 
         if normalized_filter_mode == "mdn":
             eit_filter = MDNFilter(
@@ -141,47 +171,58 @@ class EITProcessingAdapter:
                 f"EIT data filtered with a {normalized_filter_mode} Butterworth filter."
             )
             filtered_eit.pixel_impedance = filtered_pixels
-        elif normalized_filter_mode != "none":
-            raise ValueError(
-                "filter_mode must be one of: 'mdn', 'lowpass', 'bandpass', 'none'."
-            )
 
         if filtered_eit is not raw_eit:
             _add_to_collection(sequence.eit_data, filtered_eit)
-            filtered_global_impedance = filtered_eit.get_summed_impedance(
-                return_label=f"global_impedance_({filtered_eit.label})",
-                name=f"Global impedance ({filtered_eit.label})",
-                description="Global impedance calculated from filtered EIT data.",
+            if include_global_impedance:
+                filtered_global_impedance = filtered_eit.get_summed_impedance(
+                    return_label=f"global_impedance_({filtered_eit.label})",
+                    name=f"Global impedance ({filtered_eit.label})",
+                    description="Global impedance calculated from filtered EIT data.",
+                )
+                _add_to_collection(sequence.continuous_data, filtered_global_impedance)
+
+        breath_detector = None
+        breath_intervals = None
+        continuous_tiv = None
+        eeli = None
+        if compute_breath_intervals:
+            if filtered_global_impedance is None:
+                filtered_global_impedance = self.get_global_impedance(
+                    sequence, label=filtered_eit.label
+                )
+            breath_detector = BreathDetection(
+                minimum_duration=breath_min_duration_seconds
             )
-            _add_to_collection(sequence.continuous_data, filtered_global_impedance)
+            breath_intervals = breath_detector.find_breaths(
+                filtered_global_impedance,
+                result_label="eit_breaths",
+                store=False,
+            )
+            _add_to_collection(sequence.interval_data, breath_intervals)
 
-        breath_detector = BreathDetection(minimum_duration=breath_min_duration_seconds)
-        breath_intervals = breath_detector.find_breaths(
-            filtered_global_impedance,
-            result_label="eit_breaths",
-            store=False,
-        )
-        _add_to_collection(sequence.interval_data, breath_intervals)
+        if compute_continuous_tiv:
+            tiv_calculator = TIV(breath_detection=breath_detector)
+            continuous_tiv = tiv_calculator.compute_parameter(
+                filtered_global_impedance,
+                sequence=sequence,
+                store=False,
+                result_label="continuous_tivs",
+            )
+            _add_to_collection(sequence.sparse_data, continuous_tiv)
 
-        tiv_calculator = TIV(breath_detection=breath_detector)
-        continuous_tiv = tiv_calculator.compute_parameter(
-            filtered_global_impedance,
-            sequence=sequence,
-            store=False,
-            result_label="continuous_tivs",
-        )
-        _add_to_collection(sequence.sparse_data, continuous_tiv)
-
-        eeli = EELI(breath_detection=breath_detector).compute_parameter(
-            filtered_global_impedance,
-            sequence=sequence,
-            store=False,
-            result_label="continuous_eelis",
-        )
-        _add_to_collection(sequence.sparse_data, eeli)
+        if compute_eeli:
+            eeli = EELI(breath_detection=breath_detector).compute_parameter(
+                filtered_global_impedance,
+                sequence=sequence,
+                store=False,
+                result_label="continuous_eelis",
+            )
+            _add_to_collection(sequence.sparse_data, eeli)
 
         pixel_tiv = None
         if compute_pixel_tiv:
+            tiv_calculator = TIV(breath_detection=breath_detector)
             pixel_tiv = tiv_calculator.compute_parameter(
                 filtered_eit,
                 filtered_global_impedance,
@@ -196,7 +237,7 @@ class EITProcessingAdapter:
             "sequence": sequence,
             "raw_eit": raw_eit,
             "raw_global_impedance": raw_global_impedance,
-            "filtered_eit": filtered_eit,
+            "filtered_eit": filtered_eit if include_filtered_data else None,
             "filtered_global_impedance": filtered_global_impedance,
             "filter_mode": normalized_filter_mode,
             "filter_captures": filter_captures,
