@@ -6,22 +6,52 @@ from pathlib import Path
 from typing import Any
 
 from m3resp import M3Session
+from m3resp.core.config import WorkflowConfig
+from m3resp.workflows.configured import (
+    WorkflowResult,
+    run_configured_workflow,
+)
 
 
 def run_multimodal_workflow(
-    eit_path: str | Path,
-    emg_path: str | Path,
+    eit_path: str | Path | None = None,
+    emg_path: str | Path | None = None,
     eit_vendor: str | None = None,
     process_eit: bool = True,
     detect_eit_breaths: bool = True,
     process_emg: bool = True,
     detect_emg_breaths: bool = True,
     postprocess_emg: bool = True,
+    *,
+    config: str | Path | WorkflowConfig | None = None,
+    root: str | Path | None = None,
+    export: bool = True,
+    save_figures: bool = True,
     eit_adapter: Any = None,
     emg_adapter: Any = None,
     **kwargs: Any,
-) -> M3Session:
-    """Load EIT and EMG data, then run default Stage 1 pipelines."""
+) -> M3Session | WorkflowResult:
+    """Run the multimodal workflow.
+
+    Positional path calls preserve the original lightweight API and return an
+    ``M3Session``. Passing ``config=`` runs the YAML-configured workflow and
+    returns a ``WorkflowResult``.
+    """
+
+    if config is not None:
+        return run_configured_workflow(
+            config,
+            root=root,
+            export=export,
+            save_figures=save_figures,
+            eit_adapter=eit_adapter,
+            emg_adapter=emg_adapter,
+        )
+
+    if eit_path is None or emg_path is None:
+        raise TypeError(
+            "run_multimodal_workflow() requires eit_path/emg_path or config"
+        )
 
     if detect_eit_breaths and not process_eit:
         raise ValueError("detect_eit_breaths=True requires process_eit=True")
