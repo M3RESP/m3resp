@@ -1,0 +1,107 @@
+duration_seconds: 60.0
+seed: 42
+output_dir: ../../../data/source/synthetic_demo
+basename: m3resp_demo
+timestamp_output_dir: true
+generate_eit: true
+generate_emg: true
+generate_ventilator: true
+write_native_outputs: true
+
+respiratory:
+  respiratory_rate_bpm: 14.0
+  respiratory_rate_variation_bpm: 2.0
+  ie_ratio: 0.5
+  occlusion_times_seconds:
+    - 45.0
+
+drift:
+  enabled: false
+  amplitude: 0.18
+  kind: sinusoidal
+  frequency_hz: 0.008
+  secondary_frequency_hz: 0.003
+  phase_radians: 1.2
+  slope_per_second: 0.0
+
+eit:
+  sample_frequency_hz: 20.0
+  format_name: original
+  base_impedance_au: 10.0
+  tidal_amplitude_au: 0.9
+  cardiac_amplitude_au: 0.04
+  heart_rate_bpm: 72.0
+  noise_std_au: 0.02
+
+eit_waveform:
+  min_respiratory_rate_bpm: 6.0
+  tidal_amplitude_variation_fraction: 0.12
+  min_tidal_amplitude_au: 0.3
+  inhale_fraction_variation: 0.04
+  min_inhale_fraction: 0.25
+  max_inhale_fraction: 0.55
+  breath_wave_scale: 0.5
+  cardiac_primary_weight: 0.75
+  cardiac_harmonic_weight: 0.25
+  cardiac_harmonic_multiplier: 2.0
+  cardiac_harmonic_phase_radians: 0.5
+  pixel_noise_fraction: 0.003
+
+lung_template:
+  nx: 32
+  ny: 32
+  left_center_x: -0.42
+  right_center_x: 0.42
+  center_y: 0.02
+  lung_width: 0.28
+  lung_height: 0.42
+  center_penalty_weight: 0.35
+  center_penalty_width: 0.16
+  center_penalty_height: 0.7
+  min_template_value: 0.0
+
+medibus:
+  pressure_channel: 0
+  flow_channel: 1
+  volume_channel: 2
+  respiratory_rate_channel: 36
+  fio2_channel: 44
+  pressure_baseline_cm_h2o: 8.0
+  pressure_amplitude_cm_h2o: 6.0
+  volume_baseline_ml: 400.0
+  volume_amplitude_ml: 150.0
+  fio2_percent: 21.0
+
+events:
+  start_time_seconds: 0.0
+  start_marker: 1
+  start_text: start
+  midpoint_fraction: 0.5
+  midpoint_marker: 2
+  midpoint_text: midpoint
+
+emg:
+  sample_frequency_hz: 2048
+  channel_amplitudes_uv:
+    - 0.2
+    - 5.0
+  drift_amplitude_uv: 100.0
+  noise_amplitude_uv: 2.0
+  heart_rate_bpm: 72.0
+  ecg_acceleration: 1.6
+  tau_mus_up_seconds: 0.3
+  tau_mus_down_seconds: 0.3
+
+ventilator:
+  sample_frequency_hz: 100
+  driving_pressure_cm_h2o: 8.0
+  muscle_pressure_amplitude_cm_h2o: 5.0
+
+export:
+  timestamp_format: "%Y%m%d_%H%M%S"
+  timestamp_suffix_width: 2
+  csv_time_label: time_seconds
+  native_extension: .Poly5
+  draeger_event_text_length: 30
+  seconds_per_day: 86400.0
+  metadata_indent: 2
