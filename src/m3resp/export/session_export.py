@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -11,30 +12,48 @@ from typing import Any
 from m3resp.export.tables import events_to_rows, parameters_to_rows
 
 
-def export_session_summary(session: Any, output_dir: str | Path) -> Path:
+def export_session_summary(
+    session: Any,
+    output_dir: str | Path,
+    *,
+    summary_json: bool = True,
+    event_csvs: bool = True,
+    parameters_csv: bool = True,
+    postprocessing: bool = True,
+) -> Path:
     """Export a minimal CSV/JSON summary for an M3Resp session."""
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
+    parameters = dict(session.parameters)
+    if not postprocessing:
+        parameters.pop("emg_postprocessing", None)
+
     summary = {
         "metadata": _jsonable(session.metadata),
         "quality": _jsonable(session.quality),
-        "parameters": _jsonable(session.parameters),
+        "parameters": _jsonable(parameters),
         "provenance": _jsonable(session.provenance),
     }
 
-    (output_path / "summary.json").write_text(
-        json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8"
-    )
+    if summary_json:
+        Path(os.path.join(output_path, "summary.json")).write_text(
+            json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8"
+        )
 
-    for name, events in session.events.items():
-        if events:
-            _write_csv(output_path / f"{name}.csv", events_to_rows(events))
+    if event_csvs:
+        for name, events in session.events.items():
+            if events:
+                _write_csv(
+                    Path(os.path.join(output_path, f"{name}.csv")),
+                    events_to_rows(events),
+                )
 
-    if session.parameters:
+    if parameters_csv and parameters:
         _write_csv(
-            output_path / "parameters.csv", parameters_to_rows(session.parameters)
+            Path(os.path.join(output_path, "parameters.csv")),
+            parameters_to_rows(parameters),
         )
 
     return output_path
