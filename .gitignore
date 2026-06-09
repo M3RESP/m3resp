@@ -9,3 +9,6 @@ plan/*
 !.pre-commit-config.yaml
 # !.github/
 # !.github/**
+
+# agentics
+AGENTS.md
