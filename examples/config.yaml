@@ -8,7 +8,7 @@ modules:
   vent: true   # Ventilator waveform (used with EMG module)
 
 eit:
-  file:   data/source/draeger_synthetic_draeger_20Hz.bin
+  file:   data/source/synthetic_demo/20260609_171101/m3resp_demo_multimodal_eit_draeger.bin #data/source/draeger_synthetic_draeger_20Hz.bin
   vendor: draeger  # draeger | timpel | sentec | simulated
   processing:
     # preprocess: if true, preprocess the eit data
@@ -41,7 +41,7 @@ eit:
       global_impedance: true
 
 emg:
-  file: data/source/emg_data_synth_quiet_breathing.Poly5
+  file: data/source/synthetic_demo/20260610_100034/m3resp_demo_emg.Poly5 #data/source/emg_data_synth_quiet_breathing.Poly5
   processing:
     preprocess:
       enabled: true
@@ -106,7 +106,7 @@ emg:
           evaluate_respiratory_rates: false
 
 vent:
-  file: data/source/vent_data_synth_quiet_breathing.Poly5
+  file: data/source/synthetic_demo/20260610_100034/m3resp_demo_ventilator.Poly5
 
 alignment:
   method: manual_offset
