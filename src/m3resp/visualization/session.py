@@ -129,6 +129,99 @@ def plot_eit_processing_summary(session: M3Session):
     return fig
 
 
+def plot_synchronization_comparison(
+    session: M3Session,
+    *,
+    max_seconds: float | None = 120.0,
+    emg_channel: int | None = None,
+    eit_waveform: str = "global_impedance_(raw)",
+):
+    """Plot plottable signals before and after manual synchronization."""
+
+    try:
+        from matplotlib import pyplot as plt
+    except ImportError as exc:  # pragma: no cover - depends on local extras
+        raise ImportError(
+            "Synchronization visualization requires matplotlib. Install the EIT "
+            "or EMG optional dependencies, or install matplotlib directly."
+        ) from exc
+
+    synchronized = session.processed.get("synchronized")
+    if not isinstance(synchronized, dict) or not synchronized:
+        raise ValueError(
+            "No synchronized events found. Run align_modalities before calling "
+            "plot_synchronization_comparison."
+        )
+
+    offsets = session.parameters.get("raw_alignment", {}).get(
+        "offset_seconds",
+        session.parameters.get("alignment", {}).get("offset_seconds", {}),
+    )
+    if not isinstance(offsets, dict):
+        offsets = {}
+
+    rows = _get_synchronization_plot_rows(session, emg_channel, eit_waveform, offsets)
+    if not rows:
+        raise ValueError(
+            "No plottable EIT or EMG signals found for synchronization comparison."
+        )
+
+    fig, axes = plt.subplots(
+        len(rows),
+        2,
+        figsize=(12, max(3.0, 2.6 * len(rows))),
+        sharex=False,
+        constrained_layout=True,
+    )
+    axes = np.asarray(axes).reshape(len(rows), 2)
+
+    for row_axes, row in zip(axes, rows, strict=True):
+        (
+            modality,
+            event_key,
+            title,
+            before_time,
+            before_values,
+            after_time,
+            after_values,
+            ylabel,
+        ) = row
+        before_time, before_values = _limit_time(
+            before_time,
+            before_values,
+            max_seconds,
+        )
+        after_time, after_values = _limit_time(after_time, after_values, max_seconds)
+
+        before_ax, after_ax = row_axes
+        before_ax.plot(before_time, before_values, linewidth=1)
+        before_ax.set(title=f"{title} before synchronization", ylabel=ylabel)
+        before_ax.grid(True, alpha=0.25)
+
+        after_ax.plot(after_time, after_values, linewidth=1)
+        after_ax.set(title=f"{title} after synchronization", ylabel=ylabel)
+        after_ax.grid(True, alpha=0.25)
+
+        color, label = _event_style(modality)
+        _plot_events(
+            [before_ax],
+            session.events.get(event_key, []),
+            color=color,
+            label=f"{label} original",
+        )
+        _plot_events(
+            [after_ax],
+            synchronized.get(event_key, []),
+            color=color,
+            label=f"{label} synchronized",
+        )
+
+    for ax in axes[-1]:
+        ax.set_xlabel("Time (s)")
+    _deduplicate_legends(axes.ravel())
+    return fig
+
+
 def _get_eit_rows(
     session: M3Session, waveform: str
 ) -> list[tuple[str, str, np.ndarray, np.ndarray, str]]:
@@ -159,6 +252,83 @@ def _get_eit_rows(
                 ("eit", "EIT filtered global impedance", *_continuous_series(filtered))
             )
 
+    return rows
+
+
+def _get_synchronization_rows(
+    session: M3Session,
+    emg_channel: int | None,
+    eit_waveform: str,
+) -> list[tuple[str, str, str, np.ndarray, np.ndarray, str]]:
+    rows: list[tuple[str, str, str, np.ndarray, np.ndarray, str]] = []
+
+    eit_rows = _get_eit_rows(session, eit_waveform)
+    if eit_rows:
+        # Synchronization views should compare timing, not filtering effects.
+        _, title, time, values, ylabel = eit_rows[0]
+        rows.append(("eit", "eit_breaths", title, time, values, ylabel))
+
+    emg_rows = _get_emg_rows(session, emg_channel)
+    if emg_rows:
+        _, title, time, values, ylabel = emg_rows[-1]
+        rows.append(("emg", "emg_breaths", title, time, values, ylabel))
+
+    return rows
+
+
+def _get_synchronization_plot_rows(
+    session: M3Session,
+    emg_channel: int | None,
+    eit_waveform: str,
+    offsets: dict[str, float],
+) -> list[tuple[str, str, str, np.ndarray, np.ndarray, np.ndarray, np.ndarray, str]]:
+    rows: list[
+        tuple[str, str, str, np.ndarray, np.ndarray, np.ndarray, np.ndarray, str]
+    ] = []
+    raw_sync = session.processed.get("raw_synchronization")
+    if isinstance(raw_sync, dict):
+        for modality, event_key in (("eit", "eit_breaths"), ("emg", "emg_breaths")):
+            record = raw_sync.get(modality)
+            if not isinstance(record, dict):
+                continue
+            before = record.get("before")
+            after = record.get("after")
+            if not isinstance(before, dict) or not isinstance(after, dict):
+                continue
+            rows.append(
+                (
+                    modality,
+                    event_key,
+                    str(before["title"]),
+                    np.asarray(before["time"], dtype=float),
+                    np.asarray(before["values"], dtype=float),
+                    np.asarray(after["time"], dtype=float),
+                    np.asarray(after["values"], dtype=float),
+                    str(before["ylabel"]),
+                )
+            )
+        if rows:
+            return rows
+
+    for modality, event_key, title, time, values, ylabel in _get_synchronization_rows(
+        session,
+        emg_channel,
+        eit_waveform,
+    ):
+        offset = float(offsets.get(modality, 0.0))
+        after_time, after_values = _shift_and_crop_series(time, values, offset)
+        rows.append(
+            (
+                modality,
+                event_key,
+                title,
+                time,
+                values,
+                after_time,
+                after_values,
+                ylabel,
+            )
+        )
     return rows
 
 
@@ -244,6 +414,18 @@ def _limit_time(
     return time[keep], values[keep]
 
 
+def _shift_and_crop_series(
+    time: np.ndarray,
+    values: np.ndarray,
+    offset_seconds: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    if len(time) == 0 or offset_seconds == 0:
+        return time, values
+    shifted_time = time + offset_seconds
+    keep = (shifted_time >= time[0]) & (shifted_time <= time[-1])
+    return shifted_time[keep], values[keep]
+
+
 def _plot_events(
     axes: Iterable[Any],
     events: Iterable[BreathEvent],
@@ -269,6 +451,14 @@ def _plot_sparse(ax: Any, sparse: Any, title: str, ylabel: str) -> None:
     ax.plot(sparse.time, sparse.values, marker="o", linestyle="-", linewidth=1)
     ax.set(title=title, xlabel="Time (s)", ylabel=ylabel)
     ax.grid(True, alpha=0.25)
+
+
+def _event_style(modality: str) -> tuple[str, str]:
+    if modality == "eit":
+        return "tab:green", "EIT breath"
+    if modality == "emg":
+        return "tab:red", "EMG breath"
+    return "tab:blue", f"{modality.upper()} event"
 
 
 def _deduplicate_legends(axes: Iterable[Any]) -> None:

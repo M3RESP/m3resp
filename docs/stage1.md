@@ -186,9 +186,9 @@ Configured workflows can export:
 - `parameters.csv`;
 - event CSV files such as `eit_breaths.csv` and `emg_breaths.csv`;
 - EMG postprocessing outputs;
-- figures such as `overview.png`, `eit-processing.png`, and
-  `eit-rate-detection.png` when the required data and plotting dependencies are
-  available.
+- figures such as `overview.png`, `synchronization.png`,
+  `eit-processing.png`, and `eit-rate-detection.png` when the required data and
+  plotting dependencies are available.
 
 Artifact export is controlled by the top-level `results` section:
 

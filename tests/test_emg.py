@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -9,7 +10,10 @@ import pytest
 from m3resp import BreathEvent, M3Session, load_emg
 from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
 from m3resp.modalities.emg import load as load_emg_recording
-from m3resp.visualization import plot_session_overview
+from m3resp.visualization import (
+    plot_session_overview,
+    plot_synchronization_comparison,
+)
 from m3resp.workflows.multimodal_workflow import run_multimodal_workflow
 
 
@@ -113,6 +117,117 @@ def test_emg_overview_y_axis_labels_include_amplitude_and_units():
             "EMG amplitude (uV)",
             "EMG amplitude (uV)",
         ]
+    finally:
+        plt.close(fig)
+
+
+def test_synchronization_comparison_shifts_signal_time_by_alignment_offset():
+    plt = pytest.importorskip("matplotlib.pyplot")
+    session = M3Session()
+    session.processed["emg"] = {
+        "channel": 0,
+        "fs": 1000.0,
+        "metadata": {"labels": ["EMG"], "units": ["uV"]},
+        "envelope": [0.0, 0.0, 1.0, 2.0, 3.0],
+    }
+    session.add_events(
+        "emg_breaths",
+        [BreathEvent("emg", 0.002, 0.004, peak_time=0.003)],
+    )
+    session.align_modalities(offset_seconds={"emg": -0.002})
+
+    fig = plot_synchronization_comparison(session, max_seconds=None)
+
+    try:
+        before_ax, after_ax = fig.axes[:2]
+        assert list(before_ax.lines[0].get_xdata()) == [
+            0.0,
+            0.001,
+            0.002,
+            0.003,
+            0.004,
+        ]
+        assert list(after_ax.lines[0].get_xdata()) == [0.0, 0.001, 0.002]
+        assert list(after_ax.lines[0].get_ydata()) == [1.0, 2.0, 3.0]
+        assert before_ax.get_title() == "EMG envelope (EMG) before synchronization"
+        assert after_ax.get_title() == "EMG envelope (EMG) after synchronization"
+    finally:
+        plt.close(fig)
+
+
+def test_synchronization_comparison_uses_raw_eit_signal_when_filtered_exists():
+    plt = pytest.importorskip("matplotlib.pyplot")
+    session = M3Session()
+    session.raw["eit"] = SimpleNamespace(
+        data=SimpleNamespace(
+            continuous_data={
+                "global_impedance_(raw)": SimpleNamespace(
+                    time=[0.0, 1.0],
+                    values=[10.0, 11.0],
+                    label="raw impedance",
+                )
+            }
+        )
+    )
+    session.processed["eit"] = {
+        "filtered_global_impedance": SimpleNamespace(
+            time=[0.0, 1.0],
+            values=[100.0, 101.0],
+            label="filtered impedance",
+        )
+    }
+    session.add_events(
+        "eit_breaths",
+        [BreathEvent("eit", 0.0, 1.0, peak_time=0.5)],
+    )
+    session.align_modalities(offset_seconds={"eit": 0.0})
+
+    fig = plot_synchronization_comparison(session, max_seconds=None)
+
+    try:
+        before_ax, after_ax = fig.axes[:2]
+        assert before_ax.get_title() == (
+            "EIT raw global impedance before synchronization"
+        )
+        assert after_ax.get_title() == "EIT raw global impedance after synchronization"
+        assert list(before_ax.lines[0].get_ydata()) == [10.0, 11.0]
+        assert list(after_ax.lines[0].get_ydata()) == [10.0, 11.0]
+    finally:
+        plt.close(fig)
+
+
+def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
+    plt = pytest.importorskip("matplotlib.pyplot")
+    session = M3Session()
+    session.processed["raw_synchronization"] = {
+        "emg": {
+            "before": {
+                "title": "EMG raw (EMG)",
+                "time": [0.0, 0.001, 0.002, 0.003],
+                "values": [0.0, 0.0, 1.0, 2.0],
+                "ylabel": "EMG amplitude (uV)",
+            },
+            "after": {
+                "title": "EMG raw (EMG)",
+                "time": [0.002, 0.003],
+                "values": [1.0, 2.0],
+                "ylabel": "EMG amplitude (uV)",
+            },
+        }
+    }
+    session.processed["synchronized"] = {"emg_breaths": []}
+    session.parameters["raw_alignment"] = {
+        "offset_seconds": {"eit": 0.0, "emg": -0.002, "vent": 0.0}
+    }
+
+    fig = plot_synchronization_comparison(session, max_seconds=None)
+
+    try:
+        before_ax, after_ax = fig.axes[:2]
+        assert list(before_ax.lines[0].get_ydata()) == [0.0, 0.0, 1.0, 2.0]
+        assert list(after_ax.lines[0].get_ydata()) == [1.0, 2.0]
+        assert before_ax.get_title() == "EMG raw (EMG) before synchronization"
+        assert after_ax.get_title() == "EMG raw (EMG) after synchronization"
     finally:
         plt.close(fig)
 

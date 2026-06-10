@@ -15,20 +15,6 @@ respiratory:
   occlusion_times_seconds:
     - 45.0
 
-drift:
-  enabled: true   # Enable drift; false applies no drift.
-
-  kind: time_shift  # Drift model: time_shift, sinusoidal, linear, or constant.
-
-  time_shift_seconds: 2.0  # Signal shift in seconds; positive delays, negative advances.
-  time_shift_fill_mode: zero   # Fill exposed samples after time shift: edge or zero.
-
-  amplitude: 0.18  # Additive drift size in a.u.; ignored for kind: time_shift.
-  frequency_hz: 0.008   # Primary sinusoidal drift frequency in Hz.
-  secondary_frequency_hz: 0.003   # Secondary sinusoidal drift frequency in Hz.
-  phase_radians: 1.2  #Secondary sinusoidal drift phase offset in radians.
-  slope_per_second: 0.0 # Linear drift slope in a.u./s; 0.0 derives it from amplitude/duration.
-
 eit:
   sample_frequency_hz: 20.0
   format_name: original
@@ -37,6 +23,17 @@ eit:
   cardiac_amplitude_au: 0.04
   heart_rate_bpm: 72.0
   noise_std_au: 0.02
+  drift:
+    enabled: false
+    kind: sinusoidal  # EIT baseline drift: sinusoidal, linear, or constant.
+    amplitude: 0.18
+    frequency_hz: 0.008
+    secondary_frequency_hz: 0.003
+    phase_radians: 1.2
+    slope_per_second: 0.0
+  timing_drift:
+    enabled: false
+    time_shift_seconds: 0.0
 
 eit_waveform:
   min_respiratory_rate_bpm: 6.0
@@ -96,11 +93,17 @@ emg:
   ecg_acceleration: 1.6
   tau_mus_up_seconds: 0.3
   tau_mus_down_seconds: 0.3
+  timing_drift:
+    enabled: true
+    time_shift_seconds: 2.0
 
 ventilator:
   sample_frequency_hz: 100
   driving_pressure_cm_h2o: 8.0
   muscle_pressure_amplitude_cm_h2o: 5.0
+  timing_drift:
+    enabled: false
+    time_shift_seconds: 0.0
 
 export:
   timestamp_format: "%Y%m%d_%H%M%S"

@@ -25,6 +25,7 @@ def save_workflow_figures(
     from m3resp.visualization.session import (
         plot_eit_processing_summary,
         plot_session_overview,
+        plot_synchronization_comparison,
     )
 
     output_path = Path(output_dir)
@@ -37,6 +38,12 @@ def save_workflow_figures(
             "overview.png",
             lambda: plot_session_overview(session, max_seconds=max_seconds),
         )
+
+    _add_figure(
+        figures,
+        "synchronization.png",
+        lambda: plot_synchronization_comparison(session, max_seconds=max_seconds),
+    )
 
     if include_eit:
         _add_figure(

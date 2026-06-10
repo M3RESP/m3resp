@@ -15,10 +15,22 @@ from m3resp.workflows.configured.kwargs import (
 def run_configured_eit_steps(session: M3Session, cfg: WorkflowConfig) -> None:
     """Run enabled EIT loading and processing steps."""
 
+    load_configured_eit(session, cfg)
+    process_configured_eit(session, cfg)
+
+
+def load_configured_eit(session: M3Session, cfg: WorkflowConfig) -> None:
+    """Load configured EIT input."""
+
     if cfg.eit.file is None:
         raise ValueError("Configured EIT workflow requires eit.file.")
 
     session.load_eit(cfg.eit.file, vendor=cfg.eit.vendor)
+
+
+def process_configured_eit(session: M3Session, cfg: WorkflowConfig) -> None:
+    """Run enabled EIT processing steps."""
+
     if cfg.eit.processing.preprocess.enabled:
         session.preprocess_eit(**eit_preprocess_kwargs(cfg))
     if cfg.eit.processing.breath_detection.enabled:
@@ -33,10 +45,26 @@ def run_configured_eit_steps(session: M3Session, cfg: WorkflowConfig) -> None:
 def run_configured_emg_steps(session: M3Session, cfg: WorkflowConfig) -> None:
     """Run enabled EMG loading and processing steps."""
 
+    load_configured_emg(session, cfg)
+    process_configured_emg(session, cfg)
+
+
+def load_configured_emg(session: M3Session, cfg: WorkflowConfig) -> None:
+    """Load configured EMG and optional ventilator inputs."""
+
     if cfg.emg.file is None:
         raise ValueError("Configured EMG workflow requires emg.file.")
 
     session.load_emg(cfg.emg.file, verbose=False)
+    if cfg.modules.vent and cfg.vent.file is not None:
+        session.raw["vent"] = session.emg_adapter.load(
+            str(cfg.vent.file), verbose=False
+        )
+
+
+def process_configured_emg(session: M3Session, cfg: WorkflowConfig) -> None:
+    """Run enabled EMG processing steps."""
+
     if cfg.emg.processing.preprocess.enabled:
         session.preprocess_emg(**emg_preprocess_kwargs(cfg))
     if cfg.emg.processing.breath_detection.enabled:
@@ -47,9 +75,7 @@ def run_configured_emg_steps(session: M3Session, cfg: WorkflowConfig) -> None:
             )
         session.detect_emg_breaths(**emg_detection_kwargs(cfg))
 
-    ventilator = None
-    if cfg.modules.vent and cfg.vent.file is not None:
-        ventilator = session.emg_adapter.load(str(cfg.vent.file), verbose=False)
+    ventilator = session.raw.get("vent")
     if cfg.emg.processing.postprocessing.enabled:
         if not cfg.emg.processing.preprocess.enabled:
             raise ValueError(

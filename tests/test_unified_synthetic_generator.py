@@ -107,20 +107,65 @@ def test_drift_disabled_and_enabled_are_deterministic():
     assert np.allclose(enabled, enabled_again)
 
 
-def test_time_shift_drift_delays_signal_with_edge_fill():
+def test_timing_drift_shifts_arrays_along_selected_sample_axis():
     time = np.arange(0, 5, 1.0)
-    signal = np.asarray([10.0, 11.0, 13.0, 16.0, 20.0])
-    config = generator.DriftConfig(
+    values = np.asarray(
+        [
+            [0.0, 0.0, 1.0, 2.0, 3.0],
+            [0.0, 0.0, 10.0, 20.0, 30.0],
+        ],
+        dtype=np.float32,
+    )
+    config = generator.TimingDriftConfig(
         enabled=True,
-        kind="time_shift",
         time_shift_seconds=2.0,
-        time_shift_fill_mode="edge",
     )
 
-    shifted = generator.shift_signal_in_time(signal, time, config)
+    shifted_time, shifted = generator.shift_array_in_time(
+        values,
+        time,
+        config,
+        sample_axis=1,
+    )
 
-    assert np.allclose(shifted, np.asarray([10.0, 10.0, 10.0, 11.0, 13.0]))
-    assert np.allclose(generator.generate_drift(time, config), 0.0)
+    assert np.allclose(shifted_time, np.asarray([2.0, 3.0, 4.0]))
+    assert np.allclose(
+        shifted,
+        np.asarray(
+            [
+                [1.0, 2.0, 3.0],
+                [10.0, 20.0, 30.0],
+            ],
+            dtype=np.float32,
+        ),
+    )
+
+
+def test_eit_drift_lives_under_eit_config():
+    drift = generator.DriftConfig(
+        enabled=True,
+        kind="constant",
+        amplitude=0.25,
+    )
+    config = generator.SyntheticGeneratorConfig(
+        duration_seconds=2.0,
+        generate_emg=False,
+        generate_ventilator=False,
+        eit=generator.EITGeneratorConfig(
+            sample_frequency_hz=2.0,
+            noise_std_au=0.0,
+            drift=drift,
+        ),
+    )
+
+    _, _, components = generator.generate_realistic_eit_signal(
+        config,
+        duration=config.duration_seconds,
+        fs=config.eit.sample_frequency_hz,
+        seed=config.seed,
+    )
+
+    assert np.allclose(components["drift"], 0.25)
 
 
 def test_emg_and_ventilator_generation_calls_resurfemg_with_config(
@@ -208,6 +253,71 @@ def test_emg_and_ventilator_generation_calls_resurfemg_with_config(
     assert "native" not in dataset.ventilator.paths
 
 
+def test_emg_timing_drift_does_not_shift_ventilator(monkeypatch, tmp_path):
+    def simulate_raw_emg(**kwargs):
+        signal = np.arange(int(kwargs["fs_emg"] * kwargs["t_end"]), dtype=float)
+        signal[:2] = 0.0
+        return signal
+
+    def simulate_ventilator_data(**kwargs):
+        n_samples = int(kwargs["fs_vent"] * kwargs["t_end"])
+        return np.vstack(
+            [
+                np.arange(n_samples, dtype=float),
+                np.arange(n_samples, dtype=float) + 10.0,
+                np.arange(n_samples, dtype=float) + 20.0,
+            ]
+        ), np.arange(n_samples, dtype=float) + 30.0
+
+    synthetic_data = types.ModuleType("resurfemg.pipelines.synthetic_data")
+    synthetic_data.simulate_raw_emg = simulate_raw_emg
+    synthetic_data.simulate_ventilator_data = simulate_ventilator_data
+    pipelines = types.ModuleType("resurfemg.pipelines")
+    resurfemg = types.ModuleType("resurfemg")
+    monkeypatch.setitem(sys.modules, "resurfemg", resurfemg)
+    monkeypatch.setitem(sys.modules, "resurfemg.pipelines", pipelines)
+    monkeypatch.setitem(
+        sys.modules,
+        "resurfemg.pipelines.synthetic_data",
+        synthetic_data,
+    )
+
+    config = generator.SyntheticGeneratorConfig(
+        duration_seconds=1.0,
+        output_dir=str(tmp_path),
+        basename="emg_shift_only",
+        timestamp_output_dir=False,
+        generate_eit=False,
+        generate_emg=True,
+        generate_ventilator=True,
+        write_native_outputs=False,
+        emg=generator.EMGGeneratorConfig(
+            sample_frequency_hz=10.0,
+            channel_amplitudes_uv=(1.0,),
+            timing_drift=generator.TimingDriftConfig(
+                enabled=True,
+                time_shift_seconds=0.2,
+            ),
+        ),
+        ventilator=generator.VentilatorGeneratorConfig(
+            sample_frequency_hz=5.0,
+            timing_drift=generator.TimingDriftConfig(enabled=False),
+        ),
+    )
+
+    dataset = generator.generate_synthetic_dataset(config)
+
+    assert dataset.emg is not None
+    assert dataset.ventilator is not None
+    assert np.allclose(dataset.emg.time, np.arange(0.2, 1.0, 0.1))
+    assert np.allclose(
+        dataset.emg.array[0],
+        np.asarray([2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]),
+    )
+    assert np.allclose(dataset.ventilator.time, np.arange(5, dtype=float) / 5.0)
+    assert np.allclose(dataset.ventilator.array[0], np.arange(5, dtype=float))
+
+
 def test_resurfemg_length_mismatch_retries_and_normalizes_signal(
     monkeypatch,
     tmp_path,
@@ -280,10 +390,18 @@ def test_yaml_config_loader_builds_typed_config(tmp_path):
                     "  occlusion_times_seconds:",
                     "    - 1.0",
                     "    - 2.0",
+                    "eit:",
+                    "  drift:",
+                    "    enabled: true",
+                    "    kind: linear",
+                    "    amplitude: 0.2",
                     "emg:",
                     "  sample_frequency_hz: 1000",
                     "  channel_amplitudes_uv:",
                     "    - 4.0",
+                    "  timing_drift:",
+                    "    enabled: true",
+                    "    time_shift_seconds: -0.5",
                 ]
             )
         )
@@ -298,7 +416,18 @@ def test_yaml_config_loader_builds_typed_config(tmp_path):
         os.path.join(str(tmp_path), output_dir)
     )
     assert config.respiratory.occlusion_times_seconds == (1.0, 2.0)
+    assert config.eit.drift.enabled is True
+    assert config.eit.drift.kind == "linear"
+    assert config.eit.drift.amplitude == 0.2
     assert config.emg.channel_amplitudes_uv == (4.0,)
+    assert config.emg.timing_drift is not None
+    assert config.emg.timing_drift.enabled is True
+    assert config.emg.timing_drift.time_shift_seconds == -0.5
+
+
+def test_yaml_config_loader_rejects_top_level_drift():
+    with pytest.raises(ValueError, match="Unknown synthetic generator config keys"):
+        generator.synthetic_generator_config_from_dict({"drift": {"enabled": True}})
 
 
 def test_main_loads_yaml_path(monkeypatch, tmp_path, capsys):

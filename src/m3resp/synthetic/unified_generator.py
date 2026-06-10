@@ -96,14 +96,20 @@ class DriftConfig:
     enabled: bool = False
     amplitude: float = 0.0
     kind: str = "sinusoidal"
-    time_shift_seconds: float = 0.0
-    time_shift_fill_mode: str = "edge"
     frequency_hz: float = 0.008
     secondary_frequency_hz: float = 0.003
     phase_radians: float = 1.2
     slope_per_second: float = 0.0
     primary_weight: float = 0.6
     secondary_weight: float = 0.4
+
+
+@dataclass
+class TimingDriftConfig:
+    """Optional modality-specific temporal drift configuration."""
+
+    enabled: bool = False
+    time_shift_seconds: float = 0.0
 
 
 @dataclass
@@ -203,6 +209,8 @@ class EITGeneratorConfig:
     cardiac_amplitude_au: float = 0.04
     heart_rate_bpm: float = 72.0
     noise_std_au: float = 0.02
+    drift: DriftConfig = field(default_factory=DriftConfig)
+    timing_drift: TimingDriftConfig | None = None
 
 
 @dataclass
@@ -217,6 +225,7 @@ class EMGGeneratorConfig:
     ecg_acceleration: float = 1.6
     tau_mus_up_seconds: float = 0.3
     tau_mus_down_seconds: float = 0.3
+    timing_drift: TimingDriftConfig | None = None
 
 
 @dataclass
@@ -226,6 +235,7 @@ class VentilatorGeneratorConfig:
     sample_frequency_hz: float = 100.0
     driving_pressure_cm_h2o: float = 8.0
     muscle_pressure_amplitude_cm_h2o: float = 5.0
+    timing_drift: TimingDriftConfig | None = None
 
 
 @dataclass
@@ -244,7 +254,6 @@ class SyntheticGeneratorConfig:
     respiratory: RespiratoryPatternConfig = field(
         default_factory=RespiratoryPatternConfig
     )
-    drift: DriftConfig = field(default_factory=DriftConfig)
     eit: EITGeneratorConfig = field(default_factory=EITGeneratorConfig)
     emg: EMGGeneratorConfig = field(default_factory=EMGGeneratorConfig)
     ventilator: VentilatorGeneratorConfig = field(
@@ -338,7 +347,6 @@ def synthetic_generator_config_from_dict(
         RespiratoryPatternConfig,
         values.get("respiratory", {}),
     )
-    values["drift"] = _nested_dataclass(DriftConfig, values.get("drift", {}))
     values["eit"] = _nested_dataclass(EITGeneratorConfig, values.get("eit", {}))
     values["emg"] = _nested_dataclass(EMGGeneratorConfig, values.get("emg", {}))
     values["ventilator"] = _nested_dataclass(
@@ -495,6 +503,12 @@ def generate_emg_record(
 
     array = np.asarray(channels, dtype=np.float32)
     time = np.arange(array.shape[1], dtype=float) / fs_emg
+    time, array = shift_array_in_time(
+        array,
+        time,
+        config.emg.timing_drift,
+        sample_axis=DEFAULT_SECOND_AXIS,
+    )
     labels = [f"emg_{index}" for index in range(array.shape[0])]
     paths = _write_record_exports(
         output_dir=output_dir,
@@ -556,6 +570,19 @@ def generate_ventilator_record(
     array = np.asarray(y_vent, dtype=np.float32)
     p_mus = np.asarray(p_mus, dtype=np.float32)
     time = np.arange(array.shape[1], dtype=float) / fs_vent
+    original_time = time
+    time, array = shift_array_in_time(
+        array,
+        original_time,
+        config.ventilator.timing_drift,
+        sample_axis=DEFAULT_SECOND_AXIS,
+    )
+    _, p_mus = shift_array_in_time(
+        p_mus,
+        original_time,
+        config.ventilator.timing_drift,
+        sample_axis=DEFAULT_FIRST_AXIS,
+    )
     labels = list(DEFAULT_VENTILATOR_LABELS)
     paths = _write_record_exports(
         output_dir=output_dir,
@@ -661,7 +688,7 @@ def generate_realistic_eit_signal(
 
     rng = np.random.default_rng(seed)
     time_seconds = np.arange(0, duration, 1 / fs)
-    drift = generate_drift(time_seconds, config.drift)
+    drift = generate_drift(time_seconds, config.eit.drift)
     breathing = np.zeros_like(time_seconds)
     current_time = DEFAULT_ZERO
 
@@ -735,10 +762,24 @@ def generate_realistic_eit_signal(
     noise = rng.normal(DEFAULT_ZERO, config.eit.noise_std_au, size=time_seconds.shape)
     baseline = np.full_like(time_seconds, config.eit.base_impedance_au)
     signal = baseline + breathing + drift + cardiac + noise
-    if is_time_shift_drift(config.drift):
-        shifted_signal = shift_signal_in_time(signal, time_seconds, config.drift)
-        drift = shifted_signal - signal
-        signal = shifted_signal
+    timing_drift = _eit_timing_drift_config(config)
+    if timing_drift is not None:
+        time_seconds, signal, components = _shift_eit_signal_components(
+            time_seconds,
+            {
+                DEFAULT_EIT_COMPONENT_LABELS[
+                    DEFAULT_COMPONENT_BASELINE_INDEX
+                ]: baseline,
+                DEFAULT_EIT_COMPONENT_LABELS[
+                    DEFAULT_COMPONENT_BREATHING_INDEX
+                ]: breathing,
+                DEFAULT_EIT_COMPONENT_LABELS[DEFAULT_COMPONENT_DRIFT_INDEX]: drift,
+                DEFAULT_EIT_COMPONENT_LABELS[DEFAULT_COMPONENT_CARDIAC_INDEX]: cardiac,
+                DEFAULT_EIT_COMPONENT_LABELS[DEFAULT_COMPONENT_NOISE_INDEX]: noise,
+            },
+            timing_drift,
+        )
+        return time_seconds, signal, components
     return (
         time_seconds,
         signal,
@@ -754,9 +795,6 @@ def generate_realistic_eit_signal(
 
 def generate_drift(time_seconds: np.ndarray, config: DriftConfig) -> np.ndarray:
     """Generate a named drift component for any time series."""
-
-    if is_time_shift_drift(config):
-        return np.zeros_like(time_seconds, dtype=float)
 
     if not config.enabled or config.amplitude == DEFAULT_ZERO:
         return np.zeros_like(time_seconds, dtype=float)
@@ -778,45 +816,135 @@ def generate_drift(time_seconds: np.ndarray, config: DriftConfig) -> np.ndarray:
     if config.kind == "constant":
         return np.full_like(time_seconds, config.amplitude, dtype=float)
 
-    raise ValueError(
-        "drift.kind must be one of: sinusoidal, linear, constant, time_shift"
+    raise ValueError("drift.kind must be one of: sinusoidal, linear, constant")
+
+
+def is_timing_drift_enabled(config: TimingDriftConfig | None) -> bool:
+    """Return whether a modality-specific timing drift should be applied."""
+
+    return (
+        config is not None
+        and config.enabled
+        and float(config.time_shift_seconds) != DEFAULT_ZERO
     )
 
 
-def is_time_shift_drift(config: DriftConfig) -> bool:
-    """Return whether drift should be modeled as a signal time shift."""
+def shift_array_in_time(
+    array: np.ndarray,
+    time_seconds: np.ndarray,
+    config: TimingDriftConfig | None,
+    *,
+    sample_axis: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Shift a sampled array in time and crop along the requested sample axis."""
 
-    return config.enabled and config.kind == "time_shift"
+    if not is_timing_drift_enabled(config):
+        return np.asarray(time_seconds, dtype=float).copy(), np.asarray(array).copy()
+
+    values = np.asarray(array)
+    moved = np.moveaxis(values, sample_axis, DEFAULT_FIRST_AXIS)
+    flat = moved.reshape((moved.shape[DEFAULT_FIRST_AXIS], -1))
+    shifted_columns = []
+    shifted_time: np.ndarray | None = None
+    for index in range(flat.shape[DEFAULT_SECOND_AXIS]):
+        column_time, shifted_column = shift_signal_in_time_cropped(
+            flat[:, index],
+            time_seconds,
+            config,
+        )
+        if shifted_time is None:
+            shifted_time = column_time
+        shifted_columns.append(shifted_column)
+
+    if shifted_time is None:
+        shifted_time = np.asarray(time_seconds[:0], dtype=float)
+    shifted = np.stack(shifted_columns, axis=DEFAULT_SECOND_AXIS).astype(
+        DEFAULT_FLOAT32_DTYPE
+    )
+    shifted = shifted.reshape((len(shifted_time), *moved.shape[1:]))
+    return shifted_time, np.moveaxis(
+        shifted,
+        DEFAULT_FIRST_AXIS,
+        sample_axis,
+    ).astype(values.dtype)
 
 
-def shift_signal_in_time(
+def shift_signal_in_time_cropped(
     signal: np.ndarray,
     time_seconds: np.ndarray,
-    config: DriftConfig,
-) -> np.ndarray:
-    """Shift a signal in time using interpolation on the original time grid."""
+    config: TimingDriftConfig,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Crop samples exposed by a temporal shift without inserting fill values."""
 
     if signal.shape != time_seconds.shape:
         raise ValueError("signal and time_seconds must have the same shape")
     if len(time_seconds) == int(DEFAULT_ZERO):
-        return np.asarray(signal, dtype=float)
+        return np.asarray(time_seconds, dtype=float), np.asarray(signal, dtype=float)
 
-    shift_seconds = float(config.time_shift_seconds)
-    if shift_seconds == DEFAULT_ZERO:
-        return np.asarray(signal, dtype=float).copy()
+    shift_samples = _time_shift_sample_count(time_seconds, config)
+    if shift_samples == int(DEFAULT_ZERO):
+        return np.asarray(time_seconds, dtype=float).copy(), np.asarray(
+            signal,
+            dtype=float,
+        ).copy()
 
-    sample_times = time_seconds - shift_seconds
-    fill_mode = config.time_shift_fill_mode
-    if fill_mode == "edge":
-        left = float(signal[0])
-        right = float(signal[-1])
-    elif fill_mode == "zero":
-        left = DEFAULT_ZERO
-        right = DEFAULT_ZERO
+    if shift_samples > int(DEFAULT_ZERO):
+        sample_slice = slice(shift_samples, None)
     else:
-        raise ValueError("drift.time_shift_fill_mode must be one of: edge, zero")
+        sample_slice = slice(None, shift_samples)
+    return np.asarray(time_seconds[sample_slice], dtype=float), np.asarray(
+        signal[sample_slice],
+        dtype=float,
+    )
 
-    return np.interp(sample_times, time_seconds, signal, left=left, right=right)
+
+def _time_shift_sample_count(
+    time_seconds: np.ndarray,
+    config: TimingDriftConfig,
+) -> int:
+    if len(time_seconds) < int(DEFAULT_TWO):
+        return int(DEFAULT_ZERO)
+    sample_period = float(np.median(np.diff(time_seconds)))
+    if sample_period <= DEFAULT_ZERO:
+        raise ValueError("time_seconds must be strictly increasing")
+    return int(round(float(config.time_shift_seconds) / sample_period))
+
+
+def _shift_eit_signal_components(
+    time_seconds: np.ndarray,
+    components: dict[str, np.ndarray],
+    config: TimingDriftConfig,
+) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray]]:
+    shifted_components: dict[str, np.ndarray] = {}
+    shifted_time: np.ndarray | None = None
+    for label, values in components.items():
+        component_time, shifted_values = shift_signal_in_time_cropped(
+            values,
+            time_seconds,
+            config,
+        )
+        if shifted_time is None:
+            shifted_time = component_time
+        shifted_components[label] = shifted_values.astype(values.dtype)
+
+    if shifted_time is None:
+        shifted_time = np.asarray(time_seconds[:0], dtype=float)
+    shifted_signal = np.zeros_like(shifted_time, dtype=float)
+    for values in shifted_components.values():
+        shifted_signal = shifted_signal + values
+    return shifted_time, shifted_signal, shifted_components
+
+
+def _eit_timing_drift_config(
+    config: SyntheticGeneratorConfig,
+) -> TimingDriftConfig | None:
+    if config.eit.timing_drift is not None:
+        return (
+            config.eit.timing_drift
+            if is_timing_drift_enabled(config.eit.timing_drift)
+            else None
+        )
+    return None
 
 
 def make_lung_template(config: LungTemplateConfig) -> np.ndarray:
@@ -1316,6 +1444,13 @@ def _nested_dataclass(cls: type, data: Any) -> Any:
     if cls is EMGGeneratorConfig and "channel_amplitudes_uv" in values:
         values["channel_amplitudes_uv"] = tuple(
             float(value) for value in values["channel_amplitudes_uv"]
+        )
+    if "drift" in values:
+        values["drift"] = _nested_dataclass(DriftConfig, values["drift"])
+    if "timing_drift" in values:
+        values["timing_drift"] = _nested_dataclass(
+            TimingDriftConfig,
+            values["timing_drift"],
         )
     return cls(**values)
 
