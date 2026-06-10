@@ -65,6 +65,8 @@ class AlignmentConfig:
 
     method: str = "manual_offset"
     manual_offset_seconds: float = 0.0
+    offset_seconds: dict[str, float] | None = None
+    reference_modality: str | None = None
 
 
 @dataclass(frozen=True)

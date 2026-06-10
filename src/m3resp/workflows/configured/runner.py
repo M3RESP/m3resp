@@ -14,8 +14,10 @@ from m3resp.workflows.configured.artifacts import (
     save_workflow_figures,
 )
 from m3resp.workflows.configured.steps import (
-    run_configured_eit_steps,
-    run_configured_emg_steps,
+    load_configured_eit,
+    load_configured_emg,
+    process_configured_eit,
+    process_configured_emg,
 )
 from m3resp.workflows.configured.summaries import (
     summarize_eit,
@@ -44,9 +46,24 @@ def run_configured_workflow(
     session = M3Session(eit_adapter=eit_adapter, emg_adapter=emg_adapter)
 
     if cfg.modules.eit:
-        run_configured_eit_steps(session, cfg)
+        load_configured_eit(session, cfg)
     if cfg.modules.emg:
-        run_configured_emg_steps(session, cfg)
+        load_configured_emg(session, cfg)
+
+    if cfg.modules.eit and cfg.modules.emg:
+        session.synchronize_raw_modalities(
+            method=cfg.alignment.method,
+            offset_seconds=(
+                cfg.alignment.offset_seconds
+                if cfg.alignment.offset_seconds is not None
+                else cfg.alignment.manual_offset_seconds
+            ),
+        )
+
+    if cfg.modules.eit:
+        process_configured_eit(session, cfg)
+    if cfg.modules.emg:
+        process_configured_emg(session, cfg)
 
     if (
         cfg.modules.eit
@@ -56,7 +73,8 @@ def run_configured_workflow(
     ):
         session.align_modalities(
             method=cfg.alignment.method,
-            offset_seconds=cfg.alignment.manual_offset_seconds,
+            offset_seconds=0.0,
+            reference_modality=cfg.alignment.reference_modality,
         )
 
     output_dir = _timestamped_output_dir(_configured_output_dir(cfg, selected))

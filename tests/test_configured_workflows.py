@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from m3resp import BreathEvent, M3Session, load_workflow_config
 from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
 from m3resp.workflows import auto as auto_workflows
@@ -106,11 +108,13 @@ class FakeEMGAdapter(ReSurfEMGAdapter):
     def __init__(self):
         super().__init__(loader=lambda *args, **kwargs: fake_emg_recording())
         self.preprocess_kwargs: dict[str, Any] = {}
+        self.preprocess_input: Any = None
         self.detection_kwargs: dict[str, Any] = {}
         self.postprocess_kwargs: dict[str, Any] = {}
 
     def preprocess(self, signal: Any, **kwargs: Any) -> dict[str, Any]:
         self.preprocess_kwargs = kwargs
+        self.preprocess_input = signal
         return {
             **signal,
             "channel": kwargs.get("channel", 0),
@@ -382,7 +386,7 @@ def test_configured_multimodal_workflow_aligns_and_exports(tmp_path):
     synchronized = result.session.processed["synchronized"]
     assert set(synchronized) == {"eit_breaths", "emg_breaths", "ventilator_breaths"}
     assert synchronized["eit_breaths"][0].start_time == 1.0
-    assert synchronized["emg_breaths"][0].start_time == 0.25
+    assert synchronized["emg_breaths"][0].start_time == 0.0
     assert synchronized["ventilator_breaths"][0].start_time == 0.0
     assert result.session.events["emg_breaths"][0].start_time == 0.0
     assert result.session.events["ventilator_breaths"][0].modality == "vent"
@@ -393,6 +397,97 @@ def test_configured_multimodal_workflow_aligns_and_exports(tmp_path):
     assert_timestamped_output_dir(
         result.output_dir,
         Path(os.path.join(tmp_path, "output", "combined")),
+    )
+
+
+def test_configured_multimodal_workflow_exports_synchronization_figure(tmp_path):
+    pytest.importorskip("matplotlib.pyplot")
+
+    result = run_multimodal_workflow(
+        config=write_config(tmp_path),
+        root=tmp_path,
+        eit_adapter=FakeEITAdapter(),
+        emg_adapter=FakeEMGAdapter(),
+        save_figures=True,
+    )
+
+    figure_path = result.figures["synchronization.png"]
+    assert figure_path == Path(os.path.join(result.output_dir, "synchronization.png"))
+    assert figure_path.exists()
+
+
+def test_configured_multimodal_workflow_uses_alignment_offset_map(tmp_path):
+    result = run_multimodal_workflow(
+        config=write_config(
+            tmp_path,
+            extra="""
+alignment:
+  method: manual_offset
+  reference_modality: vent
+  offset_seconds:
+    eit: -0.1
+    emg: 0.25
+    vent: 0.0
+""",
+        ),
+        root=tmp_path,
+        eit_adapter=FakeEITAdapter(),
+        emg_adapter=FakeEMGAdapter(),
+        save_figures=False,
+    )
+
+    synchronized = result.session.processed["synchronized"]
+    assert synchronized["eit_breaths"][0].start_time == 1.0
+    assert synchronized["emg_breaths"][0].start_time == 0.0
+    assert synchronized["ventilator_breaths"][0].start_time == 0.0
+    assert result.session.parameters["alignment"]["reference_modality"] == "vent"
+    assert result.session.parameters["alignment"]["offset_seconds"] == {
+        "eit": 0.0,
+        "emg": 0.0,
+        "vent": 0.0,
+    }
+    assert result.session.parameters["raw_alignment"]["offset_seconds"] == {
+        "eit": -0.1,
+        "emg": 0.25,
+        "vent": 0.0,
+    }
+
+
+def test_configured_multimodal_workflow_synchronizes_raw_before_preprocessing(
+    tmp_path,
+):
+    adapter = FakeEMGAdapter()
+
+    result = run_multimodal_workflow(
+        config=write_config(
+            tmp_path,
+            extra="""
+alignment:
+  method: manual_offset
+  reference_modality: vent
+  offset_seconds:
+    eit: 0.0
+    emg: -0.001
+    vent: 0.0
+""",
+        ),
+        root=tmp_path,
+        eit_adapter=FakeEITAdapter(),
+        emg_adapter=adapter,
+        save_figures=False,
+    )
+
+    assert adapter.preprocess_input["array"] == [[1.0, 0.0]]
+    assert result.session.parameters["raw_alignment"]["cropped_samples"]["emg"] == {
+        "offset_seconds": -0.001,
+        "cropped_samples": 1,
+    }
+    raw_sync = result.session.processed["raw_synchronization"]["emg"]
+    assert raw_sync["before"]["values"] == [0.0, 1.0, 0.0]
+    assert raw_sync["after"]["values"] == [1.0, 0.0]
+    action_names = [record.action for record in result.session.provenance]
+    assert action_names.index("synchronize_raw_modalities") < action_names.index(
+        "preprocess_emg"
     )
 
 
