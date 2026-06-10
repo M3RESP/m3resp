@@ -115,15 +115,17 @@ class M3Session:
         synchronized: dict[str, Any] = {}
         traces: dict[str, Any] = {}
         for modality, offset in offsets.items():
-            before_trace = _raw_synchronization_trace(self, modality)
+            before_traces = _raw_synchronization_traces(self, modality)
             n_samples = _crop_loaded_modality(self, modality, float(offset))
-            after_trace = _raw_synchronization_trace(self, modality)
-            if before_trace is not None and after_trace is not None:
-                traces[modality] = {
-                    "before": before_trace,
-                    "after": after_trace,
-                    "offset_seconds": float(offset),
-                }
+            after_traces = _raw_synchronization_traces(self, modality)
+            for trace_name, before_trace in before_traces.items():
+                after_trace = after_traces.get(trace_name)
+                if after_trace is not None:
+                    traces[trace_name] = {
+                        "before": before_trace,
+                        "after": after_trace,
+                        "offset_seconds": float(offset),
+                    }
             if n_samples:
                 synchronized[modality] = {
                     "offset_seconds": float(offset),
@@ -357,20 +359,16 @@ def _crop_loaded_modality(session: M3Session, modality: str, offset: float) -> i
     return 0
 
 
-def _raw_synchronization_trace(
-    session: M3Session, modality: str
-) -> dict[str, Any] | None:
+def _raw_synchronization_traces(session: M3Session, modality: str) -> dict[str, Any]:
     if modality == "emg" and session.emg is not None:
-        return _emg_raw_trace(session.emg)
+        trace = _emg_raw_trace(session.emg)
+        return {"emg": trace} if trace is not None else {}
     if modality == "eit" and session.eit is not None:
-        return _eit_raw_trace(session.eit)
+        trace = _eit_raw_trace(session.eit)
+        return {"eit": trace} if trace is not None else {}
     if modality == "vent":
-        return _recording_dict_trace(
-            session.raw.get("vent"),
-            title="Ventilator pressure",
-            ylabel="Pressure",
-        )
-    return None
+        return _ventilator_raw_traces(session.raw.get("vent"))
+    return {}
 
 
 def _emg_raw_trace(recording: EMGRecording) -> dict[str, Any] | None:
@@ -392,6 +390,7 @@ def _recording_dict_trace(
     *,
     title: str,
     ylabel: str,
+    channel: int = 0,
 ) -> dict[str, Any] | None:
     if not isinstance(recording, dict) or "array" not in recording:
         return None
@@ -402,7 +401,9 @@ def _recording_dict_trace(
     array = np.asarray(recording["array"], dtype=float)
     if array.ndim == 0 or array.size == 0:
         return None
-    values = array[0] if array.ndim > 1 else array
+    if array.ndim > 1 and channel >= array.shape[0]:
+        return None
+    values = array[channel] if array.ndim > 1 else array
     time = np.arange(len(values), dtype=float) / float(fs)
     return {
         "title": title,
@@ -410,6 +411,35 @@ def _recording_dict_trace(
         "values": np.asarray(values, dtype=float).tolist(),
         "ylabel": ylabel,
     }
+
+
+def _ventilator_raw_traces(recording: Any) -> dict[str, Any]:
+    pressure = _recording_dict_trace(
+        recording,
+        title="Ventilator pressure",
+        ylabel="Pressure",
+        channel=0,
+    )
+    flow = _recording_dict_trace(
+        recording,
+        title="Ventilator flow",
+        ylabel="Flow",
+        channel=1,
+    )
+    volume = _recording_dict_trace(
+        recording,
+        title="Ventilator volume",
+        ylabel="Volume",
+        channel=2,
+    )
+    traces: dict[str, Any] = {}
+    if pressure is not None:
+        traces["vent_pressure"] = pressure
+    if flow is not None:
+        traces["vent_flow"] = flow
+    if volume is not None:
+        traces["vent_volume"] = volume
+    return traces
 
 
 def _eit_raw_trace(recording: EITRecording) -> dict[str, Any] | None:

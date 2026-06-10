@@ -287,7 +287,13 @@ def _get_synchronization_plot_rows(
     ] = []
     raw_sync = session.processed.get("raw_synchronization")
     if isinstance(raw_sync, dict):
-        for modality, event_key in (("eit", "eit_breaths"), ("emg", "emg_breaths")):
+        for modality, event_key in (
+            ("eit", "eit_breaths"),
+            ("emg", "emg_breaths"),
+            ("vent_pressure", "ventilator_breaths"),
+            ("vent_flow", "ventilator_breaths"),
+            ("vent_volume", "ventilator_breaths"),
+        ):
             record = raw_sync.get(modality)
             if not isinstance(record, dict):
                 continue
@@ -458,6 +464,8 @@ def _event_style(modality: str) -> tuple[str, str]:
         return "tab:green", "EIT breath"
     if modality == "emg":
         return "tab:red", "EMG breath"
+    if modality.startswith("vent"):
+        return "tab:blue", "Ventilator breath"
     return "tab:blue", f"{modality.upper()} event"
 
 
