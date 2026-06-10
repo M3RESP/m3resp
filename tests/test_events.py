@@ -9,7 +9,10 @@ from m3resp import (
     event_to_dict,
 )
 from m3resp.export.tables import events_to_rows
-from m3resp.synchronization.alignment import align_events_manual_offset
+from m3resp.synchronization.alignment import (
+    align_events_by_modality_offset,
+    align_events_manual_offset,
+)
 
 
 class UpstreamBreath:
@@ -127,3 +130,34 @@ def test_mixed_event_rows_and_alignment():
     assert aligned[0].time == 1.25
     assert aligned[1].start_time == 2.25
     assert aligned[1].peak_time == 2.75
+
+
+def test_manual_offset_preserves_none_peak_time_and_original_events():
+    events = [BreathEvent("emg", 2.0, 3.0)]
+
+    aligned = align_events_manual_offset(events, 0.5)
+
+    assert events[0].start_time == 2.0
+    assert events[0].peak_time is None
+    assert aligned[0].start_time == 2.5
+    assert aligned[0].end_time == 3.5
+    assert aligned[0].peak_time is None
+    assert aligned[0] is not events[0]
+
+
+def test_alignment_uses_per_modality_offset_map():
+    events = [
+        BreathEvent("eit", 1.0, 2.0, peak_time=1.5),
+        BreathEvent("emg", 1.0, 2.0, peak_time=1.5),
+        Event(name="trigger", modality="vent", time=1.0),
+    ]
+
+    aligned = align_events_by_modality_offset(
+        events,
+        {"eit": 0.0, "emg": 0.25, "vent": -0.1},
+    )
+
+    assert aligned[0].start_time == 1.0
+    assert aligned[1].start_time == 1.25
+    assert aligned[1].peak_time == 1.75
+    assert aligned[2].time == 0.9
