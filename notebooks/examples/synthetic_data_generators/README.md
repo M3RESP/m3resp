@@ -145,8 +145,8 @@ Top-level keys:
 - `generate_eit`: enable EIT generation.
 - `generate_emg`: enable EMG generation.
 - `generate_ventilator`: enable ventilator generation.
-- `write_native_outputs`: request native EMG/Vent outputs when supported. If no
-  native writer exists, portable files are still written and a warning is shown.
+- `write_native_outputs`: write native Poly5 EMG/Vent outputs in addition to
+  portable `.npy` and `.csv` files.
 
 Respiratory pattern:
 
@@ -173,6 +173,23 @@ Supported drift kinds are:
 - `sinusoidal`
 - `linear`
 - `constant`
+- `time_shift`
+
+To model drift as a simple shift of the generated EIT signal in time, use:
+
+```yaml
+drift:
+  enabled: true
+  kind: time_shift
+  time_shift_seconds: 0.5
+  time_shift_fill_mode: edge
+```
+
+Positive `time_shift_seconds` delays the signal. Negative values advance it.
+`time_shift_fill_mode` controls samples exposed at the beginning or end of the
+shifted signal and can be `edge` or `zero`. For this mode, the exported `drift`
+component is the difference between the shifted and unshifted signal so that the
+component sum remains equal to the generated EIT signal.
 
 EIT settings:
 
@@ -281,15 +298,15 @@ Ventilator generation writes:
 
 Portable `.npy` and `.csv` files are always written for EMG and ventilator data.
 
-Native EMG/Vent output depends on what the installed ReSurfEMG version exposes.
-If `write_native_outputs: true` is set but no native writer is available, the
-generator emits a warning and continues with portable `.npy` and `.csv` files.
-It does not add a `native` path unless a native file was actually written.
+Native EMG/Vent output writes Poly5 files with channel labels, units, sample
+rate, and float32 sample data. If an installed ReSurfEMG version exposes a
+native `write_synthetic_recording` helper, the generator uses it. Otherwise,
+the example generator writes ReSurfEMG-readable Poly5 files directly.
 
-For most example workflows, keep:
+To write Poly5 alongside portable exports, use:
 
 ```yaml
-write_native_outputs: false
+write_native_outputs: true
 ```
 
 ## Troubleshooting
