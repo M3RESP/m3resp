@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 import os
 import re
 import struct
@@ -10,24 +9,7 @@ import types
 import numpy as np
 import pytest
 
-
-MODULE_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)),
-    "notebooks",
-    "examples",
-    "synthetic_data_generators",
-    "unified_generator.py",
-)
-
-
-def load_generator_module():
-    spec = importlib.util.spec_from_file_location("unified_generator", MODULE_PATH)
-    module = importlib.util.module_from_spec(spec)
-    assert spec is not None
-    assert spec.loader is not None
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+from m3resp.synthetic import unified_generator as generator
 
 
 def read_poly5_like_resurfemg(path):
@@ -77,7 +59,6 @@ def read_poly5_like_resurfemg(path):
 
 
 def test_eit_only_generation_writes_draeger_and_portable_exports(tmp_path):
-    generator = load_generator_module()
     config = generator.SyntheticGeneratorConfig(
         duration_seconds=2.0,
         output_dir=str(tmp_path),
@@ -109,7 +90,6 @@ def test_eit_only_generation_writes_draeger_and_portable_exports(tmp_path):
 
 
 def test_drift_disabled_and_enabled_are_deterministic():
-    generator = load_generator_module()
     time = np.arange(0, 10, 0.5)
 
     disabled = generator.generate_drift(time, generator.DriftConfig(enabled=False))
@@ -128,7 +108,6 @@ def test_drift_disabled_and_enabled_are_deterministic():
 
 
 def test_time_shift_drift_delays_signal_with_edge_fill():
-    generator = load_generator_module()
     time = np.arange(0, 5, 1.0)
     signal = np.asarray([10.0, 11.0, 13.0, 16.0, 20.0])
     config = generator.DriftConfig(
@@ -148,7 +127,6 @@ def test_emg_and_ventilator_generation_calls_resurfemg_with_config(
     monkeypatch,
     tmp_path,
 ):
-    generator = load_generator_module()
     calls = {}
 
     def simulate_raw_emg(**kwargs):
@@ -234,7 +212,6 @@ def test_resurfemg_length_mismatch_retries_and_normalizes_signal(
     monkeypatch,
     tmp_path,
 ):
-    generator = load_generator_module()
     calls = []
 
     def simulate_raw_emg(**kwargs):
@@ -283,7 +260,6 @@ def test_resurfemg_length_mismatch_retries_and_normalizes_signal(
 
 
 def test_yaml_config_loader_builds_typed_config(tmp_path):
-    generator = load_generator_module()
     config_path = os.path.join(str(tmp_path), "synthetic.yaml")
     output_dir = os.path.join("relative", "output")
     with open(config_path, "w", encoding="utf-8") as file_obj:
@@ -326,7 +302,6 @@ def test_yaml_config_loader_builds_typed_config(tmp_path):
 
 
 def test_main_loads_yaml_path(monkeypatch, tmp_path, capsys):
-    generator = load_generator_module()
     config_path = os.path.join(str(tmp_path), "custom.yaml")
     loaded_paths = []
 
@@ -361,7 +336,6 @@ def test_main_loads_yaml_path(monkeypatch, tmp_path, capsys):
 
 
 def test_timestamp_output_directory_creates_run_folder(tmp_path):
-    generator = load_generator_module()
     config = generator.SyntheticGeneratorConfig(
         duration_seconds=1.0,
         output_dir=str(tmp_path),
@@ -382,7 +356,6 @@ def test_timestamp_output_directory_creates_run_folder(tmp_path):
 
 
 def test_missing_resurfemg_raises_clear_error(monkeypatch, tmp_path):
-    generator = load_generator_module()
     original_import_module = generator.importlib.import_module
 
     def raise_import_error(module_name):
@@ -409,7 +382,6 @@ def test_native_emg_and_ventilator_request_writes_poly5_without_upstream_writer(
     monkeypatch,
     tmp_path,
 ):
-    generator = load_generator_module()
 
     def simulate_raw_emg(**kwargs):
         return np.arange(int(kwargs["fs_emg"] * kwargs["t_end"]), dtype=float)
