@@ -1,8 +1,7 @@
 """Unified synthetic EIT, EMG, and ventilator data generator.
 
-This module is intentionally examples-only. It provides a single configuration
-surface for generating reproducible synthetic respiratory datasets without
-adding public API to :mod:`m3resp`.
+This module provides a single typed configuration surface for generating
+reproducible synthetic respiratory datasets.
 """
 
 from __future__ import annotations
@@ -30,9 +29,7 @@ FORMAT_SPECS = {
         "n_medibus_fields": 58,
     },
 }
-DEFAULT_GENERATOR_MODULE = (
-    "notebooks.examples.synthetic_data_generators.unified_generator"
-)
+DEFAULT_GENERATOR_MODULE = "m3resp.synthetic.unified_generator"
 DEFAULT_CONFIG_FILENAME = "synthetic_generator_config.yaml"
 DEFAULT_OUTPUT_DIR = os.path.join("data", "source")
 DEFAULT_BASENAME = "synthetic"

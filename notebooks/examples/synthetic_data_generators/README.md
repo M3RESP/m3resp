@@ -1,11 +1,11 @@
-# Unified Synthetic Data Generators
+# Unified Synthetic Data Generation Example
 
-This folder contains one maintained synthetic data generator for M3Resp examples:
+The maintained synthetic data generator now lives in the M3Resp package:
 
-- `unified_generator.py`: reusable example module for generating EIT, EMG, and
-  ventilator synthetic recordings.
-- `synthetic_generator_config.yaml`: editable YAML configuration for the
-  generator.
+- `src/m3resp/synthetic/unified_generator.py`: reusable module for generating
+  EIT, EMG, and ventilator synthetic recordings.
+- `src/m3resp/synthetic/synthetic_generator_config.yaml`: editable YAML
+  configuration for the generator.
 - `unified_synthetic_data_generation.ipynb`: notebook showing the same workflow
   interactively.
 
@@ -83,7 +83,8 @@ notebooks/examples/synthetic_data_generators/unified_synthetic_data_generation.i
 
 Run the cells from top to bottom.
 
-The notebook first locates this folder, then loads:
+The notebook imports the package module, locates the default YAML beside that
+module, then loads:
 
 ```python
 config_path = os.path.join(generator_dir, "synthetic_generator_config.yaml")
@@ -96,19 +97,19 @@ to choose EIT, EMG, ventilator, or any combination.
 
 ## Run From Python
 
-From this folder:
+From the repository root:
 
 ```bash
-python unified_generator.py
+python -m m3resp.synthetic.unified_generator
 ```
 
-This loads `synthetic_generator_config.yaml` from this folder and writes outputs
-using the values in that file.
+This loads `src/m3resp/synthetic/synthetic_generator_config.yaml` and writes
+outputs using the values in that file.
 
 You can also pass a different YAML file:
 
 ```bash
-python unified_generator.py path/to/custom_config.yaml
+python -m m3resp.synthetic.unified_generator path/to/custom_config.yaml
 ```
 
 For the same YAML-driven run from Python:
@@ -116,13 +117,19 @@ For the same YAML-driven run from Python:
 ```python
 import os
 
-from unified_generator import (
+from m3resp.synthetic.unified_generator import (
     generate_synthetic_dataset,
     load_synthetic_generator_config,
 )
 
 config = load_synthetic_generator_config(
-    os.path.join(os.getcwd(), "synthetic_generator_config.yaml")
+    os.path.join(
+        os.getcwd(),
+        "src",
+        "m3resp",
+        "synthetic",
+        "synthetic_generator_config.yaml",
+    )
 )
 dataset = generate_synthetic_dataset(config)
 
@@ -301,7 +308,7 @@ Portable `.npy` and `.csv` files are always written for EMG and ventilator data.
 Native EMG/Vent output writes Poly5 files with channel labels, units, sample
 rate, and float32 sample data. If an installed ReSurfEMG version exposes a
 native `write_synthetic_recording` helper, the generator uses it. Otherwise,
-the example generator writes ReSurfEMG-readable Poly5 files directly.
+the M3Resp generator writes ReSurfEMG-readable Poly5 files directly.
 
 To write Poly5 alongside portable exports, use:
 
