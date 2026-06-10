@@ -379,9 +379,17 @@ def test_configured_multimodal_workflow_aligns_and_exports(tmp_path):
 
     assert isinstance(result, WorkflowResult)
     assert "synchronized" in result.session.processed
-    assert result.session.processed["synchronized"]["eit_breaths"][0].start_time == 1.25
+    synchronized = result.session.processed["synchronized"]
+    assert set(synchronized) == {"eit_breaths", "emg_breaths", "ventilator_breaths"}
+    assert synchronized["eit_breaths"][0].start_time == 1.0
+    assert synchronized["emg_breaths"][0].start_time == 0.25
+    assert synchronized["ventilator_breaths"][0].start_time == 0.0
+    assert result.session.events["emg_breaths"][0].start_time == 0.0
+    assert result.session.events["ventilator_breaths"][0].modality == "vent"
+    assert result.session.parameters["alignment"]["reference_modality"] == "vent"
     assert result.summary["n_eit_breaths"] == 1
     assert result.summary["n_emg_breaths"] == 1
+    assert result.summary["n_ventilator_breaths"] == 1
     assert_timestamped_output_dir(
         result.output_dir,
         Path(os.path.join(tmp_path, "output", "combined")),

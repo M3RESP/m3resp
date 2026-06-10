@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
 from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
+from m3resp.core.events import BreathEvent, Event, coerce_breath_event
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.core.metadata import SessionMetadata
 from m3resp.core.provenance import ProvenanceRecord, record
 from m3resp.export.session_export import export_session_summary
 from m3resp.modalities.eit import EITRecording, load as load_eit_recording
 from m3resp.modalities.emg import EMGRecording, load as load_emg_recording
-from m3resp.synchronization.alignment import align_events_manual_offset
+from m3resp.synchronization.alignment import align_events_by_modality_offset
+
+ALIGNMENT_EVENT_LISTS = {
+    "eit": "eit_breaths",
+    "emg": "emg_breaths",
+    "vent": "ventilator_breaths",
+}
 
 
 class M3Session:
@@ -129,27 +138,65 @@ class M3Session:
             events=events,
             **kwargs,
         )
+        ventilator_breaths = self._normalize_ventilator_breaths(
+            self.parameters["emg_postprocessing"],
+            ventilator=kwargs.get("ventilator"),
+            ventilator_fs=kwargs.get("ventilator_fs"),
+            ventilator_breath_width_seconds=kwargs.get(
+                "ventilator_breath_width_seconds",
+            ),
+        )
+        if ventilator_breaths:
+            self.add_events("ventilator_breaths", ventilator_breaths)
         self._record("postprocess_emg", "emg", **kwargs)
         return self.parameters["emg_postprocessing"]
 
     def align_modalities(
-        self, method: str = "manual_offset", offset_seconds: float = 0.0
+        self,
+        method: str = "manual_offset",
+        offset_seconds: float | Mapping[str, float] = 0.0,
+        reference_modality: str | None = None,
     ) -> dict[str, Any]:
         """Apply basic Stage 1 alignment to stored event lists."""
 
         if method != "manual_offset":
             raise ValueError("Stage 1 supports only method='manual_offset'")
 
+        offsets = _resolve_alignment_offsets(offset_seconds)
+        requested_reference = reference_modality
+        resolved_reference, fallback_reference = self._resolve_alignment_reference(
+            reference_modality
+        )
         synchronized: dict[str, Any] = {}
-        for name, events in self.events.items():
+        aligned_event_lists: list[str] = []
+        missing_event_lists: list[str] = []
+        for name in ALIGNMENT_EVENT_LISTS.values():
+            events = self.events.get(name)
+            if events is None:
+                missing_event_lists.append(name)
+                continue
             if not isinstance(events, list):
                 continue
-            synchronized[name] = align_events_manual_offset(events, offset_seconds)
+            synchronized[name] = align_events_by_modality_offset(events, offsets)
+            aligned_event_lists.append(name)
 
         self.processed["synchronized"] = synchronized
+        self.parameters["alignment"] = {
+            "method": method,
+            "reference_modality": resolved_reference,
+            "requested_reference_modality": requested_reference,
+            "fallback_reference_modality": fallback_reference,
+            "offset_seconds": offsets,
+            "aligned_event_lists": aligned_event_lists,
+            "missing_event_lists": missing_event_lists,
+        }
         self._record(
             "align_modalities",
-            parameters={"method": method, "offset_seconds": offset_seconds},
+            parameters={
+                "method": method,
+                "reference_modality": resolved_reference,
+                "offset_seconds": offsets,
+            },
         )
         return synchronized
 
@@ -177,6 +224,49 @@ class M3Session:
         record_parameters = parameters or kwargs
         self.provenance.append(record(action, modality, **record_parameters))
 
+    def _resolve_alignment_reference(
+        self,
+        reference_modality: str | None,
+    ) -> tuple[str, str | None]:
+        if reference_modality is not None:
+            return _normalize_modality(reference_modality), None
+        if self.events.get("ventilator_breaths"):
+            return "vent", None
+        return "eit", "eit"
+
+    def _normalize_ventilator_breaths(
+        self,
+        postprocessing: Any,
+        *,
+        ventilator: Any | None,
+        ventilator_fs: float | None,
+        ventilator_breath_width_seconds: float | None,
+    ) -> list[BreathEvent]:
+        detections = (
+            postprocessing.get("computed", {})
+            .get("event_detection", {})
+            .get("detect_ventilator_breath", [])
+            if isinstance(postprocessing, dict)
+            else []
+        )
+        if detections is None:
+            return []
+
+        fs = _infer_ventilator_fs(ventilator, ventilator_fs)
+        width_seconds = (
+            0.0
+            if ventilator_breath_width_seconds is None
+            else float(ventilator_breath_width_seconds)
+        )
+        return [
+            _normalize_ventilator_breath(
+                detection,
+                fs=fs,
+                width_seconds=width_seconds,
+            )
+            for detection in _iter_ventilator_detections(detections)
+        ]
+
 
 def _coerce_metadata(
     metadata: SessionMetadata | dict[str, Any] | None,
@@ -186,3 +276,81 @@ def _coerce_metadata(
     if isinstance(metadata, SessionMetadata):
         return metadata
     return SessionMetadata(attributes=dict(metadata))
+
+
+def _resolve_alignment_offsets(
+    offset_seconds: float | Mapping[str, float],
+) -> dict[str, float]:
+    if isinstance(offset_seconds, Mapping):
+        offsets = {"eit": 0.0, "emg": 0.0, "vent": 0.0}
+        for modality, offset in offset_seconds.items():
+            offsets[_normalize_modality(modality)] = float(offset)
+        return offsets
+    return {"eit": 0.0, "emg": float(offset_seconds), "vent": 0.0}
+
+
+def _normalize_modality(modality: str) -> str:
+    normalized = str(modality).lower()
+    if normalized in {"ventilator", "ventilation"}:
+        return "vent"
+    return normalized
+
+
+def _iter_ventilator_detections(detections: Any) -> list[Any]:
+    if isinstance(detections, (BreathEvent, Event, Mapping)):
+        return [detections]
+    if hasattr(detections, "tolist"):
+        detections = detections.tolist()
+    return list(detections)
+
+
+def _normalize_ventilator_breath(
+    detection: Any,
+    *,
+    fs: float | None,
+    width_seconds: float,
+) -> BreathEvent:
+    if isinstance(detection, BreathEvent):
+        return replace(detection, modality="vent")
+    if isinstance(detection, Mapping):
+        breath = coerce_breath_event(detection, modality="vent", source="ventilator")
+        return replace(breath, modality="vent")
+
+    if hasattr(detection, "start_time") and hasattr(detection, "end_time"):
+        breath = coerce_breath_event(detection, modality="vent", source="ventilator")
+        return replace(breath, modality="vent")
+
+    if fs is None:
+        raise ValueError(
+            "Ventilator breath indices require a ventilator sampling rate. "
+            "Pass ventilator_fs or include metadata['fs'] in the ventilator input."
+        )
+
+    sample_index = int(detection)
+    peak_time = sample_index / float(fs)
+    half_width = width_seconds / 2
+    return BreathEvent(
+        modality="vent",
+        start_time=max(0.0, peak_time - half_width),
+        end_time=peak_time + half_width,
+        peak_time=peak_time,
+        source="resurfemg.detect_ventilator_breath",
+        metadata={
+            "sample_index": sample_index,
+            "fs": float(fs),
+            "width_seconds": width_seconds,
+        },
+    )
+
+
+def _infer_ventilator_fs(
+    ventilator: Any | None,
+    ventilator_fs: float | None,
+) -> float | None:
+    if ventilator_fs is not None:
+        return float(ventilator_fs)
+    if isinstance(ventilator, Mapping):
+        metadata = ventilator.get("metadata", {})
+        if isinstance(metadata, Mapping) and metadata.get("fs") is not None:
+            return float(metadata["fs"])
+    return None
