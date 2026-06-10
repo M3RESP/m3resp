@@ -186,6 +186,7 @@ def _get_emg_rows(
     units = metadata.get("units") or []
     label = labels[channel] if channel < len(labels) else f"channel {channel}"
     unit = units[channel] if channel < len(units) else "a.u."
+    ylabel = _emg_amplitude_label(unit)
 
     rows = []
     raw = processed.get("raw_channel")
@@ -194,7 +195,13 @@ def _get_emg_rows(
 
     if raw is not None:
         rows.append(
-            ("emg", f"EMG raw ({label})", _time_for(raw, fs), np.asarray(raw), unit)
+            (
+                "emg",
+                f"EMG raw ({label})",
+                _time_for(raw, fs),
+                np.asarray(raw),
+                ylabel,
+            )
         )
     if filtered is not None:
         rows.append(
@@ -203,7 +210,7 @@ def _get_emg_rows(
                 f"EMG filtered ({label})",
                 _time_for(filtered, fs),
                 np.asarray(filtered),
-                unit,
+                ylabel,
             )
         )
     if envelope is not None:
@@ -213,11 +220,15 @@ def _get_emg_rows(
                 f"EMG envelope ({label})",
                 _time_for(envelope, fs),
                 np.asarray(envelope),
-                unit,
+                ylabel,
             )
         )
 
     return rows
+
+
+def _emg_amplitude_label(unit: str) -> str:
+    return f"EMG amplitude ({unit})" if unit else "EMG amplitude"
 
 
 def _time_for(values: Any, sample_rate: float) -> np.ndarray:
