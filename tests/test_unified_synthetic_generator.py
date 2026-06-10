@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import re
+import struct
 import sys
 import types
 
@@ -27,6 +28,52 @@ def load_generator_module():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def read_poly5_like_resurfemg(path):
+    with open(path, "rb") as file_obj:
+        header = struct.unpack(
+            "=31sH81phhBHi4xHHHHHHHiHHH64x",
+            file_obj.read(217),
+        )
+        sample_rate = header[3]
+        num_channels = header[6] // 2
+        num_samples = header[7]
+        num_data_blocks = header[15]
+        samples_per_block = header[16]
+
+        labels = []
+        units = []
+        for _ in range(num_channels):
+            channel_description = struct.unpack(
+                "=41p4x11pffffH62x",
+                file_obj.read(136),
+            )
+            labels.append(channel_description[0][5:].decode("ascii"))
+            units.append(channel_description[1].decode("utf-8"))
+            file_obj.read(136)
+
+        sample_buffer = np.zeros(num_channels * num_samples, dtype=np.float32)
+        offset = 0
+        for block_index in range(num_data_blocks):
+            remaining_samples = num_samples - block_index * samples_per_block
+            block_samples = min(samples_per_block, remaining_samples)
+            block_values = block_samples * num_channels
+            file_obj.read(86)
+            block = np.frombuffer(
+                file_obj.read(block_values * 4),
+                dtype="<f4",
+            )
+            sample_buffer[offset : offset + block_values] = block
+            offset += block_values
+
+    samples = sample_buffer.reshape(num_samples, num_channels).T
+    return {
+        "sample_rate": sample_rate,
+        "labels": labels,
+        "units": units,
+        "samples": samples,
+    }
 
 
 def test_eit_only_generation_writes_draeger_and_portable_exports(tmp_path):
@@ -78,6 +125,23 @@ def test_drift_disabled_and_enabled_are_deterministic():
     assert np.allclose(disabled, 0.0)
     assert not np.allclose(enabled, 0.0)
     assert np.allclose(enabled, enabled_again)
+
+
+def test_time_shift_drift_delays_signal_with_edge_fill():
+    generator = load_generator_module()
+    time = np.arange(0, 5, 1.0)
+    signal = np.asarray([10.0, 11.0, 13.0, 16.0, 20.0])
+    config = generator.DriftConfig(
+        enabled=True,
+        kind="time_shift",
+        time_shift_seconds=2.0,
+        time_shift_fill_mode="edge",
+    )
+
+    shifted = generator.shift_signal_in_time(signal, time, config)
+
+    assert np.allclose(shifted, np.asarray([10.0, 10.0, 10.0, 11.0, 13.0]))
+    assert np.allclose(generator.generate_drift(time, config), 0.0)
 
 
 def test_emg_and_ventilator_generation_calls_resurfemg_with_config(
@@ -341,17 +405,28 @@ def test_missing_resurfemg_raises_clear_error(monkeypatch, tmp_path):
         generator.generate_synthetic_dataset(config)
 
 
-def test_native_emg_request_warns_without_claiming_native_path(
+def test_native_emg_and_ventilator_request_writes_poly5_without_upstream_writer(
     monkeypatch,
     tmp_path,
 ):
     generator = load_generator_module()
 
     def simulate_raw_emg(**kwargs):
-        return np.zeros(int(kwargs["fs_emg"] * kwargs["t_end"]))
+        return np.arange(int(kwargs["fs_emg"] * kwargs["t_end"]), dtype=float)
+
+    def simulate_ventilator_data(**kwargs):
+        n_samples = int(kwargs["fs_vent"] * kwargs["t_end"])
+        return np.vstack(
+            [
+                np.arange(n_samples, dtype=float),
+                np.arange(n_samples, dtype=float) + 10,
+                np.arange(n_samples, dtype=float) + 20,
+            ]
+        ), np.full(n_samples, kwargs["p_mus_amp"])
 
     synthetic_data = types.ModuleType("resurfemg.pipelines.synthetic_data")
     synthetic_data.simulate_raw_emg = simulate_raw_emg
+    synthetic_data.simulate_ventilator_data = simulate_ventilator_data
     pipelines = types.ModuleType("resurfemg.pipelines")
     resurfemg = types.ModuleType("resurfemg")
     monkeypatch.setitem(sys.modules, "resurfemg", resurfemg)
@@ -369,14 +444,33 @@ def test_native_emg_request_warns_without_claiming_native_path(
         timestamp_output_dir=False,
         generate_eit=False,
         generate_emg=True,
-        generate_ventilator=False,
+        generate_ventilator=True,
         write_native_outputs=True,
-        emg=generator.EMGGeneratorConfig(sample_frequency_hz=10.0),
+        emg=generator.EMGGeneratorConfig(
+            sample_frequency_hz=10.0,
+            channel_amplitudes_uv=(1.0, 2.0),
+        ),
+        ventilator=generator.VentilatorGeneratorConfig(sample_frequency_hz=5.0),
     )
 
-    with pytest.warns(RuntimeWarning, match="Native EMG/Ventilator output"):
-        generator.generate_synthetic_dataset(config)
+    dataset = generator.generate_synthetic_dataset(config)
+
+    assert dataset.emg is not None
+    assert dataset.ventilator is not None
 
     assert os.path.exists(os.path.join(str(tmp_path), "native_missing_emg.npy"))
     assert os.path.exists(os.path.join(str(tmp_path), "native_missing_emg.csv"))
-    assert not os.path.exists(os.path.join(str(tmp_path), "native_missing_emg.Poly5"))
+    assert os.path.exists(dataset.emg.paths["native"])
+    assert os.path.exists(dataset.ventilator.paths["native"])
+
+    emg_poly5 = read_poly5_like_resurfemg(dataset.emg.paths["native"])
+    assert emg_poly5["sample_rate"] == 10
+    assert emg_poly5["labels"] == ["emg_0", "emg_1"]
+    assert emg_poly5["units"] == ["uV", "uV"]
+    assert np.allclose(emg_poly5["samples"], dataset.emg.array)
+
+    vent_poly5 = read_poly5_like_resurfemg(dataset.ventilator.paths["native"])
+    assert vent_poly5["sample_rate"] == 5
+    assert vent_poly5["labels"] == ["pressure", "flow", "volume"]
+    assert vent_poly5["units"] == ["cmH2O", "L/s", "L"]
+    assert np.allclose(vent_poly5["samples"], dataset.ventilator.array)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -195,6 +196,11 @@ output:
     return config_path
 
 
+def assert_timestamped_output_dir(output_dir: Path, expected_parent: Path) -> None:
+    assert output_dir.parent == expected_parent
+    assert re.fullmatch(r"\d{8}_\d{6}", output_dir.name)
+
+
 def test_load_workflow_config_resolves_paths_against_root(tmp_path):
     config_path = write_config(tmp_path)
 
@@ -376,7 +382,10 @@ def test_configured_multimodal_workflow_aligns_and_exports(tmp_path):
     assert result.session.processed["synchronized"]["eit_breaths"][0].start_time == 1.25
     assert result.summary["n_eit_breaths"] == 1
     assert result.summary["n_emg_breaths"] == 1
-    assert result.output_dir == Path(os.path.join(tmp_path, "output", "combined"))
+    assert_timestamped_output_dir(
+        result.output_dir,
+        Path(os.path.join(tmp_path, "output", "combined")),
+    )
 
 
 def test_configured_multimodal_workflow_respects_module_toggles(tmp_path):
@@ -463,7 +472,10 @@ def test_auto_workflow_selects_multimodal_when_eit_and_emg_enabled(tmp_path):
     )
 
     assert select_workflow(config_path, root=tmp_path) == "multimodal"
-    assert result.output_dir == Path(os.path.join(tmp_path, "output", "combined"))
+    assert_timestamped_output_dir(
+        result.output_dir,
+        Path(os.path.join(tmp_path, "output", "combined")),
+    )
     assert "synchronized" in result.session.processed
 
 
@@ -497,7 +509,10 @@ def test_auto_workflow_selects_eit_when_only_eit_primary_enabled(tmp_path):
     )
 
     assert select_workflow(config_path, root=tmp_path) == "eit"
-    assert result.output_dir == Path(os.path.join(tmp_path, "output", "eit"))
+    assert_timestamped_output_dir(
+        result.output_dir,
+        Path(os.path.join(tmp_path, "output", "eit")),
+    )
     assert "eit" in result.session.raw
     assert "emg" not in result.session.raw
 
@@ -514,7 +529,10 @@ def test_auto_workflow_selects_emg_when_only_emg_primary_enabled(tmp_path):
     )
 
     assert select_workflow(config_path, root=tmp_path) == "emg"
-    assert result.output_dir == Path(os.path.join(tmp_path, "output", "emg"))
+    assert_timestamped_output_dir(
+        result.output_dir,
+        Path(os.path.join(tmp_path, "output", "emg")),
+    )
     assert "eit" not in result.session.raw
     assert "emg" in result.session.raw
     assert result.summary["n_ventilator_breaths"] == 1

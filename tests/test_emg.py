@@ -9,6 +9,7 @@ import pytest
 from m3resp import BreathEvent, M3Session, load_emg
 from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
 from m3resp.modalities.emg import load as load_emg_recording
+from m3resp.visualization import plot_session_overview
 from m3resp.workflows.multimodal_workflow import run_multimodal_workflow
 
 
@@ -90,6 +91,30 @@ def test_default_preprocess_updates_emg_recording_with_fake_signal():
     assert len(processed["envelope"]) == len(fake_signal)
     assert session.emg.filtered is processed["filtered"]
     assert session.emg.envelope is processed["envelope"]
+
+
+def test_emg_overview_y_axis_labels_include_amplitude_and_units():
+    plt = pytest.importorskip("matplotlib.pyplot")
+    session = M3Session()
+    session.processed["emg"] = {
+        "channel": 0,
+        "fs": 1000.0,
+        "metadata": {"labels": ["EMG"], "units": ["uV"]},
+        "raw_channel": [0.0, 1.0, 0.0],
+        "filtered": [0.0, 0.5, 0.0],
+        "envelope": [0.0, 0.25, 0.0],
+    }
+
+    fig = plot_session_overview(session, max_seconds=None)
+
+    try:
+        assert [ax.get_ylabel() for ax in fig.axes] == [
+            "EMG amplitude (uV)",
+            "EMG amplitude (uV)",
+            "EMG amplitude (uV)",
+        ]
+    finally:
+        plt.close(fig)
 
 
 def test_emg_real_data_pipeline_uses_committed_poly5_sample():
