@@ -315,6 +315,26 @@ class ReSurfEMGAdapter:
         }
         skipped: dict[str, str] = {}
 
+        peak_indices = _peak_indices_from_events(events, fs)
+        peak_indices_array = np.asarray(peak_indices, dtype=int)
+        unavailable_reason = _missing_postprocessing_dependency()
+        if unavailable_reason is not None:
+            return _unavailable_postprocessing_result(
+                selected=selected,
+                peak_indices=peak_indices_array,
+                computed=computed,
+                reason=unavailable_reason,
+                settings={
+                    "baseline_window_seconds": baseline_window_seconds,
+                    "baseline_step_seconds": baseline_step_seconds,
+                    "baseline_percentile": baseline_percentile,
+                    "slope_window_seconds": slope_window_seconds,
+                    "aub_window_seconds": aub_window_seconds,
+                    "ventilator_breath_width_seconds": ventilator_breath_width_seconds,
+                    "peep": peep,
+                },
+            )
+
         baseline = None
         if enabled(("baseline", "moving_baseline")):
             moving_baseline = self.run_postprocessing_function(
@@ -348,8 +368,6 @@ class ReSurfEMGAdapter:
             }
             baseline = slopesum_baseline[0]
 
-        peak_indices = _peak_indices_from_events(events, fs)
-        peak_indices_array = np.asarray(peak_indices, dtype=int)
         ventilator_signals = _ventilator_signals(
             ventilator,
             pressure_channel=ventilator_pressure_channel,
@@ -780,3 +798,35 @@ def _category_for_function(function_name: str) -> str | None:
         if function_name in functions:
             return category
     return None
+
+
+def _missing_postprocessing_dependency() -> str | None:
+    for module_name in _POSTPROCESSING_MODULES.values():
+        try:
+            import_module(module_name)
+        except ImportError:
+            return (
+                "Optional dependency `resurfemg` is not installed; "
+                'install with `pip install "m3resp[emg]"` to compute this function.'
+            )
+    return None
+
+
+def _unavailable_postprocessing_result(
+    *,
+    selected: set[tuple[str, str]],
+    peak_indices: Any,
+    computed: dict[str, Any],
+    reason: str,
+    settings: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "available": {},
+        "computed": computed,
+        "skipped": {
+            f"{category}.{function_name}": reason
+            for category, function_name in sorted(selected)
+        },
+        "peak_indices": peak_indices,
+        "settings": settings,
+    }
