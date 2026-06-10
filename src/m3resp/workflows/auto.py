@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -14,6 +15,7 @@ from m3resp.workflows.configured import (
 )
 
 WorkflowKind = Literal["eit", "emg", "multimodal"]
+CONFIG_PATH = Path(os.path.join("config.yaml"))
 
 
 def select_workflow(
@@ -45,7 +47,7 @@ def run_workflow(
     )
 
 
-def run(CONFIG_PATH) -> WorkflowResult:
+def run(config: str | Path | WorkflowConfig | None = None) -> WorkflowResult:
     """Run the workflow selected by the YAML module flags."""
 
-    return run_workflow(config=CONFIG_PATH)
+    return run_workflow(config=CONFIG_PATH if config is None else config)
