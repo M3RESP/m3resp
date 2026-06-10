@@ -213,9 +213,54 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
                 "values": [1.0, 2.0],
                 "ylabel": "EMG amplitude (uV)",
             },
-        }
+        },
+        "vent_pressure": {
+            "before": {
+                "title": "Ventilator pressure",
+                "time": [0.0, 0.01, 0.02],
+                "values": [8.0, 9.0, 10.0],
+                "ylabel": "Pressure",
+            },
+            "after": {
+                "title": "Ventilator pressure",
+                "time": [0.01, 0.02],
+                "values": [9.0, 10.0],
+                "ylabel": "Pressure",
+            },
+        },
+        "vent_flow": {
+            "before": {
+                "title": "Ventilator flow",
+                "time": [0.0, 0.01, 0.02],
+                "values": [0.0, 0.5, 0.0],
+                "ylabel": "Flow",
+            },
+            "after": {
+                "title": "Ventilator flow",
+                "time": [0.01, 0.02],
+                "values": [0.5, 0.0],
+                "ylabel": "Flow",
+            },
+        },
+        "vent_volume": {
+            "before": {
+                "title": "Ventilator volume",
+                "time": [0.0, 0.01, 0.02],
+                "values": [100.0, 125.0, 150.0],
+                "ylabel": "Volume",
+            },
+            "after": {
+                "title": "Ventilator volume",
+                "time": [0.01, 0.02],
+                "values": [125.0, 150.0],
+                "ylabel": "Volume",
+            },
+        },
     }
-    session.processed["synchronized"] = {"emg_breaths": []}
+    session.processed["synchronized"] = {
+        "emg_breaths": [],
+        "ventilator_breaths": [],
+    }
     session.parameters["raw_alignment"] = {
         "offset_seconds": {"eit": 0.0, "emg": -0.002, "vent": 0.0}
     }
@@ -223,11 +268,40 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
     fig = plot_synchronization_comparison(session, max_seconds=None)
 
     try:
-        before_ax, after_ax = fig.axes[:2]
-        assert list(before_ax.lines[0].get_ydata()) == [0.0, 0.0, 1.0, 2.0]
-        assert list(after_ax.lines[0].get_ydata()) == [1.0, 2.0]
-        assert before_ax.get_title() == "EMG raw (EMG) before synchronization"
-        assert after_ax.get_title() == "EMG raw (EMG) after synchronization"
+        (
+            emg_before_ax,
+            emg_after_ax,
+            pressure_before_ax,
+            pressure_after_ax,
+            flow_before_ax,
+            flow_after_ax,
+            volume_before_ax,
+            volume_after_ax,
+        ) = fig.axes
+        assert list(emg_before_ax.lines[0].get_ydata()) == [0.0, 0.0, 1.0, 2.0]
+        assert list(emg_after_ax.lines[0].get_ydata()) == [1.0, 2.0]
+        assert emg_before_ax.get_title() == "EMG raw (EMG) before synchronization"
+        assert emg_after_ax.get_title() == "EMG raw (EMG) after synchronization"
+        assert list(pressure_before_ax.lines[0].get_ydata()) == [8.0, 9.0, 10.0]
+        assert list(pressure_after_ax.lines[0].get_ydata()) == [9.0, 10.0]
+        assert pressure_before_ax.get_title() == (
+            "Ventilator pressure before synchronization"
+        )
+        assert pressure_after_ax.get_title() == (
+            "Ventilator pressure after synchronization"
+        )
+        assert list(flow_before_ax.lines[0].get_ydata()) == [0.0, 0.5, 0.0]
+        assert list(flow_after_ax.lines[0].get_ydata()) == [0.5, 0.0]
+        assert flow_before_ax.get_title() == "Ventilator flow before synchronization"
+        assert flow_after_ax.get_title() == "Ventilator flow after synchronization"
+        assert list(volume_before_ax.lines[0].get_ydata()) == [100.0, 125.0, 150.0]
+        assert list(volume_after_ax.lines[0].get_ydata()) == [125.0, 150.0]
+        assert volume_before_ax.get_title() == (
+            "Ventilator volume before synchronization"
+        )
+        assert volume_after_ax.get_title() == (
+            "Ventilator volume after synchronization"
+        )
     finally:
         plt.close(fig)
 
