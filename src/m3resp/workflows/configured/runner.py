@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -57,7 +59,7 @@ def run_configured_workflow(
             offset_seconds=cfg.alignment.manual_offset_seconds,
         )
 
-    output_dir = _configured_output_dir(cfg, selected)
+    output_dir = _timestamped_output_dir(_configured_output_dir(cfg, selected))
     if export:
         output_dir = export_configured_session(session, output_dir, cfg)
     figures = (
@@ -112,6 +114,11 @@ def _configured_output_dir(
     if selected == "eit":
         return cfg.output.eit_only
     return cfg.output.emg_only
+
+
+def _timestamped_output_dir(output_dir: Path) -> Path:
+    run_folder = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return Path(os.path.join(output_dir, run_folder))
 
 
 def _configured_summary(
