@@ -1,7 +1,7 @@
 duration_seconds: 60.0
 seed: 42
-output_dir: ../../../data/source/synthetic_demo
-basename: m3resp_demo
+output_dir: ../../../data/source/synthetic
+basename: m3resp_multimodal_1
 timestamp_output_dir: true
 generate_eit: true
 generate_emg: true
@@ -16,13 +16,18 @@ respiratory:
     - 45.0
 
 drift:
-  enabled: false
-  amplitude: 0.18
-  kind: sinusoidal
-  frequency_hz: 0.008
-  secondary_frequency_hz: 0.003
-  phase_radians: 1.2
-  slope_per_second: 0.0
+  enabled: true   # Enable drift; false applies no drift.
+
+  kind: time_shift  # Drift model: time_shift, sinusoidal, linear, or constant.
+
+  time_shift_seconds: 2.0  # Signal shift in seconds; positive delays, negative advances.
+  time_shift_fill_mode: zero   # Fill exposed samples after time shift: edge or zero.
+
+  amplitude: 0.18  # Additive drift size in a.u.; ignored for kind: time_shift.
+  frequency_hz: 0.008   # Primary sinusoidal drift frequency in Hz.
+  secondary_frequency_hz: 0.003   # Secondary sinusoidal drift frequency in Hz.
+  phase_radians: 1.2  #Secondary sinusoidal drift phase offset in radians.
+  slope_per_second: 0.0 # Linear drift slope in a.u./s; 0.0 derives it from amplitude/duration.
 
 eit:
   sample_frequency_hz: 20.0
