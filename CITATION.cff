@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use M3Resp, cite this software and the underlying modality packages used in your workflow."
+title: "M3Resp"
+version: "0.1.0"
+date-released: "2026-06-08"
+authors:
+  - name: "M3Resp contributors"
+license: "MIT"
+repository-code: "https://github.com/M3RESP/m3resp"
+abstract: "Multimodal respiratory processing for EIT, EMG, and ventilator signals."
+references:
+  - type: software
+    title: "eitprocessing"
+    notes: "Cite when using EIT functionality."
+  - type: software
+    title: "ReSurfEMG"
+    notes: "Cite when using EMG functionality."

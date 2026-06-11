@@ -1,0 +1,134 @@
+# M3Resp examples – shared configuration
+# All file paths are relative to the repository root.
+# Toggle modules on/off to activate or skip processing steps.
+
+modules:
+  eit:  true   # Electrical Impedance Tomography
+  emg:  true   # Electromyography (respiratory muscles)
+  vent: true   # Ventilator waveform (used with EMG module)
+
+eit:
+  file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_eit_draeger.bin #data/source/draeger_synthetic_draeger_20Hz.bin
+  vendor: draeger  # draeger | timpel | sentec | simulated
+  processing:
+    # preprocess: if true, preprocess the eit data
+    preprocess:
+      enabled: true
+    subject_type: adult
+    welch_window_seconds: 30.0
+    breath_min_duration_seconds: 0.6666666667
+
+    # filter: if true, filter the eit data
+    filter:
+      enabled: true
+      mode: mdn        # mdn | lowpass | bandpass | none
+      lowpass_hz: 1.0
+      highpass_hz: 0.05
+      order: 4
+
+    # breath_detection: if true, detect breaths in the eit data
+    breath_detection:
+      enabled: true
+
+    # only produce the outputs that are enabled
+    outputs:
+      rates: true
+      breath_intervals: true
+      continuous_tiv: true
+      eeli: true
+      pixel_tiv: true
+      filtered_data: true
+      global_impedance: true
+
+emg:
+  file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_emg.Poly5 #data/source/emg_data_synth_quiet_breathing.Poly5
+  processing:
+    preprocess:
+      enabled: true
+      channel: 0
+      high_pass_hz: 80
+      low_pass_hz:
+      envelope_window_seconds: 0.5
+
+    # breath_detection: if true, detect breaths in the emg data
+    breath_detection:
+      enabled: true
+      min_breath_width_seconds: 1.0
+      half_window_seconds: 0.5
+
+    # postprocessing: define which functions to use for each step
+    postprocessing:
+      enabled: true  # enable postprocessing
+      # ventilator data
+      ventilator_pressure_channel: 0
+      ventilator_flow_channel: 1
+      ventilator_volume_channel: 2
+      ventilator_fs:
+      ventilator_breath_width_seconds: 0.5
+      peep:    # PEEP is not used in the current implementation
+      baseline_window_seconds: 30.0
+      baseline_step_seconds: 1.0
+      baseline_percentile: 33.0
+      slope_window_seconds: 0.5
+      aub_window_seconds: 5.0
+
+      # available postprocessing functions: define which functions to use for each step
+      functions:
+        baseline:
+          moving_baseline: true
+          slopesum_baseline: true
+
+        event_detection:
+          find_occluded_breaths: true
+          onoffpeak_baseline_crossing: false
+          onoffpeak_slope_extrapolation: false
+          detect_ventilator_breath: true
+          detect_emg_breaths: true
+
+        features:
+          time_to_peak: false
+          pseudo_slope: false
+          amplitude: false
+          time_product: false
+          area_under_baseline: false
+          respiratory_rate: false
+
+        quality_assessment:
+          snr_pseudo: false
+          pocc_quality: false
+          interpeak_dist: false
+          percentage_under_baseline: false
+          detect_local_high_aub: false
+          detect_extreme_time_products: false
+          detect_non_consecutive_manoeuvres: true
+          evaluate_bell_curve_error: false
+          evaluate_event_timing: false
+          evaluate_respiratory_rates: false
+
+vent:
+  file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_ventilator.Poly5
+
+alignment:
+  # Stage 1 supports manual_offset only.
+  method: manual_offset
+
+  # Use ventilator breaths as timing reference; falls back to EIT if unavailable.
+  reference_modality: vent # options:eit | emg | vent
+
+  # Add seconds per modality in synchronized copies; original events are unchanged.
+  offset_seconds:
+    eit: 0.0
+    emg: -2.0
+    vent: 0.0
+
+output:
+  combined: output/multimodal-summary
+  eit_only: output/eit-summary
+  emg_only: output/emg-summary
+
+results:
+  summary_json: true
+  parameters_csv: true
+  event_csvs: true
+  postprocessing: true
+  figures: true

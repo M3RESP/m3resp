@@ -1,0 +1,626 @@
+"""The central Stage 1 M3Resp session object."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import replace
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
+from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
+from m3resp.core.events import BreathEvent, Event, coerce_breath_event
+from m3resp.core.exceptions import MissingModalityDataError
+from m3resp.core.metadata import SessionMetadata
+from m3resp.core.provenance import ProvenanceRecord, record
+from m3resp.export.session_export import export_session_summary
+from m3resp.modalities.eit import EITRecording, load as load_eit_recording
+from m3resp.modalities.emg import EMGRecording, load as load_emg_recording
+from m3resp.synchronization.alignment import align_events_by_modality_offset
+
+ALIGNMENT_EVENT_LISTS = {
+    "eit": "eit_breaths",
+    "emg": "emg_breaths",
+    "vent": "ventilator_breaths",
+}
+
+
+class M3Session:
+    """Small, explicit session object for Stage 1 multimodal workflows."""
+
+    def __init__(
+        self,
+        eit_adapter: EITProcessingAdapter | None = None,
+        emg_adapter: ReSurfEMGAdapter | None = None,
+        metadata: SessionMetadata | dict[str, Any] | None = None,
+    ):
+        self.eit_adapter = eit_adapter or EITProcessingAdapter()
+        self.emg_adapter = emg_adapter or ReSurfEMGAdapter()
+
+        self.eit: EITRecording | None = None
+        self.emg: EMGRecording | None = None
+        self.raw: dict[str, Any] = {}
+        self.processed: dict[str, Any] = {}
+        self.events: dict[str, Any] = {}
+        self.parameters: dict[str, Any] = {}
+        self.quality: dict[str, Any] = {}
+        self.metadata = _coerce_metadata(metadata)
+        self.provenance: list[ProvenanceRecord] = []
+
+    def load_eit(
+        self, path: str | Path, vendor: str | None = None, **kwargs: Any
+    ) -> Any:
+        """Load EIT data and store it under `raw["eit"]`."""
+
+        recording = load_eit_recording(
+            path,
+            vendor=vendor,
+            adapter=self.eit_adapter,
+            **kwargs,
+        )
+        self.eit = recording
+        self.raw["eit"] = recording
+        self._record("load_eit", "eit", path=str(path), vendor=vendor)
+        return recording.data
+
+    def load_emg(self, path: str | Path, **kwargs: Any) -> Any:
+        """Load EMG data and store it under `raw["emg"]`."""
+
+        recording = load_emg_recording(path, adapter=self.emg_adapter, **kwargs)
+        self.emg = recording
+        self.raw["emg"] = recording
+        self._record("load_emg", "emg", path=str(path))
+        return recording.data
+
+    def preprocess_eit(self, **kwargs: Any) -> Any:
+        """Run a provided or upstream EIT preprocessing function."""
+
+        recording = self._require_raw("eit")
+        preprocess = kwargs.pop("preprocess", None)
+        if preprocess is None:
+            self.processed["eit"] = self.eit_adapter.preprocess(
+                recording.data, **kwargs
+            )
+        else:
+            self.processed["eit"] = preprocess(recording.data, **kwargs)
+        self._record("preprocess_eit", "eit", **kwargs)
+        return self.processed["eit"]
+
+    def preprocess_emg(self, **kwargs: Any) -> Any:
+        """Run EMG preprocessing through the adapter."""
+
+        recording = self._require_raw("emg")
+        self.processed["emg"] = self.emg_adapter.preprocess(recording.data, **kwargs)
+        if self.emg is not None and isinstance(self.processed["emg"], dict):
+            self.emg.filtered = self.processed["emg"].get("filtered")
+            self.emg.envelope = self.processed["emg"].get("envelope")
+            self.emg.channel = self.processed["emg"].get("channel")
+            self.emg.fs = self.processed["emg"].get("fs")
+        self._record("preprocess_emg", "emg", **kwargs)
+        return self.processed["emg"]
+
+    def synchronize_raw_modalities(
+        self,
+        method: str = "manual_offset",
+        offset_seconds: float | Mapping[str, float] = 0.0,
+    ) -> dict[str, Any]:
+        """Crop loaded raw modality signals before downstream processing."""
+
+        if method != "manual_offset":
+            raise ValueError("Stage 1 supports only method='manual_offset'")
+
+        offsets = _resolve_alignment_offsets(offset_seconds)
+        synchronized: dict[str, Any] = {}
+        traces: dict[str, Any] = {}
+        for modality, offset in offsets.items():
+            before_traces = _raw_synchronization_traces(self, modality)
+            n_samples = _crop_loaded_modality(self, modality, float(offset))
+            after_traces = _raw_synchronization_traces(self, modality)
+            for trace_name, before_trace in before_traces.items():
+                after_trace = after_traces.get(trace_name)
+                if after_trace is not None:
+                    traces[trace_name] = {
+                        "before": before_trace,
+                        "after": after_trace,
+                        "offset_seconds": float(offset),
+                    }
+            if n_samples:
+                synchronized[modality] = {
+                    "offset_seconds": float(offset),
+                    "cropped_samples": n_samples,
+                }
+
+        self.processed["raw_synchronization"] = traces
+        self.parameters["raw_alignment"] = {
+            "method": method,
+            "offset_seconds": offsets,
+            "synchronized_modalities": sorted(synchronized),
+            "cropped_samples": synchronized,
+        }
+        self._record(
+            "synchronize_raw_modalities",
+            parameters={
+                "method": method,
+                "offset_seconds": offsets,
+                "cropped_samples": synchronized,
+            },
+        )
+        return synchronized
+
+    def detect_eit_breaths(self, **kwargs: Any) -> Any:
+        """Detect EIT breaths and store normalized events."""
+
+        data = self.processed.get("eit") or self._require_raw("eit").data
+        events = self.eit_adapter.detect_breaths(data, **kwargs)
+        self.add_events("eit_breaths", events)
+        self._record("detect_eit_breaths", "eit", **kwargs)
+        return self.events["eit_breaths"]
+
+    def detect_emg_breaths(self, **kwargs: Any) -> Any:
+        """Detect EMG breaths and store normalized events."""
+
+        data = self.processed.get("emg") or self._require_raw("emg").data
+        events = self.emg_adapter.detect_breaths(data, **kwargs)
+        self.add_events("emg_breaths", events)
+        self._record("detect_emg_breaths", "emg", **kwargs)
+        return self.events["emg_breaths"]
+
+    def add_events(self, name: str, events: Any) -> list[Any]:
+        """Store a named event list while keeping `session.events` as backing data."""
+
+        self.events[name] = list(events)
+        return self.events[name]
+
+    def get_events(self, name: str, default: Any = None) -> Any:
+        """Return a named event list from `session.events`."""
+
+        return self.events.get(name, default)
+
+    def postprocess_emg(self, **kwargs: Any) -> Any:
+        """Run EMG postprocessing through the adapter."""
+
+        data = self.processed.get("emg") or self._require_raw("emg").data
+        events = self.events.get("emg_breaths")
+        self.parameters["emg_postprocessing"] = self.emg_adapter.postprocess(
+            data,
+            events=events,
+            **kwargs,
+        )
+        ventilator_breaths = self._normalize_ventilator_breaths(
+            self.parameters["emg_postprocessing"],
+            ventilator=kwargs.get("ventilator"),
+            ventilator_fs=kwargs.get("ventilator_fs"),
+            ventilator_breath_width_seconds=kwargs.get(
+                "ventilator_breath_width_seconds",
+            ),
+        )
+        if ventilator_breaths:
+            self.add_events("ventilator_breaths", ventilator_breaths)
+        self._record("postprocess_emg", "emg", **kwargs)
+        return self.parameters["emg_postprocessing"]
+
+    def align_modalities(
+        self,
+        method: str = "manual_offset",
+        offset_seconds: float | Mapping[str, float] = 0.0,
+        reference_modality: str | None = None,
+    ) -> dict[str, Any]:
+        """Apply basic Stage 1 alignment to stored event lists."""
+
+        if method != "manual_offset":
+            raise ValueError("Stage 1 supports only method='manual_offset'")
+
+        offsets = _resolve_alignment_offsets(offset_seconds)
+        requested_reference = reference_modality
+        resolved_reference, fallback_reference = self._resolve_alignment_reference(
+            reference_modality
+        )
+        synchronized: dict[str, Any] = {}
+        aligned_event_lists: list[str] = []
+        missing_event_lists: list[str] = []
+        for name in ALIGNMENT_EVENT_LISTS.values():
+            events = self.events.get(name)
+            if events is None:
+                missing_event_lists.append(name)
+                continue
+            if not isinstance(events, list):
+                continue
+            synchronized[name] = align_events_by_modality_offset(events, offsets)
+            aligned_event_lists.append(name)
+
+        self.processed["synchronized"] = synchronized
+        self.parameters["alignment"] = {
+            "method": method,
+            "reference_modality": resolved_reference,
+            "requested_reference_modality": requested_reference,
+            "fallback_reference_modality": fallback_reference,
+            "offset_seconds": offsets,
+            "aligned_event_lists": aligned_event_lists,
+            "missing_event_lists": missing_event_lists,
+        }
+        self._record(
+            "align_modalities",
+            parameters={
+                "method": method,
+                "reference_modality": resolved_reference,
+                "offset_seconds": offsets,
+            },
+        )
+        return synchronized
+
+    def export_summary(self, output_dir: str | Path) -> Path:
+        """Export the session summary to disk."""
+
+        output_path = export_session_summary(self, output_dir)
+        self._record("export_summary", parameters={"output_dir": str(output_path)})
+        return output_path
+
+    def _require_raw(self, modality: str) -> Any:
+        if modality not in self.raw:
+            raise MissingModalityDataError(
+                f"No raw {modality.upper()} data loaded. Call load_{modality} first."
+            )
+        return self.raw[modality]
+
+    def _record(
+        self,
+        action: str,
+        modality: str | None = None,
+        parameters: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        record_parameters = parameters or kwargs
+        self.provenance.append(record(action, modality, **record_parameters))
+
+    def _resolve_alignment_reference(
+        self,
+        reference_modality: str | None,
+    ) -> tuple[str, str | None]:
+        if reference_modality is not None:
+            return _normalize_modality(reference_modality), None
+        if self.events.get("ventilator_breaths"):
+            return "vent", None
+        return "eit", "eit"
+
+    def _normalize_ventilator_breaths(
+        self,
+        postprocessing: Any,
+        *,
+        ventilator: Any | None,
+        ventilator_fs: float | None,
+        ventilator_breath_width_seconds: float | None,
+    ) -> list[BreathEvent]:
+        detections = (
+            postprocessing.get("computed", {})
+            .get("event_detection", {})
+            .get("detect_ventilator_breath", [])
+            if isinstance(postprocessing, dict)
+            else []
+        )
+        if detections is None:
+            return []
+
+        fs = _infer_ventilator_fs(ventilator, ventilator_fs)
+        width_seconds = (
+            0.0
+            if ventilator_breath_width_seconds is None
+            else float(ventilator_breath_width_seconds)
+        )
+        return [
+            _normalize_ventilator_breath(
+                detection,
+                fs=fs,
+                width_seconds=width_seconds,
+            )
+            for detection in _iter_ventilator_detections(detections)
+        ]
+
+
+def _coerce_metadata(
+    metadata: SessionMetadata | dict[str, Any] | None,
+) -> SessionMetadata:
+    if metadata is None:
+        return SessionMetadata()
+    if isinstance(metadata, SessionMetadata):
+        return metadata
+    return SessionMetadata(attributes=dict(metadata))
+
+
+def _resolve_alignment_offsets(
+    offset_seconds: float | Mapping[str, float],
+) -> dict[str, float]:
+    if isinstance(offset_seconds, Mapping):
+        offsets = {"eit": 0.0, "emg": 0.0, "vent": 0.0}
+        for modality, offset in offset_seconds.items():
+            offsets[_normalize_modality(modality)] = float(offset)
+        return offsets
+    return {"eit": 0.0, "emg": float(offset_seconds), "vent": 0.0}
+
+
+def _normalize_modality(modality: str) -> str:
+    normalized = str(modality).lower()
+    if normalized in {"ventilator", "ventilation"}:
+        return "vent"
+    return normalized
+
+
+def _crop_loaded_modality(session: M3Session, modality: str, offset: float) -> int:
+    if offset == 0.0:
+        return 0
+    if modality == "emg" and session.emg is not None:
+        return _crop_emg_recording(session.emg, offset)
+    if modality == "vent":
+        ventilator = session.raw.get("vent")
+        return _crop_recording_dict(ventilator, offset)
+    if modality == "eit" and session.eit is not None:
+        return _crop_eit_recording(session.eit, offset)
+    return 0
+
+
+def _raw_synchronization_traces(session: M3Session, modality: str) -> dict[str, Any]:
+    if modality == "emg" and session.emg is not None:
+        trace = _emg_raw_trace(session.emg)
+        return {"emg": trace} if trace is not None else {}
+    if modality == "eit" and session.eit is not None:
+        trace = _eit_raw_trace(session.eit)
+        return {"eit": trace} if trace is not None else {}
+    if modality == "vent":
+        return _ventilator_raw_traces(session.raw.get("vent"))
+    return {}
+
+
+def _emg_raw_trace(recording: EMGRecording) -> dict[str, Any] | None:
+    data = recording.data if isinstance(recording.data, dict) else None
+    metadata = data.get("metadata", {}) if isinstance(data, dict) else {}
+    labels = metadata.get("labels") or []
+    units = metadata.get("units") or []
+    label = labels[0] if labels else "emg_0"
+    unit = units[0] if units else "a.u."
+    return _recording_dict_trace(
+        data,
+        title=f"EMG raw ({label})",
+        ylabel=f"EMG amplitude ({unit})" if unit else "EMG amplitude",
+    )
+
+
+def _recording_dict_trace(
+    recording: Any,
+    *,
+    title: str,
+    ylabel: str,
+    channel: int = 0,
+) -> dict[str, Any] | None:
+    if not isinstance(recording, dict) or "array" not in recording:
+        return None
+    metadata = recording.get("metadata") or {}
+    fs = metadata.get("fs")
+    if fs is None:
+        return None
+    array = np.asarray(recording["array"], dtype=float)
+    if array.ndim == 0 or array.size == 0:
+        return None
+    if array.ndim > 1 and channel >= array.shape[0]:
+        return None
+    values = array[channel] if array.ndim > 1 else array
+    time = np.arange(len(values), dtype=float) / float(fs)
+    return {
+        "title": title,
+        "time": time.tolist(),
+        "values": np.asarray(values, dtype=float).tolist(),
+        "ylabel": ylabel,
+    }
+
+
+def _ventilator_raw_traces(recording: Any) -> dict[str, Any]:
+    pressure = _recording_dict_trace(
+        recording,
+        title="Ventilator pressure",
+        ylabel="Pressure",
+        channel=0,
+    )
+    flow = _recording_dict_trace(
+        recording,
+        title="Ventilator flow",
+        ylabel="Flow",
+        channel=1,
+    )
+    volume = _recording_dict_trace(
+        recording,
+        title="Ventilator volume",
+        ylabel="Volume",
+        channel=2,
+    )
+    traces: dict[str, Any] = {}
+    if pressure is not None:
+        traces["vent_pressure"] = pressure
+    if flow is not None:
+        traces["vent_flow"] = flow
+    if volume is not None:
+        traces["vent_volume"] = volume
+    return traces
+
+
+def _eit_raw_trace(recording: EITRecording) -> dict[str, Any] | None:
+    signal = recording.global_impedance
+    if signal is None:
+        return None
+    time = getattr(signal, "time", None)
+    values = getattr(signal, "values", None)
+    if time is None or values is None:
+        return None
+    return {
+        "title": "EIT raw global impedance",
+        "time": np.asarray(time, dtype=float).tolist(),
+        "values": np.asarray(values, dtype=float).tolist(),
+        "ylabel": getattr(signal, "label", "global_impedance_(raw)"),
+    }
+
+
+def _crop_emg_recording(recording: EMGRecording, offset: float) -> int:
+    cropped = _crop_recording_dict(recording.data, offset)
+    if not cropped:
+        return 0
+    if isinstance(recording.data, dict):
+        recording.raw = recording.data.get("array")
+        recording.metadata = recording.data.get("metadata")
+    return cropped
+
+
+def _crop_recording_dict(recording: Any, offset: float) -> int:
+    if not isinstance(recording, dict) or "array" not in recording:
+        return 0
+    metadata = recording.get("metadata") or {}
+    fs = metadata.get("fs")
+    if fs is None:
+        return 0
+    array, n_samples = _crop_sample_array(recording["array"], float(fs), offset)
+    if not n_samples:
+        return 0
+    recording["array"] = array
+    return n_samples
+
+
+def _crop_eit_recording(recording: EITRecording, offset: float) -> int:
+    sequence = recording.data
+    fs = _infer_eit_sample_frequency(recording)
+    if fs is None:
+        return 0
+
+    n_samples = 0
+    if recording.raw is not None:
+        n_samples = max(n_samples, _crop_eit_like_object(recording.raw, fs, offset))
+    if recording.global_impedance is not None:
+        n_samples = max(
+            n_samples,
+            _crop_eit_like_object(recording.global_impedance, fs, offset),
+        )
+    for collection_name in ("eit_data", "continuous_data"):
+        collection = getattr(sequence, collection_name, None)
+        if isinstance(collection, Mapping):
+            for item in collection.values():
+                n_samples = max(n_samples, _crop_eit_like_object(item, fs, offset))
+    return n_samples
+
+
+def _crop_eit_like_object(obj: Any, fs: float, offset: float) -> int:
+    n_samples = 0
+    for attr in ("pixel_impedance", "values", "time"):
+        if not hasattr(obj, attr):
+            continue
+        values = getattr(obj, attr)
+        cropped, cropped_samples = _crop_sample_array(
+            values,
+            fs,
+            offset,
+            sample_axis=0,
+        )
+        if cropped_samples:
+            setattr(obj, attr, cropped)
+            n_samples = max(n_samples, cropped_samples)
+    return n_samples
+
+
+def _crop_sample_array(
+    values: Any,
+    fs: float,
+    offset: float,
+    sample_axis: int | None = None,
+) -> tuple[Any, int]:
+    array = np.asarray(values)
+    if array.size == 0:
+        return values, 0
+
+    if sample_axis is None:
+        sample_axis = 1 if array.ndim > 1 and array.shape[1] >= array.shape[0] else 0
+    n_samples = int(round(abs(offset) * float(fs)))
+    axis_len = array.shape[sample_axis]
+    if n_samples <= 0 or n_samples >= axis_len:
+        return values, 0
+
+    if offset < 0:
+        sample_slice = slice(n_samples, None)
+    else:
+        sample_slice = slice(None, axis_len - n_samples)
+    slices = [slice(None)] * array.ndim
+    slices[sample_axis] = sample_slice
+    cropped = array[tuple(slices)]
+    if isinstance(values, list):
+        return cropped.tolist(), n_samples
+    return cropped, n_samples
+
+
+def _infer_eit_sample_frequency(recording: EITRecording) -> float | None:
+    for obj in (recording.raw, recording.global_impedance, recording.data):
+        for attr in ("sample_frequency", "sample_frequency_hz", "fs"):
+            value = getattr(obj, attr, None)
+            if value is not None:
+                return float(value)
+        metadata = getattr(obj, "metadata", None)
+        if isinstance(metadata, Mapping):
+            for key in ("sample_frequency", "sample_frequency_hz", "fs"):
+                value = metadata.get(key)
+                if value is not None:
+                    return float(value)
+    return None
+
+
+def _iter_ventilator_detections(detections: Any) -> list[Any]:
+    if isinstance(detections, (BreathEvent, Event, Mapping)):
+        return [detections]
+    if hasattr(detections, "tolist"):
+        detections = detections.tolist()
+    return list(detections)
+
+
+def _normalize_ventilator_breath(
+    detection: Any,
+    *,
+    fs: float | None,
+    width_seconds: float,
+) -> BreathEvent:
+    if isinstance(detection, BreathEvent):
+        return replace(detection, modality="vent")
+    if isinstance(detection, Mapping):
+        breath = coerce_breath_event(detection, modality="vent", source="ventilator")
+        return replace(breath, modality="vent")
+
+    if hasattr(detection, "start_time") and hasattr(detection, "end_time"):
+        breath = coerce_breath_event(detection, modality="vent", source="ventilator")
+        return replace(breath, modality="vent")
+
+    if fs is None:
+        raise ValueError(
+            "Ventilator breath indices require a ventilator sampling rate. "
+            "Pass ventilator_fs or include metadata['fs'] in the ventilator input."
+        )
+
+    sample_index = int(detection)
+    peak_time = sample_index / float(fs)
+    half_width = width_seconds / 2
+    return BreathEvent(
+        modality="vent",
+        start_time=max(0.0, peak_time - half_width),
+        end_time=peak_time + half_width,
+        peak_time=peak_time,
+        source="resurfemg.detect_ventilator_breath",
+        metadata={
+            "sample_index": sample_index,
+            "fs": float(fs),
+            "width_seconds": width_seconds,
+        },
+    )
+
+
+def _infer_ventilator_fs(
+    ventilator: Any | None,
+    ventilator_fs: float | None,
+) -> float | None:
+    if ventilator_fs is not None:
+        return float(ventilator_fs)
+    if isinstance(ventilator, Mapping):
+        metadata = ventilator.get("metadata", {})
+        if isinstance(metadata, Mapping) and metadata.get("fs") is not None:
+            return float(metadata["fs"])
+    return None
