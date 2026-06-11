@@ -627,8 +627,10 @@ class ReSurfEMGAdapter:
                         time_products,
                     )
                 )
-            if enabled(("quality_assessment", "evaluate_event_timing")) and len(
-                ventilator_breath_indices
+            if (
+                enabled(("quality_assessment", "evaluate_event_timing"))
+                and ventilator_signals is not None
+                and len(ventilator_breath_indices)
             ):
                 paired_count = min(
                     len(peak_indices_array), len(ventilator_breath_indices)

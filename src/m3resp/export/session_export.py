@@ -7,7 +7,10 @@ import json
 import os
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from _typeshed import DataclassInstance
 
 from m3resp.export.tables import events_to_rows, parameters_to_rows
 
@@ -76,8 +79,8 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def _jsonable(value: Any) -> Any:
-    if is_dataclass(value):
-        return _jsonable(asdict(value))
+    if _is_dataclass_instance(value):
+        return _jsonable(asdict(cast("DataclassInstance", value)))
     if hasattr(value, "shape") and hasattr(value, "dtype"):
         return {
             "type": type(value).__name__,
@@ -97,3 +100,7 @@ def _jsonable(value: Any) -> Any:
     except TypeError:
         return repr(value)
     return value
+
+
+def _is_dataclass_instance(value: Any) -> bool:
+    return is_dataclass(value) and not isinstance(value, type)
