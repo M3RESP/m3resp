@@ -230,7 +230,7 @@ def _get_eit_rows(
         return []
 
     sequence = recording.data
-    rows = []
+    rows: list[tuple[str, str, np.ndarray, np.ndarray, str]] = []
     continuous_data = getattr(sequence, "continuous_data", {})
     if waveform not in continuous_data:
         return rows
@@ -364,7 +364,7 @@ def _get_emg_rows(
     unit = units[channel] if channel < len(units) else "a.u."
     ylabel = _emg_amplitude_label(unit)
 
-    rows = []
+    rows: list[tuple[str, str, np.ndarray, np.ndarray, str]] = []
     raw = processed.get("raw_channel")
     filtered = processed.get("filtered")
     envelope = processed.get("envelope")

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field, is_dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from _typeshed import DataclassInstance
 
 
 @dataclass
@@ -151,9 +154,13 @@ def event_to_dict(
 
     if isinstance(value, Mapping):
         return dict(value)
-    if is_dataclass(value):
-        return asdict(value)
-    return dict(value)
+    if _is_dataclass_instance(value):
+        return asdict(cast("DataclassInstance", value))
+    return dict(cast(Any, value))
+
+
+def _is_dataclass_instance(value: Any) -> bool:
+    return is_dataclass(value) and not isinstance(value, type)
 
 
 def _optional_float(value: Any) -> float | None:

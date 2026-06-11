@@ -14,7 +14,7 @@ import struct
 import sys
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -426,7 +426,7 @@ def generate_eit_record(
     )
 
     np.save(npy_path, draeger.pixel_impedance)
-    np.savez(components_path, **draeger.components)
+    np.savez(components_path, **cast(dict[str, Any], draeger.components))
     _write_timeseries_csv(
         csv_path,
         draeger.time,
@@ -840,6 +840,7 @@ def shift_array_in_time(
 
     if not is_timing_drift_enabled(config):
         return np.asarray(time_seconds, dtype=float).copy(), np.asarray(array).copy()
+    active_config = cast(TimingDriftConfig, config)
 
     values = np.asarray(array)
     moved = np.moveaxis(values, sample_axis, DEFAULT_FIRST_AXIS)
@@ -850,7 +851,7 @@ def shift_array_in_time(
         column_time, shifted_column = shift_signal_in_time_cropped(
             flat[:, index],
             time_seconds,
-            config,
+            active_config,
         )
         if shifted_time is None:
             shifted_time = column_time

@@ -4,20 +4,36 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from typing import Any, TypeVar
+from typing import Any, overload
 
 from m3resp.core.events import BreathEvent, Event
 
-TEvent = TypeVar("TEvent", Event, BreathEvent)
+
+@overload
+def align_events_manual_offset(
+    events: Sequence[Event], offset_seconds: float
+) -> list[Event]: ...
+
+
+@overload
+def align_events_manual_offset(
+    events: Sequence[BreathEvent], offset_seconds: float
+) -> list[BreathEvent]: ...
+
+
+@overload
+def align_events_manual_offset(
+    events: Sequence[Event | BreathEvent], offset_seconds: float
+) -> list[Event | BreathEvent]: ...
 
 
 def align_events_manual_offset(
-    events: list[TEvent], offset_seconds: float
-) -> list[TEvent]:
+    events: Sequence[Event | BreathEvent], offset_seconds: float
+) -> list[Any]:
     """Return copies of events shifted by a manual offset."""
 
     offset = float(offset_seconds)
-    aligned: list[TEvent] = []
+    aligned: list[Any] = []
     for event in events:
         if isinstance(event, BreathEvent):
             aligned.append(
@@ -39,13 +55,34 @@ def align_events_manual_offset(
     return aligned
 
 
+@overload
 def align_events_by_modality_offset(
-    events: Sequence[TEvent],
+    events: Sequence[Event],
     offsets_seconds: Mapping[str, float],
-) -> list[TEvent]:
+) -> list[Event]: ...
+
+
+@overload
+def align_events_by_modality_offset(
+    events: Sequence[BreathEvent],
+    offsets_seconds: Mapping[str, float],
+) -> list[BreathEvent]: ...
+
+
+@overload
+def align_events_by_modality_offset(
+    events: Sequence[Event | BreathEvent],
+    offsets_seconds: Mapping[str, float],
+) -> list[Event | BreathEvent]: ...
+
+
+def align_events_by_modality_offset(
+    events: Sequence[Event | BreathEvent],
+    offsets_seconds: Mapping[str, float],
+) -> list[Any]:
     """Return event copies shifted by the offset configured for each modality."""
 
-    aligned: list[TEvent] = []
+    aligned: list[Any] = []
     for event in events:
         modality = _event_modality(event)
         offset = float(offsets_seconds.get(modality, 0.0))

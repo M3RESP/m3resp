@@ -261,6 +261,11 @@ def load_workflow_config(
     vent_raw: dict[str, Any] = raw.get("vent", {})
     output_raw: dict[str, Any] = raw.get("output", {})
     results_raw: dict[str, Any] = raw.get("results", {})
+    output_paths: dict[str, Path] = {}
+    for key, value in output_raw.items():
+        resolved_output_path = _resolve_optional_path(base, value)
+        if resolved_output_path is not None:
+            output_paths[key] = resolved_output_path
 
     return WorkflowConfig(
         modules=modules,
@@ -277,13 +282,7 @@ def load_workflow_config(
             file=_resolve_optional_path(base, vent_raw.get("file"))
         ),
         alignment=AlignmentConfig(**raw.get("alignment", {})),
-        output=OutputConfig(
-            **{
-                key: _resolve_optional_path(base, value)
-                for key, value in output_raw.items()
-                if value is not None
-            }
-        ),
+        output=OutputConfig(**output_paths),
         results=ResultsConfig(**results_raw),
     )
 
