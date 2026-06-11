@@ -1,7 +1,14 @@
 data/*
 output/*
+plan/*
 .venv/*
 .conda/*
 *.lock
 **/__pycache__
 .*
+!.pre-commit-config.yaml
+# !.github/
+# !.github/**
+
+# agentics
+AGENTS.md
