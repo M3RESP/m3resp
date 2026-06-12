@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from collections.abc import Mapping
@@ -9,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
+
+from m3resp.core.config import WorkflowConfig, load_workflow_config
 
 
 def find_repo_root(start: Path | None = None) -> Path:
@@ -59,6 +62,77 @@ def get_config_path(default_config_path: str) -> str:
         f"Enter a config path [press enter for default:{default_config_path}]: "
     ).strip()
     return os.path.normpath(config_path) if config_path else default_config_path
+
+
+def load_workflow_config_with_raw(
+    config: str | Path | WorkflowConfig,
+    *,
+    root: str | Path | None = None,
+) -> tuple[WorkflowConfig, dict[str, Any]]:
+    """Load typed workflow config and return the raw YAML mapping as well."""
+
+    if isinstance(config, WorkflowConfig):
+        return config, {}
+
+    import yaml
+
+    config_path = Path(config).expanduser().resolve()
+    cfg = load_workflow_config(config_path, root=root)
+    with config_path.open("r", encoding="utf-8") as fh:
+        raw = yaml.safe_load(fh) or {}
+    return cfg, dict(raw)
+
+
+def coerce_slice_value(
+    override_value: int | float | None,
+    config_value: Any,
+    slicing_mode: str,
+    *,
+    value_name: str = "slice value",
+) -> int | float:
+    """Resolve and coerce an index/time slice boundary from config and overrides."""
+
+    value = override_value if override_value is not None else config_value
+    if value is None:
+        raise ValueError(f"Workflow requires {value_name}.")
+    if slicing_mode == "index":
+        return int(value)
+    if slicing_mode == "time":
+        return float(value)
+    raise ValueError("slicing_mode must be 'index' or 'time'.")
+
+
+def slice_by_index(data: Any, *, start: int, end: int) -> Any:
+    """Slice an indexable data object by sample index."""
+
+    return data[slice(start, end)]
+
+
+def slice_by_time(data: Any, *, start: float, end: float) -> Any:
+    """Slice a data object by time using its ``.t`` selector."""
+
+    return data.t[slice(start, end)]
+
+
+def subject_result_filename(
+    subject_id: str,
+    mode: str,
+    timepoint: Any,
+    selection: str,
+) -> str:
+    """Return the conventional subject result filename."""
+
+    timepoint_part = f"{timepoint}-" if timepoint else ""
+    return f"{subject_id}-{mode}-{timepoint_part}{selection}.txt"
+
+
+def write_json(path: str | Path, payload: Mapping[str, Any]) -> None:
+    """Write a dictionary-like payload as deterministic JSON."""
+
+    Path(path).write_text(
+        json.dumps(payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
 
 
 def log_workflow_summary(

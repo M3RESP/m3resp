@@ -23,18 +23,12 @@ def main() -> None:
     configure_workflow_logging()
     result = run_rotarc_breath_duration_workflow(CONFIG_PATH)
 
-    logger.opt(colors=True).success(
-        "<bold>ROTARC breath-duration workflow complete.</bold>"
-    )
-    logger.opt(colors=True).info("<cyan>Output directory</cyan>: {}", result.output_dir)
-    logger.opt(colors=True).info(
-        "<cyan>Result path</cyan>: {}", result.summary["result_path"]
-    )
-    logger.opt(colors=True).info(
-        "<cyan>Breaths</cyan>: {}", result.summary["n_breaths"]
-    )
-    logger.opt(colors=True).info(
-        "<cyan>Breath duration CV</cyan>: {:.8f}",
+    logger.success("ROTARC breath-duration workflow complete.")
+    logger.info("Output directory: {}", result.output_dir)
+    logger.info("Result path: {}", result.summary["result_path"])
+    logger.info("Breaths: {}", result.summary["n_breaths"])
+    logger.info(
+        "Breath duration CV: {:.8f}",
         result.summary["breath_duration_cv"],
     )
 

@@ -4,6 +4,7 @@ from m3resp.workflows.auto import run, run_workflow, select_workflow
 from m3resp.workflows.eit_workflow import run_eit_workflow
 from m3resp.workflows.emg_workflow import run_emg_workflow
 from m3resp.workflows.multimodal_workflow import run_multimodal_workflow
+from m3resp.workflows.rotarc_breath_duration import run_rotarc_breath_duration_workflow
 from m3resp.workflows.configured import (
     WorkflowResult,
     save_workflow_figures,
@@ -31,6 +32,7 @@ __all__ = [
     "run_eit_workflow",
     "run_emg_workflow",
     "run_multimodal_workflow",
+    "run_rotarc_breath_duration_workflow",
     "run_workflow",
     "save_workflow_figures",
     "select_workflow",
