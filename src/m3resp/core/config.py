@@ -3,19 +3,13 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-
-@dataclass
-class M3Config:
-    """Small Stage 1 configuration object."""
-
-    time_unit: str = "seconds"
-    default_alignment_method: str = "manual_offset"
+from m3resp.core.path_helper import infer_config_root, resolve_optional_path
 
 
 @dataclass(frozen=True)
@@ -25,57 +19,6 @@ class ModuleFlags:
     eit: bool = True
     emg: bool = True
     vent: bool = True
-
-
-@dataclass(frozen=True)
-class EITWorkflowConfig:
-    """EIT-specific configured workflow settings."""
-
-    file: Path | None = None
-    vendor: str = "draeger"
-    processing: EITProcessingConfig = None  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        if self.processing is None:
-            object.__setattr__(self, "processing", EITProcessingConfig())
-
-
-@dataclass(frozen=True)
-class EMGWorkflowConfig:
-    """EMG-specific configured workflow settings."""
-
-    file: Path | None = None
-    processing: EMGProcessingConfig = None  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        if self.processing is None:
-            object.__setattr__(self, "processing", EMGProcessingConfig())
-
-
-@dataclass(frozen=True)
-class VentWorkflowConfig:
-    """Ventilator-specific configured workflow settings."""
-
-    file: Path | None = None
-
-
-@dataclass(frozen=True)
-class AlignmentConfig:
-    """Inter-modality alignment settings."""
-
-    method: str = "manual_offset"
-    manual_offset_seconds: float = 0.0
-    offset_seconds: dict[str, float] | None = None
-    reference_modality: str | None = None
-
-
-@dataclass(frozen=True)
-class OutputConfig:
-    """Configured workflow output directories."""
-
-    combined: Path = Path(os.path.join("output", "multimodal-summary"))
-    eit_only: Path = Path(os.path.join("output", "eit-summary"))
-    emg_only: Path = Path(os.path.join("output", "emg-summary"))
 
 
 @dataclass(frozen=True)
@@ -113,23 +56,22 @@ class EITOutputsConfig:
 class EITProcessingConfig:
     """EIT processing switches and parameters."""
 
-    preprocess: SwitchConfig = None  # type: ignore[assignment]
-    filter: EITFilterConfig = None  # type: ignore[assignment]
-    breath_detection: SwitchConfig = None  # type: ignore[assignment]
-    outputs: EITOutputsConfig = None  # type: ignore[assignment]
+    preprocess: SwitchConfig = field(default_factory=SwitchConfig)
+    filter: EITFilterConfig = field(default_factory=EITFilterConfig)
+    breath_detection: SwitchConfig = field(default_factory=SwitchConfig)
+    outputs: EITOutputsConfig = field(default_factory=EITOutputsConfig)
     subject_type: str = "adult"
     welch_window_seconds: float = 30.0
     breath_min_duration_seconds: float = 2 / 3
 
-    def __post_init__(self) -> None:
-        if self.preprocess is None:
-            object.__setattr__(self, "preprocess", SwitchConfig())
-        if self.filter is None:
-            object.__setattr__(self, "filter", EITFilterConfig())
-        if self.breath_detection is None:
-            object.__setattr__(self, "breath_detection", SwitchConfig())
-        if self.outputs is None:
-            object.__setattr__(self, "outputs", EITOutputsConfig())
+
+@dataclass(frozen=True)
+class EITWorkflowConfig:
+    """EIT-specific configured workflow settings."""
+
+    file: Path | None = None
+    vendor: str = "draeger"
+    processing: EITProcessingConfig = field(default_factory=EITProcessingConfig)
 
 
 @dataclass(frozen=True)
@@ -156,10 +98,10 @@ class EMGDetectionConfig:
 class EMGPostprocessingGroupsConfig:
     """Switches for ReSurfEMG postprocessing function groups."""
 
-    baseline: dict[str, bool] = None  # type: ignore[assignment]
-    event_detection: dict[str, bool] = None  # type: ignore[assignment]
-    features: dict[str, bool] = None  # type: ignore[assignment]
-    quality_assessment: dict[str, bool] = None  # type: ignore[assignment]
+    baseline: dict[str, bool] | None = None
+    event_detection: dict[str, bool] | None = None
+    features: dict[str, bool] | None = None
+    quality_assessment: dict[str, bool] | None = None
 
     def __post_init__(self) -> None:
         from m3resp.adapters.resurfemg_adapter import POSTPROCESSING_FUNCTIONS
@@ -183,7 +125,9 @@ class EMGPostprocessingConfig:
     """EMG postprocessing switches and parameters."""
 
     enabled: bool = True
-    functions: EMGPostprocessingGroupsConfig = None  # type: ignore[assignment]
+    functions: EMGPostprocessingGroupsConfig = field(
+        default_factory=EMGPostprocessingGroupsConfig
+    )
     ventilator_pressure_channel: int = 0
     ventilator_flow_channel: int = 1
     ventilator_volume_channel: int = 2
@@ -196,26 +140,50 @@ class EMGPostprocessingConfig:
     slope_window_seconds: float = 0.5
     aub_window_seconds: float = 5.0
 
-    def __post_init__(self) -> None:
-        if self.functions is None:
-            object.__setattr__(self, "functions", EMGPostprocessingGroupsConfig())
-
 
 @dataclass(frozen=True)
 class EMGProcessingConfig:
     """EMG processing switches and parameters."""
 
-    preprocess: EMGPreprocessConfig = None  # type: ignore[assignment]
-    breath_detection: EMGDetectionConfig = None  # type: ignore[assignment]
-    postprocessing: EMGPostprocessingConfig = None  # type: ignore[assignment]
+    preprocess: EMGPreprocessConfig = field(default_factory=EMGPreprocessConfig)
+    breath_detection: EMGDetectionConfig = field(default_factory=EMGDetectionConfig)
+    postprocessing: EMGPostprocessingConfig = field(
+        default_factory=EMGPostprocessingConfig
+    )
 
-    def __post_init__(self) -> None:
-        if self.preprocess is None:
-            object.__setattr__(self, "preprocess", EMGPreprocessConfig())
-        if self.breath_detection is None:
-            object.__setattr__(self, "breath_detection", EMGDetectionConfig())
-        if self.postprocessing is None:
-            object.__setattr__(self, "postprocessing", EMGPostprocessingConfig())
+
+@dataclass(frozen=True)
+class EMGWorkflowConfig:
+    """EMG-specific configured workflow settings."""
+
+    file: Path | None = None
+    processing: EMGProcessingConfig = field(default_factory=EMGProcessingConfig)
+
+
+@dataclass(frozen=True)
+class VentWorkflowConfig:
+    """Ventilator-specific configured workflow settings."""
+
+    file: Path | None = None
+
+
+@dataclass(frozen=True)
+class AlignmentConfig:
+    """Inter-modality alignment settings."""
+
+    method: str = "manual_offset"
+    manual_offset_seconds: float = 0.0
+    offset_seconds: dict[str, float] | None = None
+    reference_modality: str | None = None
+
+
+@dataclass(frozen=True)
+class OutputConfig:
+    """Configured workflow output directories."""
+
+    combined: Path = Path(os.path.join("output", "multimodal-summary"))
+    eit_only: Path = Path(os.path.join("output", "eit-summary"))
+    emg_only: Path = Path(os.path.join("output", "emg-summary"))
 
 
 @dataclass(frozen=True)
@@ -230,6 +198,20 @@ class ResultsConfig:
 
 
 @dataclass(frozen=True)
+class RotarcWorkflowConfig:
+    """ROTARC breath-duration workflow settings."""
+
+    subject_id: str | None = None
+    mode: str | None = None
+    timepoint: str | None = None
+    start: int | float | None = None
+    end: int | float | None = None
+    slicing_mode: str = "index"
+    selection: str = "selected"
+    run_identifier: str | None = None
+
+
+@dataclass(frozen=True)
 class WorkflowConfig:
     """Typed, resolved YAML workflow configuration."""
 
@@ -240,6 +222,23 @@ class WorkflowConfig:
     alignment: AlignmentConfig
     output: OutputConfig
     results: ResultsConfig
+    rotarc: RotarcWorkflowConfig = field(default_factory=RotarcWorkflowConfig)
+
+    def validate_rotarc(self) -> None:
+        """Validate settings required by the ROTARC workflow."""
+
+        if self.eit.file is None:
+            raise ValueError("ROTARC workflow requires eit.file.")
+
+        for field_name in [
+            "subject_id",
+            "mode",
+            "start",
+            "end",
+            "run_identifier",
+        ]:
+            if getattr(self.rotarc, field_name) is None:
+                raise ValueError(f"ROTARC workflow requires rotarc.{field_name}.")
 
 
 def load_workflow_config(
@@ -250,7 +249,11 @@ def load_workflow_config(
     """Load a YAML workflow config and resolve paths to absolute paths."""
 
     path = Path(config_path).expanduser().resolve()
-    base = Path(root).expanduser().resolve() if root is not None else _infer_root(path)
+    base = (
+        Path(root).expanduser().resolve()
+        if root is not None
+        else infer_config_root(path)
+    )
 
     with path.open("r", encoding="utf-8") as fh:
         raw = yaml.safe_load(fh) or {}
@@ -261,49 +264,30 @@ def load_workflow_config(
     vent_raw: dict[str, Any] = raw.get("vent", {})
     output_raw: dict[str, Any] = raw.get("output", {})
     results_raw: dict[str, Any] = raw.get("results", {})
+    rotarc_raw: dict[str, Any] = raw.get("rotarc", {})
     output_paths: dict[str, Path] = {}
     for key, value in output_raw.items():
-        resolved_output_path = _resolve_optional_path(base, value)
+        resolved_output_path = resolve_optional_path(base, value)
         if resolved_output_path is not None:
             output_paths[key] = resolved_output_path
 
     return WorkflowConfig(
         modules=modules,
         eit=EITWorkflowConfig(
-            file=_resolve_optional_path(base, eit_raw.get("file")),
+            file=resolve_optional_path(base, eit_raw.get("file")),
             vendor=eit_raw.get("vendor", "draeger"),
             processing=_load_eit_processing(eit_raw.get("processing", {})),
         ),
         emg=EMGWorkflowConfig(
-            file=_resolve_optional_path(base, emg_raw.get("file")),
+            file=resolve_optional_path(base, emg_raw.get("file")),
             processing=_load_emg_processing(emg_raw.get("processing", {})),
         ),
-        vent=VentWorkflowConfig(
-            file=_resolve_optional_path(base, vent_raw.get("file"))
-        ),
+        vent=VentWorkflowConfig(file=resolve_optional_path(base, vent_raw.get("file"))),
         alignment=AlignmentConfig(**raw.get("alignment", {})),
         output=OutputConfig(**output_paths),
         results=ResultsConfig(**results_raw),
+        rotarc=RotarcWorkflowConfig(**rotarc_raw),
     )
-
-
-def _infer_root(config_path: Path) -> Path:
-    for candidate in [config_path.parent, *config_path.parents]:
-        if (
-            Path(os.path.join(candidate, "pyproject.toml")).exists()
-            and Path(os.path.join(candidate, "src", "m3resp")).exists()
-        ):
-            return candidate
-    return config_path.parent
-
-
-def _resolve_optional_path(base: Path, value: Any) -> Path | None:
-    if value is None:
-        return None
-    path = Path(value).expanduser()
-    if path.is_absolute():
-        return path
-    return Path(os.path.join(base, path)).resolve()
 
 
 def _load_eit_processing(raw: dict[str, Any]) -> EITProcessingConfig:

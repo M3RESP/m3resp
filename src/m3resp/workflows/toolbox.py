@@ -12,19 +12,13 @@ from typing import Any
 from loguru import logger
 
 from m3resp.core.config import WorkflowConfig, load_workflow_config
+from m3resp.core.path_helper import infer_repo_root
 
 
 def find_repo_root(start: Path | None = None) -> Path:
     """Find the local m3resp repository root."""
 
-    start = (start or Path.cwd()).resolve()
-    for candidate in [start, *start.parents]:
-        if (
-            Path(os.path.join(str(candidate), "pyproject.toml")).exists()
-            and Path(os.path.join(str(candidate), "src", "m3resp")).exists()
-        ):
-            return candidate
-    raise RuntimeError("Could not find the m3resp repository root.")
+    return infer_repo_root(start or Path.cwd())
 
 
 def configure_workflow_paths(*sibling_repositories: str) -> Path:
@@ -83,25 +77,6 @@ def load_workflow_config_with_raw(
     return cfg, dict(raw)
 
 
-def coerce_slice_value(
-    override_value: int | float | None,
-    config_value: Any,
-    slicing_mode: str,
-    *,
-    value_name: str = "slice value",
-) -> int | float:
-    """Resolve and coerce an index/time slice boundary from config and overrides."""
-
-    value = override_value if override_value is not None else config_value
-    if value is None:
-        raise ValueError(f"Workflow requires {value_name}.")
-    if slicing_mode == "index":
-        return int(value)
-    if slicing_mode == "time":
-        return float(value)
-    raise ValueError("slicing_mode must be 'index' or 'time'.")
-
-
 def slice_by_index(data: Any, *, start: int, end: int) -> Any:
     """Slice an indexable data object by sample index."""
 
@@ -112,6 +87,22 @@ def slice_by_time(data: Any, *, start: float, end: float) -> Any:
     """Slice a data object by time using its ``.t`` selector."""
 
     return data.t[slice(start, end)]
+
+
+def slice_signal_by_mode(
+    data: Any,
+    *,
+    start: int | float,
+    end: int | float,
+    slicing_mode: str,
+) -> Any:
+    """Slice a signal by sample index or time selector."""
+
+    if slicing_mode == "index":
+        return slice_by_index(data, start=int(start), end=int(end))
+    if slicing_mode == "time":
+        return slice_by_time(data, start=float(start), end=float(end))
+    raise ValueError("slicing_mode must be 'index' or 'time'.")
 
 
 def subject_result_filename(

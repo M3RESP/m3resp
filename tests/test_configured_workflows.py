@@ -10,6 +10,7 @@ import pytest
 from m3resp import BreathEvent, M3Session, load_workflow_config
 from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
 from m3resp.workflows import auto as auto_workflows
+from m3resp.workflows import rotarc_breath_duration as rotarc_workflow
 from m3resp.workflows import (
     WorkflowResult,
     run_eit_workflow,
@@ -259,6 +260,116 @@ results:
     assert cfg.emg.processing.breath_detection.min_breath_width_seconds == 1.5
     assert cfg.emg.processing.postprocessing.functions.features["amplitude"] is False
     assert cfg.results.figures is False
+
+
+def test_load_workflow_config_reads_rotarc_section(tmp_path):
+    config_path = write_config(
+        tmp_path,
+        emg=False,
+        vent=False,
+        extra="""
+rotarc:
+  subject_id: subject-001
+  mode: quiet
+  timepoint: baseline
+  start: 2.5
+  end: 12.5
+  slicing_mode: time
+  selection: selected
+  run_identifier: run-001
+""",
+    )
+
+    cfg = load_workflow_config(config_path, root=tmp_path)
+
+    assert cfg.rotarc.subject_id == "subject-001"
+    assert cfg.rotarc.mode == "quiet"
+    assert cfg.rotarc.timepoint == "baseline"
+    assert cfg.rotarc.start == 2.5
+    assert cfg.rotarc.end == 12.5
+    assert cfg.rotarc.slicing_mode == "time"
+    assert cfg.rotarc.selection == "selected"
+    assert cfg.rotarc.run_identifier == "run-001"
+
+
+def test_workflow_config_validates_rotarc_required_fields(tmp_path):
+    cfg = load_workflow_config(
+        write_config(tmp_path, emg=False, vent=False),
+        root=tmp_path,
+    )
+
+    try:
+        cfg.validate_rotarc()
+    except ValueError as exc:
+        assert "rotarc.subject_id" in str(exc)
+    else:
+        raise AssertionError("Expected missing ROTARC subject_id to fail.")
+
+
+def test_rotarc_workflow_accepts_loaded_config_object(monkeypatch, tmp_path):
+    config_path = write_config(
+        tmp_path,
+        emg=False,
+        vent=False,
+        extra="""
+rotarc:
+  subject_id: subject-001
+  mode: quiet
+  timepoint: baseline
+  start: 10
+  end: 40
+  slicing_mode: index
+  selection: selected
+  run_identifier: run-001
+""",
+    )
+    cfg = load_workflow_config(config_path, root=tmp_path)
+    captured: dict[str, Any] = {}
+    eit_adapter = object()
+
+    def fake_pipeline(
+        cfg_arg: Any,
+        *,
+        eit_adapter: Any,
+    ) -> tuple[M3Session, dict[str, Any]]:
+        captured["cfg"] = cfg_arg
+        captured["eit_adapter"] = eit_adapter
+        return M3Session(), {"breath_duration_cv": 0.125}
+
+    monkeypatch.setattr(rotarc_workflow, "_run_rotarc_eit_pipeline", fake_pipeline)
+    monkeypatch.setattr(
+        rotarc_workflow,
+        "export_session_summary",
+        lambda *args, **kwargs: None,
+    )
+
+    result = rotarc_workflow.run_rotarc_breath_duration_workflow(
+        cfg,
+        eit_adapter=eit_adapter,
+    )
+
+    assert result.summary["breath_duration_cv"] == 0.125
+    assert captured["cfg"] is cfg
+    assert captured["eit_adapter"] is eit_adapter
+    assert cfg.eit.file == Path(os.path.join(tmp_path, "data", "eit.bin"))
+    assert cfg.rotarc.subject_id == "subject-001"
+    assert cfg.rotarc.mode == "quiet"
+    assert cfg.rotarc.timepoint == "baseline"
+    assert cfg.rotarc.start == 10
+    assert cfg.rotarc.end == 40
+    assert cfg.rotarc.slicing_mode == "index"
+    assert cfg.rotarc.selection == "selected"
+    assert cfg.rotarc.run_identifier == "run-001"
+    assert result.output_dir == Path(
+        os.path.join(tmp_path, "output", "combined", "subject_results", "run-001")
+    )
+    assert result.summary["result_path"] == os.path.join(
+        result.output_dir,
+        "subject-001-quiet-baseline-selected.txt",
+    )
+    assert Path(result.summary["result_path"]).read_text(encoding="utf-8") == (
+        "0.12500000"
+    )
 
 
 def test_configured_eit_workflow_exports_summary(tmp_path):
