@@ -1,0 +1,47 @@
+# ROTARC breath-duration variability example.
+# Paths are resolved relative to the m3resp repository root.
+
+modules:
+  eit: true
+  emg: false
+  vent: false
+
+eit:
+  file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_eit_draeger.bin
+  vendor: draeger
+  processing:
+    subject_type: adult
+    breath_min_duration_seconds: 0.6666666667
+    filter:
+      enabled: true
+      mode: mdn
+    breath_detection:
+      enabled: true
+    outputs:
+      rates: true
+      breath_intervals: true
+      continuous_tiv: false
+      eeli: false
+      pixel_tiv: false
+      filtered_data: true
+      global_impedance: true
+
+rotarc:
+  subject_id: subject
+  mode: mode
+  timepoint:
+  start: 0
+  end: 1200
+  slicing_mode: index # index | time
+  selection: selected
+  run_identifier: test-run
+
+output:
+  combined: output/rotarc-breath-duration
+
+results:
+  summary_json: true
+  parameters_csv: false
+  event_csvs: true
+  postprocessing: false
+  figures: false
