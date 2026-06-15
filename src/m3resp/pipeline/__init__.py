@@ -5,7 +5,7 @@ and executed by :func:`run_pipeline`, without writing custom Python per workflow
 """
 
 from m3resp.pipeline.context import PipelineContext
-from m3resp.pipeline.engine import PipelineResult, run_pipeline, validate_spec
+from m3resp.pipeline.engine import PipelineResult, run_pipeline, run_spec, validate_spec
 from m3resp.pipeline.registry import (
     STEP_REGISTRY,
     StepDefinition,
@@ -27,5 +27,6 @@ __all__ = [
     "load_spec",
     "register_step",
     "run_pipeline",
+    "run_spec",
     "validate_spec",
 ]

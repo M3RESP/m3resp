@@ -1,15 +1,38 @@
-# ROTARC breath-duration variability, expressed as a declarative pipeline spec.
-# This reconstructs the same processing as the old hand-written
-# `_preprocess_rotarc_eit` function, with no custom Python — run it with
-# `m3resp.pipeline.run_pipeline("breath-duration.pipeline.yaml")`.
+# ROTARC breath-duration variability — self-contained declarative pipeline.
 #
-# The `selection: selected` behaviour is simply whether the second `eit.slice`
-# step (signal: global_impedance -> detection_signal) is present.
+# Run with:
+#   python -m m3resp run breath-duration.pipeline.yaml
+#
+# No custom Python script needed.  Everything — processing, file naming, and
+# export — is driven by the three top-level sections:
+#
+#   experiment:  study metadata (subject_id, mode, timepoint, run_identifier,
+#                selection) → drives output filename
+#   outputs:     where to write results and which artifacts to produce
+#   inputs:      data paths (referenced in steps with @name)
+#
+# The `selection: selected` behaviour is whether the second `eit.slice` step
+# (re-slicing global_impedance → detection_signal) is present.
 
 name: rotarc-breath-duration
 
+experiment:
+  subject_id: subject
+  mode: mode
+  timepoint:               # leave blank for no timepoint in the filename
+  run_identifier: test-run
+  selection: selected
+
+outputs:
+  dir: ../../output/rotarc-breath-duration
+  timestamped: true       # ROTARC writes to a fixed run folder, not timestamped
+  summary_json: true
+  event_csvs: true
+  parameters_csv: false
+  postprocessing: false
+
 inputs:
-  eit_file: /mnt/iccl-data/vcl17/ICCL/DATA/Research ICV/Beademing/Studies/PC v PS (Blankman)/Data/raw .bin files/0478079/0478079_01_01.bin
+  eit_file: .../PCvPS-Blankman/raw .bin files/B001/B001_01_01.bin
   vendor: draeger
 
 steps:
@@ -45,3 +68,9 @@ steps:
   - uses: metric.interval_cv
     in:  { intervals: breath_intervals }
     out: { cv: breath_duration_cv }
+
+  # Writes <outputs.dir>/subject_results/<run_identifier>/<subject>-<mode>-<tp>-<selection>.txt
+  # and rotarc_summary.json, then exports event CSVs per the outputs: section.
+  - uses: export.rotarc_result
+    in:  { value: breath_duration_cv }
+    with: { precision: 8 }

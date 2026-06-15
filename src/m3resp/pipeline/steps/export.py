@@ -65,4 +65,82 @@ def session_summary(
     return {"output_dir": str(target)}
 
 
-__all__ = ["scalar_file", "json_file", "session_summary"]
+@register_step(
+    "export.rotarc_result",
+    reads={
+        "value": "cv",
+        "_spec_outputs": "_spec_outputs",
+        "_spec_experiment": "_spec_experiment",
+        "session": "session",
+    },
+    writes=("result_path",),
+    summary="Write ROTARC breath-duration CV to a named result file and rotarc_summary.json.",
+)
+def rotarc_result(
+    value: float,
+    _spec_outputs: Any,
+    _spec_experiment: Any,
+    session: M3Session,
+    *,
+    precision: int = 8,
+) -> dict[str, Any]:
+    """Derives the output path from the spec's ``experiment:`` and ``outputs:`` sections.
+
+    Mirrors the file-naming logic in ``run_rotarc_breath_duration_workflow``:
+    ``<outputs.dir>/subject_results/<run_identifier>/<subject>-<mode>-<tp>-<selection>.txt``
+    """
+
+    from m3resp.workflows.toolbox import subject_result_filename
+
+    exp = _spec_experiment
+    out = _spec_outputs
+
+    if out is None or out.dir is None:
+        raise ValueError(
+            "export.rotarc_result requires 'outputs.dir' to be set in the pipeline spec."
+        )
+    for field_name, field_val in [
+        ("experiment.subject_id", exp.subject_id),
+        ("experiment.run_identifier", exp.run_identifier),
+    ]:
+        if not field_val:
+            raise ValueError(
+                f"export.rotarc_result requires '{field_name}' in the pipeline spec."
+            )
+
+    output_dir = Path(out.dir) / "subject_results" / str(exp.run_identifier)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    result_filename = subject_result_filename(
+        str(exp.subject_id),
+        str(exp.mode),
+        exp.timepoint,
+        str(exp.selection),
+    )
+    result_path = output_dir / result_filename
+    result_path.write_text(f"{float(value):.{precision}f}", encoding="utf-8")
+
+    rotarc_summary = {
+        "subject_id": exp.subject_id,
+        "mode": exp.mode,
+        "timepoint": exp.timepoint,
+        "selection": exp.selection,
+        "run_identifier": exp.run_identifier,
+        "result_path": str(result_path),
+        "breath_duration_cv": float(value),
+    }
+    write_json(output_dir / "rotarc_summary.json", rotarc_summary)
+
+    export_session_summary(
+        session,
+        output_dir,
+        summary_json=out.summary_json,
+        event_csvs=out.event_csvs,
+        parameters_csv=out.parameters_csv,
+        postprocessing=out.postprocessing,
+    )
+
+    return {"result_path": str(result_path)}
+
+
+__all__ = ["scalar_file", "json_file", "session_summary", "rotarc_result"]
