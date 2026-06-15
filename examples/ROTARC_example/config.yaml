@@ -7,7 +7,7 @@ modules:
   vent: false
 
 eit:
-  file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_eit_draeger.bin
+  file: .../PCvPS-Blankman/raw .bin files/B001/B001_01_01.bin
   vendor: draeger
   processing:
     subject_type: adult
@@ -20,9 +20,9 @@ eit:
     outputs:
       rates: true
       breath_intervals: true
-      continuous_tiv: false
-      eeli: false
-      pixel_tiv: false
+      continuous_tiv: true
+      eeli: true
+      pixel_tiv: true
       filtered_data: true
       global_impedance: true
 
@@ -30,8 +30,8 @@ rotarc:
   subject_id: subject
   mode: mode
   timepoint:
-  start: 0
-  end: 1200
+  start: 5373
+  end: 6159
   slicing_mode: index # index | time
   selection: selected
   run_identifier: test-run
