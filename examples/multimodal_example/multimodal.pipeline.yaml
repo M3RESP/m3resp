@@ -1,29 +1,41 @@
-# Full multimodal (EIT + EMG + ventilator) pipeline expressed as a declarative
-# spec.  Values here mirror examples/multimodal_example/config.yaml exactly so
-# running either script should produce identical outputs.
+# Full multimodal (EIT + EMG + ventilator) pipeline — self-contained declarative spec.
 #
-# Usage:
-#   python examples/multimodal_example/run_pipeline_spec.py
+# Run with:
+#   python -m m3resp run multimodal.pipeline.yaml
 #
-# The ventilator array is NOT listed here (it is a binary array and cannot be
-# serialized to YAML).  The emg.postprocess step reads it from
-# session.raw["vent"] automatically after emg.load puts it there.
+# The `outputs:` section controls where results are written and which artifacts
+# are produced.  A timestamped subfolder (YYYYMMDD_HHMMSS) is appended
+# automatically when `timestamped: true`.
+#
+# The ventilator array is NOT listed as a step param (it is a binary array and
+# cannot be serialized to YAML).  The `emg.postprocess` step reads it from
+# session.raw["vent"] automatically after `emg.load` puts it there.
 
 name: multimodal
+
+outputs:
+  dir: output/multimodal-summary
+  timestamped: true
+  summary_json: true
+  event_csvs: true
+  parameters_csv: true
+  postprocessing: true
+  figures: false
+
+inputs:
+  eit_file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_eit_draeger.bin
+  emg_file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_emg.Poly5
+  vent_file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_ventilator.Poly5
 
 steps:
   # ── Load ─────────────────────────────────────────────────────────────────
   - uses: eit.load
-    with:
-      file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_eit_draeger.bin
-      vendor: draeger
+    with: { file: "@eit_file", vendor: draeger }
 
   - uses: emg.load
-    with:
-      file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_emg.Poly5
-      vent_file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_ventilator.Poly5
+    with: { file: "@emg_file", vent_file: "@vent_file" }
 
-  # ── Synchronise raw signals (crop by manual offset before processing) ────
+  # ── Synchronise raw signals before processing ─────────────────────────────
   - uses: session.sync_raw
     with:
       method: manual_offset
@@ -110,3 +122,6 @@ steps:
       method: manual_offset
       offset_seconds: 0.0
       reference_modality: vent
+
+  # No explicit export step needed — the `outputs:` section above handles
+  # creating the timestamped directory and calling export_session_summary.

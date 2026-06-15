@@ -22,6 +22,7 @@ from m3resp.pipeline import (
     load_spec,
     register_step,
     run_pipeline,
+    run_spec,
 )
 
 __version__ = "0.1.0"
@@ -44,4 +45,5 @@ __all__ = [
     "load_workflow_config",
     "register_step",
     "run_pipeline",
+    "run_spec",
 ]

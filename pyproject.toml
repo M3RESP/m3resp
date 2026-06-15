@@ -52,6 +52,9 @@ dev = [
   "types-PyYAML",
 ]
 
+[project.scripts]
+m3resp = "m3resp.__main__:main"
+
 [project.urls]
 Homepage = "https://github.com/M3RESP/m3resp"
 Repository = "https://github.com/M3RESP/m3resp"

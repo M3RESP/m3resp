@@ -532,7 +532,7 @@ def test_multimodal_pipeline_produces_same_session_state_as_configured_runner(
     spec = build_multimodal_spec(cfg)
     new_result = run_pipeline(spec, session=new_session)
 
-    # Assemble session.processed["eit"] (same as run_pipeline_spec.py does)
+    # Assemble session.processed["eit"] so summarize_eit works.
     plan = build_eit_processing_plan(cfg)
     seed = {
         "eit_sequence": new_result.value("eit_sequence"),

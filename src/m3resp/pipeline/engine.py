@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -90,6 +91,163 @@ def run_pipeline(
     return PipelineResult(name=parsed.name, context=ctx, outputs=produced)
 
 
+def run_spec(
+    path: str | Path,
+    *,
+    session: M3Session | None = None,
+    eit_adapter: Any = None,
+    emg_adapter: Any = None,
+) -> PipelineResult:
+    """Load a spec file and run it end-to-end, including automatic export.
+
+    This is the top-level entry point for the ``m3resp run <spec.yaml>`` CLI.
+    Unlike ``run_pipeline``, it:
+
+    - Injects ``_spec_outputs`` and ``_spec_experiment`` into the context so
+      steps like ``export.rotarc_result`` can read them.
+    - After the pipeline finishes, applies the ``outputs:`` section: creates
+      the output directory, assembles ``session.processed["eit"]``, and calls
+      ``export_session_summary`` with the configured switches.
+    """
+
+    parsed = load_spec(path)
+    extra: dict[str, Any] = {
+        "_spec_outputs": parsed.outputs,
+        "_spec_experiment": parsed.experiment,
+    }
+    result = run_pipeline(
+        parsed,
+        session=session,
+        eit_adapter=eit_adapter,
+        emg_adapter=emg_adapter,
+        extra_context=extra,
+    )
+    _apply_outputs(parsed, result)
+    return result
+
+
+def _apply_outputs(spec: PipelineSpec, result: PipelineResult) -> None:
+    """Apply the spec's ``outputs:`` section after the pipeline has run.
+
+    If ``outputs.dir`` is set and the spec does not already contain an
+    explicit ``export.session_summary`` or ``export.rotarc_result`` step,
+    this function performs the export automatically.
+    """
+
+    out = spec.outputs
+    if out.dir is None:
+        return
+
+    explicit_export_steps = {
+        "export.session_summary",
+        "export.rotarc_result",
+        "export.json_file",
+    }
+    step_names = {s.uses for s in spec.steps}
+    if step_names & explicit_export_steps:
+        return
+
+    output_dir = Path(out.dir)
+    if out.timestamped:
+        output_dir = output_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    session = result.session
+
+    if "eit_sequence" in result.context.values:
+        _maybe_assemble_eit(result)
+
+    from m3resp.export.session_export import export_session_summary
+
+    export_session_summary(
+        session,
+        output_dir,
+        summary_json=out.summary_json,
+        event_csvs=out.event_csvs,
+        parameters_csv=out.parameters_csv,
+        postprocessing=out.postprocessing,
+    )
+
+    _maybe_log_summary(session, output_dir, spec)
+
+
+def _maybe_assemble_eit(result: PipelineResult) -> None:
+    """Populate ``session.processed['eit']`` from the pipeline context.
+
+    Reads whatever EIT artifacts the steps produced and assembles the dict
+    shape that ``summarize_eit`` expects, without needing a ``WorkflowConfig``.
+    """
+
+    ctx = result.context.values
+    if "raw_eit" not in ctx:
+        return
+
+    filtered_eit = ctx.get("filtered_eit")
+    filter_mode = "none"
+    if filtered_eit is not None:
+        label = getattr(filtered_eit, "label", "")
+        if "mdn" in label:
+            filter_mode = "mdn"
+        elif "lowpass" in label:
+            filter_mode = "lowpass"
+        elif "bandpass" in label:
+            filter_mode = "bandpass"
+
+    result.session.processed["eit"] = {
+        "sequence": ctx.get("eit_sequence"),
+        "raw_eit": ctx.get("raw_eit"),
+        "raw_global_impedance": ctx.get("raw_global_impedance"),
+        "filter_mode": filter_mode,
+        "filter_captures": ctx.get("filter_captures", {}),
+        "rate_detector": ctx.get("rate_detector"),
+        "rate_captures": ctx.get("rate_captures", {}),
+        "respiratory_rate_hz": ctx.get("respiratory_rate_hz"),
+        "heart_rate_hz": ctx.get("heart_rate_hz"),
+        "filtered_eit": filtered_eit,
+        "filtered_global_impedance": ctx.get(
+            "global_impedance", ctx.get("raw_global_impedance")
+        ),
+        "breath_intervals": ctx.get("breath_intervals"),
+        "continuous_tiv": ctx.get("continuous_tiv"),
+        "eeli": ctx.get("eeli"),
+        "pixel_tiv": ctx.get("pixel_tiv"),
+    }
+
+
+def _maybe_log_summary(
+    session: M3Session, output_dir: Path, spec: PipelineSpec
+) -> None:
+    """Log a compact workflow summary if loguru is available."""
+
+    try:
+        from loguru import logger
+        from m3resp.workflows.toolbox import log_workflow_summary
+    except ImportError:
+        return
+
+    from m3resp.workflows.configured.summaries import (
+        summarize_eit,
+        summarize_emg,
+        summarize_multimodal,
+    )
+
+    has_eit = "eit" in session.processed
+    has_emg = "emg" in session.processed
+    if has_eit and has_emg:
+        summary = summarize_multimodal(session, include_eit=True, include_emg=True)
+    elif has_eit:
+        summary = summarize_eit(session)
+    elif has_emg:
+        summary = summarize_emg(session)
+    else:
+        summary = {}
+
+    if summary:
+        log_workflow_summary(spec.name, output_dir, summary)
+    else:
+        logger.success("{} complete. Output: {}", spec.name, output_dir)
+
+
 def validate_spec(spec: PipelineSpec, *, available: set[str] | None = None) -> None:
     """Statically check that every step's inputs are produced before use.
 
@@ -97,7 +255,15 @@ def validate_spec(spec: PipelineSpec, *, available: set[str] | None = None) -> N
     """
 
     _ensure_steps_registered()
-    produced: set[str] = {SESSION_KEY, *spec.inputs, *(available or set())}
+    # _spec_outputs and _spec_experiment are always injected by run_spec before
+    # the pipeline executes, so treat them as globally available.
+    produced: set[str] = {
+        SESSION_KEY,
+        "_spec_outputs",
+        "_spec_experiment",
+        *spec.inputs,
+        *(available or set()),
+    }
     for position, step_spec in enumerate(spec.steps):
         definition = get_step(step_spec.uses)
         for context_key in _required_context_keys(definition, step_spec):
