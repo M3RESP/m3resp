@@ -1,0 +1,47 @@
+# ROTARC breath-duration variability, expressed as a declarative pipeline spec.
+# This reconstructs the same processing as the old hand-written
+# `_preprocess_rotarc_eit` function, with no custom Python — run it with
+# `m3resp.pipeline.run_pipeline("breath-duration.pipeline.yaml")`.
+#
+# The `selection: selected` behaviour is simply whether the second `eit.slice`
+# step (signal: global_impedance -> detection_signal) is present.
+
+name: rotarc-breath-duration
+
+inputs:
+  eit_file: /mnt/iccl-data/vcl17/ICCL/DATA/Research ICV/Beademing/Studies/PC v PS (Blankman)/Data/raw .bin files/0478079/0478079_01_01.bin
+  vendor: draeger
+
+steps:
+  - uses: eit.load
+    with: { file: "@eit_file", vendor: "@vendor" }
+
+  - uses: eit.slice
+    in:  { signal: raw_eit }
+    with: { start: 5373, end: 6159, mode: index }
+    out: { result: selected_eit }
+
+  - uses: eit.detect_rates
+    in:  { signal: selected_eit }
+    with: { subject_type: adult }
+
+  - uses: eit.mdn_filter
+    in:  { signal: raw_eit }
+
+  - uses: eit.global_impedance
+    in:  { signal: filtered_eit }
+
+  - uses: eit.slice
+    in:  { signal: global_impedance }
+    with: { start: 5373, end: 6159, mode: index }
+    out: { result: detection_signal }
+
+  - uses: eit.detect_breaths
+    in:  { signal: detection_signal }
+    with: { min_duration_s: 0.6666666667 }
+
+  - uses: eit.normalize_breaths
+
+  - uses: metric.interval_cv
+    in:  { intervals: breath_intervals }
+    out: { cv: breath_duration_cv }

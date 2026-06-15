@@ -1,4 +1,9 @@
-"""ROTARC-style EIT breath-duration variability workflow."""
+"""ROTARC-style EIT breath-duration variability workflow.
+
+The processing pipeline is assembled declaratively from registered steps via the
+:mod:`m3resp.pipeline` engine instead of a hand-wired preprocess function. The
+equivalent spec ships at ``examples/ROTARC_example/breath-duration.pipeline.yaml``.
+"""
 
 from __future__ import annotations
 
@@ -6,17 +11,12 @@ import os
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
 from m3resp import M3Session
 from m3resp.core.config import WorkflowConfig
 from m3resp.export.session_export import export_session_summary
+from m3resp.pipeline import run_pipeline
 from m3resp.workflows.configured import WorkflowResult, coerce_workflow_config
-from m3resp.workflows.toolbox import (
-    slice_signal_by_mode,
-    subject_result_filename,
-    write_json,
-)
+from m3resp.workflows.toolbox import subject_result_filename, write_json
 
 
 def run_rotarc_breath_duration_workflow(
@@ -79,26 +79,76 @@ def run_rotarc_breath_duration_workflow(
     )
 
 
+def build_rotarc_spec(cfg: WorkflowConfig) -> dict[str, Any]:
+    """Build the declarative breath-duration pipeline spec from a workflow config.
+
+    The ``selection`` setting decides whether breath detection runs on the sliced
+    window (``selected``) or the full filtered global impedance signal.
+    """
+
+    rotarc = cfg.rotarc
+    processing = cfg.eit.processing
+    slice_with = {
+        "start": rotarc.start,
+        "end": rotarc.end,
+        "mode": rotarc.slicing_mode,
+    }
+
+    steps: list[dict[str, Any]] = [
+        {
+            "uses": "eit.load",
+            "with": {"file": str(cfg.eit.file), "vendor": cfg.eit.vendor},
+        },
+        {
+            "uses": "eit.slice",
+            "in": {"signal": "raw_eit"},
+            "with": slice_with,
+            "out": {"result": "selected_eit"},
+        },
+        {
+            "uses": "eit.detect_rates",
+            "in": {"signal": "selected_eit"},
+            "with": {"subject_type": processing.subject_type},
+        },
+        {"uses": "eit.mdn_filter", "in": {"signal": "raw_eit"}},
+        {"uses": "eit.global_impedance", "in": {"signal": "filtered_eit"}},
+    ]
+
+    detect = {
+        "uses": "eit.detect_breaths",
+        "with": {"min_duration_s": processing.breath_min_duration_seconds},
+    }
+    if rotarc.selection == "selected":
+        steps.append(
+            {
+                "uses": "eit.slice",
+                "in": {"signal": "global_impedance"},
+                "with": slice_with,
+                "out": {"result": "detection_signal"},
+            }
+        )
+        detect["in"] = {"signal": "detection_signal"}
+    else:
+        detect["in"] = {"signal": "global_impedance"}
+    steps.append(detect)
+    steps.append({"uses": "eit.normalize_breaths"})
+
+    steps.append(
+        {"uses": "metric.interval_cv", "in": {"intervals": "breath_intervals"}}
+    )
+
+    return {"name": "rotarc-breath-duration", "steps": steps}
+
+
 def _run_rotarc_eit_pipeline(
     cfg: WorkflowConfig,
     *,
     eit_adapter: Any,
 ) -> tuple[M3Session, dict[str, Any]]:
     session = M3Session(eit_adapter=eit_adapter)
-    session.load_eit(
-        cfg.eit.file,
-        vendor=cfg.eit.vendor,
-    )
-    processed = session.preprocess_eit(
-        preprocess=_preprocess_rotarc_eit,
-        subject_type=cfg.eit.processing.subject_type,
-        breath_min_duration_seconds=cfg.eit.processing.breath_min_duration_seconds,
-        start=cfg.rotarc.start,
-        end=cfg.rotarc.end,
-        slicing_mode=cfg.rotarc.slicing_mode,
-        selection=cfg.rotarc.selection,
-    )
-    session.detect_eit_breaths()
+    result = run_pipeline(build_rotarc_spec(cfg), session=session)
+    context = result.context
+
     session.parameters["rotarc_breath_duration"] = {
         "data_path": str(cfg.eit.file),
         "subject_id": cfg.rotarc.subject_id,
@@ -112,75 +162,13 @@ def _run_rotarc_eit_pipeline(
         "breath_min_duration_seconds": cfg.eit.processing.breath_min_duration_seconds,
     }
 
-    breath_intervals = processed["breath_intervals"]
-    breath_durations = np.asarray(
-        [interval[1] - interval[0] for interval in breath_intervals.intervals],
-        dtype=float,
-    )
-    breath_duration_cv = float(breath_durations.std() / breath_durations.mean())
-
     summary = {
         **session.parameters["rotarc_breath_duration"],
-        "respiratory_rate_hz": float(processed["respiratory_rate_hz"]),
-        "heart_rate_hz": float(processed["heart_rate_hz"]),
-        "n_breaths": int(len(breath_intervals.intervals)),
-        "mean_breath_duration_seconds": float(breath_durations.mean()),
-        "std_breath_duration_seconds": float(breath_durations.std()),
-        "breath_duration_cv": breath_duration_cv,
+        "respiratory_rate_hz": float(context.get("respiratory_rate_hz")),
+        "heart_rate_hz": float(context.get("heart_rate_hz")),
+        "n_breaths": int(context.get("n")),
+        "mean_breath_duration_seconds": float(context.get("mean")),
+        "std_breath_duration_seconds": float(context.get("std")),
+        "breath_duration_cv": float(context.get("cv")),
     }
     return session, summary
-
-
-def _preprocess_rotarc_eit(
-    sequence: Any,
-    *,
-    subject_type: str,
-    breath_min_duration_seconds: float,
-    start: int | float,
-    end: int | float,
-    slicing_mode: str,
-    selection: str,
-) -> dict[str, Any]:
-    from eitprocessing.features.breath_detection import BreathDetection
-    from eitprocessing.features.rate_detection import RateDetection
-    from eitprocessing.filters.mdn import MDNFilter
-
-    raw_eit = sequence.data["raw"]
-    selected_eit = slice_signal_by_mode(
-        raw_eit,
-        start=start,
-        end=end,
-        slicing_mode=slicing_mode,
-    )
-    respiratory_rate_hz, heart_rate_hz = RateDetection(subject_type).apply(selected_eit)
-
-    filtered_eit = MDNFilter(
-        respiratory_rate=respiratory_rate_hz,
-        heart_rate=heart_rate_hz,
-    ).apply(sequence.data["raw"], label="filtered")
-    sequence.eit_data.add(filtered_eit, overwrite=True)
-
-    filtered_global_impedance = filtered_eit.get_summed_impedance()
-    sequence.continuous_data.add(filtered_global_impedance, overwrite=True)
-
-    if selection == "selected":
-        detection_signal = slice_signal_by_mode(
-            filtered_global_impedance,
-            start=start,
-            end=end,
-            slicing_mode=slicing_mode,
-        )
-    else:
-        detection_signal = filtered_global_impedance
-
-    breath_intervals = BreathDetection(
-        minimum_duration=breath_min_duration_seconds
-    ).find_breaths(detection_signal)
-    return {
-        "sequence": sequence,
-        "filtered_eit": filtered_eit,
-        "filtered_global_impedance": filtered_global_impedance,
-        "respiratory_rate_hz": respiratory_rate_hz,
-        "heart_rate_hz": heart_rate_hz,
-        "breath_intervals": breath_intervals,
-    }
