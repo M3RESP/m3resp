@@ -30,6 +30,8 @@ class FakeCollection(dict):
 
 class FakeEITData:
     label = "raw"
+    sample_frequency = 20.0
+    pixel_impedance = [[[1.0]], [[2.0]], [[3.0]]]
 
     def get_summed_impedance(self, return_label: str | None = None, **kwargs: Any):
         return FakeContinuousData(return_label or "global_impedance_(raw)")
@@ -46,6 +48,8 @@ class FakeSequence:
     def __init__(self):
         self.eit_data = FakeCollection(raw=FakeEITData())
         self.continuous_data = FakeCollection()
+        self.sparse_data = FakeCollection()
+        self.interval_data = FakeCollection()
 
 
 class FakeBreath:
@@ -68,6 +72,7 @@ class FakeSparse:
 
 
 class FakePixelTIV:
+    label = "pixel"
     values: list[Any] = []
 
 
@@ -157,6 +162,67 @@ def fake_emg_recording() -> dict[str, Any]:
         "dataframe": {"kind": "fake"},
         "metadata": {"fs": 1000.0, "labels": ["EMG"], "units": ["uV"]},
     }
+
+
+@pytest.fixture
+def patch_eit_upstream(monkeypatch):
+    """Patch the eitprocessing classes the granular EIT steps import at call time.
+
+    The configured EIT flow is now a spec of granular steps that call these
+    classes directly (instead of one monolithic ``adapter.preprocess``), so the
+    fakes live at the upstream import sites rather than on the adapter.
+    """
+
+    import eitprocessing.features.breath_detection as bd
+    import eitprocessing.features.rate_detection as rd
+    import eitprocessing.filters.butterworth_filters as butter
+    import eitprocessing.filters.mdn as mdn
+    import eitprocessing.parameters.eeli as eeli_mod
+    import eitprocessing.parameters.tidal_impedance_variation as tiv_mod
+
+    class FakeRateDetection:
+        def __init__(self, subject_type: str, **kwargs: Any) -> None:
+            self.subject_type = subject_type
+
+        def apply(self, signal: Any, **kwargs: Any) -> tuple[float, float]:
+            return 0.25, 1.0
+
+    class FakeMDNFilter:
+        def __init__(self, **kwargs: Any) -> None: ...
+
+        def apply(self, signal: Any, label: str = "filtered", **kwargs: Any):
+            return FakeEITData()
+
+    class FakeButterworthFilter:
+        def __init__(self, **kwargs: Any) -> None: ...
+
+        def apply(self, pixels: Any, axis: int = 0, **kwargs: Any):
+            return pixels
+
+    class FakeBreathDetection:
+        def __init__(self, **kwargs: Any) -> None: ...
+
+        def find_breaths(self, signal: Any, **kwargs: Any) -> FakeIntervals:
+            return FakeIntervals()
+
+    class FakeTIV:
+        def __init__(self, **kwargs: Any) -> None: ...
+
+        def compute_parameter(self, *args: Any, **kwargs: Any):
+            return FakePixelTIV() if kwargs.get("tiv_timing") else FakeSparse()
+
+    class FakeEELI:
+        def __init__(self, **kwargs: Any) -> None: ...
+
+        def compute_parameter(self, *args: Any, **kwargs: Any):
+            return FakeSparse()
+
+    monkeypatch.setattr(rd, "RateDetection", FakeRateDetection)
+    monkeypatch.setattr(mdn, "MDNFilter", FakeMDNFilter)
+    monkeypatch.setattr(butter, "ButterworthFilter", FakeButterworthFilter)
+    monkeypatch.setattr(bd, "BreathDetection", FakeBreathDetection)
+    monkeypatch.setattr(tiv_mod, "TIV", FakeTIV)
+    monkeypatch.setattr(eeli_mod, "EELI", FakeEELI)
 
 
 def write_config(
@@ -372,7 +438,7 @@ rotarc:
     )
 
 
-def test_configured_eit_workflow_exports_summary(tmp_path):
+def test_configured_eit_workflow_exports_summary(tmp_path, patch_eit_upstream):
     adapter = FakeEITAdapter()
     result = run_eit_workflow(
         config=write_config(tmp_path, emg=False, vent=False),
@@ -383,12 +449,16 @@ def test_configured_eit_workflow_exports_summary(tmp_path):
 
     assert isinstance(result, WorkflowResult)
     assert result.summary["n_eit_breaths"] == 1
-    assert adapter.preprocess_kwargs["filter_mode"] == "mdn"
+    # Default config uses the MDN filter; the granular flow records that mode.
+    assert result.session.processed["eit"]["filter_mode"] == "mdn"
+    assert result.summary["respiratory_rate_bpm"] == 15.0
     assert os.path.exists(os.path.join(result.output_dir, "summary.json"))
     assert os.path.exists(os.path.join(result.output_dir, "eit_breaths.csv"))
 
 
-def test_configured_eit_workflow_respects_processing_switches(tmp_path):
+def test_configured_eit_workflow_respects_processing_switches(
+    tmp_path, patch_eit_upstream
+):
     adapter = FakeEITAdapter()
     result = run_eit_workflow(
         config=write_config(
@@ -416,10 +486,11 @@ eit:
         save_figures=False,
     )
 
-    assert adapter.preprocess_kwargs["filter_mode"] == "lowpass"
-    assert adapter.preprocess_kwargs["lowpass_hz"] == 0.9
-    assert adapter.preprocess_kwargs["compute_rates"] is False
-    assert adapter.preprocess_kwargs["compute_pixel_tiv"] is False
+    # Switches now drive which steps the compiler emits, observable in the
+    # processed EIT output and summary rather than in monolithic preprocess kwargs.
+    assert result.session.processed["eit"]["filter_mode"] == "lowpass"
+    assert result.session.processed["eit"]["respiratory_rate_hz"] is None
+    assert result.session.processed["eit"]["continuous_tiv"] is None
     assert "respiratory_rate_bpm" not in result.summary
     assert "n_continuous_tiv_values" not in result.summary
 
@@ -483,7 +554,9 @@ emg:
     assert selected["features"]["amplitude"] is False
 
 
-def test_configured_multimodal_workflow_aligns_and_exports(tmp_path):
+def test_configured_multimodal_workflow_aligns_and_exports(
+    tmp_path, patch_eit_upstream
+):
     result = run_multimodal_workflow(
         config=write_config(tmp_path),
         root=tmp_path,
@@ -511,7 +584,9 @@ def test_configured_multimodal_workflow_aligns_and_exports(tmp_path):
     )
 
 
-def test_configured_multimodal_workflow_exports_synchronization_figure(tmp_path):
+def test_configured_multimodal_workflow_exports_synchronization_figure(
+    tmp_path, patch_eit_upstream
+):
     pytest.importorskip("matplotlib.pyplot")
 
     result = run_multimodal_workflow(
@@ -527,7 +602,9 @@ def test_configured_multimodal_workflow_exports_synchronization_figure(tmp_path)
     assert figure_path.exists()
 
 
-def test_configured_multimodal_workflow_uses_alignment_offset_map(tmp_path):
+def test_configured_multimodal_workflow_uses_alignment_offset_map(
+    tmp_path, patch_eit_upstream
+):
     result = run_multimodal_workflow(
         config=write_config(
             tmp_path,
@@ -565,7 +642,7 @@ alignment:
 
 
 def test_configured_multimodal_workflow_synchronizes_raw_before_preprocessing(
-    tmp_path,
+    tmp_path, patch_eit_upstream
 ):
     adapter = FakeEMGAdapter()
 
@@ -674,7 +751,9 @@ emg:
         raise AssertionError("Expected invalid EMG postprocessing config to fail.")
 
 
-def test_auto_workflow_selects_multimodal_when_eit_and_emg_enabled(tmp_path):
+def test_auto_workflow_selects_multimodal_when_eit_and_emg_enabled(
+    tmp_path, patch_eit_upstream
+):
     config_path = write_config(tmp_path, eit=True, emg=True, vent=True)
 
     result = run_workflow(
@@ -711,7 +790,9 @@ def test_auto_run_delegates_to_config_path(monkeypatch, tmp_path):
     assert calls["config"] == config_path
 
 
-def test_auto_workflow_selects_eit_when_only_eit_primary_enabled(tmp_path):
+def test_auto_workflow_selects_eit_when_only_eit_primary_enabled(
+    tmp_path, patch_eit_upstream
+):
     config_path = write_config(tmp_path, eit=True, emg=False, vent=True)
 
     result = run_workflow(

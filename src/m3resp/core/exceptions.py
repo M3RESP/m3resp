@@ -15,3 +15,15 @@ class MissingModalityDataError(M3RespError):
 
 class UnsupportedWorkflowError(M3RespError):
     """Raised when an adapter cannot infer the requested workflow operation."""
+
+
+class PipelineError(M3RespError):
+    """Base exception for declarative pipeline errors."""
+
+
+class UnknownStepError(PipelineError):
+    """Raised when a spec references a step name that is not registered."""
+
+
+class PipelineSpecError(PipelineError):
+    """Raised when a pipeline spec is malformed or fails static validation."""
