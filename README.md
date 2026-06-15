@@ -60,33 +60,91 @@ To use another branch, change the branch name after `@` in
 git+https://github.com/M3RESP/eitprocessing.git@feature-branch
 ```
 
-## Example
+## Running Pipelines
 
-Run the configured workflow from YAML:
+M3Resp workflows are now usually run from declarative YAML pipeline specs. A
+spec lists the processing steps, their inputs, and the export settings, so an
+example can be run without writing a custom Python script.
+
+List the available pipeline steps:
 
 ```bash
-python examples/workflow.py
+python -m m3resp steps
 ```
 
-Or call the same wrapper from Python:
+Run a pipeline spec:
+
+```bash
+python -m m3resp run path/to/pipeline.yaml
+```
+
+After installation, the console script is equivalent:
+
+```bash
+m3resp run path/to/pipeline.yaml
+```
+
+The shipped examples are:
+
+```bash
+python -m m3resp run examples/ROTARC_example/breath-duration.pipeline.yaml
+python -m m3resp run examples/multimodal_example/multimodal.pipeline.yaml
+```
+
+The ROTARC example computes breath-duration variability from EIT data and writes
+a ROTARC-style subject result file plus summary exports. The multimodal example
+loads EIT, EMG, and ventilator signals, synchronizes raw signals, processes each
+modality, aligns detected events, and exports session summaries.
+
+Run the examples from the repository root. The multimodal example references the
+synthetic files committed under `data/source/synthetic/...`; the ROTARC example
+contains a site-specific absolute EIT path, so update `inputs.eit_file` in that
+YAML before running it on another machine.
+
+### Example Output Paths
+
+Pipeline `outputs.dir` values are resolved relative to the pipeline file, not
+relative to the shell directory where the command is run. For example,
+`examples/ROTARC_example/breath-duration.pipeline.yaml` contains:
+
+```yaml
+outputs:
+  dir: output/rotarc-breath-duration
+```
+
+When run from the repository root, that writes under:
+
+```text
+examples/ROTARC_example/output/rotarc-breath-duration
+```
+
+To write to the repository-level `output` directory from that example, set:
+
+```yaml
+outputs:
+  dir: ../../output/rotarc-breath-duration
+```
+
+Absolute output paths are also accepted. Input paths are passed through from the
+spec, so relative input paths should be written with the intended working
+directory in mind.
+
+### Python API
+
+Pipeline specs can also be run from Python:
 
 ```python
 import os
 
-from m3resp.workflows import run_workflow
+from m3resp import run_spec
 
-result = run_workflow(config=os.path.join("examples", "config.yaml"))
+result = run_spec(
+    os.path.join("examples", "ROTARC_example", "breath-duration.pipeline.yaml")
+)
 
-session = result.session
-print(result.summary)
-print(result.output_dir)
+print(result.outputs)
+print(result.session)
 ```
-
-The configured workflow uses `examples/config.yaml` for modality toggles, input
-files, alignment settings, and output directories. `run_workflow` selects the
-workflow from `modules`: EIT+EMG runs the combined workflow, EIT-only runs the
-EIT workflow, and EMG-only runs the EMG workflow. `vent` is used with EMG
-postprocessing when EMG is enabled.
 
 For lower-level control, use `M3Session` directly:
 
@@ -134,8 +192,11 @@ Stage 1 provides:
 - common event dataclasses;
 - adapters for `eitprocessing` and `resurfemg`;
 - basic manual synchronization;
+- a declarative YAML/JSON pipeline engine and CLI;
+- compiled configured workflows for legacy YAML settings;
 - CSV and JSON export helpers;
-- minimal examples and tests.
+- ROTARC and multimodal pipeline examples;
+- focused tests for the core scientific workflow behavior.
 
 It does not attempt a full code merge, final data model, GUI, dashboard, or
 1.0 release.
