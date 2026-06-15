@@ -105,13 +105,16 @@ class M3Session:
         self,
         method: str = "manual_offset",
         offset_seconds: float | Mapping[str, float] = 0.0,
+        reference_modality: str | None = None,
     ) -> dict[str, Any]:
         """Crop loaded raw modality signals before downstream processing."""
 
         if method != "manual_offset":
             raise ValueError("Stage 1 supports only method='manual_offset'")
 
-        offsets = _resolve_alignment_offsets(offset_seconds)
+        configured_offsets = _resolve_alignment_offsets(offset_seconds)
+        resolved_reference = self._resolve_raw_alignment_reference(reference_modality)
+        offsets = _offsets_relative_to_reference(configured_offsets, resolved_reference)
         synchronized: dict[str, Any] = {}
         traces: dict[str, Any] = {}
         for modality, offset in offsets.items():
@@ -135,7 +138,10 @@ class M3Session:
         self.processed["raw_synchronization"] = traces
         self.parameters["raw_alignment"] = {
             "method": method,
+            "reference_modality": resolved_reference,
+            "requested_reference_modality": reference_modality,
             "offset_seconds": offsets,
+            "configured_offset_seconds": configured_offsets,
             "synchronized_modalities": sorted(synchronized),
             "cropped_samples": synchronized,
         }
@@ -143,7 +149,9 @@ class M3Session:
             "synchronize_raw_modalities",
             parameters={
                 "method": method,
+                "reference_modality": resolved_reference,
                 "offset_seconds": offsets,
+                "configured_offset_seconds": configured_offsets,
                 "cropped_samples": synchronized,
             },
         )
@@ -284,6 +292,17 @@ class M3Session:
             return "vent", None
         return "eit", "eit"
 
+    def _resolve_raw_alignment_reference(self, reference_modality: str | None) -> str:
+        if reference_modality is not None:
+            return _normalize_modality(reference_modality)
+        if "vent" in self.raw:
+            return "vent"
+        if "eit" in self.raw:
+            return "eit"
+        if "emg" in self.raw:
+            return "emg"
+        return "eit"
+
     def _normalize_ventilator_breaths(
         self,
         postprocessing: Any,
@@ -337,6 +356,18 @@ def _resolve_alignment_offsets(
             offsets[_normalize_modality(modality)] = float(offset)
         return offsets
     return {"eit": 0.0, "emg": float(offset_seconds), "vent": 0.0}
+
+
+def _offsets_relative_to_reference(
+    offsets: Mapping[str, float],
+    reference_modality: str,
+) -> dict[str, float]:
+    reference = _normalize_modality(reference_modality)
+    reference_offset = float(offsets.get(reference, 0.0))
+    return {
+        _normalize_modality(modality): float(offset) - reference_offset
+        for modality, offset in offsets.items()
+    }
 
 
 def _normalize_modality(modality: str) -> str:

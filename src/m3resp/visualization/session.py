@@ -147,10 +147,13 @@ def plot_synchronization_comparison(
         ) from exc
 
     synchronized = session.processed.get("synchronized")
-    if not isinstance(synchronized, dict) or not synchronized:
+    if not isinstance(synchronized, dict):
+        synchronized = {}
+    raw_sync = session.processed.get("raw_synchronization")
+    if not synchronized and not isinstance(raw_sync, dict):
         raise ValueError(
-            "No synchronized events found. Run align_modalities before calling "
-            "plot_synchronization_comparison."
+            "No synchronization data found. Run synchronize_raw_modalities before "
+            "calling plot_synchronization_comparison."
         )
 
     offsets = session.parameters.get("raw_alignment", {}).get(

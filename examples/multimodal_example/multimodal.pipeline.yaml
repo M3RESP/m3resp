@@ -40,6 +40,7 @@ steps:
     with:
       method: manual_offset
       offset_seconds: { eit: 0.0, emg: -2.0, vent: 0.0 }
+      reference_modality: vent
 
   # ── EIT processing (granular) ─────────────────────────────────────────────
   - uses: eit.detect_rates
@@ -115,13 +116,6 @@ steps:
           evaluate_bell_curve_error: false
           evaluate_event_timing: false
           evaluate_respiratory_rates: false
-
-  # ── Align events across modalities ────────────────────────────────────────
-  - uses: session.align
-    with:
-      method: manual_offset
-      offset_seconds: 0.0
-      reference_modality: vent
 
   # No explicit export step needed — the `outputs:` section above handles
   # creating the timestamped directory and calling export_session_summary.

@@ -497,7 +497,6 @@ def test_multimodal_spec_validates(tmp_path):
     assert "eit.load" in uses
     assert "emg.load" in uses
     assert "session.sync_raw" in uses
-    assert "session.align" in uses
     assert "eit.mdn_filter" in uses
     assert "emg.preprocess" in uses
 
@@ -556,15 +555,14 @@ def test_multimodal_pipeline_produces_same_session_state_as_configured_runner(
         old_summary.get("respiratory_rate_bpm")
     )
 
-    # Both sessions have synchronized and alignment records.
-    assert "synchronized" in new_session.processed
-    assert "synchronized" in old_session.processed
-    assert set(new_session.processed["synchronized"]) == set(
-        old_session.processed["synchronized"]
+    # Both sessions have the same raw synchronization reference frame.
+    assert (
+        new_session.parameters["raw_alignment"]["reference_modality"]
+        == old_session.parameters["raw_alignment"]["reference_modality"]
     )
     assert (
-        new_session.parameters["alignment"]["reference_modality"]
-        == old_session.parameters["alignment"]["reference_modality"]
+        new_session.parameters["raw_alignment"]["offset_seconds"]
+        == old_session.parameters["raw_alignment"]["offset_seconds"]
     )
 
     # EIT output dict shape is identical.

@@ -257,10 +257,6 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
             },
         },
     }
-    session.processed["synchronized"] = {
-        "emg_breaths": [],
-        "ventilator_breaths": [],
-    }
     session.parameters["raw_alignment"] = {
         "offset_seconds": {"eit": 0.0, "emg": -0.002, "vent": 0.0}
     }

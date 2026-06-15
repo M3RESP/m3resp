@@ -181,7 +181,11 @@ def build_multimodal_spec(cfg: WorkflowConfig) -> dict[str, Any]:
         steps.append(
             {
                 "uses": "session.sync_raw",
-                "with": {"method": cfg.alignment.method, "offset_seconds": offset},
+                "with": {
+                    "method": cfg.alignment.method,
+                    "offset_seconds": offset,
+                    "reference_modality": cfg.alignment.reference_modality,
+                },
             }
         )
 
@@ -191,18 +195,6 @@ def build_multimodal_spec(cfg: WorkflowConfig) -> dict[str, Any]:
 
     if cfg.modules.emg:
         steps.extend(_build_emg_steps_no_vent(cfg))
-
-    if cfg.modules.eit and cfg.modules.emg:
-        steps.append(
-            {
-                "uses": "session.align",
-                "with": {
-                    "method": cfg.alignment.method,
-                    "offset_seconds": 0.0,
-                    "reference_modality": cfg.alignment.reference_modality,
-                },
-            }
-        )
 
     return {"name": "multimodal", "steps": steps}
 
