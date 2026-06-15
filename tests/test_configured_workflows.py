@@ -554,7 +554,7 @@ emg:
     assert selected["features"]["amplitude"] is False
 
 
-def test_configured_multimodal_workflow_aligns_and_exports(
+def test_configured_multimodal_workflow_synchronizes_raw_and_exports(
     tmp_path, patch_eit_upstream
 ):
     result = run_multimodal_workflow(
@@ -566,15 +566,10 @@ def test_configured_multimodal_workflow_aligns_and_exports(
     )
 
     assert isinstance(result, WorkflowResult)
-    assert "synchronized" in result.session.processed
-    synchronized = result.session.processed["synchronized"]
-    assert set(synchronized) == {"eit_breaths", "emg_breaths", "ventilator_breaths"}
-    assert synchronized["eit_breaths"][0].start_time == 1.0
-    assert synchronized["emg_breaths"][0].start_time == 0.0
-    assert synchronized["ventilator_breaths"][0].start_time == 0.0
+    assert "raw_synchronization" in result.session.processed
     assert result.session.events["emg_breaths"][0].start_time == 0.0
     assert result.session.events["ventilator_breaths"][0].modality == "vent"
-    assert result.session.parameters["alignment"]["reference_modality"] == "vent"
+    assert result.session.parameters["raw_alignment"]["reference_modality"] == "vent"
     assert result.summary["n_eit_breaths"] == 1
     assert result.summary["n_emg_breaths"] == 1
     assert result.summary["n_ventilator_breaths"] == 1
@@ -624,20 +619,47 @@ alignment:
         save_figures=False,
     )
 
-    synchronized = result.session.processed["synchronized"]
-    assert synchronized["eit_breaths"][0].start_time == 1.0
-    assert synchronized["emg_breaths"][0].start_time == 0.0
-    assert synchronized["ventilator_breaths"][0].start_time == 0.0
-    assert result.session.parameters["alignment"]["reference_modality"] == "vent"
-    assert result.session.parameters["alignment"]["offset_seconds"] == {
-        "eit": 0.0,
-        "emg": 0.0,
-        "vent": 0.0,
-    }
+    assert "synchronized" not in result.session.processed
+    assert result.session.parameters["raw_alignment"]["reference_modality"] == "vent"
     assert result.session.parameters["raw_alignment"]["offset_seconds"] == {
         "eit": -0.1,
         "emg": 0.25,
         "vent": 0.0,
+    }
+
+
+def test_configured_multimodal_workflow_offsets_raw_sync_relative_to_reference(
+    tmp_path, patch_eit_upstream
+):
+    result = run_multimodal_workflow(
+        config=write_config(
+            tmp_path,
+            extra="""
+alignment:
+  method: manual_offset
+  reference_modality: emg
+  offset_seconds:
+    eit: -0.1
+    emg: 0.25
+    vent: 0.0
+""",
+        ),
+        root=tmp_path,
+        eit_adapter=FakeEITAdapter(),
+        emg_adapter=FakeEMGAdapter(),
+        save_figures=False,
+    )
+
+    assert result.session.parameters["raw_alignment"]["reference_modality"] == "emg"
+    assert result.session.parameters["raw_alignment"]["configured_offset_seconds"] == {
+        "eit": -0.1,
+        "emg": 0.25,
+        "vent": 0.0,
+    }
+    assert result.session.parameters["raw_alignment"]["offset_seconds"] == {
+        "eit": -0.35,
+        "emg": 0.0,
+        "vent": -0.25,
     }
 
 
@@ -769,7 +791,8 @@ def test_auto_workflow_selects_multimodal_when_eit_and_emg_enabled(
         result.output_dir,
         Path(os.path.join(tmp_path, "output", "combined")),
     )
-    assert "synchronized" in result.session.processed
+    assert "raw_synchronization" in result.session.processed
+    assert "synchronized" not in result.session.processed
 
 
 def test_auto_run_delegates_to_config_path(monkeypatch, tmp_path):

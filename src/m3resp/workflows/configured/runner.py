@@ -58,24 +58,13 @@ def run_configured_workflow(
                 if cfg.alignment.offset_seconds is not None
                 else cfg.alignment.manual_offset_seconds
             ),
+            reference_modality=cfg.alignment.reference_modality,
         )
 
     if cfg.modules.eit:
         process_configured_eit(session, cfg)
     if cfg.modules.emg:
         process_configured_emg(session, cfg)
-
-    if (
-        cfg.modules.eit
-        and cfg.modules.emg
-        and "eit_breaths" in session.events
-        and "emg_breaths" in session.events
-    ):
-        session.align_modalities(
-            method=cfg.alignment.method,
-            offset_seconds=0.0,
-            reference_modality=cfg.alignment.reference_modality,
-        )
 
     output_dir = _timestamped_output_dir(_configured_output_dir(cfg, selected))
     if export:

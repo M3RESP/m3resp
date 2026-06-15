@@ -158,13 +158,18 @@ session = M3Session()
 session.load_eit(os.path.join("path", "to", "eit_file"), vendor="sentec")
 session.load_emg(os.path.join("path", "to", "emg_file"))
 
+session.synchronize_raw_modalities(
+    method="manual_offset",
+    offset_seconds={"eit": 0.0, "emg": 0.0},
+    reference_modality="eit",
+)
+
 session.preprocess_eit()
 session.preprocess_emg()
 
 session.detect_eit_breaths()
 session.detect_emg_breaths()
 
-session.align_modalities(method="manual_offset", offset_seconds=0.0)
 session.export_summary(os.path.join("results"))
 ```
 
