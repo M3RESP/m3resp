@@ -1,9 +1,8 @@
-"""Tests for the declarative pipeline engine and the ROTARC migration."""
+"""Tests for the declarative pipeline engine."""
 
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -13,11 +12,6 @@ from m3resp.adapters import EITProcessingAdapter
 from m3resp.core.exceptions import PipelineSpecError, UnknownStepError
 from m3resp.core.session import M3Session
 from m3resp.pipeline import load_spec, register_step, run_pipeline, validate_spec
-from m3resp.workflows.rotarc_breath_duration import (
-    build_rotarc_spec,
-    run_rotarc_breath_duration_workflow,
-)
-from m3resp import load_workflow_config
 
 
 # --------------------------------------------------------------------------- #
@@ -109,7 +103,6 @@ def test_public_api_exposes_engine_and_steps():
 
     assert callable(m3resp.run_pipeline)
     steps = m3resp.available_steps()
-    # Built-in steps register on demand and are discoverable.
     assert {
         "eit.load",
         "eit.detect_breaths",
@@ -119,7 +112,7 @@ def test_public_api_exposes_engine_and_steps():
 
 
 # --------------------------------------------------------------------------- #
-# ROTARC pipeline equivalence (fake eitprocessing primitives)                 #
+# ROTARC pipeline — fake eitprocessing primitives                             #
 # --------------------------------------------------------------------------- #
 
 
@@ -136,8 +129,6 @@ class FakeBreath:
 
 
 class FakeIntervals:
-    """Mimics eitprocessing breath intervals: ``.intervals`` and ``.values``."""
-
     def __init__(self, pairs: list[tuple[float, float]]):
         self.intervals = pairs
         self.values = [FakeBreath(start, end) for start, end in pairs]
@@ -215,379 +206,134 @@ def _expected_cv() -> tuple[float, float, float, int]:
     )
 
 
-def _write_rotarc_config(tmp_path: Path, selection: str = "selected") -> Path:
-    config_path = Path(os.path.join(tmp_path, "config.yaml"))
-    config_path.write_text(
-        f"""
-modules: {{eit: true, emg: false, vent: false}}
-eit:
-  file: {os.path.join("data", "eit.bin")}
-  vendor: draeger
-  processing:
-    subject_type: adult
-    breath_min_duration_seconds: 0.5
-output:
-  combined: {os.path.join("output", "rotarc")}
-rotarc:
-  subject_id: subj
-  mode: quiet
-  timepoint: t0
-  start: 1
-  end: 3
-  slicing_mode: index
-  selection: {selection}
-  run_identifier: run-1
-""",
-        encoding="utf-8",
-    )
-    return config_path
+# Inline ROTARC spec (selection="selected"): slice → detect_rates → mdn_filter →
+# global_impedance → slice detection window → detect_breaths → normalize → cv.
+_ROTARC_SPEC: dict[str, Any] = {
+    "name": "rotarc-breath-duration",
+    "steps": [
+        {"uses": "eit.load", "with": {"file": "data/eit.bin", "vendor": "draeger"}},
+        {
+            "uses": "eit.slice",
+            "in": {"signal": "raw_eit"},
+            "with": {"start": 1, "end": 3, "mode": "index"},
+            "out": {"result": "selected_eit"},
+        },
+        {
+            "uses": "eit.detect_rates",
+            "in": {"signal": "selected_eit"},
+            "with": {"subject_type": "adult"},
+        },
+        {"uses": "eit.mdn_filter", "in": {"signal": "raw_eit"}},
+        {"uses": "eit.global_impedance", "in": {"signal": "filtered_eit"}},
+        {
+            "uses": "eit.slice",
+            "in": {"signal": "global_impedance"},
+            "with": {"start": 1, "end": 3, "mode": "index"},
+            "out": {"result": "detection_signal"},
+        },
+        {
+            "uses": "eit.detect_breaths",
+            "in": {"signal": "detection_signal"},
+            "with": {"min_duration_s": 0.5},
+        },
+        {"uses": "eit.normalize_breaths"},
+        {"uses": "metric.interval_cv", "in": {"intervals": "breath_intervals"}},
+    ],
+}
 
 
-def test_rotarc_pipeline_runs_through_engine(tmp_path, fake_eitprocessing):
-    cfg = load_workflow_config(_write_rotarc_config(tmp_path), root=tmp_path)
-    result = run_pipeline(build_rotarc_spec(cfg), session=_fake_eit_session())
+def test_rotarc_pipeline_runs_through_engine(fake_eitprocessing):
+    result = run_pipeline(_ROTARC_SPEC, session=_fake_eit_session())
 
     expected_cv, expected_mean, expected_std, expected_n = _expected_cv()
     assert result.value("cv") == pytest.approx(expected_cv)
     assert result.value("mean") == pytest.approx(expected_mean)
     assert result.value("n") == expected_n
-    # Breath events were normalized onto the session for export.
     assert len(result.session.events["eit_breaths"]) == expected_n
 
 
-def test_rotarc_workflow_end_to_end_matches_cv(tmp_path, fake_eitprocessing):
-    cfg = load_workflow_config(_write_rotarc_config(tmp_path), root=tmp_path)
-    fake_adapter = EITProcessingAdapter(loader=lambda *a, **k: FakeSequence())
-    result = run_rotarc_breath_duration_workflow(cfg, eit_adapter=fake_adapter)
-
-    expected_cv, expected_mean, expected_std, expected_n = _expected_cv()
-    assert result.summary["breath_duration_cv"] == pytest.approx(expected_cv)
-    assert result.summary["mean_breath_duration_seconds"] == pytest.approx(
-        expected_mean
-    )
-    assert result.summary["std_breath_duration_seconds"] == pytest.approx(expected_std)
-    assert result.summary["n_breaths"] == expected_n
-    assert result.summary["respiratory_rate_hz"] == pytest.approx(0.25)
-    assert result.summary["heart_rate_hz"] == pytest.approx(1.5)
-
-    result_file = Path(result.summary["result_path"])
-    assert result_file.read_text(encoding="utf-8") == f"{expected_cv:.8f}"
-    assert os.path.exists(os.path.join(result.output_dir, "rotarc_summary.json"))
+def test_rotarc_spec_validates():
+    validate_spec(load_spec(_ROTARC_SPEC))
 
 
-# --------------------------------------------------------------------------- #
-# Multimodal pipeline parity tests                                            #
-# --------------------------------------------------------------------------- #
+def test_rotarc_full_selection_spec_has_one_slice():
+    """'full' selection: no second slice, detect_breaths reads global_impedance."""
 
-
-from m3resp.adapters import ReSurfEMGAdapter  # noqa: E402
-from m3resp.pipeline.compile_config import (  # noqa: E402
-    build_multimodal_spec,
-    build_eit_processing_plan,
-)
-from m3resp.workflows.configured.steps import assemble_eit_processed  # noqa: E402
-from m3resp.workflows.configured.runner import run_configured_workflow  # noqa: E402
-from m3resp.workflows.configured.summaries import summarize_multimodal  # noqa: E402
-
-
-# ── shared fake for multimodal ────────────────────────────────────────────────
-
-
-class FakeEITDataMM:
-    """EIT data fake with the attrs the granular steps need."""
-
-    label = "raw"
-    sample_frequency = 20.0
-    pixel_impedance = [[[1.0]], [[2.0]], [[3.0]]]
-
-    def get_summed_impedance(self, *a: Any, **kw: Any) -> "FakeSignalMM":
-        return FakeSignalMM("global_impedance_(mdn_filtered)")
-
-
-class FakeSignalMM:
-    def __init__(self, label: str = "raw") -> None:
-        self.label = label
-
-    def __getitem__(self, _: Any) -> "FakeSignalMM":
-        return FakeSignalMM(self.label + "_sliced")
-
-    def get_summed_impedance(self, *a: Any, **kw: Any) -> "FakeSignalMM":
-        return FakeSignalMM("global_impedance_(mdn_filtered)")
-
-
-class FakeSparseData:
-    label = "sparse"
-    time = [1.0]
-    values = [2.0]
-
-    def __len__(self) -> int:
-        return 1
-
-
-class FakePixelTIVMM:
-    label = "pixel"
-    values: list[Any] = []
-
-
-class FakeBreathEventsMM:
-    start_time = 1.0
-    end_time = 2.0
-    middle_time = 1.5
-
-
-class FakeIntervalsMM:
-    def __init__(self) -> None:
-        self.intervals = [(1.0, 2.0), (2.0, 3.2)]
-        self.values = [FakeBreathEventsMM(), FakeBreathEventsMM()]
-
-
-class FakeCollectionMM(dict):
-    def add(self, value: Any, overwrite: bool = False) -> None:
-        self[getattr(value, "label", "x")] = value
-
-
-class FakeSequenceMM:
-    def __init__(self) -> None:
-        self.eit_data = FakeCollectionMM(raw=FakeEITDataMM())
-        self.continuous_data = FakeCollectionMM()
-        self.sparse_data = FakeCollectionMM()
-        self.interval_data = FakeCollectionMM()
-
-
-@pytest.fixture
-def fake_eit_upstream_mm(monkeypatch):
-    """Patch all eitprocessing upstream classes used in a full EIT sub-pipeline."""
-
-    import eitprocessing.features.breath_detection as bd
-    import eitprocessing.features.rate_detection as rd
-    import eitprocessing.filters.butterworth_filters as butter
-    import eitprocessing.filters.mdn as mdn
-    import eitprocessing.parameters.eeli as eeli_mod
-    import eitprocessing.parameters.tidal_impedance_variation as tiv_mod
-
-    class _RD:
-        def __init__(self, *a: Any, **kw: Any) -> None: ...
-        def apply(self, *a: Any, **kw: Any) -> tuple[float, float]:
-            return 0.25, 1.0
-
-    class _MDN:
-        def __init__(self, **kw: Any) -> None: ...
-        def apply(self, s: Any, label: str = "filtered", **kw: Any) -> FakeSignalMM:
-            return FakeSignalMM(label)
-
-    class _BW:
-        def __init__(self, **kw: Any) -> None: ...
-        def apply(self, px: Any, **kw: Any) -> Any:
-            return px
-
-    class _BD:
-        def __init__(self, **kw: Any) -> None: ...
-        def find_breaths(self, *a: Any, **kw: Any) -> FakeIntervalsMM:
-            return FakeIntervalsMM()
-
-    class _TIV:
-        def __init__(self, **kw: Any) -> None: ...
-        def compute_parameter(self, *a: Any, **kw: Any) -> Any:
-            return FakePixelTIVMM() if kw.get("tiv_timing") else FakeSparseData()
-
-    class _EELI:
-        def __init__(self, **kw: Any) -> None: ...
-        def compute_parameter(self, *a: Any, **kw: Any) -> FakeSparseData:
-            return FakeSparseData()
-
-    monkeypatch.setattr(rd, "RateDetection", _RD)
-    monkeypatch.setattr(mdn, "MDNFilter", _MDN)
-    monkeypatch.setattr(butter, "ButterworthFilter", _BW)
-    monkeypatch.setattr(bd, "BreathDetection", _BD)
-    monkeypatch.setattr(tiv_mod, "TIV", _TIV)
-    monkeypatch.setattr(eeli_mod, "EELI", _EELI)
-
-
-def _make_fake_emg_adapter() -> ReSurfEMGAdapter:
-    from m3resp import BreathEvent
-
-    class _FakeEMGAdapter(ReSurfEMGAdapter):
-        def __init__(self) -> None:
-            super().__init__(
-                loader=lambda *a, **kw: {
-                    "array": [[0.0, 1.0, 0.0]],
-                    "dataframe": {},
-                    "metadata": {"fs": 1000.0, "labels": ["EMG"], "units": ["uV"]},
-                }
-            )
-
-        def preprocess(self, signal: Any, **kw: Any) -> dict[str, Any]:
-            return {
-                **signal,
-                "channel": kw.get("channel", 0),
-                "fs": 1000.0,
-                "raw_channel": [0.0, 1.0, 0.0],
-                "filtered": [0.0, 0.5, 0.0],
-                "envelope": [0.0, 1.0, 0.0],
-                "filter": {"high_pass_hz": kw.get("high_pass_hz", 80)},
-            }
-
-        def detect_breaths(self, signal: Any, **kw: Any) -> list[BreathEvent]:
-            return [BreathEvent("emg", 0.0, 1.0, peak_time=0.5)]
-
-        def postprocess(
-            self, proc: Any, events: Any = None, **kw: Any
-        ) -> dict[str, Any]:
-            vent = kw.get("ventilator")
-            vent_breaths = (
-                [BreathEvent("vent", 0.0, 1.0, peak_time=0.5)] if vent else []
-            )
-            return {
-                "available": {"event_detection": ["detect_ventilator_breath"]},
-                "computed": {
-                    "event_detection": {"detect_ventilator_breath": vent_breaths}
-                },
-                "skipped": {},
-            }
-
-    return _FakeEMGAdapter()
-
-
-def _write_multimodal_config(tmp_path: Path) -> Path:
-    p = tmp_path / "config.yaml"
-    p.write_text(
-        f"""
-modules: {{eit: true, emg: true, vent: true}}
-eit:
-  file: {os.path.join("data", "eit.bin")}
-  vendor: draeger
-  processing:
-    subject_type: adult
-    breath_min_duration_seconds: 0.5
-    filter: {{enabled: true, mode: mdn}}
-    outputs: {{rates: true, breath_intervals: true, continuous_tiv: true, eeli: true, pixel_tiv: true}}
-emg:
-  file: {os.path.join("data", "emg.Poly5")}
-  processing:
-    preprocess: {{enabled: true}}
-    breath_detection: {{enabled: true}}
-    postprocessing: {{enabled: true}}
-vent:
-  file: {os.path.join("data", "vent.Poly5")}
-alignment:
-  method: manual_offset
-  manual_offset_seconds: 0.0
-  reference_modality: vent
-output:
-  combined: {os.path.join("output", "multimodal")}
-results:
-  summary_json: true
-  event_csvs: true
-  parameters_csv: false
-  postprocessing: false
-  figures: false
-""",
-        encoding="utf-8",
-    )
-    return p
-
-
-def test_multimodal_spec_validates(tmp_path):
-    """build_multimodal_spec generates a spec that passes static validation."""
-
-    cfg = load_workflow_config(_write_multimodal_config(tmp_path), root=tmp_path)
-    spec = build_multimodal_spec(cfg)
-    validate_spec(load_spec(spec))
-    uses = [s["uses"] for s in spec["steps"]]
-    assert "eit.load" in uses
-    assert "emg.load" in uses
-    assert "session.sync_raw" in uses
-    assert "eit.mdn_filter" in uses
-    assert "emg.preprocess" in uses
-
-
-def test_multimodal_pipeline_produces_same_session_state_as_configured_runner(
-    tmp_path, fake_eit_upstream_mm
-):
-    """Pipeline spec and configured runner must produce equivalent session state."""
-
-    cfg = load_workflow_config(_write_multimodal_config(tmp_path), root=tmp_path)
-    eit_loader = lambda *a, **kw: FakeSequenceMM()  # noqa: E731
-    emg_adapter = _make_fake_emg_adapter()
-
-    # ── Old path: configured runner ────────────────────────────────────────
-    old_result = run_configured_workflow(
-        cfg,
-        eit_adapter=EITProcessingAdapter(loader=eit_loader),
-        emg_adapter=_make_fake_emg_adapter(),
-        export=False,
-        save_figures=False,
-    )
-    old_summary = old_result.summary
-    old_session = old_result.session
-
-    # ── New path: build_multimodal_spec + run_pipeline ─────────────────────
-    from m3resp.core.session import M3Session
-
-    new_session = M3Session(
-        eit_adapter=EITProcessingAdapter(loader=eit_loader),
-        emg_adapter=emg_adapter,
-    )
-    spec = build_multimodal_spec(cfg)
-    new_result = run_pipeline(spec, session=new_session)
-
-    # Assemble session.processed["eit"] so summarize_eit works.
-    plan = build_eit_processing_plan(cfg)
-    seed = {
-        "eit_sequence": new_result.value("eit_sequence"),
-        "raw_eit": new_result.value("raw_eit"),
-        "raw_global_impedance": new_result.value("raw_global_impedance"),
+    spec = {
+        "name": "rotarc-breath-duration",
+        "steps": [
+            {"uses": "eit.load", "with": {"file": "data/eit.bin", "vendor": "draeger"}},
+            {
+                "uses": "eit.slice",
+                "in": {"signal": "raw_eit"},
+                "with": {"start": 1, "end": 3, "mode": "index"},
+                "out": {"result": "selected_eit"},
+            },
+            {
+                "uses": "eit.detect_rates",
+                "in": {"signal": "selected_eit"},
+                "with": {"subject_type": "adult"},
+            },
+            {"uses": "eit.mdn_filter", "in": {"signal": "raw_eit"}},
+            {"uses": "eit.global_impedance", "in": {"signal": "filtered_eit"}},
+            {
+                "uses": "eit.detect_breaths",
+                "in": {"signal": "global_impedance"},
+                "with": {"min_duration_s": 0.5},
+            },
+            {"uses": "eit.normalize_breaths"},
+            {"uses": "metric.interval_cv", "in": {"intervals": "breath_intervals"}},
+        ],
     }
-    new_session.processed["eit"] = assemble_eit_processed(
-        plan, seed, new_result.context.values
-    )
-
-    new_summary = summarize_multimodal(new_session, include_eit=True, include_emg=True)
-
-    # ── Compare key outputs ────────────────────────────────────────────────
-    # Breath counts must match exactly.
-    assert new_summary["n_eit_breaths"] == old_summary["n_eit_breaths"]
-    assert new_summary["n_emg_breaths"] == old_summary["n_emg_breaths"]
-    assert new_summary["n_ventilator_breaths"] == old_summary["n_ventilator_breaths"]
-
-    # EIT rates match.
-    assert new_summary.get("respiratory_rate_bpm") == pytest.approx(
-        old_summary.get("respiratory_rate_bpm")
-    )
-
-    # Both sessions have the same raw synchronization reference frame.
-    assert (
-        new_session.parameters["raw_alignment"]["reference_modality"]
-        == old_session.parameters["raw_alignment"]["reference_modality"]
-    )
-    assert (
-        new_session.parameters["raw_alignment"]["offset_seconds"]
-        == old_session.parameters["raw_alignment"]["offset_seconds"]
-    )
-
-    # EIT output dict shape is identical.
-    old_eit = old_session.processed["eit"]
-    new_eit = new_session.processed["eit"]
-    assert new_eit["filter_mode"] == old_eit["filter_mode"]
-    assert (new_eit["respiratory_rate_hz"] is None) == (
-        old_eit["respiratory_rate_hz"] is None
-    )
-    assert (new_eit["breath_intervals"] is not None) == (
-        old_eit["breath_intervals"] is not None
-    )
-    assert (new_eit["continuous_tiv"] is not None) == (
-        old_eit["continuous_tiv"] is not None
-    )
-    assert (new_eit["eeli"] is not None) == (old_eit["eeli"] is not None)
-
-
-def test_rotarc_full_selection_skips_second_slice(tmp_path):
-    cfg = load_workflow_config(
-        _write_rotarc_config(tmp_path, selection="full"), root=tmp_path
-    )
-    spec = build_rotarc_spec(cfg)
     slice_steps = [s for s in spec["steps"] if s["uses"] == "eit.slice"]
     assert len(slice_steps) == 1
     detect = next(s for s in spec["steps"] if s["uses"] == "eit.detect_breaths")
     assert detect["in"]["signal"] == "global_impedance"
     validate_spec(load_spec(spec))
+
+
+# --------------------------------------------------------------------------- #
+# export.rotarc_result step                                                   #
+# --------------------------------------------------------------------------- #
+
+
+def test_rotarc_result_step_writes_file_and_summary(tmp_path):
+    from m3resp.pipeline.spec import SpecExperimentConfig, SpecOutputsConfig
+
+    session = M3Session()
+    outputs = SpecOutputsConfig(
+        dir=tmp_path,
+        timestamped=False,
+        summary_json=False,
+        event_csvs=False,
+    )
+    experiment = SpecExperimentConfig(
+        subject_id="s01",
+        mode="quiet",
+        timepoint=None,
+        run_identifier="run-1",
+        selection="selected",
+    )
+    spec = {
+        "name": "rotarc",
+        "steps": [
+            {
+                "uses": "export.rotarc_result",
+                "in": {"value": "cv"},
+                "with": {"precision": 4},
+            }
+        ],
+    }
+    result = run_pipeline(
+        spec,
+        session=session,
+        extra_context={
+            "cv": 0.1234,
+            "_spec_outputs": outputs,
+            "_spec_experiment": experiment,
+        },
+    )
+    result_path = Path(result.value("result_path"))
+    assert result_path.exists()
+    assert result_path.read_text(encoding="utf-8") == "0.1234"
+    assert (tmp_path / "subject_results" / "run-1" / "rotarc_summary.json").exists()

@@ -1,18 +1,10 @@
-# ROTARC breath-duration variability — self-contained declarative pipeline.
+# ROTARC breath-duration variability pipeline.
 #
-# Run with:
-#   python -m m3resp run breath-duration.pipeline.yaml
+# Run with: python -m m3resp run breath-duration.pipeline.yaml
 #
-# No custom Python script needed.  Everything — processing, file naming, and
-# export — is driven by the three top-level sections:
-#
-#   experiment:  study metadata (subject_id, mode, timepoint, run_identifier,
-#                selection) → drives output filename
+#   experiment:  study metadata; drives the output filename
 #   outputs:     where to write results and which artifacts to produce
 #   inputs:      data paths (referenced in steps with @name)
-#
-# The `selection: selected` behaviour is whether the second `eit.slice` step
-# (re-slicing global_impedance → detection_signal) is present.
 
 name: rotarc-breath-duration
 
@@ -25,7 +17,7 @@ experiment:
 
 outputs:
   dir: ../../output/rotarc-breath-duration
-  timestamped: true       # ROTARC writes to a fixed run folder, not timestamped
+  timestamped: false      # export.rotarc_result writes to a fixed run folder
   summary_json: true
   event_csvs: true
   parameters_csv: false

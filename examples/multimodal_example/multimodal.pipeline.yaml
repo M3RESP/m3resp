@@ -1,15 +1,9 @@
-# Full multimodal (EIT + EMG + ventilator) pipeline — self-contained declarative spec.
+# Full multimodal (EIT + EMG + ventilator) pipeline.
 #
-# Run with:
-#   python -m m3resp run multimodal.pipeline.yaml
+# Run with: python -m m3resp run multimodal.pipeline.yaml
 #
-# The `outputs:` section controls where results are written and which artifacts
-# are produced.  A timestamped subfolder (YYYYMMDD_HHMMSS) is appended
-# automatically when `timestamped: true`.
-#
-# The ventilator array is NOT listed as a step param (it is a binary array and
-# cannot be serialized to YAML).  The `emg.postprocess` step reads it from
-# session.raw["vent"] automatically after `emg.load` puts it there.
+# The ventilator array can't be serialized to YAML, so it is not passed as a
+# step param; `emg.postprocess` reads it from the session after `emg.load`.
 
 name: multimodal
 
@@ -28,21 +22,21 @@ inputs:
   vent_file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_ventilator.Poly5
 
 steps:
-  # ── Load ─────────────────────────────────────────────────────────────────
+  # Load
   - uses: eit.load
     with: { file: "@eit_file", vendor: draeger }
 
   - uses: emg.load
     with: { file: "@emg_file", vent_file: "@vent_file" }
 
-  # ── Synchronise raw signals before processing ─────────────────────────────
+  # Synchronize raw signals before processing
   - uses: session.sync_raw
     with:
       method: manual_offset
       offset_seconds: { eit: 0.0, emg: -2.0, vent: 0.0 }
       reference_modality: vent
 
-  # ── EIT processing (granular) ─────────────────────────────────────────────
+  # EIT processing
   - uses: eit.detect_rates
     in:  { signal: raw_eit }
     with: { subject_type: adult, welch_window_seconds: 30.0, capture: true }
@@ -69,7 +63,7 @@ steps:
   - uses: eit.pixel_tiv
     in:  { signal: global_impedance, filtered_eit: filtered_eit }
 
-  # ── EMG processing ────────────────────────────────────────────────────────
+  # EMG processing
   - uses: emg.preprocess
     with: { channel: 0, high_pass_hz: 80, envelope_window_seconds: 0.5 }
 

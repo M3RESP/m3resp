@@ -1,9 +1,8 @@
 """Registered EIT pipeline steps.
 
-Each step is a thin wrapper around a single ``eitprocessing`` operation, mirroring
-the hand-wired logic that previously lived inside ``_preprocess_rotarc_eit`` and
-the monolithic ``EITProcessingAdapter.preprocess``. Upstream imports are deferred
-so the package installs without the optional ``eitprocessing`` dependency.
+Each step wraps a single ``eitprocessing`` operation. Upstream imports are
+deferred to call time so the package installs without the optional
+``eitprocessing`` dependency.
 """
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ from typing import Any
 
 from m3resp.core.session import M3Session
 from m3resp.pipeline.registry import register_step
-from m3resp.workflows.toolbox import slice_signal_by_mode
+from m3resp.pipeline.utils import slice_signal_by_mode
 
 
 def _add_to_collection(collection: Any, value: Any) -> None:
@@ -34,7 +33,7 @@ def _add_to_collection(collection: Any, value: Any) -> None:
 def load(session: M3Session, *, file: str, vendor: str | None = None) -> dict[str, Any]:
     session.load_eit(file, vendor=vendor)
     recording = session.eit
-    assert recording is not None  # set by load_eit above
+    assert recording is not None
     return {
         "raw_eit": recording.raw,
         "raw_global_impedance": recording.global_impedance,
@@ -195,8 +194,6 @@ def detect_breaths(signal: Any, *, min_duration_s: float = 2 / 3) -> dict[str, A
     summary="Normalize detected EIT breath intervals into session events.",
 )
 def normalize_breaths(breath_intervals: Any, session: M3Session) -> dict[str, Any]:
-    # Reuse the adapter normalization path used by ``M3Session.detect_eit_breaths``
-    # so exports (event CSVs) keep working.
     events = session.eit_adapter.detect_breaths({"breath_intervals": breath_intervals})
     session.add_events("eit_breaths", events)
     return {}

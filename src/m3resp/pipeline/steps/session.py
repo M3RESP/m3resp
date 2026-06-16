@@ -1,7 +1,7 @@
 """Registered session-level pipeline steps.
 
-These wrap M3Session cross-modality operations so multimodal workflows can be
-expressed as a declarative pipeline spec instead of hand-coded runner scripts.
+These wrap ``M3Session`` cross-modality operations so multimodal workflows can be
+expressed as a declarative pipeline spec.
 """
 
 from __future__ import annotations

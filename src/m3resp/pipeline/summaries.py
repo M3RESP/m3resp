@@ -1,4 +1,4 @@
-"""Summary helpers for YAML-configured workflows."""
+"""Compact session summaries for logging after a pipeline run."""
 
 from __future__ import annotations
 
@@ -8,8 +8,6 @@ from m3resp.core.session import M3Session
 
 
 def summarize_eit(session: M3Session) -> dict[str, Any]:
-    """Return a compact summary of processed EIT outputs."""
-
     eit = session.processed["eit"]
     summary: dict[str, Any] = {"filter_mode": eit["filter_mode"]}
     if eit.get("respiratory_rate_hz") is not None:
@@ -31,37 +29,12 @@ def summarize_eit(session: M3Session) -> dict[str, Any]:
     return summary
 
 
-def summarize_emg_postprocessing(
-    session: M3Session,
-    *,
-    key_prefix: str = "postprocessing_",
-) -> dict[str, Any]:
-    """Return compact EMG postprocessing metadata."""
-
-    postprocessing = session.parameters["emg_postprocessing"]
-    return {
-        f"{key_prefix}available": {
-            category: len(functions)
-            for category, functions in postprocessing["available"].items()
-        },
-        f"{key_prefix}computed": {
-            category: list(results)
-            for category, results in postprocessing["computed"].items()
-            if results
-        },
-        f"{key_prefix}skipped": postprocessing["skipped"],
-    }
-
-
 def summarize_emg(session: M3Session) -> dict[str, Any]:
-    """Return a compact summary of processed EMG outputs."""
-
     emg = session.processed["emg"]
     postprocessing = session.parameters.get("emg_postprocessing", {})
     computed = postprocessing.get("computed", {})
     ventilator_breaths = computed.get("event_detection", {}).get(
-        "detect_ventilator_breath",
-        [],
+        "detect_ventilator_breath", []
     )
     summary = {
         "channel": emg["channel"],
@@ -74,11 +47,18 @@ def summarize_emg(session: M3Session) -> dict[str, Any]:
     }
     if "emg_breaths" in session.events:
         summary["n_emg_breaths"] = len(session.events["emg_breaths"])
-        summary["emg_breath_peak_times"] = [
-            event.peak_time for event in session.events["emg_breaths"]
-        ]
     if postprocessing:
-        summary.update(summarize_emg_postprocessing(session))
+        pp = postprocessing
+        summary["postprocessing_available"] = {
+            category: len(functions)
+            for category, functions in pp.get("available", {}).items()
+        }
+        summary["postprocessing_computed"] = {
+            category: list(results)
+            for category, results in pp.get("computed", {}).items()
+            if results
+        }
+        summary["postprocessing_skipped"] = pp.get("skipped", {})
     return summary
 
 
@@ -88,8 +68,6 @@ def summarize_multimodal(
     include_eit: bool,
     include_emg: bool,
 ) -> dict[str, Any]:
-    """Return the compact summary used by configured multimodal workflows."""
-
     summary: dict[str, Any] = {}
     if include_eit:
         summary.update(summarize_eit(session))
@@ -98,16 +76,11 @@ def summarize_multimodal(
         for key in ("n_emg_breaths", "n_ventilator_breaths"):
             if key in emg_summary:
                 summary[key] = emg_summary[key]
-        if "postprocessing_available" in emg_summary:
-            summary["emg_postprocessing_available"] = emg_summary[
-                "postprocessing_available"
-            ]
-        if "postprocessing_computed" in emg_summary:
-            summary["emg_postprocessing_computed"] = emg_summary[
-                "postprocessing_computed"
-            ]
-        if "postprocessing_skipped" in emg_summary:
-            summary["emg_postprocessing_skipped"] = emg_summary[
-                "postprocessing_skipped"
-            ]
+        for key in (
+            "postprocessing_available",
+            "postprocessing_computed",
+            "postprocessing_skipped",
+        ):
+            if key in emg_summary:
+                summary[f"emg_{key}"] = emg_summary[key]
     return summary

@@ -1,14 +1,12 @@
 """Registered EMG pipeline steps.
 
-These wrap the ``M3Session`` EMG stage methods so EMG processing runs through the
-same engine as everything else. The methods already dispatch ReSurfEMG functions
-at per-function granularity (see ``ReSurfEMGAdapter`` ``POSTPROCESSING_FUNCTIONS``),
-so wrapping them keeps that granularity while unifying orchestration.
+These wrap the ``M3Session`` EMG stage methods, which dispatch the underlying
+ReSurfEMG functions.
 """
 
 from __future__ import annotations
 
-from typing import Any  # noqa: F401 (used in step signatures below)
+from typing import Any
 
 from m3resp.core.session import M3Session
 from m3resp.pipeline.registry import register_step
@@ -60,8 +58,7 @@ def detect_breaths(session: M3Session, **kwargs: Any) -> dict[str, Any]:
     summary="Run selected ReSurfEMG postprocessing functions.",
 )
 def postprocess(session: M3Session, **kwargs: Any) -> dict[str, Any]:
-    # Fall back to the loaded ventilator data from the session when the caller
-    # didn't embed it in the spec (e.g. a pure YAML spec can't hold numpy arrays).
+    # A YAML spec can't carry the ventilator array, so default it from the session.
     if "ventilator" not in kwargs:
         kwargs["ventilator"] = session.raw.get("vent")
     session.postprocess_emg(**kwargs)
