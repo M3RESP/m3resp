@@ -158,6 +158,7 @@ BREATH_PAIRS = [(0.0, 1.0), (1.0, 2.5), (2.5, 3.2), (3.2, 4.6)]
 def fake_eitprocessing(monkeypatch):
     """Patch the upstream classes the EIT steps import at call time."""
 
+    pytest.importorskip("eitprocessing")
     import eitprocessing.features.breath_detection as bd
     import eitprocessing.features.rate_detection as rd
     import eitprocessing.filters.mdn as mdn
