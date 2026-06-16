@@ -19,10 +19,8 @@ _STEPS_REGISTERED = False
 def _ensure_steps_registered() -> None:
     """Import the built-in step package so every step is registered.
 
-    Done lazily (not at module import) to avoid a circular import: the step
-    modules import ``m3resp.workflows`` helpers, and the workflows package imports
-    the pipeline engine. Step modules defer their upstream (eitprocessing/
-    resurfemg) imports to call time, so this stays safe without those packages.
+    Done lazily to avoid a circular import between the step modules and the
+    workflows package.
     """
 
     global _STEPS_REGISTERED
@@ -100,14 +98,10 @@ def run_spec(
 ) -> PipelineResult:
     """Load a spec file and run it end-to-end, including automatic export.
 
-    This is the top-level entry point for the ``m3resp run <spec.yaml>`` CLI.
-    Unlike ``run_pipeline``, it:
-
-    - Injects ``_spec_outputs`` and ``_spec_experiment`` into the context so
-      steps like ``export.rotarc_result`` can read them.
-    - After the pipeline finishes, applies the ``outputs:`` section: creates
-      the output directory, assembles ``session.processed["eit"]``, and calls
-      ``export_session_summary`` with the configured switches.
+    This is the entry point for the ``m3resp run <spec.yaml>`` CLI. It injects
+    the spec's ``outputs`` and ``experiment`` sections into the context (so steps
+    like ``export.rotarc_result`` can read them) and applies the ``outputs:``
+    section after the pipeline finishes.
     """
 
     parsed = load_spec(path)
@@ -172,32 +166,18 @@ def _apply_outputs(spec: PipelineSpec, result: PipelineResult) -> None:
 
 
 def _maybe_assemble_eit(result: PipelineResult) -> None:
-    """Populate ``session.processed['eit']`` from the pipeline context.
-
-    Reads whatever EIT artifacts the steps produced and assembles the dict
-    shape that ``summarize_eit`` expects, without needing a ``WorkflowConfig``.
-    """
+    """Populate ``session.processed['eit']`` from the pipeline context."""
 
     ctx = result.context.values
     if "raw_eit" not in ctx:
         return
 
     filtered_eit = ctx.get("filtered_eit")
-    filter_mode = "none"
-    if filtered_eit is not None:
-        label = getattr(filtered_eit, "label", "")
-        if "mdn" in label:
-            filter_mode = "mdn"
-        elif "lowpass" in label:
-            filter_mode = "lowpass"
-        elif "bandpass" in label:
-            filter_mode = "bandpass"
-
     result.session.processed["eit"] = {
         "sequence": ctx.get("eit_sequence"),
         "raw_eit": ctx.get("raw_eit"),
         "raw_global_impedance": ctx.get("raw_global_impedance"),
-        "filter_mode": filter_mode,
+        "filter_mode": _infer_filter_mode(filtered_eit),
         "filter_captures": ctx.get("filter_captures", {}),
         "rate_detector": ctx.get("rate_detector"),
         "rate_captures": ctx.get("rate_captures", {}),
@@ -214,6 +194,18 @@ def _maybe_assemble_eit(result: PipelineResult) -> None:
     }
 
 
+def _infer_filter_mode(filtered_eit: Any) -> str:
+    """Derive the filter mode from a filtered EIT signal's label."""
+
+    if filtered_eit is None:
+        return "none"
+    label = getattr(filtered_eit, "label", "")
+    for mode in ("mdn", "lowpass", "bandpass"):
+        if mode in label:
+            return mode
+    return "none"
+
+
 def _maybe_log_summary(
     session: M3Session, output_dir: Path, spec: PipelineSpec
 ) -> None:
@@ -221,11 +213,11 @@ def _maybe_log_summary(
 
     try:
         from loguru import logger
-        from m3resp.workflows.toolbox import log_workflow_summary
+        from m3resp.pipeline.utils import log_workflow_summary
     except ImportError:
         return
 
-    from m3resp.workflows.configured.summaries import (
+    from m3resp.pipeline.summaries import (
         summarize_eit,
         summarize_emg,
         summarize_multimodal,

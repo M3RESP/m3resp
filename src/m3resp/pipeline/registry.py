@@ -4,9 +4,6 @@ A *step* is a named, reusable operation. Each step declares the context keys it
 reads (mapped onto its parameter names) and the context keys it writes. A
 pipeline spec lists steps by name and binds them together, so workflows can be
 assembled from a YAML/JSON file without writing custom Python.
-
-This generalizes the name-based dispatch already used by
-``ReSurfEMGAdapter.run_postprocessing_function`` to every pipeline stage.
 """
 
 from __future__ import annotations

@@ -1,10 +1,5 @@
 """M3Resp public API."""
 
-from m3resp.core.config import (
-    RotarcWorkflowConfig,
-    WorkflowConfig,
-    load_workflow_config,
-)
 from m3resp.core.events import (
     BreathEvent,
     Event,
@@ -32,8 +27,6 @@ __all__ = [
     "Event",
     "M3Session",
     "PipelineResult",
-    "RotarcWorkflowConfig",
-    "WorkflowConfig",
     "available_steps",
     "coerce_breath_event",
     "coerce_breath_events",
@@ -42,7 +35,6 @@ __all__ = [
     "load_eit",
     "load_emg",
     "load_spec",
-    "load_workflow_config",
     "register_step",
     "run_pipeline",
     "run_spec",
