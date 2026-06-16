@@ -5,47 +5,48 @@ modality-specific processing in the upstream packages whenever possible:
 
 - EIT-specific changes belong in `eitprocessing`.
 - EMG-specific changes belong in `ReSurfEMG` / `resurfemg`.
-- Cross-modality API, synchronization, export, and session state belong here.
+- Cross-modality API, synchronization, export, session state, and the pipeline
+  engine belong here.
 
-Before opening a pull request, run:
+Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Making changes
+
+Before opening a pull request, make sure the tests pass:
 
 ```bash
 pytest
 ```
 
-For Stage 1, prefer small, explicit changes over broad architecture work.
+The pre-commit hooks run Ruff linting and formatting automatically. Install them
+once after setting up the dev environment:
 
-# Contributing guidelines
+```bash
+pip install -e ".[dev]"
+pre-commit install
+```
 
-We welcome any kind of contribution to our software, from simple comment or question to a full fledged [pull request](https://help.github.com/articles/about-pull-requests/). Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+Run the checks manually at any time:
 
-A contribution can be one of the following cases:
+```bash
+pre-commit run --all-files
+```
 
-1. you have a question;
-2. you think you may have found a bug (including unexpected behavior);
-3. you want to make some kind of change to the code base (e.g. to fix a bug, to add a new feature, to update documentation);
-4. you want to make a new release of the code base.
+## Types of contributions
 
-The sections below outline the steps in each case.
+We welcome contributions of all kinds:
 
-## You have a question
+1. **Questions** — open an issue and add the "Question" label.
+2. **Bug reports** — open an issue with enough context to reproduce the problem
+   (commit hash, dependency versions, OS, and a minimal example if possible).
+3. **Code changes** — open a pull request. For anything beyond a small fix,
+   open an issue first so we can discuss the approach.
+4. **Documentation** — improvements to the docs are always welcome.
 
-1. use the search functionality [here](git@github.com:EIT-ALIVE/eitprocessing/issues) to see if someone already filed the same issue;
-2. if your issue search did not yield any relevant results, make a new issue;
-3. apply the "Question" label; apply other labels when relevant.
+## What belongs here vs upstream
 
-## You think you may have found a bug
-
-1. use the search functionality [here](git@github.com:EIT-ALIVE/eitprocessing/issues) to see if someone already filed the same issue;
-2. if your issue search did not yield any relevant results, make a new issue, making sure to provide enough information to the rest of the community to understand the cause and context of the problem. Depending on the issue, you may want to include:
-   - the [SHA hashcode](https://help.github.com/articles/autolinked-references-and-urls/#commit-shas) of the commit that is causing your problem;
-   - some identifying information (name and version number) for dependencies you're using;
-   - information about the operating system;
-3. apply relevant labels to the newly created issue.
-
-## You want to make some kind of change to the code base
-
-We welcome all contributions to this open-source project, as long as they follow our
-[code of conduct](https://github.com/EIT-ALIVE/eitprocessing/blob/main/CODE_OF_CONDUCT.md).
-
-Please read out [developers documentation](https://github.com/EIT-ALIVE/eitprocessing/blob/main/README.dev.md) if you are interested in contributing to the code base
+If you are unsure whether a change belongs in `m3resp` or in one of the upstream
+packages, open an issue and we will figure it out together. The general rule:
+if the change is about how EIT or EMG signals are processed scientifically, it
+belongs upstream. If it is about how those results are orchestrated, exported,
+or combined across modalities, it belongs here.
