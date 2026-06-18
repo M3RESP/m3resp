@@ -25,8 +25,9 @@ class StepDefinition:
 
     name: str
     func: StepCallable
-    #: parameter name -> default context key the value is read from.
-    reads: Mapping[str, str] = field(default_factory=dict)
+    #: parameter name -> default context key, or None if the binding is required
+    #: and must be supplied via ``in:`` in the spec.
+    reads: Mapping[str, str | None] = field(default_factory=dict)
     #: natural output names the step returns (default context keys it writes).
     writes: tuple[str, ...] = ()
     #: context keys that must already exist before the step runs, but are not
@@ -41,7 +42,7 @@ STEP_REGISTRY: dict[str, StepDefinition] = {}
 def register_step(
     name: str,
     *,
-    reads: Mapping[str, str] | None = None,
+    reads: Mapping[str, str | None] | None = None,
     writes: tuple[str, ...] = (),
     requires: tuple[str, ...] = (),
     summary: str = "",
