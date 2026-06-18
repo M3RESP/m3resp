@@ -269,10 +269,15 @@ def validate_spec(spec: PipelineSpec, *, available: set[str] | None = None) -> N
 
 
 def _required_context_keys(definition: StepDefinition, step_spec: StepSpec) -> set[str]:
-    keys = {
-        step_spec.inputs.get(param, default)
-        for param, default in definition.reads.items()
-    }
+    keys = set()
+    for param, default in definition.reads.items():
+        context_key = step_spec.inputs.get(param, default)
+        if context_key is None:
+            raise PipelineSpecError(
+                f"Step '{step_spec.uses}' requires an explicit 'in: {{{param}: ...}}' "
+                f"binding — this parameter has no default context key."
+            )
+        keys.add(context_key)
     keys.update(definition.requires)
     return keys
 
@@ -290,6 +295,11 @@ def _bind_arguments(
     kwargs: dict[str, Any] = {}
     for param, default_key in definition.reads.items():
         context_key = step_spec.inputs.get(param, default_key)
+        if context_key is None:
+            raise PipelineSpecError(
+                f"Step #{position} '{step_spec.uses}' requires an explicit "
+                f"'in: {{{param}: ...}}' binding — this parameter has no default context key."
+            )
         kwargs[param] = ctx.get(context_key)
 
     for param, raw_value in step_spec.params.items():

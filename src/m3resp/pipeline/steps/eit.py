@@ -96,7 +96,7 @@ def detect_rates(
 @register_step(
     "eit.mdn_filter",
     reads={
-        "signal": "raw_eit",
+        "signal": None,
         "respiratory_rate_hz": "respiratory_rate_hz",
         "heart_rate_hz": "heart_rate_hz",
         "eit_sequence": "eit_sequence",
