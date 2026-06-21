@@ -65,6 +65,29 @@ def test_validation_rejects_unproduced_context_key():
         validate_spec(load_spec(spec))
 
 
+def test_validation_rejects_duplicate_output_keys():
+    spec = {
+        "name": "bad",
+        "steps": [
+            {"uses": "t.make", "with": {"value": 1}},
+            {"uses": "t.make", "with": {"value": 2}},  # writes "a" again
+        ],
+    }
+    with pytest.raises(PipelineSpecError, match="already produced"):
+        validate_spec(load_spec(spec))
+
+
+def test_validation_allows_duplicate_step_with_out_rename():
+    spec = {
+        "name": "ok",
+        "steps": [
+            {"uses": "t.make", "with": {"value": 1}, "out": {"a": "a1"}},
+            {"uses": "t.make", "with": {"value": 2}, "out": {"a": "a2"}},
+        ],
+    }
+    validate_spec(load_spec(spec))  # should not raise
+
+
 def test_engine_rejects_undeclared_output():
     spec = {"name": "bad", "steps": [{"uses": "t.bad_output"}]}
     with pytest.raises(PipelineSpecError, match="did not return it"):
