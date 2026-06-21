@@ -241,7 +241,8 @@ def _maybe_log_summary(
 
 
 def validate_spec(spec: PipelineSpec, *, available: set[str] | None = None) -> None:
-    """Statically check that every step's inputs are produced before use.
+    """Statically check that every step's inputs are produced before use,
+    and that no two steps write to the same context key without explicit renaming.
 
     ``available`` lists extra context keys seeded outside the spec.
     """
@@ -249,13 +250,17 @@ def validate_spec(spec: PipelineSpec, *, available: set[str] | None = None) -> N
     _ensure_steps_registered()
     # _spec_outputs and _spec_experiment are always injected by run_spec before
     # the pipeline executes, so treat them as globally available.
-    produced: set[str] = {
+    # Pre-seeded keys are exempt from duplicate-write detection.
+    seeded: set[str] = {
         SESSION_KEY,
         "_spec_outputs",
         "_spec_experiment",
         *spec.inputs,
         *(available or set()),
     }
+    # Maps context key -> label of the step that produced it, for error messages.
+    produced: dict[str, str] = {key: "pipeline seed" for key in seeded}
+
     for position, step_spec in enumerate(spec.steps):
         definition = get_step(step_spec.uses)
         for context_key in _required_context_keys(definition, step_spec):
@@ -265,7 +270,15 @@ def validate_spec(spec: PipelineSpec, *, available: set[str] | None = None) -> N
                     f"'{context_key}', which is not produced by an earlier step "
                     f"or declared in inputs."
                 )
-        produced.update(_output_context_keys(definition, step_spec))
+        step_label = f"step #{position} '{step_spec.uses}'"
+        for context_key in _output_context_keys(definition, step_spec):
+            if context_key in produced and context_key not in seeded:
+                raise PipelineSpecError(
+                    f"Step #{position} '{step_spec.uses}' writes to context key "
+                    f"'{context_key}', which was already produced by "
+                    f"{produced[context_key]}. Use 'out:' to rename one of the outputs."
+                )
+            produced[context_key] = step_label
 
 
 def _required_context_keys(definition: StepDefinition, step_spec: StepSpec) -> set[str]:
