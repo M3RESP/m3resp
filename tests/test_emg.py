@@ -8,13 +8,12 @@ from typing import Any
 import pytest
 
 from m3resp import BreathEvent, M3Session, load_emg
-from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
+from m3resp.adapters import ReSurfEMGAdapter
 from m3resp.modalities.emg import load as load_emg_recording
 from m3resp.visualization import (
     plot_session_overview,
     plot_synchronization_comparison,
 )
-from m3resp.workflows.multimodal_workflow import run_multimodal_workflow
 
 
 def fake_emg_recording() -> dict[str, Any]:
@@ -257,10 +256,6 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
             },
         },
     }
-    session.processed["synchronized"] = {
-        "emg_breaths": [],
-        "ventilator_breaths": [],
-    }
     session.parameters["raw_alignment"] = {
         "offset_seconds": {"eit": 0.0, "emg": -0.002, "vent": 0.0}
     }
@@ -371,94 +366,3 @@ def test_run_postprocessing_function_exposes_resurfemg_functions():
 
     assert len(baseline) == 3
     assert "quality_assessment" in adapter.available_postprocessing()
-
-
-def test_multimodal_workflow_runs_emg_milestone4_with_fake_adapters():
-    class FakeEITAdapter(EITProcessingAdapter):
-        def __init__(self):
-            super().__init__(loader=lambda *args, **kwargs: {"eit": True})
-
-        def preprocess(self, sequence: Any, **kwargs: Any) -> dict[str, Any]:
-            return {"breath_intervals": FakeIntervals()}
-
-    class FakeIntervals:
-        values = []
-
-    class FakeEMGAdapter(ReSurfEMGAdapter):
-        def __init__(self):
-            super().__init__(loader=lambda *args, **kwargs: fake_emg_recording())
-
-        def preprocess(self, signal: Any, **kwargs: Any) -> dict[str, Any]:
-            raw = [0.0] * 1000
-            filtered = [0.0] * 1000
-            envelope = [0.0] * 1000
-            for index in range(400, 601):
-                envelope[index] = 1.0 - abs(index - 500) / 101
-                filtered[index] = envelope[index]
-            return {
-                **signal,
-                "channel": 0,
-                "fs": 1000.0,
-                "raw_channel": raw,
-                "filtered": filtered,
-                "envelope": envelope,
-                "filter": {},
-            }
-
-        def detect_breaths(self, signal: Any, **kwargs: Any) -> list[BreathEvent]:
-            return [BreathEvent("emg", 0.4, 0.6, peak_time=0.5)]
-
-    session = run_multimodal_workflow(
-        "subject.eit",
-        "subject.Poly5",
-        eit_vendor="sentec",
-        eit_adapter=FakeEITAdapter(),
-        emg_adapter=FakeEMGAdapter(),
-    )
-
-    assert session.emg is session.raw["emg"]
-    assert len(session.processed["emg"]["filtered"]) == 1000
-    assert session.events["emg_breaths"][0].peak_time == 0.5
-    assert "emg_postprocessing" in session.parameters
-
-
-def test_multimodal_workflow_real_emg_sample_with_fake_eit_adapter():
-    pytest.importorskip("resurfemg")
-
-    class FakeEITAdapter(EITProcessingAdapter):
-        def __init__(self):
-            super().__init__(loader=lambda *args, **kwargs: {"eit": True})
-
-        def preprocess(self, sequence: Any, **kwargs: Any) -> dict[str, Any]:
-            return {"breath_intervals": FakeIntervals()}
-
-    class FakeIntervals:
-        values = []
-
-    repo_root = Path(__file__).resolve().parents[1]
-    ventilator = ReSurfEMGAdapter().load(
-        os.path.join(
-            repo_root, "data", "source", "vent_data_synth_quiet_breathing.Poly5"
-        ),
-        verbose=False,
-    )
-    session = run_multimodal_workflow(
-        "subject.eit",
-        os.path.join(
-            repo_root, "data", "source", "emg_data_synth_quiet_breathing.Poly5"
-        ),
-        eit_vendor="sentec",
-        eit_adapter=FakeEITAdapter(),
-        detect_eit_breaths=False,
-        emg={"verbose": False},
-        emg_postprocessing={"ventilator": ventilator},
-    )
-
-    assert session.emg is not None
-    assert session.emg.envelope is not None
-    assert "emg_breaths" in session.events
-    assert "emg_postprocessing" in session.parameters
-    assert (
-        "detect_ventilator_breath"
-        in session.parameters["emg_postprocessing"]["computed"]["event_detection"]
-    )

@@ -1,0 +1,68 @@
+# ROTARC breath-duration variability pipeline.
+#
+# Run with: python -m m3resp run breath-duration.pipeline.yaml
+#
+#   experiment:  study metadata; drives the output filename
+#   outputs:     where to write results and which artifacts to produce
+#   inputs:      data paths (referenced in steps with @name)
+
+name: rotarc-breath-duration
+
+experiment:
+  subject_id: subject
+  mode: mode
+  timepoint:               # leave blank for no timepoint in the filename
+  run_identifier: test-run
+  selection: selected
+
+outputs:
+  dir: ../../output/rotarc-breath-duration
+  timestamped: false      # export.rotarc_result writes to a fixed run folder
+  summary_json: true
+  event_csvs: true
+  parameters_csv: false
+  postprocessing: false
+
+inputs:
+  eit_file: .../PCvPS-Blankman/raw .bin files/B001/B001_01_01.bin
+  vendor: draeger
+
+steps:
+  - uses: eit.load
+    with: { file: "@eit_file", vendor: "@vendor" }
+
+  - uses: eit.slice
+    in:  { signal: raw_eit }
+    with: { start: 5373, end: 6159, mode: index }
+    out: { result: selected_eit }
+
+  - uses: eit.detect_rates
+    in:  { signal: selected_eit }
+    with: { subject_type: adult }
+
+  - uses: eit.mdn_filter
+    in:  { signal: raw_eit }
+
+  - uses: eit.global_impedance
+    in:  { signal: filtered_eit }
+
+  - uses: eit.slice
+    in:  { signal: global_impedance }
+    with: { start: 5373, end: 6159, mode: index }
+    out: { result: detection_signal }
+
+  - uses: eit.detect_breaths
+    in:  { signal: detection_signal }
+    with: { min_duration_s: 0.6666666667 }
+
+  - uses: eit.normalize_breaths
+
+  - uses: metric.interval_cv
+    in:  { intervals: breath_intervals }
+    out: { cv: breath_duration_cv }
+
+  # Writes <outputs.dir>/subject_results/<run_identifier>/<subject>-<mode>-<tp>-<selection>.txt
+  # and rotarc_summary.json, then exports event CSVs per the outputs: section.
+  - uses: export.rotarc_result
+    in:  { value: breath_duration_cv }
+    with: { precision: 8 }

@@ -8,9 +8,8 @@ from typing import Any
 import pytest
 
 from m3resp import BreathEvent, M3Session, load_eit
-from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
+from m3resp.adapters import EITProcessingAdapter
 from m3resp.modalities.eit import load as load_eit_recording
-from m3resp.workflows.multimodal_workflow import run_multimodal_workflow
 
 
 class FakeCollection(dict):
@@ -169,59 +168,3 @@ def test_eit_real_data_pipeline_uses_committed_sample():
 
     assert events
     assert all(isinstance(event, BreathEvent) for event in events)
-
-
-def test_multimodal_workflow_runs_eit_milestone3_with_fake_adapters():
-    class FakeEITAdapter(EITProcessingAdapter):
-        def __init__(self):
-            super().__init__(loader=lambda *args, **kwargs: FakeSequence())
-
-        def preprocess(self, sequence: Any, **kwargs: Any) -> dict[str, Any]:
-            return {"sequence": sequence, "breath_intervals": FakeIntervals()}
-
-    session = run_multimodal_workflow(
-        "subject.eit",
-        "subject.edf",
-        eit_vendor="sentec",
-        eit_adapter=FakeEITAdapter(),
-        emg_adapter=ReSurfEMGAdapter(
-            loader=lambda path, **kwargs: {"path": path, "kind": "emg"}
-        ),
-        process_emg=False,
-        detect_emg_breaths=False,
-        postprocess_emg=False,
-    )
-
-    assert session.eit is session.raw["eit"]
-    assert session.raw["emg"].data == {"path": "subject.edf", "kind": "emg"}
-    assert session.processed["eit"]["breath_intervals"] is not None
-    assert session.events["eit_breaths"][0].source == "eitprocessing.BreathDetection"
-
-
-def test_multimodal_workflow_real_eit_sample_with_fake_emg_loader():
-    repo_root = Path(__file__).resolve().parents[1]
-    sibling_eitprocessing = os.path.join(repo_root.parent, "eitprocessing")
-    if (
-        os.path.exists(sibling_eitprocessing)
-        and str(sibling_eitprocessing) not in sys.path
-    ):
-        sys.path.insert(0, str(sibling_eitprocessing))
-
-    pytest.importorskip("eitprocessing")
-
-    session = run_multimodal_workflow(
-        os.path.join(repo_root, "data", "source", "draeger_synthetic_draeger_20Hz.bin"),
-        "subject.edf",
-        eit_vendor="draeger",
-        emg_adapter=ReSurfEMGAdapter(
-            loader=lambda path, **kwargs: {"path": path, "kind": "emg"}
-        ),
-        process_emg=False,
-        detect_emg_breaths=False,
-        postprocess_emg=False,
-    )
-
-    assert session.eit is not None
-    assert session.eit.raw is not None
-    assert len(session.events["eit_breaths"]) > 0
-    assert session.raw["emg"].data == {"path": "subject.edf", "kind": "emg"}
