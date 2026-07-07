@@ -9,6 +9,7 @@ plan/*
 !.pre-commit-config.yaml
 # !.github/
 # !.github/**
+graphify-out/
 
 # agentics
 AGENTS.md
