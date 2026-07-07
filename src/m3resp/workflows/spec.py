@@ -27,6 +27,7 @@ class SpecOutputsConfig:
     event_csvs: bool = True
     parameters_csv: bool = False
     postprocessing: bool = False
+    structured_export: bool = False
     figures: bool = False
 
 
@@ -135,6 +136,7 @@ def _parse_outputs(raw: Any, *, root: Path) -> SpecOutputsConfig:
         event_csvs=bool(raw.get("event_csvs", True)),
         parameters_csv=bool(raw.get("parameters_csv", False)),
         postprocessing=bool(raw.get("postprocessing", False)),
+        structured_export=bool(raw.get("structured_export", False)),
         figures=bool(raw.get("figures", False)),
     )
 

@@ -96,3 +96,24 @@ def _event_modality(event: Any) -> str:
     raise TypeError(
         "Manual offset alignment supports only Event and BreathEvent objects."
     )
+
+
+def compute_offsets_from_timestamps(
+    reference_modality: str, timestamps: Mapping[str, float]
+) -> dict[str, float]:
+    """Convert absolute per-device start timestamps into manual offsets
+    (plan_stage2.md Sec 20, "timestamp alignment").
+
+    Each modality's events are relative to that modality's own recording
+    start. If a modality's device started recording ``timestamps[modality]``
+    seconds after ``reference_modality``'s device did, its events must be
+    shifted forward by that same amount to land on the reference timeline.
+    Feed the result straight into `align_events_by_modality_offset`.
+    """
+
+    if reference_modality not in timestamps:
+        raise KeyError(
+            f"reference_modality {reference_modality!r} is not in timestamps"
+        )
+    reference_time = timestamps[reference_modality]
+    return {modality: value - reference_time for modality, value in timestamps.items()}

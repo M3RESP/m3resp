@@ -27,3 +27,7 @@ class UnknownStepError(PipelineError):
 
 class PipelineSpecError(PipelineError):
     """Raised when a pipeline spec is malformed or fails static validation."""
+
+
+class UnknownPipelineError(PipelineError):
+    """Raised when ``M3Session.run_pipeline`` references an unregistered name."""

@@ -51,6 +51,7 @@ def session_summary(
     event_csvs: bool = True,
     parameters_csv: bool = True,
     postprocessing: bool = True,
+    structured_export: bool = True,
 ) -> dict[str, Any]:
     target = Path(output_dir)
     target.mkdir(parents=True, exist_ok=True)
@@ -61,6 +62,7 @@ def session_summary(
         event_csvs=event_csvs,
         parameters_csv=parameters_csv,
         postprocessing=postprocessing,
+        structured_export=structured_export,
     )
     return {"output_dir": str(target)}
 
@@ -71,6 +73,7 @@ def session_summary(
         "value": "cv",
         "_spec_outputs": "_spec_outputs",
         "_spec_experiment": "_spec_experiment",
+        "_resolved_output_dir": "_resolved_output_dir",
         "session": "session",
     },
     writes=("result_path",),
@@ -80,13 +83,17 @@ def rotarc_result(
     value: float,
     _spec_outputs: Any,
     _spec_experiment: Any,
+    _resolved_output_dir: Path | None,
     session: M3Session,
     *,
     precision: int = 8,
 ) -> dict[str, Any]:
     """Derives the output path from the spec's ``experiment:`` and ``outputs:`` sections.
 
-    Output path: ``<outputs.dir>/subject_results/<run_identifier>/<subject>-<mode>-<tp>-<selection>.txt``
+    Output path: ``<outputs.dir>/[<timestamp>/]subject_results/<run_identifier>/<subject>-<mode>-<tp>-<selection>.txt``.
+    The optional timestamp segment is included when ``outputs.timestamped`` is
+    set - see ``_resolved_output_dir`` in ``run_spec`` for how it's computed
+    once per run and shared across every export step.
     """
 
     from m3resp.workflows.utils import subject_result_filename
@@ -94,7 +101,7 @@ def rotarc_result(
     exp = _spec_experiment
     out = _spec_outputs
 
-    if out is None or out.dir is None:
+    if _resolved_output_dir is None:
         raise ValueError(
             "export.rotarc_result requires 'outputs.dir' to be set in the pipeline spec."
         )
@@ -107,7 +114,9 @@ def rotarc_result(
                 f"export.rotarc_result requires '{field_name}' in the pipeline spec."
             )
 
-    output_dir = Path(out.dir) / "subject_results" / str(exp.run_identifier)
+    output_dir = (
+        Path(_resolved_output_dir) / "subject_results" / str(exp.run_identifier)
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     result_filename = subject_result_filename(
@@ -137,6 +146,7 @@ def rotarc_result(
         event_csvs=out.event_csvs,
         parameters_csv=out.parameters_csv,
         postprocessing=out.postprocessing,
+        structured_export=out.structured_export,
     )
 
     return {"result_path": str(result_path)}

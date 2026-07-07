@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -86,7 +85,10 @@ def run_pipeline(
         for key in ctx.values
         if key != SESSION_KEY and key not in parsed.inputs
     }
-    return PipelineResult(name=parsed.name, context=ctx, outputs=produced)
+    pipeline_result = PipelineResult(name=parsed.name, context=ctx, outputs=produced)
+    if ctx.session.datamodel is not None:
+        ctx.session.datamodel.record_pipeline_result(pipeline_result)
+    return pipeline_result
 
 
 def run_spec(
@@ -102,12 +104,34 @@ def run_spec(
     the spec's ``outputs`` and ``experiment`` sections into the context (so steps
     like ``export.rotarc_result`` can read them) and applies the ``outputs:``
     section after the pipeline finishes.
+
+    ``outputs.timestamped`` is resolved exactly once here into
+    ``_resolved_output_dir`` (and the raw stamp into ``_run_timestamp``), both
+    seeded into context alongside ``_spec_outputs``/``_spec_experiment``. Every
+    export path in the run - the automatic export below, built-in steps like
+    ``export.rotarc_result``, and any custom export step that reads
+    ``_resolved_output_dir`` - shares that one resolved directory, so a run
+    never ends up split across two different timestamp folders.
     """
 
+    from m3resp.workflows.utils import default_run_timestamp, resolve_output_dir
+
     parsed = load_spec(path)
+    run_timestamp = default_run_timestamp()
+    resolved_output_dir = (
+        resolve_output_dir(
+            parsed.outputs.dir,
+            timestamped=parsed.outputs.timestamped,
+            timestamp=run_timestamp,
+        )
+        if parsed.outputs.dir is not None
+        else None
+    )
     extra: dict[str, Any] = {
         "_spec_outputs": parsed.outputs,
         "_spec_experiment": parsed.experiment,
+        "_resolved_output_dir": resolved_output_dir,
+        "_run_timestamp": run_timestamp if parsed.outputs.timestamped else None,
     }
     result = run_pipeline(
         parsed,
@@ -141,9 +165,7 @@ def _apply_outputs(spec: PipelineSpec, result: PipelineResult) -> None:
     if step_names & explicit_export_steps:
         return
 
-    output_dir = Path(out.dir)
-    if out.timestamped:
-        output_dir = output_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = result.context.values.get("_resolved_output_dir") or Path(out.dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     session = result.session
@@ -160,6 +182,7 @@ def _apply_outputs(spec: PipelineSpec, result: PipelineResult) -> None:
         event_csvs=out.event_csvs,
         parameters_csv=out.parameters_csv,
         postprocessing=out.postprocessing,
+        structured_export=out.structured_export,
     )
 
     _maybe_log_summary(session, output_dir, spec)
@@ -248,13 +271,16 @@ def validate_spec(spec: PipelineSpec, *, available: set[str] | None = None) -> N
     """
 
     _ensure_steps_registered()
-    # _spec_outputs and _spec_experiment are always injected by run_spec before
-    # the pipeline executes, so treat them as globally available.
-    # Pre-seeded keys are exempt from duplicate-write detection.
+    # _spec_outputs, _spec_experiment, _resolved_output_dir, and _run_timestamp
+    # are always injected by run_spec before the pipeline executes, so treat
+    # them as globally available. Pre-seeded keys are exempt from
+    # duplicate-write detection.
     seeded: set[str] = {
         SESSION_KEY,
         "_spec_outputs",
         "_spec_experiment",
+        "_resolved_output_dir",
+        "_run_timestamp",
         *spec.inputs,
         *(available or set()),
     }
