@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.pipeline.registry import register_step
+from m3resp.workflows.registry import register_step
 
 
 @register_step(

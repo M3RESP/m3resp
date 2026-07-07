@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from m3resp.core.session import M3Session
-from m3resp.pipeline.registry import register_step
+from m3resp.workflows.registry import register_step
 
 
 @register_step(

@@ -4,16 +4,21 @@ Workflows are described as ordered lists of named steps in a YAML or JSON spec
 and executed by :func:`run_pipeline`, without writing custom Python per workflow.
 """
 
-from m3resp.pipeline.context import PipelineContext
-from m3resp.pipeline.engine import PipelineResult, run_pipeline, run_spec, validate_spec
-from m3resp.pipeline.registry import (
+from m3resp.workflows.context import PipelineContext
+from m3resp.workflows.engine import (
+    PipelineResult,
+    run_pipeline,
+    run_spec,
+    validate_spec,
+)
+from m3resp.workflows.registry import (
     STEP_REGISTRY,
     StepDefinition,
     available_steps,
     get_step,
     register_step,
 )
-from m3resp.pipeline.spec import PipelineSpec, StepSpec, load_spec
+from m3resp.workflows.spec import PipelineSpec, StepSpec, load_spec
 
 __all__ = [
     "STEP_REGISTRY",

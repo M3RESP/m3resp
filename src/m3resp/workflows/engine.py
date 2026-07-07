@@ -9,9 +9,9 @@ from typing import Any
 
 from m3resp.core.exceptions import PipelineSpecError
 from m3resp.core.session import M3Session
-from m3resp.pipeline.context import SESSION_KEY, PipelineContext
-from m3resp.pipeline.registry import StepDefinition, get_step
-from m3resp.pipeline.spec import PipelineSpec, StepSpec, load_spec
+from m3resp.workflows.context import SESSION_KEY, PipelineContext
+from m3resp.workflows.registry import StepDefinition, get_step
+from m3resp.workflows.spec import PipelineSpec, StepSpec, load_spec
 
 _STEPS_REGISTERED = False
 
@@ -25,7 +25,7 @@ def _ensure_steps_registered() -> None:
 
     global _STEPS_REGISTERED
     if not _STEPS_REGISTERED:
-        from m3resp.pipeline import steps as _steps  # noqa: F401
+        from m3resp.workflows import steps as _steps  # noqa: F401
 
         _STEPS_REGISTERED = True
 
@@ -213,11 +213,11 @@ def _maybe_log_summary(
 
     try:
         from loguru import logger
-        from m3resp.pipeline.utils import log_workflow_summary
+        from m3resp.workflows.utils import log_workflow_summary
     except ImportError:
         return
 
-    from m3resp.pipeline.summaries import (
+    from m3resp.workflows.summaries import (
         summarize_eit,
         summarize_emg,
         summarize_multimodal,

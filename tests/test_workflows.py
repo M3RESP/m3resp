@@ -11,7 +11,7 @@ import pytest
 from m3resp.adapters import EITProcessingAdapter
 from m3resp.core.exceptions import PipelineSpecError, UnknownStepError
 from m3resp.core.session import M3Session
-from m3resp.pipeline import load_spec, register_step, run_pipeline, validate_spec
+from m3resp.workflows import load_spec, register_step, run_pipeline, validate_spec
 
 
 # --------------------------------------------------------------------------- #
@@ -23,7 +23,7 @@ from m3resp.pipeline import load_spec, register_step, run_pipeline, validate_spe
 def _temp_steps():
     """Register throwaway steps for engine tests and clean them up after."""
 
-    from m3resp.pipeline.registry import STEP_REGISTRY
+    from m3resp.workflows.registry import STEP_REGISTRY
 
     created: list[str] = []
 
@@ -322,7 +322,7 @@ def test_rotarc_full_selection_spec_has_one_slice():
 
 
 def test_rotarc_result_step_writes_file_and_summary(tmp_path):
-    from m3resp.pipeline.spec import SpecExperimentConfig, SpecOutputsConfig
+    from m3resp.workflows.spec import SpecExperimentConfig, SpecOutputsConfig
 
     session = M3Session()
     outputs = SpecOutputsConfig(
