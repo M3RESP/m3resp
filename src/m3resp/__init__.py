@@ -11,7 +11,7 @@ from m3resp.core.events import (
 from m3resp.core.session import M3Session
 from m3resp.modalities.eit import load as load_eit
 from m3resp.modalities.emg import load as load_emg
-from m3resp.pipeline import (
+from m3resp.workflows import (
     PipelineResult,
     available_steps,
     load_spec,

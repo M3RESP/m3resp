@@ -20,7 +20,7 @@ from m3resp.core.session import (
     _iter_ventilator_detections,
     _normalize_ventilator_breath,
 )
-from m3resp.pipeline.registry import register_step
+from m3resp.workflows.registry import register_step
 
 
 @register_step(

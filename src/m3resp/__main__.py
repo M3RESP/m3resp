@@ -40,7 +40,7 @@ def main(argv: list[str] | None = None) -> None:
 
 
 def _cmd_run(spec_path: str) -> None:
-    from m3resp.pipeline.engine import run_spec
+    from m3resp.workflows.engine import run_spec
 
     run_spec(spec_path)
 

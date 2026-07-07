@@ -87,6 +87,6 @@ def available_steps() -> dict[str, str]:
     """Return a mapping of registered step name -> one-line summary."""
 
     # Ensure the built-in step package is imported so the registry is populated.
-    from m3resp.pipeline import steps  # noqa: F401
+    from m3resp.workflows import steps  # noqa: F401
 
     return {name: step.summary for name, step in sorted(STEP_REGISTRY.items())}
