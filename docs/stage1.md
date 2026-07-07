@@ -44,7 +44,7 @@ src/m3resp/
 ├── modalities/    Top-level load helpers (load_eit, load_emg)
 ├── export/        session_export, tables
 ├── visualization/ Session overview and synchronization plots
-└── pipeline/      Declarative engine, step registry, built-in steps
+└── workflows/      Declarative engine, step registry, built-in steps
     ├── steps/     eit.*, emg.*, metric.*, session.*, export.*
     ├── engine.py  run_pipeline, run_spec, validate_spec
     ├── spec.py    YAML/JSON parser

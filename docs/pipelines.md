@@ -102,6 +102,40 @@ The four keys for each step:
 - **`experiment`** — study metadata used by `export.rotarc_result` for output
   file naming (`subject_id`, `mode`, `timepoint`, `run_identifier`, `selection`).
 
+### Timestamped output directories
+
+Set `outputs.timestamped: true` to give every run its own subfolder
+(`<outputs.dir>/YYYYMMDD_HHMMSS/...`) instead of overwriting the same folder
+each time. This works the same way for *any* export path in the run:
+
+- The automatic export (no explicit export step in the spec).
+- Built-in export steps that need a directory, e.g. `export.rotarc_result`
+  (`<outputs.dir>/<timestamp>/subject_results/<run_identifier>/...`).
+- Any custom export step, by reading `_resolved_output_dir` from context.
+
+`run_spec` computes the timestamp exactly once per run and seeds it as
+`_resolved_output_dir` (a resolved `Path`, or `None` if `outputs.dir` isn't
+set) and `_run_timestamp` (the raw stamp, or `None` if not timestamped) into
+context, alongside `_spec_outputs`/`_spec_experiment`. Every export path in
+the run reads the *same* resolved directory, so a single run never ends up
+split across two different timestamp folders even if it uses more than one
+export mechanism. To make your own export step honor it:
+
+```python
+@register_step(
+    "export.my_thing",
+    reads={
+        "session": "session",
+        "output_dir": "_resolved_output_dir",   # None if outputs.dir isn't set
+    },
+    writes=("result_path",),
+)
+def my_thing(session, output_dir, **kwargs) -> dict:
+    if output_dir is None:
+        raise ValueError("export.my_thing requires 'outputs.dir' to be set.")
+    ...
+```
+
 ## Built-in steps
 
 Run `m3resp steps` to see the full list with descriptions. The main groups are:
@@ -161,10 +195,10 @@ a site-specific path.
 
 | File | Responsibility |
 |---|---|
-| `pipeline/registry.py` | `@register_step` decorator and the global step registry. |
-| `pipeline/spec.py` | Parse and validate a YAML or JSON spec into typed dataclasses. |
-| `pipeline/context.py` | `PipelineContext` — the shared artifact store wrapping an `M3Session`. |
-| `pipeline/engine.py` | `run_pipeline` and `run_spec` — bind arguments, validate, execute. |
-| `pipeline/steps/` | Built-in steps for EIT, EMG, metrics, session ops, and export. |
-| `pipeline/utils.py` | Shared utilities: signal slicing, JSON writing, summary logging. |
-| `pipeline/summaries.py` | Compact session summaries written to the log after a run. |
+| `workflows/registry.py` | `@register_step` decorator and the global step registry. |
+| `workflows/spec.py` | Parse and validate a YAML or JSON spec into typed dataclasses. |
+| `workflows/context.py` | `PipelineContext` — the shared artifact store wrapping an `M3Session`. |
+| `workflows/engine.py` | `run_pipeline` and `run_spec` — bind arguments, validate, execute. |
+| `workflows/steps/` | Built-in steps for EIT, EMG, metrics, session ops, and export. |
+| `workflows/utils.py` | Shared utilities: signal slicing, JSON writing, summary logging, `resolve_output_dir` (timestamped output directories). |
+| `workflows/summaries.py` | Compact session summaries written to the log after a run. |

@@ -355,6 +355,7 @@ def test_rotarc_result_step_writes_file_and_summary(tmp_path):
             "cv": 0.1234,
             "_spec_outputs": outputs,
             "_spec_experiment": experiment,
+            "_resolved_output_dir": Path(tmp_path),
         },
     )
     result_path = Path(result.value("result_path"))

@@ -26,6 +26,7 @@ dependencies = [
   "loguru",
   "numpy",
   "pandas",
+  "pydantic>=2",
   "PyYAML",
 ]
 dynamic = ["version"]
