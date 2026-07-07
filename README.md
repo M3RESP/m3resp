@@ -117,6 +117,20 @@ session.export_summary("results/")
 See [docs/pipelines.md](docs/pipelines.md) for the full spec format, the list
 of built-in steps, and how to add your own.
 
+### Stage 2: shared data model and named pipelines
+
+On top of the Stage 1 API above, `m3resp` also provides a shared multimodal
+data model (`m3resp.data`: `Signal`, `ParameterResult`, `QualityFlag`,
+`LinkedBreath`, ...), typed collections on `M3Session`
+(`session.signals`, `session.parameter_results`, `session.quality`,
+`session.linked_breaths`), named one-call presets
+(`session.run_pipeline("eit" | "emg" | "multimodal")`), cross-modality
+synchronization helpers, structured export, and a persisted/audit data model
+for querying and exporting what a session did. See
+[docs/stage2.md](docs/stage2.md) for the full architecture and
+[docs/migration.md](docs/migration.md) if you're migrating code that calls
+`eitprocessing`/`resurfemg` directly.
+
 ## Development
 
 Install the pre-commit hooks once:
@@ -143,12 +157,20 @@ pytest
 
 - A `M3Session` API for loading, processing, and exporting multimodal sessions.
 - Adapters for `eitprocessing` and `resurfemg` that can be swapped or upgraded
-  without touching user code.
-- A declarative YAML/JSON pipeline engine and `m3resp` CLI.
-- Common event dataclasses (`BreathEvent`, `Event`) shared across modalities.
-- Manual raw-signal synchronization before processing.
-- CSV, JSON, and figure export helpers.
+  without touching user code, converting their output into shared
+  `Signal`/`ParameterResult`/`QualityFlag` objects.
+- A declarative YAML/JSON pipeline engine and `m3resp` CLI, plus named
+  one-call presets (`session.run_pipeline("eit" | "emg" | "multimodal")`).
+- Common event dataclasses (`BreathEvent`, `Event`) shared across modalities,
+  and `LinkedBreath` for matching breaths across modalities.
+- Manual-offset and timestamp-derived synchronization, plus signal resampling.
+- CSV, JSON, and figure export helpers, including a structured export of the
+  full typed session state.
+- A persisted, validated data model (`m3resp.datamodel`) for querying and
+  auditing what a session did.
 - ROTARC and multimodal pipeline examples.
+- Regression tests (`tests/regression/`) pinning the adapters as thin,
+  numerically identical wrappers around `eitprocessing`/`resurfemg`.
 
 ## Repository layout
 
