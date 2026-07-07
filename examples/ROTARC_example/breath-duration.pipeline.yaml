@@ -17,23 +17,33 @@ experiment:
 
 outputs:
   dir: ../../output/rotarc-breath-duration
-  timestamped: false      # export.rotarc_result writes to a fixed run folder
+  # export.rotarc_result honors this: results land under
+  # <dir>/<timestamp>/subject_results/<run_identifier>/... instead of
+  # overwriting the same folder on every run. Set to false to go back to a
+  # fixed, non-timestamped run folder.
+  timestamped: true
   summary_json: true
   event_csvs: true
   parameters_csv: false
-  postprocessing: false
+  postprocessing: true
 
 inputs:
-  eit_file: .../PCvPS-Blankman/raw .bin files/B001/B001_01_01.bin
+  eit_file: /home/mahyart/Desktop/M3Resp/EIT_EMG/ajM3resp_02_001_01.bin #.../PCvPS-Blankman/raw .bin files/B001/B001_01_01.bin
   vendor: draeger
 
 steps:
   - uses: eit.load
     with: { file: "@eit_file", vendor: "@vendor" }
 
+  # start/end are sample indices into eit_file above (0:1550 = the full
+  # recording for the currently configured file, 1550 samples at 50 Hz).
+  # Re-check these against len(raw_eit) if you point eit_file at a
+  # different recording - an out-of-range slice fails silently (empty
+  # result) rather than raising, and shows up later as a confusing crash
+  # in rate/breath detection.
   - uses: eit.slice
     in:  { signal: raw_eit }
-    with: { start: 5373, end: 6159, mode: index }
+    with: { start: 0, end: 1550, mode: index }
     out: { result: selected_eit }
 
   - uses: eit.detect_rates
@@ -48,7 +58,7 @@ steps:
 
   - uses: eit.slice
     in:  { signal: global_impedance }
-    with: { start: 5373, end: 6159, mode: index }
+    with: { start: 0, end: 1550, mode: index }
     out: { result: detection_signal }
 
   - uses: eit.detect_breaths

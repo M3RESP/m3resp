@@ -6,9 +6,13 @@ import copy
 from collections.abc import Callable
 from typing import Any
 
+import numpy as np
+
 from m3resp.core.events import BreathEvent
 from m3resp.core.events import coerce_breath_events
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
+from m3resp.data import ParameterResult, QualityFlag, Signal
+from m3resp.data.signals import Modality, ProcessingState
 
 
 class EITProcessingAdapter:
@@ -284,6 +288,106 @@ class EITProcessingAdapter:
             )
         return compute(sequence, **kwargs)
 
+    # -- Milestone 2.3: conversion to m3resp-native Layer 1 objects -----------
+    #
+    # These convert `preprocess()`'s output dict (still raw `eitprocessing`
+    # `ContinuousData`/`SparseData` objects) into `m3resp.data` objects. They
+    # duck-type on `.values`/`.time`/`.sample_frequency`/`.unit`/`.name` rather
+    # than importing `eitprocessing` types, so they also work against any
+    # object with that shape (e.g. in tests, without the optional dependency).
+
+    def to_signals(self, preprocessed: dict[str, Any]) -> list[Signal]:
+        """Convert preprocessed global-impedance waveforms into `Signal` objects."""
+
+        signals: list[Signal] = []
+        raw_gi = preprocessed.get("raw_global_impedance")
+        if raw_gi is not None:
+            signals.append(
+                _continuous_data_to_signal(
+                    raw_gi,
+                    modality="eit",
+                    channel="global_impedance",
+                    processing_state="raw",
+                )
+            )
+
+        filtered_gi = preprocessed.get("filtered_global_impedance")
+        if filtered_gi is not None and filtered_gi is not raw_gi:
+            signals.append(
+                _continuous_data_to_signal(
+                    filtered_gi,
+                    modality="eit",
+                    channel="global_impedance",
+                    processing_state="filtered",
+                )
+            )
+        return signals
+
+    def to_parameters(self, preprocessed: dict[str, Any]) -> list[ParameterResult]:
+        """Convert rate/TIV/EELI results into `ParameterResult` objects."""
+
+        parameters: list[ParameterResult] = []
+
+        respiratory_rate_hz = preprocessed.get("respiratory_rate_hz")
+        if respiratory_rate_hz is not None:
+            parameters.append(
+                ParameterResult(
+                    name="respiratory_rate",
+                    value=float(respiratory_rate_hz),
+                    modality="eit",
+                    unit="Hz",
+                    method="eitprocessing.RateDetection",
+                )
+            )
+
+        heart_rate_hz = preprocessed.get("heart_rate_hz")
+        if heart_rate_hz is not None:
+            parameters.append(
+                ParameterResult(
+                    name="heart_rate",
+                    value=float(heart_rate_hz),
+                    modality="eit",
+                    unit="Hz",
+                    method="eitprocessing.RateDetection",
+                )
+            )
+
+        for key, method in (
+            ("continuous_tiv", "eitprocessing.TIV"),
+            ("eeli", "eitprocessing.EELI"),
+            ("pixel_tiv", "eitprocessing.TIV"),
+        ):
+            sparse = preprocessed.get(key)
+            if sparse is not None:
+                parameters.extend(
+                    _sparse_data_to_parameters(sparse, modality="eit", method=method)
+                )
+        return parameters
+
+    def to_quality_flags(self, preprocessed: dict[str, Any]) -> list[QualityFlag]:
+        """Convert preprocessing completeness into `QualityFlag` objects.
+
+        `eitprocessing` does not expose an explicit signal-quality score at
+        this stage, so these flags report whether the optional preprocessing
+        outputs a downstream step depends on (rate detection, breath
+        intervals) were actually produced.
+        """
+
+        return [
+            QualityFlag(
+                name="respiratory_rate_detected",
+                passed=preprocessed.get("respiratory_rate_hz") is not None,
+                severity="warning",
+                modality="eit",
+            ),
+            QualityFlag(
+                name="breath_intervals_detected",
+                passed=preprocessed.get("breath_intervals") is not None,
+                severity="warning",
+                modality="eit",
+            ),
+        ]
+
 
 def _require_eit_sequence(sequence: Any) -> None:
     if not hasattr(sequence, "eit_data") or not hasattr(sequence, "continuous_data"):
@@ -309,3 +413,55 @@ def _breath_intervals_to_dicts(breath_intervals: Any) -> list[dict[str, Any]]:
         }
         for breath in breath_intervals.values
     ]
+
+
+def _continuous_data_to_signal(
+    obj: Any,
+    *,
+    modality: Modality,
+    channel: str | None,
+    processing_state: ProcessingState,
+) -> Signal:
+    """Convert an `eitprocessing.ContinuousData`-shaped object to a `Signal`."""
+
+    return Signal(
+        values=obj.values,
+        time=obj.time,
+        sample_frequency=getattr(obj, "sample_frequency", None),
+        unit=getattr(obj, "unit", None),
+        name=getattr(obj, "name", None) or getattr(obj, "label", None),
+        modality=modality,
+        channel=channel,
+        processing_state=processing_state,
+    )
+
+
+def _sparse_data_to_parameters(
+    obj: Any, *, modality: str, method: str
+) -> list[ParameterResult]:
+    """Convert an `eitprocessing.SparseData`-shaped object (one value per
+    breath) into one `ParameterResult` per non-NaN sample.
+    """
+
+    values = np.asarray(obj.values)
+    times = np.asarray(obj.time)
+    name = getattr(obj, "name", None) or getattr(obj, "label", None) or "parameter"
+    unit = getattr(obj, "unit", None)
+
+    results: list[ParameterResult] = []
+    for index, value in enumerate(values):
+        if np.ndim(value) == 0 and np.isnan(value):
+            continue
+        metadata = {"time": float(times[index])} if index < len(times) else {}
+        results.append(
+            ParameterResult(
+                name=name,
+                value=value,
+                modality=modality,
+                unit=unit,
+                breath_id=str(index),
+                method=method,
+                metadata=metadata,
+            )
+        )
+    return results
