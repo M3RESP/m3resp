@@ -32,10 +32,6 @@ def summarize_eit(session: M3Session) -> dict[str, Any]:
 def summarize_emg(session: M3Session) -> dict[str, Any]:
     emg = session.processed["emg"]
     postprocessing = session.parameters.get("emg_postprocessing", {})
-    computed = postprocessing.get("computed", {})
-    ventilator_breaths = computed.get("event_detection", {}).get(
-        "detect_ventilator_breath", []
-    )
     summary = {
         "channel": emg["channel"],
         "fs": emg["fs"],
@@ -43,7 +39,7 @@ def summarize_emg(session: M3Session) -> dict[str, Any]:
         "n_raw_samples": len(emg["raw_channel"]),
         "n_filtered_samples": len(emg["filtered"]),
         "n_envelope_samples": len(emg["envelope"]),
-        "n_ventilator_breaths": len(ventilator_breaths),
+        "n_ventilator_breaths": len(session.events.get("ventilator_breaths", [])),
     }
     if "emg_breaths" in session.events:
         summary["n_emg_breaths"] = len(session.events["emg_breaths"])

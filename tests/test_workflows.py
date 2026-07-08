@@ -134,6 +134,42 @@ def test_public_api_exposes_engine_and_steps():
     } <= (set(steps))
 
 
+def test_emg_postprocessing_registers_one_step_per_function():
+    """emg.* postprocessing is decomposed like eit.*: one step per operation."""
+
+    import m3resp
+
+    steps = set(m3resp.available_steps())
+    assert "emg.postprocess" not in steps
+    assert {
+        "emg.load_ventilator",
+        "emg.ventilator_channels",
+        "emg.peak_indices",
+        "emg.moving_baseline",
+        "emg.slopesum_baseline",
+        "emg.detect_ventilator_breath",
+        "emg.find_occluded_breaths",
+        "emg.onoffpeak_baseline_crossing",
+        "emg.onoffpeak_slope_extrapolation",
+        "emg.time_to_peak",
+        "emg.pseudo_slope",
+        "emg.amplitude",
+        "emg.time_product",
+        "emg.area_under_baseline",
+        "emg.respiratory_rate",
+        "emg.ventilator_respiratory_rate",
+        "emg.snr_pseudo",
+        "emg.percentage_under_baseline",
+        "emg.detect_local_high_aub",
+        "emg.detect_extreme_time_products",
+        "emg.detect_non_consecutive_manoeuvres",
+        "emg.evaluate_bell_curve_error",
+        "emg.evaluate_event_timing",
+        "emg.evaluate_respiratory_rates",
+        "emg.normalize_ventilator_breaths",
+    } <= steps
+
+
 # --------------------------------------------------------------------------- #
 # ROTARC pipeline — fake eitprocessing primitives                             #
 # --------------------------------------------------------------------------- #
