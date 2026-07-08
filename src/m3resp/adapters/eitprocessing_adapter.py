@@ -13,6 +13,7 @@ from m3resp.core.events import coerce_breath_events
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
 from m3resp.data import ParameterResult, QualityFlag, Signal
 from m3resp.data.signals import Modality, ProcessingState
+from m3resp.processing.filters import butterworth_filter
 
 
 class EITProcessingAdapter:
@@ -85,10 +86,8 @@ class EITProcessingAdapter:
         """Run the Stage 1 EIT preprocessing pipeline through `eitprocessing`."""
 
         try:
-            import numpy as np
             from eitprocessing.features.breath_detection import BreathDetection
             from eitprocessing.features.rate_detection import RateDetection
-            from eitprocessing.filters.butterworth_filters import ButterworthFilter
             from eitprocessing.filters.mdn import MDNFilter
             from eitprocessing.parameters.eeli import EELI
             from eitprocessing.parameters.tidal_impedance_variation import TIV
@@ -158,14 +157,12 @@ class EITProcessingAdapter:
                 if normalized_filter_mode == "lowpass"
                 else (highpass_hz, lowpass_hz)
             )
-            eit_filter = ButterworthFilter(
+            filtered_pixels = butterworth_filter(
+                np.nan_to_num(raw_eit.pixel_impedance),
                 filter_type=normalized_filter_mode,
                 cutoff_frequency=cutoff_frequency,
-                order=filter_order,
                 sample_frequency=raw_eit.sample_frequency,
-            )
-            filtered_pixels = eit_filter.apply(
-                np.nan_to_num(raw_eit.pixel_impedance),
+                order=filter_order,
                 axis=0,
                 captures=filter_captures,
             )
