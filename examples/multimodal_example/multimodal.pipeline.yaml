@@ -1,9 +1,6 @@
 # Full multimodal (EIT + EMG + ventilator) pipeline.
 #
 # Run with: python -m m3resp run multimodal.pipeline.yaml
-#
-# The ventilator array can't be serialized to YAML, so it is not passed as a
-# step param; `emg.postprocess` reads it from the session after `emg.load`.
 
 name: multimodal
 
@@ -27,7 +24,10 @@ steps:
     with: { file: "@eit_file", vendor: draeger }
 
   - uses: emg.load
-    with: { file: "@emg_file", vent_file: "@vent_file" }
+    with: { file: "@emg_file" }
+
+  - uses: emg.load_ventilator
+    with: { file: "@vent_file" }
 
   # Synchronize raw signals before processing
   - uses: session.sync_raw
@@ -70,46 +70,26 @@ steps:
   - uses: emg.detect_breaths
     with: { min_breath_width_seconds: 1.0, half_window_seconds: 0.5 }
 
-  - uses: emg.postprocess
-    # ventilator is read from session.raw["vent"] automatically at run time
+  - uses: emg.peak_indices
+
+  - uses: emg.ventilator_channels
     with:
-      ventilator_pressure_channel: 0
-      ventilator_flow_channel: 1
-      ventilator_volume_channel: 2
-      ventilator_breath_width_seconds: 0.5
-      baseline_window_seconds: 30.0
-      baseline_step_seconds: 1.0
-      baseline_percentile: 33.0
-      slope_window_seconds: 0.5
-      aub_window_seconds: 5.0
-      selected_functions:
-        baseline:
-          moving_baseline: true
-          slopesum_baseline: true
-        event_detection:
-          find_occluded_breaths: true
-          onoffpeak_baseline_crossing: false
-          onoffpeak_slope_extrapolation: false
-          detect_ventilator_breath: true
-          detect_emg_breaths: true
-        features:
-          time_to_peak: false
-          pseudo_slope: false
-          amplitude: false
-          time_product: false
-          area_under_baseline: false
-          respiratory_rate: false
-        quality_assessment:
-          snr_pseudo: false
-          pocc_quality: false
-          interpeak_dist: false
-          percentage_under_baseline: false
-          detect_local_high_aub: false
-          detect_extreme_time_products: false
-          detect_non_consecutive_manoeuvres: true
-          evaluate_bell_curve_error: false
-          evaluate_event_timing: false
-          evaluate_respiratory_rates: false
+      pressure_channel: 0
+      flow_channel: 1
+      volume_channel: 2
+
+  - uses: emg.slopesum_baseline
+    with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
+
+  - uses: emg.find_occluded_breaths
+
+  - uses: emg.detect_ventilator_breath
+    with: { breath_width_seconds: 0.5 }
+
+  - uses: emg.detect_non_consecutive_manoeuvres
+
+  - uses: emg.normalize_ventilator_breaths
+    with: { breath_width_seconds: 0.5 }
 
   # No explicit export step needed — the `outputs:` section above handles
   # creating the timestamped directory and calling export_session_summary.

@@ -109,7 +109,7 @@ Run `m3resp steps` to see the full list with descriptions. The main groups are:
 | Prefix | What it covers |
 |---|---|
 | `eit.*` | Load, slice, filter, detect rates/breaths, compute TIV/EELI/pixel TIV |
-| `emg.*` | Load, preprocess, detect breaths, postprocess |
+| `emg.*` | Load (EMG/ventilator), preprocess, detect breaths, compute per-function baseline/event-detection/feature/quality-assessment postprocessing steps |
 | `session.*` | Cross-modality operations (raw signal synchronization) |
 | `metric.*` | Reduction steps (e.g. coefficient of variation of intervals) |
 | `export.*` | Write results to disk (scalar files, JSON, session summary, ROTARC result) |
