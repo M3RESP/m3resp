@@ -28,6 +28,7 @@ dependencies = [
   "pandas",
   "pydantic>=2",
   "PyYAML",
+  "scipy",
 ]
 dynamic = ["version"]
 

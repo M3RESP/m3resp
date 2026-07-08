@@ -13,6 +13,7 @@ from m3resp.core.events import coerce_breath_events
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
 from m3resp.data import ParameterResult, QualityFlag, Signal
 from m3resp.data.signals import ProcessingState
+from m3resp.processing.windows import rolling_arv
 
 POSTPROCESSING_FUNCTIONS: dict[str, tuple[str, ...]] = {
     "baseline": ("moving_baseline", "slopesum_baseline"),
@@ -272,7 +273,6 @@ class ReSurfEMGAdapter:
 
         try:
             import numpy as np
-            from resurfemg.preprocessing.envelope import full_rolling_arv
             from resurfemg.preprocessing.filtering import emg_bandpass_butter
         except ImportError as exc:
             raise OptionalDependencyError(
@@ -297,7 +297,7 @@ class ReSurfEMGAdapter:
             fs_emg=fs,
         )
         envelope_window_samples = max(1, int(envelope_window_seconds * fs))
-        envelope = full_rolling_arv(filtered, envelope_window_samples)
+        envelope = rolling_arv(filtered, window_length=envelope_window_samples)
 
         return {
             **recording,
