@@ -77,6 +77,15 @@ packages = ["src/m3resp"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.marimo.runtime]
+# Raise the cell-output size cap (marimo default 8 MB) so the multimodal viewer
+# can render lower-downsample / wider-window traces. A full-resolution 180 s
+# Biopac window is ~18 MB of Plotly JSON; 50 MB leaves headroom while still
+# guarding against runaway outputs. Note: Scattergl speeds up *rendering* but
+# does not shrink this serialized payload, and the figure is re-sent over the
+# WebSocket on every slider drag -- keep downsample moderate for smooth interaction.
+output_max_bytes = 50_000_000
+
 [tool.ruff]
 line-length = 88
 target-version = "py310"
