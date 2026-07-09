@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from importlib import import_module
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -31,6 +32,7 @@ from m3resp.processing.peaks import (
     detect_occluded_breath_peaks,
     detect_ventilator_breath_peaks,
 )
+from m3resp.processing.quality import quality_flag_from_result, skipped_quality_flag
 from m3resp.processing.windows import rolling_arv
 
 POSTPROCESSING_FUNCTIONS: dict[str, tuple[str, ...]] = {
@@ -72,6 +74,76 @@ _POSTPROCESSING_MODULES = {
 }
 
 
+def _load_biopac_txt(path: str) -> dict[str, Any]:
+    """Load a Biopac/AcqKnowledge tab-delimited ``.txt`` export.
+
+    The header looks like::
+
+        Paw_EMG.gtl
+        0.5 msec/sample
+        3 channels
+        Paw - TSD104A - Blood Pressure, DA100C
+        cmH2O
+        EMGdi - EMG100C
+        mV
+        EMGps - EMG100C
+        mV
+        CH1<TAB>CH2<TAB>CH3
+        3571881<TAB>3571887<TAB>3571887
+        <numeric data rows...>
+
+    i.e. a title line, a ``msec/sample`` sampling-interval line, a
+    ``N channels`` line, then two lines per channel (label, unit), a ``CHn``
+    column header, a per-channel sample-count row, and finally the samples.
+    Returns the same ``(array, dataframe, metadata)``-shaped dict as
+    :meth:`ReSurfEMGAdapter.load`, with ``array`` channel-major
+    ``(n_channels, n_samples)`` and ``metadata["fs"]`` populated.
+    """
+
+    import pandas as pd
+
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        header: list[str] = [handle.readline().rstrip("\n") for _ in range(3)]
+
+    msec_per_sample = float(header[1].split()[0])
+    fs = 1000.0 / msec_per_sample
+    n_channels = int(header[2].split()[0])
+
+    labels: list[str] = []
+    units: list[str] = []
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        for _ in range(3):
+            handle.readline()
+        for _ in range(n_channels):
+            label_line = handle.readline().rstrip("\n")
+            unit_line = handle.readline().rstrip("\n")
+            # "Paw - TSD104A - Blood Pressure, DA100C" -> "Paw"
+            labels.append(label_line.split(" - ")[0].strip())
+            units.append(unit_line.strip())
+
+    # 3 title/rate/channel lines + 2 lines per channel + column-header row
+    # + per-channel sample-count row precede the numeric samples.
+    skiprows = 3 + 2 * n_channels + 2
+    dataframe = pd.read_csv(
+        path,
+        sep="\t",
+        skiprows=skiprows,
+        names=labels,
+        usecols=range(n_channels),
+        engine="c",
+    )
+    array = dataframe.to_numpy(dtype=float).T  # channel-major (n_channels, n_samples)
+    metadata = {
+        "fs": fs,
+        "labels": labels,
+        "units": units,
+        "file_name": Path(path).name,
+        "file_dir": str(Path(path).parent),
+        "file_extension": "txt",
+    }
+    return {"array": array, "dataframe": dataframe, "metadata": metadata}
+
+
 class ReSurfEMGAdapter:
     """Thin wrapper around `resurfemg`."""
 
@@ -83,6 +155,14 @@ class ReSurfEMGAdapter:
 
         if self._loader is not None:
             return self._loader(path, **kwargs)
+
+        # Biopac/AcqKnowledge tab-delimited text exports (used by the
+        # eit_emg_annemijn dataset) are not one of resurfemg's supported
+        # extensions and, unlike .npy/.csv, carry their sample rate and channel
+        # labels in a text header. Parse them ourselves so `metadata["fs"]`
+        # (required by `_preprocess_default`) is populated.
+        if str(path).lower().endswith(".txt"):
+            return _load_biopac_txt(path)
 
         try:
             from resurfemg.data_connector.converter_functions import load_file
@@ -219,23 +299,20 @@ class ReSurfEMGAdapter:
 
         quality_results = _computed_category(postprocessed, "quality_assessment")
         flags = [
-            QualityFlag(
+            quality_flag_from_result(
                 name=name,
-                passed=_quality_result_passed(value),
-                severity="info",
+                result=value,
                 modality="emg",
-                value=_scalar_or_none(value),
+                source_method=f"resurfemg.{name}",
             )
             for name, value in quality_results.items()
         ]
         for name, reason in postprocessed.get("skipped", {}).items():
             flags.append(
-                QualityFlag(
+                skipped_quality_flag(
                     name=name,
-                    passed=False,
-                    severity="warning",
                     modality="emg",
-                    message=str(reason),
+                    reason=str(reason),
                 )
             )
         return flags
@@ -891,23 +968,6 @@ def _as_parameter_value(value: Any) -> float | np.ndarray:
     if isinstance(value, (int, float)):
         return float(value)
     return np.asarray(value)
-
-
-def _quality_result_passed(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    array = np.asarray(value)
-    if array.dtype == bool:
-        return bool(array.all())
-    return True
-
-
-def _scalar_or_none(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    return None
 
 
 def _peak_indices_from_events(

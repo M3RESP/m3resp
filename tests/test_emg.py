@@ -69,6 +69,62 @@ def test_custom_emg_detector_normalization_still_works():
     ]
 
 
+def test_custom_emg_preprocess_callable_still_works():
+    adapter = ReSurfEMGAdapter()
+
+    processed = adapter.preprocess(
+        {"recording": True},
+        preprocess=lambda signal, *, gain: {"signal": signal, "gain": gain},
+        gain=2.0,
+    )
+
+    assert processed == {"signal": {"recording": True}, "gain": 2.0}
+
+
+def test_custom_emg_compute_callable_still_works():
+    adapter = ReSurfEMGAdapter()
+    events = [BreathEvent("emg", 0.0, 1.0, peak_time=0.5)]
+
+    features = adapter.compute_features(
+        {"processed": True},
+        events,
+        compute=lambda signal, detected_events, *, scale: {
+            "signal": signal,
+            "events": detected_events,
+            "scale": scale,
+        },
+        scale=3.0,
+    )
+
+    assert features == {
+        "signal": {"processed": True},
+        "events": events,
+        "scale": 3.0,
+    }
+
+
+def test_custom_emg_postprocess_callable_still_works():
+    adapter = ReSurfEMGAdapter()
+    events = [BreathEvent("emg", 0.0, 1.0, peak_time=0.5)]
+
+    result = adapter.postprocess(
+        {"processed": True},
+        events=events,
+        postprocess=lambda processed, *, events, label: {
+            "processed": processed,
+            "events": events,
+            "label": label,
+        },
+        label="custom",
+    )
+
+    assert result == {
+        "processed": {"processed": True},
+        "events": events,
+        "label": "custom",
+    }
+
+
 def test_default_preprocess_updates_emg_recording_with_fake_signal():
     pytest.importorskip("resurfemg")
     np = pytest.importorskip("numpy")

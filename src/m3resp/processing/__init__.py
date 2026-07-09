@@ -36,6 +36,13 @@ from m3resp.processing.peaks import (
     remove_duplicate_extrema,
     remove_low_amplitude_peaks,
 )
+from m3resp.processing.quality import (
+    fraction_flag,
+    quality_flag_from_result,
+    skipped_quality_flag,
+    threshold_flag,
+    timing_window_flag,
+)
 from m3resp.processing.windows import (
     moving_average,
     naive_rolling_rms,
@@ -59,6 +66,7 @@ __all__ = [
     "detect_peaks",
     "detect_peaks_above_moving_average",
     "detect_ventilator_breath_peaks",
+    "fraction_flag",
     "harmonic_notch_filter",
     "highpass_filter",
     "lowpass_filter",
@@ -69,6 +77,7 @@ __all__ = [
     "onoff_from_slope",
     "pair_valley_peak_valley",
     "pseudo_slope",
+    "quality_flag_from_result",
     "remove_duplicate_extrema",
     "remove_low_amplitude_peaks",
     "respiratory_rate_from_indices",
@@ -77,7 +86,10 @@ __all__ = [
     "rolling_rms",
     "rolling_rms_ci",
     "sample_intervals_to_breath_events",
+    "skipped_quality_flag",
     "tidal_variation",
+    "threshold_flag",
+    "timing_window_flag",
     "time_to_peak",
     "window_integral",
 ]

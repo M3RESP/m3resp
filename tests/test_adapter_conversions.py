@@ -153,7 +153,11 @@ class TestReSurfEMGAdapterConversions:
         by_name = {f.name: f for f in flags}
         assert by_name["snr_pseudo"].passed is True
         assert by_name["snr_pseudo"].value == 12.5
+        assert by_name["snr_pseudo"].metadata == {
+            "source_method": "resurfemg.snr_pseudo"
+        }
         assert by_name["interpeak_dist"].passed is True
         assert by_name["pocc_quality"].passed is False
         assert by_name["pocc_quality"].severity == "warning"
         assert by_name["pocc_quality"].message == "missing ventilator pressure"
+        assert by_name["pocc_quality"].metadata == {"skipped": True}
