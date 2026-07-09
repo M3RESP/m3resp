@@ -129,6 +129,11 @@ class TestReSurfEMGAdapterConversions:
         by_name = {p.name: p for p in parameters}
         assert by_name["amplitude"].value == 1.5
         assert by_name["amplitude"].is_scalar
+        assert by_name["amplitude"].method == "resurfemg.amplitude"
+        assert by_name["amplitude"].metadata == {
+            "source_method": "resurfemg.amplitude",
+            "implementation": "m3resp.processing.metrics",
+        }
         assert not by_name["time_to_peak"].is_scalar
 
     def test_to_quality_flags_converts_results_and_skipped_functions(self):

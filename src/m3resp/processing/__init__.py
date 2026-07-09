@@ -10,6 +10,32 @@ from m3resp.processing.filters import (
     lowpass_filter,
     notch_filter,
 )
+from m3resp.processing.intervals import (
+    baseline_crossings,
+    onoff_from_baseline_crossings,
+    onoff_from_slope,
+    sample_intervals_to_breath_events,
+)
+from m3resp.processing.metrics import (
+    amplitude_at_peaks,
+    area_under_baseline,
+    pseudo_slope,
+    respiratory_rate_from_indices,
+    tidal_variation,
+    time_to_peak,
+    window_integral,
+)
+from m3resp.processing.peaks import (
+    closest_event_indices,
+    detect_emg_breath_peaks,
+    detect_occluded_breath_peaks,
+    detect_peaks,
+    detect_peaks_above_moving_average,
+    detect_ventilator_breath_peaks,
+    pair_valley_peak_valley,
+    remove_duplicate_extrema,
+    remove_low_amplitude_peaks,
+)
 from m3resp.processing.windows import (
     moving_average,
     naive_rolling_rms,
@@ -20,18 +46,38 @@ from m3resp.processing.windows import (
 )
 
 __all__ = [
+    "amplitude_at_peaks",
+    "area_under_baseline",
     "bandpass_filter",
     "bandstop_filter",
+    "baseline_crossings",
     "butterworth_filter",
+    "closest_event_indices",
     "compute_power_loss",
+    "detect_emg_breath_peaks",
+    "detect_occluded_breath_peaks",
+    "detect_peaks",
+    "detect_peaks_above_moving_average",
+    "detect_ventilator_breath_peaks",
     "harmonic_notch_filter",
     "highpass_filter",
     "lowpass_filter",
     "moving_average",
     "naive_rolling_rms",
     "notch_filter",
+    "onoff_from_baseline_crossings",
+    "onoff_from_slope",
+    "pair_valley_peak_valley",
+    "pseudo_slope",
+    "remove_duplicate_extrema",
+    "remove_low_amplitude_peaks",
+    "respiratory_rate_from_indices",
     "rolling_arv",
     "rolling_arv_ci",
     "rolling_rms",
     "rolling_rms_ci",
+    "sample_intervals_to_breath_events",
+    "tidal_variation",
+    "time_to_peak",
+    "window_integral",
 ]

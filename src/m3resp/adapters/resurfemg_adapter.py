@@ -13,6 +13,24 @@ from m3resp.core.events import coerce_breath_events
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
 from m3resp.data import ParameterResult, QualityFlag, Signal
 from m3resp.data.signals import ProcessingState
+from m3resp.processing.filters import harmonic_notch_filter
+from m3resp.processing.intervals import (
+    onoff_from_baseline_crossings,
+    onoff_from_slope,
+)
+from m3resp.processing.metrics import (
+    amplitude_at_peaks,
+    area_under_baseline,
+    pseudo_slope,
+    respiratory_rate_from_indices,
+    time_to_peak,
+    window_integral,
+)
+from m3resp.processing.peaks import (
+    detect_emg_breath_peaks,
+    detect_occluded_breath_peaks,
+    detect_ventilator_breath_peaks,
+)
 from m3resp.processing.windows import rolling_arv
 
 POSTPROCESSING_FUNCTIONS: dict[str, tuple[str, ...]] = {
@@ -175,6 +193,10 @@ class ReSurfEMGAdapter:
                 value=_as_parameter_value(value),
                 modality="emg",
                 method=f"resurfemg.{name}",
+                metadata={
+                    "source_method": f"resurfemg.{name}",
+                    "implementation": "m3resp.processing.metrics",
+                },
             )
             for name, value in features.items()
         ]
@@ -268,8 +290,20 @@ class ReSurfEMGAdapter:
         high_pass_hz: float = 80,
         low_pass_hz: float | None = None,
         envelope_window_seconds: float = 0.5,
+        notch_base_frequency: float | None = None,
+        notch_max_frequency: float | None = None,
+        notch_quality_factor: float = 30.0,
     ) -> dict[str, Any]:
-        """Run the Stage 1 EMG preprocessing pipeline through ReSurfEMG."""
+        """Run the Stage 1 EMG preprocessing pipeline through ReSurfEMG.
+
+        ``notch_base_frequency`` opts into harmonic notch filtering (e.g.
+        ``50.0`` for mains hum, or a co-recorded EIT device's frame rate, which
+        injects a harmonic comb into the sEMG whenever the EIT device is
+        running simultaneously). It is applied to the band-passed signal, after
+        ``emg_bandpass_butter`` and before the envelope is computed, so a
+        narrow high-pass alone (which only removes the fundamental) doesn't
+        leave higher harmonics inside the pass band untouched.
+        """
 
         try:
             import numpy as np
@@ -296,6 +330,14 @@ class ReSurfEMGAdapter:
             low_pass=low_pass_hz,
             fs_emg=fs,
         )
+        if notch_base_frequency is not None:
+            filtered = harmonic_notch_filter(
+                filtered,
+                base_frequency=notch_base_frequency,
+                sample_frequency=fs,
+                max_frequency=notch_max_frequency or low_pass_hz,
+                quality_factor=notch_quality_factor,
+            )
         envelope_window_samples = max(1, int(envelope_window_seconds * fs))
         envelope = rolling_arv(filtered, window_length=envelope_window_samples)
 
@@ -310,6 +352,15 @@ class ReSurfEMGAdapter:
                 "high_pass_hz": high_pass_hz,
                 "low_pass_hz": low_pass_hz,
                 "envelope_window_seconds": envelope_window_seconds,
+                "notch_base_frequency": notch_base_frequency,
+                "notch_max_frequency": (
+                    (notch_max_frequency or low_pass_hz)
+                    if notch_base_frequency is not None
+                    else None
+                ),
+                "notch_quality_factor": (
+                    notch_quality_factor if notch_base_frequency is not None else None
+                ),
             },
         }
 
@@ -323,14 +374,6 @@ class ReSurfEMGAdapter:
     ) -> list[dict[str, Any]]:
         """Run ReSurfEMG EMG breath detection and return common rows."""
 
-        try:
-            from resurfemg.postprocessing.event_detection import detect_emg_breaths
-        except ImportError as exc:
-            raise OptionalDependencyError(
-                "EMG breath detection requires the optional dependency `resurfemg`. "
-                'Install with `pip install "m3resp[emg]"`.'
-            ) from exc
-
         if not isinstance(processed_emg, dict) or "envelope" not in processed_emg:
             raise UnsupportedWorkflowError(
                 "Default EMG breath detection expects processed EMG data from "
@@ -343,9 +386,9 @@ class ReSurfEMGAdapter:
         min_width_samples = max(1, int(min_breath_width_seconds * fs))
         half_window_samples = max(1, int(half_window_seconds * fs))
 
-        peak_indices = detect_emg_breaths(
-            emg_env=envelope,
-            min_peak_width_s=min_width_samples,
+        peak_indices = detect_emg_breath_peaks(
+            envelope,
+            min_peak_width_samples=min_width_samples,
             **kwargs,
         )
 
@@ -484,13 +527,11 @@ class ReSurfEMGAdapter:
             vent_width_samples = max(1, int(ventilator_breath_width_seconds * vent_fs))
             if enabled(("event_detection", "detect_ventilator_breath")):
                 ventilator_breath_indices = np.asarray(
-                    self.run_postprocessing_function(
-                        "event_detection",
-                        "detect_ventilator_breath",
+                    detect_ventilator_breath_peaks(
                         v_vent,
-                        0,
-                        len(v_vent) - 1,
-                        vent_width_samples,
+                        start_index=0,
+                        end_index=len(v_vent) - 1,
+                        width_samples=vent_width_samples,
                     ),
                     dtype=int,
                 )
@@ -503,12 +544,10 @@ class ReSurfEMGAdapter:
                 if peep is None:
                     peep = float(np.nanmedian(p_vent))
                 pocc_indices = np.asarray(
-                    self.run_postprocessing_function(
-                        "event_detection",
-                        "find_occluded_breaths",
+                    detect_occluded_breath_peaks(
                         p_vent,
-                        vent_fs,
-                        peep,
+                        sample_frequency=vent_fs,
+                        peep=peep,
                     ),
                     dtype=int,
                 )
@@ -560,9 +599,7 @@ class ReSurfEMGAdapter:
         if len(peak_indices_array) and baseline is not None:
             if enabled(("event_detection", "onoffpeak_baseline_crossing")):
                 computed["event_detection"]["onoffpeak_baseline_crossing"] = (
-                    self.run_postprocessing_function(
-                        "event_detection",
-                        "onoffpeak_baseline_crossing",
+                    onoff_from_baseline_crossings(
                         envelope,
                         baseline,
                         peak_indices_array,
@@ -574,72 +611,50 @@ class ReSurfEMGAdapter:
             slope_window_samples = max(1, int(slope_window_seconds * fs))
             if enabled(("event_detection", "onoffpeak_slope_extrapolation")):
                 computed["event_detection"]["onoffpeak_slope_extrapolation"] = (
-                    self.run_postprocessing_function(
-                        "event_detection",
-                        "onoffpeak_slope_extrapolation",
+                    onoff_from_slope(
                         envelope,
-                        fs,
-                        peak_indices_array,
-                        slope_window_samples,
+                        sample_frequency=fs,
+                        peak_indices=peak_indices_array,
+                        slope_window=slope_window_samples,
                     )
                 )
 
             if start_indices is not None and end_indices is not None:
                 if enabled(("features", "time_to_peak")):
-                    computed["features"]["time_to_peak"] = (
-                        self.run_postprocessing_function(
-                            "features",
-                            "time_to_peak",
-                            envelope,
-                            start_indices,
-                            end_indices,
-                        )
+                    computed["features"]["time_to_peak"] = time_to_peak(
+                        envelope,
+                        start_indices,
+                        end_indices,
                     )
                 if enabled(("features", "pseudo_slope")):
-                    computed["features"]["pseudo_slope"] = (
-                        self.run_postprocessing_function(
-                            "features",
-                            "pseudo_slope",
-                            envelope,
-                            start_indices,
-                            end_indices,
-                        )
+                    computed["features"]["pseudo_slope"] = pseudo_slope(
+                        envelope,
+                        start_indices,
+                        end_indices,
                     )
                 if enabled(("features", "amplitude")):
-                    computed["features"]["amplitude"] = (
-                        self.run_postprocessing_function(
-                            "features",
-                            "amplitude",
-                            envelope,
-                            peak_indices_array,
-                            baseline,
-                        )
+                    computed["features"]["amplitude"] = amplitude_at_peaks(
+                        envelope,
+                        peak_indices_array,
+                        baseline,
                     )
                 if enabled(("features", "time_product")):
-                    computed["features"]["time_product"] = (
-                        self.run_postprocessing_function(
-                            "features",
-                            "time_product",
-                            envelope,
-                            fs,
-                            start_indices,
-                            end_indices,
-                            baseline,
-                        )
+                    computed["features"]["time_product"] = window_integral(
+                        envelope,
+                        fs,
+                        start_indices,
+                        end_indices,
+                        baseline,
                     )
                 if enabled(("features", "area_under_baseline")):
-                    computed["features"]["area_under_baseline"] = (
-                        self.run_postprocessing_function(
-                            "features",
-                            "area_under_baseline",
-                            envelope,
-                            fs,
-                            peak_indices_array,
-                            start_indices,
-                            end_indices,
-                            max(1, int(aub_window_seconds * fs)),
-                            baseline,
-                        )
+                    computed["features"]["area_under_baseline"] = area_under_baseline(
+                        envelope,
+                        fs,
+                        peak_indices_array,
+                        start_indices,
+                        end_indices,
+                        max(1, int(aub_window_seconds * fs)),
+                        baseline,
                     )
             else:
                 skipped["features"] = (
@@ -651,9 +666,7 @@ class ReSurfEMGAdapter:
                 and len(peak_indices_array) >= 2
             ):
                 computed["features"]["respiratory_rate"] = (
-                    self.run_postprocessing_function(
-                        "features", "respiratory_rate", peak_indices_array, fs
-                    )
+                    respiratory_rate_from_indices(peak_indices_array, fs)
                 )
             elif enabled(("features", "respiratory_rate")):
                 skipped["features.respiratory_rate"] = "Needs at least two EMG breaths."

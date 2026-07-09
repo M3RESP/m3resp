@@ -1,10 +1,10 @@
 """Registered EMG pipeline steps.
 
 Loading/preprocessing steps wrap the ``M3Session`` EMG stage methods.
-Postprocessing steps each wrap a single ``resurfemg.postprocessing`` function,
-mirroring the one-step-per-operation structure used by ``eit.py``. Upstream
-imports are deferred to call time so the package installs without the
-optional ``resurfemg`` dependency.
+Postprocessing steps keep the one-step-per-operation structure used by
+``eit.py``. Factored signal-processing primitives are used where available;
+remaining upstream imports are deferred to call time so the package installs
+without the optional ``resurfemg`` dependency.
 """
 
 from __future__ import annotations
@@ -19,6 +19,22 @@ from m3resp.core.session import (
     M3Session,
     _iter_ventilator_detections,
     _normalize_ventilator_breath,
+)
+from m3resp.processing.intervals import (
+    onoff_from_baseline_crossings,
+    onoff_from_slope,
+)
+from m3resp.processing.metrics import (
+    amplitude_at_peaks,
+    area_under_baseline as _area_under_baseline,
+    pseudo_slope as _pseudo_slope,
+    respiratory_rate_from_indices,
+    time_to_peak as _time_to_peak,
+    window_integral,
+)
+from m3resp.processing.peaks import (
+    detect_occluded_breath_peaks,
+    detect_ventilator_breath_peaks,
 )
 from m3resp.workflows.registry import register_step
 
@@ -196,14 +212,16 @@ def detect_ventilator_breath(
     ventilator_signals: Any, *, breath_width_seconds: float = 0.5
 ) -> dict[str, Any]:
     import numpy as np
-    from resurfemg.postprocessing.event_detection import (
-        detect_ventilator_breath as _detect_ventilator_breath,
-    )
 
     volume = ventilator_signals["volume"]
     fs = float(ventilator_signals["fs"])
     width_samples = max(1, int(breath_width_seconds * fs))
-    indices = _detect_ventilator_breath(volume, 0, len(volume) - 1, width_samples)
+    indices = detect_ventilator_breath_peaks(
+        volume,
+        start_index=0,
+        end_index=len(volume) - 1,
+        width_samples=width_samples,
+    )
     return {"ventilator_breath_indices": np.asarray(indices, dtype=int)}
 
 
@@ -217,15 +235,16 @@ def find_occluded_breaths(
     ventilator_signals: Any, *, peep: float | None = None
 ) -> dict[str, Any]:
     import numpy as np
-    from resurfemg.postprocessing.event_detection import (
-        find_occluded_breaths as _find_occluded_breaths,
-    )
 
     pressure = ventilator_signals["pressure"]
     fs = float(ventilator_signals["fs"])
     if peep is None:
         peep = float(np.nanmedian(pressure))
-    indices = _find_occluded_breaths(pressure, fs, peep)
+    indices = detect_occluded_breath_peaks(
+        pressure,
+        sample_frequency=fs,
+        peep=peep,
+    )
     return {"pocc_indices": np.asarray(indices, dtype=int)}
 
 
@@ -243,12 +262,9 @@ def onoffpeak_baseline_crossing(
     processed_emg: Any, baseline: Any, peak_indices: Any
 ) -> dict[str, Any]:
     import numpy as np
-    from resurfemg.postprocessing.event_detection import (
-        onoffpeak_baseline_crossing as _onoffpeak_baseline_crossing,
-    )
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
-    start_indices, end_indices, *_rest = _onoffpeak_baseline_crossing(
+    start_indices, end_indices, *_rest = onoff_from_baseline_crossings(
         envelope, baseline, peak_indices
     )
     return {"start_indices": start_indices, "end_indices": end_indices}
@@ -264,15 +280,15 @@ def onoffpeak_slope_extrapolation(
     processed_emg: Any, peak_indices: Any, *, slope_window_seconds: float = 0.5
 ) -> dict[str, Any]:
     import numpy as np
-    from resurfemg.postprocessing.event_detection import (
-        onoffpeak_slope_extrapolation as _onoffpeak_slope_extrapolation,
-    )
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
     fs = float(processed_emg["fs"])
     slope_window_samples = max(1, int(slope_window_seconds * fs))
-    result = _onoffpeak_slope_extrapolation(
-        envelope, fs, peak_indices, slope_window_samples
+    result = onoff_from_slope(
+        envelope,
+        sample_frequency=fs,
+        peak_indices=peak_indices,
+        slope_window=slope_window_samples,
     )
     return {"onoffpeak_slope_result": result}
 
@@ -294,7 +310,6 @@ def time_to_peak(
     processed_emg: Any, start_indices: Any, end_indices: Any
 ) -> dict[str, Any]:
     import numpy as np
-    from resurfemg.postprocessing.features import time_to_peak as _time_to_peak
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
     return {"time_to_peak": _time_to_peak(envelope, start_indices, end_indices)}
@@ -314,7 +329,6 @@ def pseudo_slope(
     processed_emg: Any, start_indices: Any, end_indices: Any
 ) -> dict[str, Any]:
     import numpy as np
-    from resurfemg.postprocessing.features import pseudo_slope as _pseudo_slope
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
     return {"pseudo_slope": _pseudo_slope(envelope, start_indices, end_indices)}
@@ -332,10 +346,9 @@ def pseudo_slope(
 )
 def amplitude(processed_emg: Any, peak_indices: Any, baseline: Any) -> dict[str, Any]:
     import numpy as np
-    from resurfemg.postprocessing.features import amplitude as _amplitude
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
-    return {"amplitude": _amplitude(envelope, peak_indices, baseline)}
+    return {"amplitude": amplitude_at_peaks(envelope, peak_indices, baseline)}
 
 
 @register_step(
@@ -353,12 +366,11 @@ def time_product(
     processed_emg: Any, start_indices: Any, end_indices: Any, baseline: Any
 ) -> dict[str, Any]:
     import numpy as np
-    from resurfemg.postprocessing.features import time_product as _time_product
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
     fs = float(processed_emg["fs"])
     return {
-        "time_product": _time_product(
+        "time_product": window_integral(
             envelope, fs, start_indices, end_indices, baseline
         )
     }
@@ -386,9 +398,6 @@ def area_under_baseline(
     window_seconds: float = 5.0,
 ) -> dict[str, Any]:
     import numpy as np
-    from resurfemg.postprocessing.features import (
-        area_under_baseline as _area_under_baseline,
-    )
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
     fs = float(processed_emg["fs"])
@@ -412,12 +421,8 @@ def area_under_baseline(
     summary="Compute respiratory rate from detected EMG breath peaks.",
 )
 def respiratory_rate(peak_indices: Any, processed_emg: Any) -> dict[str, Any]:
-    from resurfemg.postprocessing.features import (
-        respiratory_rate as _respiratory_rate,
-    )
-
     fs = float(processed_emg["fs"])
-    return {"respiratory_rate": _respiratory_rate(peak_indices, fs)}
+    return {"respiratory_rate": respiratory_rate_from_indices(peak_indices, fs)}
 
 
 @register_step(
@@ -432,13 +437,11 @@ def respiratory_rate(peak_indices: Any, processed_emg: Any) -> dict[str, Any]:
 def ventilator_respiratory_rate(
     ventilator_breath_indices: Any, ventilator_signals: Any
 ) -> dict[str, Any]:
-    from resurfemg.postprocessing.features import (
-        respiratory_rate as _respiratory_rate,
-    )
-
     fs = float(ventilator_signals["fs"])
     return {
-        "ventilator_respiratory_rate": _respiratory_rate(ventilator_breath_indices, fs)
+        "ventilator_respiratory_rate": respiratory_rate_from_indices(
+            ventilator_breath_indices, fs
+        )
     }
 
 
