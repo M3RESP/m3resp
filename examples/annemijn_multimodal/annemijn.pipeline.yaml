@@ -1,0 +1,107 @@
+# Multimodal (EIT + diaphragm sEMG + airway pressure) pipeline for the
+# eit_emg_annemijn dataset -- the same data used by the marimo multimodal
+# viewer (tools/visualization_tool/multimodal_vis.py).
+#
+# Dataset:
+#   * EIT    -- Draeger, 50 Hz frame rate. Registration 03 is the one recorded
+#               simultaneously with the Biopac sEMG (ajM3resp_03_001_01.bin).
+#   * Biopac -- 2000 Hz, one tab-delimited .txt with 3 channels:
+#               0 = Paw (airway pressure via mouthpiece), 1 = diaphragm sEMG,
+#               2 = empty/ignore. The EIT device injects an interference comb
+#               into the sEMG while it records; the last ~2 min is EIT-off.
+# There is no mechanical ventilator in this recording, so the ventilator-only
+# steps (flow/volume channels, occlusion manoeuvres, ventilator breaths) are
+# intentionally omitted.
+#
+# Run from the repo root with:
+#   python -m m3resp run examples/annemijn_multimodal/annemijn.pipeline.yaml
+# `inputs:` paths are resolved relative to the working directory (the repo
+# root); `outputs.dir` is resolved relative to this spec file.
+
+name: annemijn_multimodal
+
+outputs:
+  dir: ../../output/annemijn-multimodal-summary
+  timestamped: true
+  summary_json: true
+  event_csvs: true
+  parameters_csv: true
+  postprocessing: true
+  figures: false
+
+inputs:
+  eit_file: data/source/eit_emg_annemijn/ajM3resp_03_001_01.bin
+  emg_file: data/source/eit_emg_annemijn/Paw_EMG_ajM3Resp_test.txt
+
+steps:
+  # Load
+  - uses: eit.load
+    with: { file: "@eit_file", vendor: draeger }
+
+  - uses: emg.load
+    with: { file: "@emg_file" }
+
+  # Estimate (and record, for provenance) the EIT-to-Biopac time offset from the
+  # raw signals, using the EIT interference edge on the diaphragm sEMG (channel
+  # 1). Must run before any cropping, on the full un-cropped sEMG including the
+  # EIT-off tail. Writes `estimated_offset_seconds` / `offset_estimation`.
+  - uses: sync.estimate_offset
+    with:
+      method: interference
+      emg_source: emg
+      emg_channel: 1
+      target_source: eit
+      target_channel: 0
+
+  # EIT processing
+  - uses: eit.detect_rates
+    in:  { signal: raw_eit }
+    with: { subject_type: adult, welch_window_seconds: 30.0, capture: true }
+
+  - uses: eit.mdn_filter
+    in:  { signal: raw_eit }
+    with: { label: mdn_filtered }
+
+  - uses: eit.global_impedance
+    in:  { signal: filtered_eit }
+
+  - uses: eit.detect_breaths
+    in:  { signal: global_impedance }
+    with: { min_duration_s: 0.6666666667 }
+
+  - uses: eit.normalize_breaths
+
+  - uses: eit.continuous_tiv
+    in:  { signal: global_impedance }
+
+  - uses: eit.eeli
+    in:  { signal: global_impedance }
+
+  - uses: eit.pixel_tiv
+    in:  { signal: global_impedance, filtered_eit: filtered_eit }
+
+  # EMG processing
+  # Biopac channels: 0 = Paw (airway pressure), 1 = diaphragm sEMG,
+  # 2 = empty/ignore. Preprocess the diaphragm sEMG (channel 1).
+  # `notch_base_frequency: 50` suppresses both mains hum and the EIT frame-rate
+  # interference comb (50 Hz + harmonics) that contaminates the sEMG whenever
+  # the EIT device records simultaneously.
+  - uses: emg.preprocess
+    with: {
+      channel: 1,
+      high_pass_hz: 80,
+      envelope_window_seconds: 0.5,
+      notch_base_frequency: 50.0,
+      notch_quality_factor: 30.0
+      }
+
+  - uses: emg.detect_breaths
+    with: { min_breath_width_seconds: 1.0, half_window_seconds: 0.5 }
+
+  - uses: emg.peak_indices
+
+  - uses: emg.slopesum_baseline
+    with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
+
+  # No explicit export step needed — the `outputs:` section above handles
+  # creating the timestamped directory and calling export_session_summary.
