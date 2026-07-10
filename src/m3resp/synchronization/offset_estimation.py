@@ -11,12 +11,14 @@ missing estimation stage.
 Two complementary estimators are provided, mirroring the interactive marimo
 viewer in ``tools/visualization_tool/multimodal_vis.py``:
 
-* :func:`estimate_offset_from_interference` -- an **absolute anchor**. Many EIT
-  devices inject interference into a simultaneously-recorded sEMG *only while
-  the EIT device is running*. The sEMG high-frequency power therefore steps down
-  at the instant the EIT recording stops. Detecting that edge pins the EIT
+* :func:`estimate_offset_from_interference` -- a
+  **recording-protocol-specific absolute anchor**. In the Annemijn recording, the
+  way the EIT and Biopac acquisition were run left a visible high-frequency
+  artifact in the raw sEMG while EIT was active; that artifact drops when EIT
+  stops. This is not a general EIT-device feature and should only be used when a
+  clear on-to-off artifact is present. Detecting that edge pins the EIT
   recording's end onto the reference (Biopac) clock, which -- knowing the EIT
-  recording duration -- yields the offset directly, with no manual guessing.
+  recording duration -- yields the offset directly.
 * :func:`refine_offset_by_crosscorrelation` -- a **relative refinement**. EIT
   global impedance and airway pressure both track the breath cycle. Cross-
   correlating them over an overlap window snaps the alignment to within a
@@ -176,13 +178,13 @@ def estimate_offset_from_interference(
     fast_window_seconds: float = 0.5,
     smooth_window_seconds: float = 2.0,
 ) -> InterferenceOffsetResult:
-    """Estimate the offset by finding where EIT interference leaves the sEMG.
+    """Estimate the offset from a protocol-specific sEMG artifact drop.
 
-    The reference-device (EIT) interference is present while the EIT device
-    records and vanishes once it stops. This finds the strongest sustained
-    *downward* step in the sEMG interference power within the last
-    ``search_window_seconds`` of the recording, treats that as the EIT-off
-    instant on the reference clock, and returns
+    In recordings where the acquisition protocol leaves an EIT-related
+    high-frequency artifact in the raw sEMG that disappears when EIT stops, this
+    finds the strongest sustained *downward* step in the sEMG interference power
+    within the last ``search_window_seconds`` of the recording, treats that as
+    the EIT-off instant on the reference clock, and returns
     ``edge_time - reference_duration_seconds`` as the offset.
 
     :param reference_duration_seconds: Duration of the target (EIT) recording,
@@ -192,7 +194,8 @@ def estimate_offset_from_interference(
     :param plateau_guard_seconds: The "interference present" plateau level is the
         median power before ``end - plateau_guard_seconds``.
     :param tail_seconds: The "interference absent" level is the median power over
-        the final ``tail_seconds`` (assumed to be inside the EIT-off region).
+        the final ``tail_seconds`` (assumed to be inside the artifact-off
+        region).
     :param min_power_ratio: Require ``high >= min_power_ratio * low`` for an edge
         to be considered present at all.
     :param min_drop_fraction: Require the detected step to drop by at least

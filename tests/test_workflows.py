@@ -131,7 +131,46 @@ def test_public_api_exposes_engine_and_steps():
         "eit.detect_breaths",
         "emg.preprocess",
         "metric.interval_cv",
+        "sync.apply_estimated_offset",
     } <= (set(steps))
+
+
+def test_apply_estimated_offset_consumes_estimator_output():
+    session = M3Session()
+    calls: list[dict[str, Any]] = []
+
+    def _synchronize_raw_modalities(**kwargs: Any) -> dict[str, Any]:
+        calls.append(kwargs)
+        session.parameters["raw_alignment"] = {}
+        return {"emg": {"cropped_samples": 10}}
+
+    session.synchronize_raw_modalities = _synchronize_raw_modalities  # type: ignore[method-assign]
+    spec = {
+        "name": "apply-estimate",
+        "steps": [
+            {
+                "uses": "t.make",
+                "with": {"value": 12.5},
+                "out": {"a": "estimated_offset_seconds"},
+            },
+            {
+                "uses": "sync.apply_estimated_offset",
+                "with": {"source_modalities": ["emg"]},
+            },
+        ],
+    }
+
+    result = run_pipeline(spec, session=session)
+
+    assert calls == [
+        {
+            "method": "manual_offset",
+            "offset_seconds": {"eit": 0.0, "emg": -12.5},
+            "reference_modality": "eit",
+        }
+    ]
+    assert result.value("sync_summary") == {"emg": {"cropped_samples": 10}}
+    assert session.parameters["raw_alignment"]["estimated_offset_seconds"] == 12.5
 
 
 def test_emg_postprocessing_registers_one_step_per_function():

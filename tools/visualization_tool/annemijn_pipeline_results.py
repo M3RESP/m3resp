@@ -65,15 +65,12 @@ def _intro(DEFAULT_SPEC, mo):
 
         This notebook **runs the declarative pipeline**
         [`{DEFAULT_SPEC.name}`]() end-to-end (EIT + diaphragm sEMG + airway
-        pressure) and visualizes the results, reusing the **native plotting
-        functions** shipped with `eitprocessing` and `ReSurfEMG` wherever they
-        exist:
+        pressure), synchronizes the raw signals with the interference and
+        cross-correlation estimate, and visualizes the results. Native plotting
+        functions from `eitprocessing` are reused wherever they exist:
 
         * `eitprocessing` — `RateDetection.plotting.plot(...)` (frequency
           analysis) and `PixelMap.plotting.imshow(...)` (per-pixel TIV map).
-        * `ReSurfEMG` — `helper_functions.visualization.show_psd_welch(...)`
-          (sEMG power spectrum / EIT-interference comb).
-
         Time-series overlays (impedance + detected breaths, sEMG envelope) use
         Plotly, matching the other tools in this folder.
         """
@@ -128,9 +125,151 @@ def _run_pipeline(ROOT, mo, os, run_button, spec_path):
 
 
 @app.cell
+def _section_synced_raw(mo):
+    mo.vstack([mo.md("## Synchronized raw EIT, EMG, and ventilation data")])
+    return
+
+
+@app.cell
+def _raw_sync_data(np, session):
+    _eit_signal = session.eit.global_impedance if session.eit is not None else None
+    _eit_time = np.asarray(getattr(_eit_signal, "time", []), dtype=float)
+    _eit_values = np.asarray(getattr(_eit_signal, "values", []), dtype=float)
+    if _eit_time.size:
+        _eit_time = _eit_time - _eit_time[0]
+
+    _emg_payload = (
+        session.emg.data
+        if session.emg is not None and isinstance(session.emg.data, dict)
+        else {}
+    )
+    _emg_array = np.asarray(_emg_payload.get("array", []), dtype=float)
+    _emg_metadata = _emg_payload.get("metadata") or {}
+    _emg_fs = float(_emg_metadata.get("fs", 0.0) or 0.0)
+    _emg_time = (
+        np.arange(_emg_array.shape[-1], dtype=float) / _emg_fs
+        if _emg_array.ndim == 2 and _emg_array.shape[0] >= 2 and _emg_fs > 0
+        else np.asarray([], dtype=float)
+    )
+    _labels = _emg_metadata.get("labels") or []
+    _units = _emg_metadata.get("units") or []
+
+    raw_sync_data = {
+        "eit": {
+            "time": _eit_time,
+            "values": _eit_values,
+            "title": "EIT raw global impedance",
+            "ylabel": getattr(_eit_signal, "label", "impedance"),
+            "color": "#185FA5",
+        },
+        "emg": {
+            "time": _emg_time,
+            "values": _emg_array[1] if _emg_time.size else np.asarray([]),
+            "title": _labels[1] if len(_labels) > 1 else "Diaphragm sEMG",
+            "ylabel": _units[1] if len(_units) > 1 else "mV",
+            "color": "#2A9D8F",
+        },
+        "vent": {
+            "time": _emg_time,
+            "values": _emg_array[0] if _emg_time.size else np.asarray([]),
+            "title": _labels[0] if _labels else "Airway pressure (Paw)",
+            "ylabel": _units[0] if _units else "pressure",
+            "color": "#D1495B",
+        },
+    }
+    return (raw_sync_data,)
+
+
+@app.cell
+def _ui_raw_sync_range(mo, raw_sync_data):
+    _durations = [
+        float(_trace["time"][-1])
+        for _trace in raw_sync_data.values()
+        if _trace["time"].size
+    ]
+    _duration = min(_durations) if _durations else 1.0
+    raw_sync_range = mo.ui.range_slider(
+        start=0.0,
+        stop=max(1.0, round(_duration, 1)),
+        step=1.0,
+        value=[0.0, round(min(120.0, _duration), 1)],
+        label="Synchronized raw time window (s)",
+        full_width=True,
+    )
+    raw_sync_range
+    return (raw_sync_range,)
+
+
+@app.cell
+def _plot_synced_raw(go, make_subplots, mo, np, raw_sync_data, raw_sync_range, session):
+    _missing = [
+        _name for _name, _trace in raw_sync_data.items() if not _trace["time"].size
+    ]
+    if _missing:
+        mo.output.replace(
+            mo.callout(
+                mo.md(f"Missing synchronized raw data: {', '.join(_missing)}."),
+                kind="warn",
+            )
+        )
+    else:
+        _lo, _hi = [float(value) for value in raw_sync_range.value]
+        _fig = make_subplots(
+            rows=3,
+            cols=1,
+            shared_xaxes=True,
+            vertical_spacing=0.07,
+            subplot_titles=[
+                raw_sync_data["eit"]["title"],
+                raw_sync_data["emg"]["title"],
+                raw_sync_data["vent"]["title"],
+            ],
+        )
+        for _row, _name in enumerate(("eit", "emg", "vent"), start=1):
+            _trace = raw_sync_data[_name]
+            _time = _trace["time"]
+            _values = _trace["values"]
+            _indices = np.flatnonzero((_time >= _lo) & (_time <= _hi))
+            _stride = max(1, int(np.ceil(_indices.size / 20_000)))
+            _indices = _indices[::_stride]
+            _fig.add_trace(
+                go.Scattergl(
+                    x=_time[_indices],
+                    y=_values[_indices],
+                    mode="lines",
+                    name=_name.upper(),
+                    line=dict(color=_trace["color"], width=1.0),
+                ),
+                row=_row,
+                col=1,
+            )
+            _fig.update_yaxes(title_text=_trace["ylabel"], row=_row, col=1)
+
+        _alignment = session.parameters.get("raw_alignment", {}) or {}
+        _estimate = _alignment.get("estimated_offset_seconds")
+        _subtitle = (
+            f"Estimated EIT-to-Biopac offset: {_estimate:.2f} s"
+            if _estimate is not None
+            else "Estimated EIT-to-Biopac offset unavailable"
+        )
+        _fig.update_xaxes(title_text="synchronized time (s)", row=3, col=1)
+        _fig.update_layout(
+            title=dict(text=_subtitle, font=dict(size=14)),
+            template="plotly_white",
+            height=680,
+            hovermode="x unified",
+            showlegend=False,
+            margin=dict(t=70, r=20, b=44, l=76),
+        )
+        mo.output.replace(_fig)
+    return
+
+
+@app.cell
 def _summary(ctx, mo, np):
     _oe = ctx.get("offset_estimation", {}) or {}
     _interf = _oe.get("interference", {}) or {}
+    _xcorr = _oe.get("crosscorrelation", {}) or {}
     _rr = ctx.get("respiratory_rate_hz")
     _hr = ctx.get("heart_rate_hz")
     _n_eit = len(ctx["breath_intervals"].values)
@@ -143,8 +282,12 @@ def _summary(ctx, mo, np):
 
     _rows = [
         (
-            "EIT–Biopac offset (interference)",
+            "EIT–Biopac offset (interference + cross-correlation)",
             f"{_oe.get('offset_seconds', float('nan')):.2f} s",
+        ),
+        (
+            "Cross-correlation refinement",
+            f"{_xcorr.get('lag_seconds', float('nan')):+.2f} s",
         ),
         (
             "EIT-off edge in Biopac time",
@@ -513,58 +656,58 @@ def _plot_emg(ctx, emg_downsample, emg_range, go, make_subplots, np):
     return
 
 
-@app.cell
-def _section_psd(mo):
-    mo.md(
-        """
-        ## sEMG — power spectrum (native `ReSurfEMG` figure)
+# @app.cell
+# def _section_psd(mo):
+#     mo.md(
+#         """
+#         ## sEMG — power spectrum (native `ReSurfEMG` figure)
 
-        `ReSurfEMG`'s `show_psd_welch(...)` on the raw diaphragm sEMG. With the
-        EIT device recording simultaneously, its 50 Hz frame-rate injects a
-        harmonic **interference comb** (50, 100, 150 … Hz) that is clearly
-        visible here — exactly what the pipeline's 50 Hz notch removes before
-        computing the envelope.
-        """
-    )
-    return
-
-
-@app.cell
-def _ui_psd(ctx, mo, np):
-    _fs = float(ctx["processed_emg"]["fs"])
-    _dur = float(np.asarray(ctx["processed_emg"]["raw_channel"]).size) / _fs
-    psd_range = mo.ui.range_slider(
-        start=0.0,
-        stop=round(_dur, 1),
-        step=1.0,
-        # Default to a window inside the EIT-on part (interference present).
-        value=[0.0, round(min(120.0, _dur), 1)],
-        label="sEMG window for the spectrum (s)",
-        full_width=True,
-    )
-    psd_range
-    return (psd_range,)
+#         `ReSurfEMG`'s `show_psd_welch(...)` on the raw diaphragm sEMG. With the
+#         EIT device recording simultaneously, its 50 Hz frame-rate injects a
+#         harmonic **interference comb** (50, 100, 150 … Hz) that is clearly
+#         visible here — exactly what the pipeline's 50 Hz notch removes before
+#         computing the envelope.
+#         """
+#     )
+#     return
 
 
-@app.cell
-def _plot_psd(ctx, mo, np, plt, psd_range):
-    from resurfemg.helper_functions.visualization import show_psd_welch
+# @app.cell
+# def _ui_psd(ctx, mo, np):
+#     _fs = float(ctx["processed_emg"]["fs"])
+#     _dur = float(np.asarray(ctx["processed_emg"]["raw_channel"]).size) / _fs
+#     psd_range = mo.ui.range_slider(
+#         start=0.0,
+#         stop=round(_dur, 1),
+#         step=1.0,
+#         # Default to a window inside the EIT-on part (interference present).
+#         value=[0.0, round(min(120.0, _dur), 1)],
+#         label="sEMG window for the spectrum (s)",
+#         full_width=True,
+#     )
+#     psd_range
+#     return (psd_range,)
 
-    _pe = ctx["processed_emg"]
-    _fs = float(_pe["fs"])
-    _raw = np.asarray(_pe["raw_channel"], dtype=float)
-    _lo, _hi = [float(v) for v in psd_range.value]
-    _seg = _raw[int(_lo * _fs) : int(_hi * _fs)]
 
-    plt.close("all")
-    _fig = plt.figure(figsize=(11, 4.2))
-    # show_psd_welch draws on the current pyplot figure (and calls plt.show,
-    # which only warns under the Agg backend); grab the figure it drew on.
-    show_psd_welch(_seg, _fs, t_window_s=2, axis_spec=1, signal_unit="mV")
-    _fig = plt.gcf()
-    _fig.axes[0].set_title(f"sEMGdi Welch PSD — window {_lo:.0f}–{_hi:.0f} s")
-    mo.output.replace(_fig)
-    return
+# @app.cell
+# def _plot_psd(ctx, mo, np, plt, psd_range):
+#     from resurfemg.helper_functions.visualization import show_psd_welch
+
+#     _pe = ctx["processed_emg"]
+#     _fs = float(_pe["fs"])
+#     _raw = np.asarray(_pe["raw_channel"], dtype=float)
+#     _lo, _hi = [float(v) for v in psd_range.value]
+#     _seg = _raw[int(_lo * _fs) : int(_hi * _fs)]
+
+#     plt.close("all")
+#     _fig = plt.figure(figsize=(11, 4.2))
+#     # show_psd_welch draws on the current pyplot figure (and calls plt.show,
+#     # which only warns under the Agg backend); grab the figure it drew on.
+#     show_psd_welch(_seg, _fs, t_window_s=2, axis_spec=1, signal_unit="mV")
+#     _fig = plt.gcf()
+#     _fig.axes[0].set_title(f"sEMGdi Welch PSD — window {_lo:.0f}–{_hi:.0f} s")
+#     mo.output.replace(_fig)
+#     return
 
 
 @app.cell

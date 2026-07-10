@@ -9,9 +9,9 @@
 #               0 = Paw (airway pressure via mouthpiece), 1 = diaphragm sEMG,
 #               2 = empty/ignore. The EIT device injects an interference comb
 #               into the sEMG while it records; the last ~2 min is EIT-off.
-# There is no mechanical ventilator in this recording, so the ventilator-only
-# steps (flow/volume channels, occlusion manoeuvres, ventilator breaths) are
-# intentionally omitted.
+# There is no mechanical ventilator in this recording. Paw channel 0 is used as
+# the ventilation reference for synchronization and visualization; ventilator-
+# only processing (flow/volume, occlusions, ventilator breaths) remains omitted.
 #
 # Run from the repo root with:
 #   python -m m3resp run examples/annemijn_multimodal/annemijn.pipeline.yaml
@@ -41,17 +41,29 @@ steps:
   - uses: emg.load
     with: { file: "@emg_file" }
 
-  # Estimate (and record, for provenance) the EIT-to-Biopac time offset from the
-  # raw signals, using the EIT interference edge on the diaphragm sEMG (channel
-  # 1). Must run before any cropping, on the full un-cropped sEMG including the
-  # EIT-off tail. Writes `estimated_offset_seconds` / `offset_estimation`.
+  # Estimate the EIT-to-Biopac offset from the full, un-cropped recording. The
+  # EIT interference edge on diaphragm sEMG (channel 1) provides the absolute
+  # anchor; cross-correlation with Paw (channel 0) refines the breathing phase.
   - uses: sync.estimate_offset
     with:
-      method: interference
+      method: interference+crosscorrelation
       emg_source: emg
       emg_channel: 1
       target_source: eit
       target_channel: 0
+      reference_source: emg
+      reference_channel: 0
+      crosscorrelation_kwargs:
+        window: [60.0, 180.0]
+        max_lag_seconds: 10.0
+
+  # Apply the estimated offset before modality-specific preprocessing. Paw and
+  # diaphragm sEMG share the same Biopac clock and are cropped together.
+  - uses: sync.apply_estimated_offset
+    in: { offset_seconds: estimated_offset_seconds }
+    with:
+      target_modality: eit
+      source_modalities: [emg]
 
   # EIT processing
   - uses: eit.detect_rates

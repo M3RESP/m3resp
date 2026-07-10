@@ -3,9 +3,9 @@
 ``sync.estimate_offset`` estimates the constant time offset that aligns the EIT
 recording to the Biopac/EMG clock directly from the raw signals (see
 :mod:`m3resp.synchronization.offset_estimation`) and writes it into the pipeline
-context. Downstream, ``session.sync_raw`` can bind its ``offset_seconds`` from
-that value to actually crop the modalities -- so estimation and application stay
-separate, declarative steps.
+context. Downstream, ``sync.apply_estimated_offset`` consumes that value and
+crops the modalities, keeping estimation and application as separate,
+declarative steps.
 
 Run this *after* the ``*.load`` steps but *before* ``session.sync_raw``: the
 interference anchor needs the full, un-cropped sEMG including the EIT-off tail,
@@ -207,3 +207,48 @@ def estimate_offset(
         "estimated_offset_seconds": result.offset_seconds,
         "offset_estimation": summary,
     }
+
+
+@register_step(
+    "sync.apply_estimated_offset",
+    reads={
+        "session": "session",
+        "offset_seconds": "estimated_offset_seconds",
+    },
+    writes=("sync_summary",),
+    summary="Apply an estimated EIT-to-source offset to the raw modalities.",
+)
+def apply_estimated_offset(
+    session: M3Session,
+    offset_seconds: float,
+    *,
+    target_modality: str = "eit",
+    source_modalities: tuple[str, ...] | list[str] = ("emg", "vent"),
+) -> dict[str, Any]:
+    """Crop source-clock recordings so they start with the target recording.
+
+    ``sync.estimate_offset`` reports where target ``t=0`` falls on the source
+    clock. The corresponding Stage-1 crop is therefore the negative estimate
+    on each source modality, with the target modality held at zero.
+    """
+
+    target = str(target_modality).lower()
+    sources = tuple(str(modality).lower() for modality in source_modalities)
+    if not sources:
+        raise ValueError("source_modalities must contain at least one modality")
+    if target in sources:
+        raise ValueError("target_modality cannot also be a source modality")
+
+    estimate = float(offset_seconds)
+    configured_offsets = {target: 0.0}
+    configured_offsets.update({modality: -estimate for modality in sources})
+    summary = session.synchronize_raw_modalities(
+        method="manual_offset",
+        offset_seconds=configured_offsets,
+        reference_modality=target,
+    )
+    session.parameters["raw_alignment"]["estimated_offset_seconds"] = estimate
+    session.parameters["raw_alignment"]["estimate_direction"] = (
+        "target_t0_on_source_clock"
+    )
+    return {"sync_summary": summary}
