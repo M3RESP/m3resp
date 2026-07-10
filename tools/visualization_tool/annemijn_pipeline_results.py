@@ -220,12 +220,12 @@ def _plot_synced_raw(go, make_subplots, mo, np, raw_sync_data, raw_sync_range, s
             shared_xaxes=True,
             vertical_spacing=0.07,
             subplot_titles=[
+                raw_sync_data["vent"]["title"],
                 raw_sync_data["eit"]["title"],
                 raw_sync_data["emg"]["title"],
-                raw_sync_data["vent"]["title"],
             ],
         )
-        for _row, _name in enumerate(("eit", "emg", "vent"), start=1):
+        for _row, _name in enumerate(("vent", "eit", "emg"), start=1):
             _trace = raw_sync_data[_name]
             _time = _trace["time"]
             _values = _trace["values"]
@@ -538,122 +538,122 @@ def _plot_pixel_tiv(ctx, mo, np, plt):
     return
 
 
-@app.cell
-def _section_emg(mo):
-    mo.md("## sEMG (diaphragm) — filtered signal, envelope & detected breaths")
-    return
+# @app.cell
+# def _section_emg(mo):
+#     mo.md("## sEMG (diaphragm) — filtered signal, envelope & detected breaths")
+#     return
 
 
-@app.cell
-def _ui_emg_range(ctx, mo, np):
-    _fs = float(ctx["processed_emg"]["fs"])
-    _dur = float(np.asarray(ctx["processed_emg"]["raw_channel"]).size) / _fs
-    emg_range = mo.ui.range_slider(
-        start=0.0,
-        stop=round(_dur, 1),
-        step=1.0,
-        value=[0.0, round(min(120.0, _dur), 1)],
-        label="sEMG time window (s)",
-        full_width=True,
-    )
-    emg_downsample = mo.ui.slider(
-        start=1, stop=50, step=1, value=10, label="downsample"
-    )
-    mo.vstack(
-        [
-            emg_range,
-            mo.hstack([mo.md("**Downsample**"), emg_downsample], justify="start"),
-        ]
-    )
-    return emg_downsample, emg_range
+# @app.cell
+# def _ui_emg_range(ctx, mo, np):
+#     _fs = float(ctx["processed_emg"]["fs"])
+#     _dur = float(np.asarray(ctx["processed_emg"]["raw_channel"]).size) / _fs
+#     emg_range = mo.ui.range_slider(
+#         start=0.0,
+#         stop=round(_dur, 1),
+#         step=1.0,
+#         value=[0.0, round(min(120.0, _dur), 1)],
+#         label="sEMG time window (s)",
+#         full_width=True,
+#     )
+#     emg_downsample = mo.ui.slider(
+#         start=1, stop=50, step=1, value=10, label="downsample"
+#     )
+#     mo.vstack(
+#         [
+#             emg_range,
+#             mo.hstack([mo.md("**Downsample**"), emg_downsample], justify="start"),
+#         ]
+#     )
+#     return emg_downsample, emg_range
 
 
-@app.cell
-def _plot_emg(ctx, emg_downsample, emg_range, go, make_subplots, np):
-    _pe = ctx["processed_emg"]
-    _fs = float(_pe["fs"])
-    _raw = np.asarray(_pe["raw_channel"], dtype=float)
-    _filt = np.asarray(_pe["filtered"], dtype=float)
-    _env = np.asarray(_pe["envelope"], dtype=float)
-    _base = np.asarray(ctx["baseline"], dtype=float)
-    _t = np.arange(_raw.size, dtype=float) / _fs
+# @app.cell
+# def _plot_emg(ctx, emg_downsample, emg_range, go, make_subplots, np):
+#     _pe = ctx["processed_emg"]
+#     _fs = float(_pe["fs"])
+#     _raw = np.asarray(_pe["raw_channel"], dtype=float)
+#     _filt = np.asarray(_pe["filtered"], dtype=float)
+#     _env = np.asarray(_pe["envelope"], dtype=float)
+#     _base = np.asarray(ctx["baseline"], dtype=float)
+#     _t = np.arange(_raw.size, dtype=float) / _fs
 
-    _lo, _hi = [float(v) for v in emg_range.value]
-    _step = int(emg_downsample.value)
-    _m = np.where((_t >= _lo) & (_t <= _hi))[0][::_step]
+#     _lo, _hi = [float(v) for v in emg_range.value]
+#     _step = int(emg_downsample.value)
+#     _m = np.where((_t >= _lo) & (_t <= _hi))[0][::_step]
 
-    _events = ctx["emg_breath_events"]
-    _peak_t = np.array([e.peak_time for e in _events], dtype=float)
-    _emask = (_peak_t >= _lo) & (_peak_t <= _hi)
+#     _events = ctx["emg_breath_events"]
+#     _peak_t = np.array([e.peak_time for e in _events], dtype=float)
+#     _emask = (_peak_t >= _lo) & (_peak_t <= _hi)
 
-    _fig = make_subplots(
-        rows=2,
-        cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.08,
-        subplot_titles=[
-            "Filtered sEMGdi (band-pass + 50 Hz interference notch)",
-            "ARV envelope, baseline & detected breaths",
-        ],
-    )
-    _fig.add_trace(
-        go.Scattergl(
-            x=_t[_m],
-            y=_filt[_m],
-            mode="lines",
-            name="filtered sEMG",
-            line=dict(color="#2A9D8F", width=0.7),
-        ),
-        row=1,
-        col=1,
-    )
-    _fig.add_trace(
-        go.Scattergl(
-            x=_t[_m],
-            y=_env[_m],
-            mode="lines",
-            name="envelope (ARV)",
-            line=dict(color="#E07A00", width=1.4),
-        ),
-        row=2,
-        col=1,
-    )
-    _fig.add_trace(
-        go.Scattergl(
-            x=_t[_m],
-            y=_base[_m],
-            mode="lines",
-            name="baseline",
-            line=dict(color="#888888", width=1.0, dash="dot"),
-        ),
-        row=2,
-        col=1,
-    )
-    if _emask.any():
-        _pk = np.clip((_peak_t[_emask] * _fs).astype(int), 0, _env.size - 1)
-        _fig.add_trace(
-            go.Scattergl(
-                x=_peak_t[_emask],
-                y=_env[_pk],
-                mode="markers",
-                name="detected breaths",
-                marker=dict(color="#D1495B", size=9, symbol="triangle-down"),
-            ),
-            row=2,
-            col=1,
-        )
-    _fig.update_xaxes(title_text="time (s)", row=2, col=1)
-    _fig.update_yaxes(title_text="mV", row=1, col=1)
-    _fig.update_yaxes(title_text="a.u.", row=2, col=1)
-    _fig.update_layout(
-        template="plotly_white",
-        height=540,
-        hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(t=54, r=20, b=44, l=64),
-    )
-    _fig
-    return
+#     _fig = make_subplots(
+#         rows=2,
+#         cols=1,
+#         shared_xaxes=True,
+#         vertical_spacing=0.08,
+#         subplot_titles=[
+#             "Filtered sEMGdi (band-pass + 50 Hz interference notch)",
+#             "ARV envelope, baseline & detected breaths",
+#         ],
+#     )
+#     _fig.add_trace(
+#         go.Scattergl(
+#             x=_t[_m],
+#             y=_filt[_m],
+#             mode="lines",
+#             name="filtered sEMG",
+#             line=dict(color="#2A9D8F", width=0.7),
+#         ),
+#         row=1,
+#         col=1,
+#     )
+#     _fig.add_trace(
+#         go.Scattergl(
+#             x=_t[_m],
+#             y=_env[_m],
+#             mode="lines",
+#             name="envelope (ARV)",
+#             line=dict(color="#E07A00", width=1.4),
+#         ),
+#         row=2,
+#         col=1,
+#     )
+#     _fig.add_trace(
+#         go.Scattergl(
+#             x=_t[_m],
+#             y=_base[_m],
+#             mode="lines",
+#             name="baseline",
+#             line=dict(color="#888888", width=1.0, dash="dot"),
+#         ),
+#         row=2,
+#         col=1,
+#     )
+#     if _emask.any():
+#         _pk = np.clip((_peak_t[_emask] * _fs).astype(int), 0, _env.size - 1)
+#         _fig.add_trace(
+#             go.Scattergl(
+#                 x=_peak_t[_emask],
+#                 y=_env[_pk],
+#                 mode="markers",
+#                 name="detected breaths",
+#                 marker=dict(color="#D1495B", size=9, symbol="triangle-down"),
+#             ),
+#             row=2,
+#             col=1,
+#         )
+#     _fig.update_xaxes(title_text="time (s)", row=2, col=1)
+#     _fig.update_yaxes(title_text="mV", row=1, col=1)
+#     _fig.update_yaxes(title_text="a.u.", row=2, col=1)
+#     _fig.update_layout(
+#         template="plotly_white",
+#         height=540,
+#         hovermode="x unified",
+#         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+#         margin=dict(t=54, r=20, b=44, l=64),
+#     )
+#     _fig
+#     return
 
 
 # @app.cell

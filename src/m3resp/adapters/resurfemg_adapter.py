@@ -408,11 +408,17 @@ class ReSurfEMGAdapter:
             fs_emg=fs,
         )
         if notch_base_frequency is not None:
+            # Default the notch's reach to Nyquist, not `low_pass_hz`: a
+            # harmonic landing at or just past the low-pass cutoff (e.g. the
+            # EIT frame-rate comb's 10th harmonic sitting on a 500 Hz
+            # low-pass edge) is only partially attenuated by the low-pass
+            # filter's finite roll-off, so it must still be fully inside the
+            # notch's stopband rather than at its boundary.
             filtered = harmonic_notch_filter(
                 filtered,
                 base_frequency=notch_base_frequency,
                 sample_frequency=fs,
-                max_frequency=notch_max_frequency or low_pass_hz,
+                max_frequency=notch_max_frequency or (fs / 2),
                 quality_factor=notch_quality_factor,
             )
         envelope_window_samples = max(1, int(envelope_window_seconds * fs))
@@ -431,7 +437,7 @@ class ReSurfEMGAdapter:
                 "envelope_window_seconds": envelope_window_seconds,
                 "notch_base_frequency": notch_base_frequency,
                 "notch_max_frequency": (
-                    (notch_max_frequency or low_pass_hz)
+                    (notch_max_frequency or (fs / 2))
                     if notch_base_frequency is not None
                     else None
                 ),

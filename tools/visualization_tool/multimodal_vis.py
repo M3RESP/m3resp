@@ -183,7 +183,7 @@ def _controls(biopac_duration, default_biopac_offset, mo):
             "Interference anchor",
             "Interference + cross-corr",
         ],
-        value="Interference anchor",
+        value="Interference + cross-corr",
         label="Sync method",
     )
     time_range = mo.ui.range_slider(
@@ -242,6 +242,25 @@ def _controls(biopac_duration, default_biopac_offset, mo):
     notch_quality_factor = mo.ui.number(
         start=1.0, stop=100.0, step=1.0, value=30.0, label="Notch quality factor"
     )
+    # A harmonic sitting at or just past `low_pass_hz` (e.g. the EIT frame-rate
+    # comb's 10th harmonic at 500 Hz) is only partially attenuated by the
+    # low-pass filter's finite roll-off. If the notch's own reach stops at
+    # that same edge (the old default), that harmonic is never fully
+    # notched either. Two independent knobs to compare live:
+    #  - `canonical_low_pass_hz`: where the band-pass cuts off.
+    #  - `canonical_notch_max_hz`: how far the harmonic notch reaches.
+    # Set them equal to reproduce the old buggy behaviour; set the notch
+    # reach well past the low-pass cutoff (default here) for the fix.
+    canonical_low_pass_hz = mo.ui.number(
+        start=100.0, stop=1000.0, step=10.0, value=500.0, label="Low-pass cutoff (Hz)"
+    )
+    canonical_notch_max_hz = mo.ui.number(
+        start=50.0,
+        stop=1000.0,
+        step=10.0,
+        value=1000.0,
+        label="Notch reach / max freq (Hz)",
+    )
     breath_min_width_s = mo.ui.number(
         start=0.1, stop=5.0, step=0.1, value=1.0, label="Breath min width (s)"
     )
@@ -261,6 +280,24 @@ def _controls(biopac_duration, default_biopac_offset, mo):
     canonical_hpf_hz = mo.ui.number(
         start=0.5, stop=40.0, step=0.5, value=20.0, label="Low-freq HPF (Hz)"
     )
+    # ECG (QRS) removal knobs. A missed R-peak gets no wavelet suppression /
+    # no gate at all for that beat -- on this dataset the detector's default
+    # `peak_fraction=0.4` misses roughly 1 in 6-7 beats (checked by sweeping
+    # peak_fraction over a known EIT-off window: 0.4 -> 46 peaks / 50 s,
+    # 0.2 -> 49 peaks with no spurious doubles, 0.1 -> 59 peaks already
+    # over-detecting). Lowered the default to 0.2 accordingly.
+    canonical_ecg_peak_fraction = mo.ui.number(
+        start=0.02, stop=1.0, step=0.02, value=0.2, label="ECG peak sensitivity"
+    )
+    canonical_wavelet_threshold = mo.ui.number(
+        start=1.0, stop=10.0, step=0.25, value=4.5, label="Wavelet threshold (σ)"
+    )
+    canonical_wavelet_level = mo.ui.number(
+        start=1, stop=8, step=1, value=4, label="Wavelet level (n)"
+    )
+    canonical_gate_width_ms = mo.ui.number(
+        start=20.0, stop=300.0, step=5.0, value=100.0, label="Gate width (ms)"
+    )
     canonical_envelope_type = mo.ui.dropdown(
         options=["RMS", "ARV", "MAV (median)"],
         value="RMS",
@@ -277,9 +314,15 @@ def _controls(biopac_duration, default_biopac_offset, mo):
         breath_prominence_factor,
         canonical_baseline_correction,
         canonical_ecg_method,
+        canonical_ecg_peak_fraction,
         canonical_envelope_ms,
         canonical_envelope_type,
+        canonical_gate_width_ms,
         canonical_hpf_hz,
+        canonical_low_pass_hz,
+        canonical_notch_max_hz,
+        canonical_wavelet_level,
+        canonical_wavelet_threshold,
         downsample,
         eit_manual_offset,
         emg_manual_offset,
@@ -294,21 +337,12 @@ def _controls(biopac_duration, default_biopac_offset, mo):
 
 
 @app.cell
-def _controls_layout(
-    breath_min_width_s,
-    breath_prominence_factor,
-    canonical_baseline_correction,
-    canonical_ecg_method,
-    canonical_envelope_ms,
-    canonical_envelope_type,
-    canonical_hpf_hz,
+def _sync_controls_layout(
     downsample,
     eit_manual_offset,
     emg_manual_offset,
     mo,
     normalize,
-    notch_base_frequency,
-    notch_quality_factor,
     offset_fine,
     stretch,
     sync_mode,
@@ -330,22 +364,6 @@ def _controls_layout(
             *_manual_offset_controls,
             mo.hstack(
                 [offset_fine, stretch, downsample, normalize],
-                justify="start",
-                gap=2,
-            ),
-            mo.md("### Canonical step-by-step pipeline (Jonkman et al. 2024)"),
-            mo.hstack(
-                [
-                    notch_base_frequency,
-                    notch_quality_factor,
-                    canonical_ecg_method,
-                    canonical_hpf_hz,
-                    canonical_envelope_type,
-                    canonical_envelope_ms,
-                    canonical_baseline_correction,
-                    breath_min_width_s,
-                    breath_prominence_factor,
-                ],
                 justify="start",
                 gap=2,
             ),
@@ -639,15 +657,220 @@ def _stacked_plot(
 
 
 @app.cell
+def _pipeline_controls_layout(
+    breath_min_width_s,
+    breath_prominence_factor,
+    canonical_baseline_correction,
+    canonical_ecg_method,
+    canonical_ecg_peak_fraction,
+    canonical_envelope_ms,
+    canonical_envelope_type,
+    canonical_gate_width_ms,
+    canonical_hpf_hz,
+    canonical_low_pass_hz,
+    canonical_notch_max_hz,
+    canonical_wavelet_level,
+    canonical_wavelet_threshold,
+    mo,
+    notch_base_frequency,
+    notch_quality_factor,
+):
+    # ECG-removal knobs only apply to the method that's currently selected:
+    # peak detection feeds both Gating and Wavelet denoising (not the plain
+    # High-pass 200 Hz fallback); wavelet threshold/level only affect Wavelet
+    # denoising; gate width only affects Gating.
+    _ecg_method = canonical_ecg_method.value
+
+    # A small "i" hover button after each pipeline knob, explaining what it
+    # does and its typical/recommended range -- browser-native tooltip via
+    # the HTML `title` attribute, so it needs no extra JS.
+    def _info(text):
+        _title = text.replace('"', "'")
+        return mo.md(
+            f'<span title="{_title}" '
+            'style="cursor:help; opacity:0.6; font-size:0.85em;'
+            ' padding-left:2px;">&#9432;</span>'
+        )
+
+    def _lab(control, text):
+        # `justify="start"` is required here: mo.hstack defaults to
+        # "space-between", which stretches to fill the outer hstack's column
+        # width and shoves the icon away from its control.
+        return mo.hstack(
+            [control, _info(text)], justify="start", align="center", gap=0.25
+        )
+
+    _ecg_controls = [
+        _lab(
+            canonical_ecg_method,
+            "Method for removing ECG (cardiac) crosstalk from the sEMG. "
+            "Wavelet denoising (paper default) shrinks wavelet coefficients "
+            "around detected R-peaks; Gating blanks/interpolates a fixed "
+            "window at each R-peak; High-pass 200 Hz is a rudimentary "
+            "fallback that also removes most EMG content below 200 Hz.",
+        )
+    ]
+    if _ecg_method in ("Gating", "Wavelet denoising"):
+        _ecg_controls.append(
+            _lab(
+                canonical_ecg_peak_fraction,
+                "R-peak detection sensitivity (fraction of peak "
+                "normalized cross-correlation used as the threshold). Lower "
+                "= more sensitive (finds more beats, risk of false "
+                "positives); higher = misses beats, leaving unfiltered QRS "
+                "spikes. Typical range: 0.1-0.3. The library default (0.4) "
+                "under-detects on this dataset -- verified by sweeping "
+                "peak_fraction over an EIT-off window and counting beats.",
+            )
+        )
+    if _ecg_method == "Wavelet denoising":
+        _ecg_controls += [
+            _lab(
+                canonical_wavelet_threshold,
+                "Shrinkage threshold in noise-sigma units (σ): wavelet "
+                "coefficients below this multiple of the estimated noise "
+                "level are zeroed. Lower = more aggressive ECG removal but "
+                "risks removing real EMG amplitude; higher leaves more "
+                "residual QRS spikes. Typical range: 3.5-5 (Jonkman et al. "
+                "2024 default: 4.5).",
+            ),
+            _lab(
+                canonical_wavelet_level,
+                "Depth of the à-trous wavelet decomposition. Higher levels "
+                "capture lower-frequency structure (more thorough removal, "
+                "slower, can over-smooth genuine EMG). Typical range: 3-5 "
+                "(paper default: 4).",
+            ),
+        ]
+    if _ecg_method == "Gating":
+        _ecg_controls.append(
+            _lab(
+                canonical_gate_width_ms,
+                "Width of the window blanked/interpolated around each "
+                "detected R-peak. Should roughly match the QRS complex "
+                "duration -- too narrow leaves QRS edges unremoved, too "
+                "wide deletes real EMG around each heartbeat. Typical "
+                "range: 80-120 ms.",
+            )
+        )
+
+    mo.vstack(
+        [
+            mo.md("### Canonical step-by-step pipeline (Jonkman et al. 2024)"),
+            mo.md("**1-2. Line-noise & band-limiting**"),
+            mo.hstack(
+                [
+                    _lab(
+                        notch_base_frequency,
+                        "Fundamental frequency of the periodic interference "
+                        "to notch out (mains hum, or a co-recorded EIT "
+                        "device's frame rate). Typical: 50 Hz (EU mains / "
+                        "Draeger EIT frame rate) or 60 Hz (US mains).",
+                    ),
+                    _lab(
+                        notch_quality_factor,
+                        "Notch sharpness (f0 / bandwidth) at each harmonic. "
+                        "Higher = narrower notch, less collateral signal "
+                        "loss, but must land exactly on the true "
+                        "frequency. Typical range: 20-40.",
+                    ),
+                    _lab(
+                        canonical_notch_max_hz,
+                        "Highest frequency the harmonic notch reaches. Must "
+                        "be >= the low-pass cutoff -- a harmonic sitting "
+                        "right at that edge is only partially attenuated by "
+                        "either filter otherwise. Typical: Nyquist (fs/2). "
+                        "Set equal to the low-pass cutoff to reproduce that "
+                        "under-notching bug.",
+                    ),
+                    _lab(
+                        canonical_low_pass_hz,
+                        "Upper cutoff of the EMG band-pass. Diaphragm sEMG "
+                        "content is mostly below ~250 Hz, but literature "
+                        "commonly keeps headroom up to 400-500 Hz.",
+                    ),
+                    _lab(
+                        canonical_hpf_hz,
+                        "Lower cutoff removing baseline wander and residual "
+                        "ECG P/T waves. Jonkman et al. 2024 recommend "
+                        "0.5-20 Hz; higher strips more cardiac content but "
+                        "risks removing genuine low-frequency diaphragm "
+                        "EMG.",
+                    ),
+                ],
+                justify="start",
+                gap=2,
+            ),
+            mo.md("**3. ECG (QRS) removal**"),
+            mo.hstack(_ecg_controls, justify="start", gap=2),
+            mo.md("**4-6. Envelope & breath detection**"),
+            mo.hstack(
+                [
+                    _lab(
+                        canonical_envelope_type,
+                        "How the burst amplitude envelope is computed. RMS "
+                        "(paper default, required for variance-based "
+                        "baseline correction), ARV (mean absolute value), "
+                        "or MAV (rolling median of the absolute value, more "
+                        "robust to spikes).",
+                    ),
+                    _lab(
+                        canonical_envelope_ms,
+                        "Length of the centered rolling window used to "
+                        "compute the envelope. Shorter = more temporal "
+                        "detail but noisier; longer = smoother but blurs "
+                        "breath onset/offset timing. Typical range: "
+                        "100-300 ms (paper default: 250 ms).",
+                    ),
+                    _lab(
+                        canonical_baseline_correction,
+                        "Subtracts the estimated noise floor (10th "
+                        "percentile) from the envelope. For RMS, the noise "
+                        "*variance* is subtracted, not the standard "
+                        "deviation, per the paper's recommendation. "
+                        "Recommended: on.",
+                    ),
+                    _lab(
+                        breath_min_width_s,
+                        "Minimum width of an EMG burst to count as a "
+                        "breath; also sets the window used for per-breath "
+                        "amplitude. Typical range: 0.5-1.5 s (matches "
+                        "expected inspiratory duration).",
+                    ),
+                    _lab(
+                        breath_prominence_factor,
+                        "Minimum peak prominence (relative to signal scale) "
+                        "for a burst to be counted as a breath. Lower = "
+                        "more sensitive (more breaths, more false "
+                        "positives from residual noise); higher may miss "
+                        "weak breaths. Typical range: 0.05-0.2.",
+                    ),
+                ],
+                justify="start",
+                gap=2,
+            ),
+        ],
+        gap=1,
+    )
+    return
+
+
+@app.cell
 def _canonical_pipeline(
     BIOPAC_SAMPLE_FREQUENCY,
     breath_min_width_s,
     breath_prominence_factor,
     canonical_baseline_correction,
     canonical_ecg_method,
+    canonical_ecg_peak_fraction,
     canonical_envelope_ms,
     canonical_envelope_type,
+    canonical_gate_width_ms,
     canonical_hpf_hz,
+    canonical_low_pass_hz,
+    canonical_notch_max_hz,
+    canonical_wavelet_level,
+    canonical_wavelet_threshold,
     detect_ecg_peaks,
     detect_emg_breath_peaks,
     downsample,
@@ -670,18 +893,27 @@ def _canonical_pipeline(
     _fs = BIOPAC_SAMPLE_FREQUENCY
     _raw = emg_plot["raw_full"]
     _time = emg_plot["full_time"]
-    _low_pass = min(500.0, _fs / 2 * 0.95)
+    _low_pass = min(float(canonical_low_pass_hz.value), _fs / 2 * 0.95)
+    _notch_max = min(float(canonical_notch_max_hz.value), _fs / 2 * 0.95)
 
     # -- Stage 1: low-frequency artifact + power-line removal ------------------
     # Paper: HPF 0.5-20 Hz (baseline wander, P/T waves) + power-line (50/60 Hz)
     # suppression. The 50 Hz harmonic notch here also removes the EIT comb, and
     # the 20 Hz high-pass is the paper's recommended way to strip the P/T waves
     # (rather than a wider gate).
+    #
+    # `_notch_max` and `_low_pass` are independent controls: a harmonic sitting
+    # at or just past the low-pass cutoff (e.g. the EIT frame-rate comb's 10th
+    # harmonic at 500 Hz) is only partially attenuated by the low-pass
+    # filter's finite roll-off, so it must still be fully inside the notch's
+    # stopband rather than at its edge. Set `_notch_max == _low_pass` to
+    # reproduce that under-notching; the default here extends the notch past
+    # the low-pass cutoff to fix it.
     _notched = harmonic_notch_filter(
         _raw,
         base_frequency=float(notch_base_frequency.value),
         sample_frequency=_fs,
-        max_frequency=_low_pass,
+        max_frequency=_notch_max,
         quality_factor=float(notch_quality_factor.value),
     )
     _hpf = emg_bandpass_butter(
@@ -692,21 +924,45 @@ def _canonical_pipeline(
     )
 
     # -- Stage 2: ECG (cardiac crosstalk) removal -----------------------------
+    # A missed R-peak gets no wavelet suppression / no gate at all for that
+    # beat, which shows up as leftover QRS spikes riding through stage 2/3 even
+    # in EIT-off windows. `_peak_fraction` trades detection sensitivity
+    # against false positives -- too high misses beats, too low starts
+    # double-detecting and gating/denoising real EMG content around them.
+    _peak_fraction = float(canonical_ecg_peak_fraction.value)
     _method = canonical_ecg_method.value
     if _method == "Gating":
-        _peaks = detect_ecg_peaks(ecg_raw=_hpf, fs=int(_fs), peak_fraction=0.4)
-        _gate_w = max(2, int(0.10 * _fs))  # window ~ QRS complex duration
+        _peaks = detect_ecg_peaks(
+            ecg_raw=_hpf, fs=int(_fs), peak_fraction=_peak_fraction
+        )
+        _gate_w = max(2, int(float(canonical_gate_width_ms.value) / 1000.0 * _fs))
         _ecg_removed = gating(_hpf, _peaks, gate_width=_gate_w, method=1)
-        _stage2_label = "ECG removed — gating (QRS-width window, interpolated)"
+        _stage2_label = (
+            f"ECG removed — gating ({float(canonical_gate_width_ms.value):.0f} ms"
+            " window, interpolated)"
+        )
     elif _method == "High-pass 200 Hz":
         _ecg_removed = emg_bandpass_butter(
             emg_raw=_notched, high_pass=200.0, low_pass=_low_pass, fs_emg=_fs
         )
         _stage2_label = "ECG removed — high-pass 200 Hz (rudimentary)"
     else:  # Wavelet denoising (paper's go-to method)
-        _peaks = detect_ecg_peaks(ecg_raw=_hpf, fs=int(_fs), peak_fraction=0.4)
-        _ecg_removed, _, _, _ = wavelet_denoising(_hpf, _peaks, fs=int(_fs))
-        _stage2_label = "ECG removed — wavelet denoising (db2, 4.5σ)"
+        _peaks = detect_ecg_peaks(
+            ecg_raw=_hpf, fs=int(_fs), peak_fraction=_peak_fraction
+        )
+        _wavelet_threshold = float(canonical_wavelet_threshold.value)
+        _wavelet_level = int(canonical_wavelet_level.value)
+        _ecg_removed, _, _, _ = wavelet_denoising(
+            _hpf,
+            _peaks,
+            fs=int(_fs),
+            n=_wavelet_level,
+            fixed_threshold=_wavelet_threshold,
+        )
+        _stage2_label = (
+            f"ECG removed — wavelet denoising (db2, {_wavelet_threshold:g}σ,"
+            f" level {_wavelet_level}, {len(_peaks)} R-peaks found)"
+        )
 
     # -- Stage 3: envelope ----------------------------------------------------
     # Paper general recommendation: centered window, length 250 ms.
@@ -774,6 +1030,8 @@ def _canonical_pipeline(
         "envelope_type": _env_type,
         "envelope_ms": float(canonical_envelope_ms.value),
         "hpf_hz": float(canonical_hpf_hz.value),
+        "low_pass_hz": _low_pass,
+        "notch_max_hz": _notch_max,
         "baseline_corrected": bool(canonical_baseline_correction.value),
         "time": _time[::_step],
         "raw": _prep(_raw),
@@ -801,13 +1059,17 @@ def _canonical_pipeline_status(canonical_plot, mo, np):
     _rate_text = f"{_rate:.0f}" if np.isfinite(_rate) else "n/a"
     mo.md(
         f"""
-        ### Canonical pipeline (Jonkman et al. 2024) — step by step
-
         1. **Acquisition** — Biopac sEMGdi at 2000 Hz (paper advises ≥500,
            ideally 1000 Hz; respiratory content 25-250 Hz).
-        2. **Low-frequency artifact removal** — 50 Hz harmonic notch
-           (power-line / EIT interference) + {canonical_plot["hpf_hz"]:.0f} Hz
-           high-pass (baseline wander, P/T waves).
+        2. **Low-frequency artifact removal** — 50 Hz harmonic notch, reaching
+           up to {canonical_plot["notch_max_hz"]:.0f} Hz (power-line / EIT
+           interference) + {canonical_plot["hpf_hz"]:.0f} Hz high-pass
+           (baseline wander, P/T waves); low-pass cutoff at
+           {canonical_plot["low_pass_hz"]:.0f} Hz. If the notch's reach stops
+           at or before the low-pass cutoff, a harmonic sitting on that edge
+           (e.g. the EIT frame-rate comb's 10th harmonic) only gets partial
+           attenuation from either filter — set "Notch reach" ≥ "Low-pass
+           cutoff" to avoid that.
         3. **ECG removal** — {canonical_plot["stage2_label"]}.
         4. **Envelope** — {canonical_plot["envelope_type"]},
            {canonical_plot["envelope_ms"]:.0f} ms centered window.
@@ -915,80 +1177,80 @@ def _canonical_pipeline_plot(
     return
 
 
-@app.cell
-def _emg_spectrum_plot(
-    BIOPAC_SAMPLE_FREQUENCY,
-    emg_plot,
-    go,
-    np,
-    welch,
-):
-    # Power spectrum of the raw EMG in the visible window. The EIT interference
-    # (removed only inside the canonical pipeline below) shows up here as a
-    # comb at the frame rate and its harmonics.
-    _raw = emg_plot["raw_full"]
-    _n_fft = min(4096, max(256, 1 << int(np.log2(max(_raw.size, 1)))))
-    _f_raw, _p_raw = welch(_raw, fs=BIOPAC_SAMPLE_FREQUENCY, nperseg=_n_fft)
+# @app.cell
+# def _emg_spectrum_plot(
+#     BIOPAC_SAMPLE_FREQUENCY,
+#     emg_plot,
+#     go,
+#     np,
+#     welch,
+# ):
+#     # Power spectrum of the raw EMG in the visible window. The EIT interference
+#     # (removed only inside the canonical pipeline below) shows up here as a
+#     # comb at the frame rate and its harmonics.
+#     _raw = emg_plot["raw_full"]
+#     _n_fft = min(4096, max(256, 1 << int(np.log2(max(_raw.size, 1)))))
+#     _f_raw, _p_raw = welch(_raw, fs=BIOPAC_SAMPLE_FREQUENCY, nperseg=_n_fft)
 
-    _fig = go.Figure()
-    _fig.add_trace(
-        go.Scatter(
-            x=_f_raw,
-            y=_p_raw,
-            mode="lines",
-            name="raw",
-            line=dict(color="#185FA5", width=1),
-        )
-    )
-    _fig.update_layout(
-        title="EMGdi power spectrum — raw (visible window)",
-        template="plotly_white",
-        height=280,
-        margin=dict(t=40, r=20, b=44, l=64),
-        xaxis_title="frequency (Hz)",
-        yaxis_title="PSD",
-        yaxis_type="log",
-        xaxis_range=[0, min(500, BIOPAC_SAMPLE_FREQUENCY / 2)],
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    )
-    _fig
-    return
+#     _fig = go.Figure()
+#     _fig.add_trace(
+#         go.Scatter(
+#             x=_f_raw,
+#             y=_p_raw,
+#             mode="lines",
+#             name="raw",
+#             line=dict(color="#185FA5", width=1),
+#         )
+#     )
+#     _fig.update_layout(
+#         title="EMGdi power spectrum — raw (visible window)",
+#         template="plotly_white",
+#         height=280,
+#         margin=dict(t=40, r=20, b=44, l=64),
+#         xaxis_title="frequency (Hz)",
+#         yaxis_title="PSD",
+#         yaxis_type="log",
+#         xaxis_range=[0, min(500, BIOPAC_SAMPLE_FREQUENCY / 2)],
+#         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+#     )
+#     _fig
+#     return
 
 
-@app.cell
-def _interference_plot(go, interference_edge, interference_power):
-    _fig = go.Figure()
-    _fig.add_trace(
-        go.Scatter(
-            x=interference_power["time"],
-            y=interference_power["values"],
-            mode="lines",
-            name="sEMG HF power",
-            line=dict(color="#E07A00", width=1),
-        )
-    )
-    if interference_power["threshold"] is not None:
-        _fig.add_hline(
-            y=interference_power["threshold"],
-            line=dict(color="#888888", dash="dot"),
-            annotation_text="threshold",
-        )
-    if interference_edge is not None:
-        _fig.add_vline(
-            x=interference_edge,
-            line=dict(color="#D1495B", dash="dash"),
-            annotation_text="EIT off",
-        )
-    _fig.update_layout(
-        title="sEMG interference power — EIT-off edge detection",
-        template="plotly_white",
-        height=260,
-        margin=dict(t=40, r=20, b=36, l=64),
-        xaxis_title="Biopac time (s)",
-        yaxis_title="HF power (a.u.)",
-    )
-    _fig
-    return
+# @app.cell
+# def _interference_plot(go, interference_edge, interference_power):
+#     _fig = go.Figure()
+#     _fig.add_trace(
+#         go.Scatter(
+#             x=interference_power["time"],
+#             y=interference_power["values"],
+#             mode="lines",
+#             name="sEMG HF power",
+#             line=dict(color="#E07A00", width=1),
+#         )
+#     )
+#     if interference_power["threshold"] is not None:
+#         _fig.add_hline(
+#             y=interference_power["threshold"],
+#             line=dict(color="#888888", dash="dot"),
+#             annotation_text="threshold",
+#         )
+#     if interference_edge is not None:
+#         _fig.add_vline(
+#             x=interference_edge,
+#             line=dict(color="#D1495B", dash="dash"),
+#             annotation_text="EIT off",
+#         )
+#     _fig.update_layout(
+#         title="sEMG interference power — EIT-off edge detection",
+#         template="plotly_white",
+#         height=260,
+#         margin=dict(t=40, r=20, b=36, l=64),
+#         xaxis_title="Biopac time (s)",
+#         yaxis_title="HF power (a.u.)",
+#     )
+#     _fig
+#     return
 
 
 @app.cell
