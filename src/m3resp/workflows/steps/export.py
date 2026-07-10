@@ -7,8 +7,8 @@ from typing import Any
 
 from m3resp.core.session import M3Session
 from m3resp.export.session_export import export_session_summary
-from m3resp.pipeline.registry import register_step
-from m3resp.pipeline.utils import write_json
+from m3resp.workflows.registry import register_step
+from m3resp.workflows.utils import write_json
 
 
 @register_step(
@@ -89,7 +89,7 @@ def rotarc_result(
     Output path: ``<outputs.dir>/subject_results/<run_identifier>/<subject>-<mode>-<tp>-<selection>.txt``
     """
 
-    from m3resp.pipeline.utils import subject_result_filename
+    from m3resp.workflows.utils import subject_result_filename
 
     exp = _spec_experiment
     out = _spec_outputs

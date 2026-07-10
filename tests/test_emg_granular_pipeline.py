@@ -1,6 +1,6 @@
 """Regression coverage for the granular `emg.*` postprocessing steps.
 
-Confirms the per-function `emg.*` pipeline steps (src/m3resp/pipeline/steps/emg.py)
+Confirms the per-function `emg.*` pipeline steps (src/m3resp/workflows/steps/emg.py)
 are a faithful factoring of `ReSurfEMGAdapter._postprocess_default`, not a
 behavioral rewrite, by running both against the same committed sample data
 and comparing numeric output.
@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from m3resp.core.session import M3Session
-from m3resp.pipeline import run_pipeline
+from m3resp.workflows import run_pipeline
 
 pytest.importorskip("resurfemg")
 np = pytest.importorskip("numpy")

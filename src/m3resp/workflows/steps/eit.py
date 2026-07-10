@@ -11,8 +11,8 @@ import copy
 from typing import Any
 
 from m3resp.core.session import M3Session
-from m3resp.pipeline.registry import register_step
-from m3resp.pipeline.utils import slice_signal_by_mode
+from m3resp.workflows.registry import register_step
+from m3resp.workflows.utils import slice_signal_by_mode
 
 
 def _add_to_collection(collection: Any, value: Any) -> None:

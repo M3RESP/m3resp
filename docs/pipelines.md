@@ -120,7 +120,7 @@ Register a function with `@register_step`. Declare the context keys it reads
 (mapped onto its parameter names) and the output names it returns:
 
 ```python
-from m3resp.pipeline import register_step
+from m3resp.workflows import register_step
 
 @register_step(
     "my.step",
