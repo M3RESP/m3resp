@@ -10,18 +10,10 @@ from __future__ import annotations
 import copy
 from typing import Any, Literal, cast
 
+from m3resp.adapters.eitprocessing_adapter import _add_to_collection
 from m3resp.core.session import M3Session
 from m3resp.workflows.registry import register_step
 from m3resp.workflows.utils import slice_signal_by_mode
-
-
-def _add_to_collection(collection: Any, value: Any) -> None:
-    """Add ``value`` to an eitprocessing collection, tolerating old signatures."""
-
-    try:
-        collection.add(value, overwrite=True)
-    except TypeError:
-        collection.add(value)
 
 
 @register_step(

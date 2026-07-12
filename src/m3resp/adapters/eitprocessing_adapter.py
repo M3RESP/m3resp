@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import math
 from collections.abc import Callable
 from typing import Any, Literal, cast
 
@@ -69,6 +70,259 @@ class EITProcessingAdapter:
         _add_to_collection(sequence.continuous_data, global_impedance)
         return global_impedance
 
+    # -- Phase 1: reusable adapter operations ----------------------------------
+    #
+    # Small public methods, each wrapping exactly one `eitprocessing` operation.
+    # `preprocess()` and the granular workflow steps in
+    # `m3resp.workflows.steps.eit` both call these so the two paths cannot
+    # drift. Upstream imports stay local to each method so `m3resp` installs
+    # without the optional `eitprocessing` dependency.
+
+    def detect_rates(
+        self,
+        signal: Any,
+        *,
+        subject_type: Literal["adult", "neonate"] = "adult",
+        welch_window_seconds: float | None = None,
+        capture: bool = False,
+    ) -> dict[str, Any]:
+        """Estimate respiratory and heart rate from an EIT (or continuous) signal."""
+
+        try:
+            from eitprocessing.features.rate_detection import RateDetection
+        except ImportError as exc:
+            raise _optional_dependency_error() from exc
+
+        detector = (
+            RateDetection(subject_type)
+            if welch_window_seconds is None
+            else RateDetection(subject_type, welch_window=welch_window_seconds)
+        )
+        captures: dict[str, Any] = {}
+        if capture:
+            respiratory_rate_hz, heart_rate_hz = detector.apply(
+                signal,
+                captures=captures,
+                suppress_length_warnings=True,
+                suppress_edge_case_warning=True,
+            )
+        else:
+            respiratory_rate_hz, heart_rate_hz = detector.apply(signal)
+        return {
+            "respiratory_rate_hz": float(respiratory_rate_hz),
+            "heart_rate_hz": float(heart_rate_hz),
+            "rate_detector": detector,
+            "rate_captures": captures,
+        }
+
+    def apply_mdn(
+        self,
+        signal: Any,
+        *,
+        respiratory_rate_hz: float,
+        heart_rate_hz: float,
+        label: str = "filtered",
+        name: str | None = None,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        """Apply an MDN heart-rate-removal filter to EIT pixel data."""
+
+        try:
+            from eitprocessing.filters.mdn import MDNFilter
+        except ImportError as exc:
+            raise _optional_dependency_error() from exc
+
+        for rate_name, rate in (
+            ("respiratory_rate_hz", respiratory_rate_hz),
+            ("heart_rate_hz", heart_rate_hz),
+        ):
+            if not math.isfinite(rate) or rate <= 0:
+                raise ValueError(
+                    f"{rate_name} must be a finite, positive value in Hz, got {rate!r}."
+                )
+
+        apply_kwargs: dict[str, Any] = {"label": label}
+        if name is not None:
+            apply_kwargs["name"] = name
+        if description is not None:
+            apply_kwargs["description"] = description
+
+        captures: dict[str, Any] = {}
+        filtered_eit = MDNFilter(
+            respiratory_rate=respiratory_rate_hz,
+            heart_rate=heart_rate_hz,
+        ).apply(signal, captures=captures, **apply_kwargs)
+        return {"filtered_eit": filtered_eit, "filter_captures": captures}
+
+    def find_pixel_breaths(
+        self,
+        eit_data: Any,
+        timing_data: Any,
+        *,
+        sequence: Any | None = None,
+        phase_correction_mode: Literal["negative amplitude", "phase shift", "none"]
+        | None = "negative amplitude",
+        minimum_duration_seconds: float = 2 / 3,
+        result_label: str = "pixel_breaths",
+    ) -> Any:
+        """Detect per-pixel breath timing (start/middle/end of in-/deflation)."""
+
+        try:
+            from eitprocessing.features.breath_detection import BreathDetection
+            from eitprocessing.features.pixel_breath import PixelBreath
+        except ImportError as exc:
+            raise _optional_dependency_error() from exc
+
+        breath_detector = BreathDetection(minimum_duration=minimum_duration_seconds)
+        result = PixelBreath(
+            breath_detection=breath_detector,
+            phase_correction_mode=phase_correction_mode,
+        ).find_pixel_breaths(
+            eit_data,
+            timing_data,
+            sequence=sequence,
+            store=False,
+            result_label=result_label,
+        )
+        if sequence is not None:
+            _add_to_collection(sequence.interval_data, result)
+        return result
+
+    def compute_eeli(
+        self,
+        timing_data: Any,
+        *,
+        sequence: Any,
+        breath_detector: Any,
+        result_label: str = "continuous_eelis",
+    ) -> Any:
+        """Compute end-expiratory lung impedance (EELI) per breath."""
+
+        try:
+            from eitprocessing.parameters.eeli import EELI
+        except ImportError as exc:
+            raise _optional_dependency_error() from exc
+
+        result = EELI(breath_detection=breath_detector).compute_parameter(
+            timing_data,
+            sequence=sequence,
+            store=False,
+            result_label=result_label,
+        )
+        _add_to_collection(sequence.sparse_data, result)
+        return result
+
+    def compute_pixel_tiv(
+        self,
+        eit_data: Any,
+        timing_data: Any,
+        *,
+        sequence: Any,
+        breath_detector: Any,
+        tiv_timing: Literal["pixel", "continuous"] = "continuous",
+        result_label: str = "pixel_tivs",
+    ) -> Any:
+        """Compute per-pixel tidal impedance variation (TIV)."""
+
+        try:
+            from eitprocessing.parameters.tidal_impedance_variation import TIV
+        except ImportError as exc:
+            raise _optional_dependency_error() from exc
+
+        result: Any = TIV(breath_detection=breath_detector).compute_parameter(
+            eit_data,
+            timing_data,
+            sequence,
+            tiv_timing=tiv_timing,
+            store=False,
+            result_label=result_label,
+        )
+        _add_to_collection(sequence.sparse_data, result)
+        return result
+
+    def compute_tiv_lungspace(
+        self,
+        eit_data: Any,
+        *,
+        timing_data: Any | None = None,
+        threshold: float = 0.15,
+    ) -> dict[str, Any]:
+        """Threshold mean pixel TIV into a functional lung-space mask."""
+
+        try:
+            from eitprocessing.roi.tiv import TIVLungspace
+        except ImportError as exc:
+            raise _optional_dependency_error() from exc
+
+        captures: dict[str, Any] = {}
+        mask = TIVLungspace(threshold=threshold).apply(
+            eit_data, timing_data=timing_data, captures=captures
+        )
+        return {"mask": mask, "captures": captures}
+
+    def compute_amplitude_lungspace(
+        self,
+        eit_data: Any,
+        *,
+        timing_data: Any | None = None,
+        threshold: float = 0.15,
+    ) -> dict[str, Any]:
+        """Threshold mean pixel amplitude into a lung-space mask.
+
+        Upstream does not recommend amplitude alone as a general-purpose
+        functional lung-space definition; it exists primarily to support
+        `compute_watershed_lungspace()`.
+        """
+
+        try:
+            from eitprocessing.roi.amplitude import AmplitudeLungspace
+        except ImportError as exc:
+            raise _optional_dependency_error() from exc
+
+        captures: dict[str, Any] = {}
+        mask = AmplitudeLungspace(threshold=threshold).apply(
+            eit_data, timing_data=timing_data, captures=captures
+        )
+        return {"mask": mask, "captures": captures}
+
+    def compute_watershed_lungspace(
+        self,
+        eit_data: Any,
+        *,
+        timing_data: Any | None = None,
+        threshold_fraction: float = 0.15,
+    ) -> dict[str, Any]:
+        """Derive a lung-space mask with the watershed method (pendelluft-aware)."""
+
+        try:
+            from eitprocessing.roi.watershed import WatershedLungspace
+        except ImportError as exc:
+            raise _optional_dependency_error() from exc
+
+        captures: dict[str, Any] = {}
+        mask = WatershedLungspace(threshold_fraction=threshold_fraction).apply(
+            eit_data, timing_data=timing_data, captures=captures
+        )
+        return {"mask": mask, "captures": captures}
+
+    def filter_roi_by_size(
+        self,
+        mask: Any,
+        *,
+        min_region_size: int = 10,
+        connectivity: Literal[1, 2] | np.ndarray = 1,
+    ) -> Any:
+        """Keep only connected mask regions at or above `min_region_size`."""
+
+        try:
+            from eitprocessing.roi.filter_by_size import FilterROIBySize
+        except ImportError as exc:
+            raise _optional_dependency_error() from exc
+
+        return FilterROIBySize(
+            min_region_size=min_region_size, connectivity=connectivity
+        ).apply(mask)
+
     def preprocess(
         self,
         sequence: Any,
@@ -93,9 +347,6 @@ class EITProcessingAdapter:
 
         try:
             from eitprocessing.features.breath_detection import BreathDetection
-            from eitprocessing.features.rate_detection import RateDetection
-            from eitprocessing.filters.mdn import MDNFilter
-            from eitprocessing.parameters.eeli import EELI
             from eitprocessing.parameters.tidal_impedance_variation import TIV
         except ImportError as exc:
             raise OptionalDependencyError(
@@ -131,15 +382,16 @@ class EITProcessingAdapter:
         heart_rate_hz = None
         rates_required = compute_rates or normalized_filter_mode == "mdn"
         if rates_required:
-            rate_detector = RateDetection(
-                subject_type, welch_window=welch_window_seconds
-            )
-            respiratory_rate_hz, heart_rate_hz = rate_detector.apply(
+            rates = self.detect_rates(
                 raw_eit,
-                captures=rate_captures,
-                suppress_length_warnings=True,
-                suppress_edge_case_warning=True,
+                subject_type=subject_type,
+                welch_window_seconds=welch_window_seconds,
+                capture=True,
             )
+            rate_detector = rates["rate_detector"]
+            rate_captures = rates["rate_captures"]
+            respiratory_rate_hz = rates["respiratory_rate_hz"]
+            heart_rate_hz = rates["heart_rate_hz"]
 
         filter_captures: dict[str, Any] = {}
         filtered_eit = raw_eit
@@ -148,17 +400,16 @@ class EITProcessingAdapter:
         if normalized_filter_mode == "mdn":
             assert respiratory_rate_hz is not None
             assert heart_rate_hz is not None
-            eit_filter = MDNFilter(
-                respiratory_rate=respiratory_rate_hz,
-                heart_rate=heart_rate_hz,
-            )
-            filtered_eit = eit_filter.apply(
+            mdn_result = self.apply_mdn(
                 raw_eit,
-                captures=filter_captures,
+                respiratory_rate_hz=respiratory_rate_hz,
+                heart_rate_hz=heart_rate_hz,
                 label="mdn_filtered",
                 name="MDN-filtered EIT data",
                 description="EIT data filtered with MDN heart-rate noise removal.",
             )
+            filtered_eit = mdn_result["filtered_eit"]
+            filter_captures = mdn_result["filter_captures"]
         elif normalized_filter_mode in {"lowpass", "bandpass"}:
             butterworth_filter_type = cast(
                 Literal["lowpass", "bandpass"], normalized_filter_mode
@@ -233,28 +484,25 @@ class EITProcessingAdapter:
         if compute_eeli:
             assert breath_detector is not None
             assert filtered_global_impedance is not None
-            eeli = EELI(breath_detection=breath_detector).compute_parameter(
+            eeli = self.compute_eeli(
                 filtered_global_impedance,
                 sequence=sequence,
-                store=False,
+                breath_detector=breath_detector,
                 result_label="continuous_eelis",
             )
-            _add_to_collection(sequence.sparse_data, eeli)
 
         pixel_tiv: Any = None
         if compute_pixel_tiv:
             assert breath_detector is not None
             assert filtered_global_impedance is not None
-            tiv_calculator = TIV(breath_detection=breath_detector)
-            pixel_tiv = tiv_calculator.compute_parameter(
+            pixel_tiv = self.compute_pixel_tiv(
                 filtered_eit,
                 filtered_global_impedance,
-                sequence,
+                sequence=sequence,
+                breath_detector=breath_detector,
                 tiv_timing="continuous",
-                store=False,
                 result_label="pixel_tivs",
             )
-            _add_to_collection(sequence.sparse_data, pixel_tiv)
 
         return {
             "sequence": sequence,
@@ -405,6 +653,13 @@ class EITProcessingAdapter:
                 modality="eit",
             ),
         ]
+
+
+def _optional_dependency_error() -> OptionalDependencyError:
+    return OptionalDependencyError(
+        "EIT support requires the optional dependency `eitprocessing`. "
+        'Install with `pip install "m3resp[eit]"`.'
+    )
 
 
 def _require_eit_sequence(sequence: Any) -> None:
