@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
+from m3resp.adapters.eitprocessing_adapter import _sparse_data_to_parameters
 from m3resp.data import ParameterResult, QualityFlag, Signal
 
 
@@ -94,6 +95,63 @@ class TestEITAdapterConversions:
 
         assert all(isinstance(f, QualityFlag) for f in flags)
         assert all(f.passed is False for f in flags)
+
+
+class TestSparseDataToParameters:
+    """Phase 0.2 - `_sparse_data_to_parameters()` must never assume a scalar
+    per-breath timestamp; pixel-resolved results (e.g. pixel TIV) carry a
+    full (row, column) array of timing values per breath instead.
+    """
+
+    def test_scalar_sparse_values_keep_scalar_time(self):
+        obj = _sparse([1.0, 2.0], name="continuous_tivs")
+
+        results = _sparse_data_to_parameters(obj, modality="eit", method="m")
+
+        assert [r.metadata["time"] for r in results] == [0.0, 1.0]
+        assert all("time_shape" not in r.metadata for r in results)
+
+    def test_per_breath_map_values_keep_array_time_without_raising(self):
+        map_value = np.full((2, 3), 5.5)
+        obj = SimpleNamespace(
+            values=[map_value],
+            time=[np.full((2, 3), 1.25)],
+            unit="a.u.",
+            name="pixel_tivs",
+        )
+
+        results = _sparse_data_to_parameters(obj, modality="eit", method="m")
+
+        assert len(results) == 1
+        np.testing.assert_array_equal(results[0].value, map_value)
+        assert results[0].metadata["time"] == [[1.25, 1.25, 1.25], [1.25, 1.25, 1.25]]
+        assert results[0].metadata["time_shape"] == [2, 3]
+        assert results[0].metadata["time_axes"] == ["row", "column"]
+
+    def test_all_nan_map_slice_is_preserved_not_dropped(self):
+        all_nan = np.full((2, 2), np.nan)
+        obj = SimpleNamespace(
+            values=[all_nan],
+            time=[np.zeros((2, 2))],
+            unit="a.u.",
+            name="pixel_tivs",
+        )
+
+        results = _sparse_data_to_parameters(obj, modality="eit", method="m")
+
+        assert len(results) == 1
+        assert np.all(np.isnan(results[0].value))
+
+    def test_mismatched_value_and_time_lengths_do_not_raise(self):
+        obj = _sparse([1.0, 2.0, 3.0], name="continuous_tivs")
+        obj.time = obj.time[:1]
+
+        results = _sparse_data_to_parameters(obj, modality="eit", method="m")
+
+        assert len(results) == 3
+        assert results[0].metadata == {"time": 0.0}
+        assert results[1].metadata == {}
+        assert results[2].metadata == {}
 
 
 class TestReSurfEMGAdapterConversions:

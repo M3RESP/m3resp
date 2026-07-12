@@ -145,8 +145,13 @@ def test_eit_real_data_pipeline_uses_committed_sample():
     pytest.importorskip("eitprocessing")
 
     eit_path = os.path.join(
-        repo_root, "data", "source", "draeger_synthetic_draeger_20Hz.bin"
+        repo_root,
+        "data",
+        "source",
+        "data_from_repo",
+        "draeger_synthetic_draeger_20Hz.bin",
     )
+    assert os.path.exists(eit_path), f"missing committed EIT fixture: {eit_path}"
     session = M3Session()
 
     session.load_eit(eit_path, vendor="draeger")

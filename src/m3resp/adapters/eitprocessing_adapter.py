@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal, cast
 
 import numpy as np
 
@@ -31,6 +31,12 @@ class EITProcessingAdapter:
 
         if self._loader is not None:
             return self._loader(path, vendor=vendor, **kwargs)
+
+        if vendor is None:
+            raise ValueError(
+                "EIT loading requires an explicit vendor (e.g. 'draeger', "
+                "'sentec', or 'timpel') when no loader is injected."
+            )
 
         try:
             from eitprocessing.datahandling.loading import load_eit_data
@@ -67,7 +73,7 @@ class EITProcessingAdapter:
         self,
         sequence: Any,
         *,
-        subject_type: str = "adult",
+        subject_type: Literal["adult", "neonate"] = "adult",
         welch_window_seconds: float = 30.0,
         filter_mode: str = "mdn",
         filter_enabled: bool = True,
@@ -140,6 +146,8 @@ class EITProcessingAdapter:
         filtered_global_impedance = raw_global_impedance
 
         if normalized_filter_mode == "mdn":
+            assert respiratory_rate_hz is not None
+            assert heart_rate_hz is not None
             eit_filter = MDNFilter(
                 respiratory_rate=respiratory_rate_hz,
                 heart_rate=heart_rate_hz,
@@ -152,14 +160,17 @@ class EITProcessingAdapter:
                 description="EIT data filtered with MDN heart-rate noise removal.",
             )
         elif normalized_filter_mode in {"lowpass", "bandpass"}:
+            butterworth_filter_type = cast(
+                Literal["lowpass", "bandpass"], normalized_filter_mode
+            )
             cutoff_frequency = (
                 lowpass_hz
-                if normalized_filter_mode == "lowpass"
+                if butterworth_filter_type == "lowpass"
                 else (highpass_hz, lowpass_hz)
             )
             filtered_pixels = butterworth_filter(
                 np.nan_to_num(raw_eit.pixel_impedance),
-                filter_type=normalized_filter_mode,
+                filter_type=butterworth_filter_type,
                 cutoff_frequency=cutoff_frequency,
                 sample_frequency=raw_eit.sample_frequency,
                 order=filter_order,
@@ -186,7 +197,7 @@ class EITProcessingAdapter:
 
         breath_detector = None
         breath_intervals = None
-        continuous_tiv = None
+        continuous_tiv: Any = None
         eeli = None
         if compute_breath_intervals:
             if filtered_global_impedance is None:
@@ -203,7 +214,13 @@ class EITProcessingAdapter:
             )
             _add_to_collection(sequence.interval_data, breath_intervals)
 
+        # `compute_breath_intervals` is guaranteed True here (validated above
+        # whenever any of these three outputs is requested), so
+        # `breath_detector`/`filtered_global_impedance` are always populated;
+        # the asserts only narrow the type for mypy.
         if compute_continuous_tiv:
+            assert breath_detector is not None
+            assert filtered_global_impedance is not None
             tiv_calculator = TIV(breath_detection=breath_detector)
             continuous_tiv = tiv_calculator.compute_parameter(
                 filtered_global_impedance,
@@ -214,6 +231,8 @@ class EITProcessingAdapter:
             _add_to_collection(sequence.sparse_data, continuous_tiv)
 
         if compute_eeli:
+            assert breath_detector is not None
+            assert filtered_global_impedance is not None
             eeli = EELI(breath_detection=breath_detector).compute_parameter(
                 filtered_global_impedance,
                 sequence=sequence,
@@ -222,8 +241,10 @@ class EITProcessingAdapter:
             )
             _add_to_collection(sequence.sparse_data, eeli)
 
-        pixel_tiv = None
+        pixel_tiv: Any = None
         if compute_pixel_tiv:
+            assert breath_detector is not None
+            assert filtered_global_impedance is not None
             tiv_calculator = TIV(breath_detection=breath_detector)
             pixel_tiv = tiv_calculator.compute_parameter(
                 filtered_eit,
@@ -438,10 +459,14 @@ def _sparse_data_to_parameters(
 ) -> list[ParameterResult]:
     """Convert an `eitprocessing.SparseData`-shaped object (one value per
     breath) into one `ParameterResult` per non-NaN sample.
+
+    Per-breath timing is usually a scalar, but pixel-resolved results (e.g.
+    pixel TIV) carry a full array (row, column, ...) per breath. Both shapes
+    are preserved; the array case is never truncated to a single float.
     """
 
     values = np.asarray(obj.values)
-    times = np.asarray(obj.time)
+    times = np.asarray(obj.time, dtype=object)
     name = getattr(obj, "name", None) or getattr(obj, "label", None) or "parameter"
     unit = getattr(obj, "unit", None)
 
@@ -449,7 +474,15 @@ def _sparse_data_to_parameters(
     for index, value in enumerate(values):
         if np.ndim(value) == 0 and np.isnan(value):
             continue
-        metadata = {"time": float(times[index])} if index < len(times) else {}
+        metadata: dict[str, Any] = {}
+        if index < len(times):
+            time_entry = np.asarray(times[index])
+            if time_entry.ndim == 0:
+                metadata["time"] = float(time_entry)
+            else:
+                metadata["time"] = time_entry.tolist()
+                metadata["time_shape"] = list(time_entry.shape)
+                metadata["time_axes"] = ["row", "column"][: time_entry.ndim]
         results.append(
             ParameterResult(
                 name=name,

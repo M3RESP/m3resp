@@ -8,7 +8,7 @@ deferred to call time so the package installs without the optional
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import Any, Literal, cast
 
 from m3resp.core.session import M3Session
 from m3resp.workflows.registry import register_step
@@ -64,7 +64,7 @@ def slice_signal(
 def detect_rates(
     signal: Any,
     *,
-    subject_type: str = "adult",
+    subject_type: Literal["adult", "neonate"] = "adult",
     welch_window_seconds: float | None = None,
     capture: bool = False,
 ) -> dict[str, Any]:
@@ -133,7 +133,7 @@ def butterworth_filter(
     signal: Any,
     eit_sequence: Any,
     *,
-    mode: str = "lowpass",
+    mode: Literal["lowpass", "bandpass"] = "lowpass",
     lowpass_hz: float = 1.0,
     highpass_hz: float = 0.05,
     order: int = 4,
@@ -142,7 +142,13 @@ def butterworth_filter(
     import numpy as np
     from eitprocessing.filters.butterworth_filters import ButterworthFilter
 
-    cutoff_frequency = lowpass_hz if mode == "lowpass" else (highpass_hz, lowpass_hz)
+    # Upstream annotates `cutoff_frequency` as `float | tuple[float]` (a
+    # one-element tuple), but its bandpass/bandstop branch actually requires
+    # and accepts a two-element tuple; the cast reflects the real contract.
+    cutoff_frequency = cast(
+        "float | tuple[float]",
+        lowpass_hz if mode == "lowpass" else (highpass_hz, lowpass_hz),
+    )
     captures: dict[str, Any] = {}
     filtered_pixels = ButterworthFilter(
         filter_type=mode,
