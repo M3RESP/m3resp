@@ -345,10 +345,20 @@ class M3Session:
         pipeline_cls = get_pipeline(name)
         return pipeline_cls().run(self, config=config)
 
-    def export_summary(self, output_dir: str | Path) -> Path:
-        """Export the session summary to disk."""
+    def export_summary(
+        self, output_dir: str | Path, *, processing_run_id: str | None = None
+    ) -> Path:
+        """Export the session summary to disk.
 
-        output_path = export_session_summary(self, output_dir)
+        ``processing_run_id`` (typically `PipelineResult.processing_run_id`)
+        links a written parameter-array archive to the `ProcessingRun` that
+        produced it when a `DataModelRecorder` is attached; omit it for a
+        manual export with no associated pipeline run.
+        """
+
+        output_path = export_session_summary(
+            self, output_dir, processing_run_id=processing_run_id
+        )
         self._record("export_summary", parameters={"output_dir": str(output_path)})
         return output_path
 

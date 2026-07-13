@@ -36,6 +36,10 @@ class PipelineResult:
     name: str
     context: PipelineContext
     outputs: dict[str, Any] = field(default_factory=dict)
+    #: The `ProcessingRun` id `record_pipeline_result` created for this run,
+    #: when a `DataModelRecorder` is attached to the session. `None`
+    #: otherwise (including for a session without a recorder).
+    processing_run_id: str | None = None
 
     @property
     def session(self) -> M3Session:
@@ -87,7 +91,8 @@ def run_pipeline(
     }
     pipeline_result = PipelineResult(name=parsed.name, context=ctx, outputs=produced)
     if ctx.session.datamodel is not None:
-        ctx.session.datamodel.record_pipeline_result(pipeline_result)
+        run = ctx.session.datamodel.record_pipeline_result(pipeline_result)
+        pipeline_result.processing_run_id = run.processing_run_id
     return pipeline_result
 
 
@@ -183,6 +188,7 @@ def _apply_outputs(spec: PipelineSpec, result: PipelineResult) -> None:
         parameters_csv=out.parameters_csv,
         postprocessing=out.postprocessing,
         structured_export=out.structured_export,
+        processing_run_id=result.processing_run_id,
     )
 
     _maybe_log_summary(session, output_dir, spec)
@@ -214,6 +220,11 @@ def _maybe_assemble_eit(result: PipelineResult) -> None:
         "continuous_tiv": ctx.get("continuous_tiv"),
         "eeli": ctx.get("eeli"),
         "pixel_tiv": ctx.get("pixel_tiv"),
+        "pixel_breaths": ctx.get("pixel_breaths"),
+        "tiv_lungspace_mask": ctx.get("tiv_lungspace_mask"),
+        "amplitude_lungspace_mask": ctx.get("amplitude_lungspace_mask"),
+        "watershed_lungspace_mask": ctx.get("watershed_lungspace_mask"),
+        "size_filtered_roi_mask": ctx.get("size_filtered_roi_mask"),
     }
 
 

@@ -31,7 +31,15 @@ class SignalCollection:
     items: list[Signal] = field(default_factory=list)
 
     def add(self, signal: Signal) -> Signal:
-        self.items.append(signal)
+        """Append `signal`, unless this exact object is already present.
+
+        Identity (not value) equality: re-adding the same `Signal` instance -
+        e.g. if it gets assembled twice on an export path - is a no-op, while
+        two distinct results that happen to compare equal both get added.
+        """
+
+        if not any(existing is signal for existing in self.items):
+            self.items.append(signal)
         return signal
 
     def for_modality(self, modality: str) -> list[Signal]:
@@ -54,7 +62,11 @@ class ParameterResultCollection:
     items: list[ParameterResult] = field(default_factory=list)
 
     def add(self, parameter: ParameterResult) -> ParameterResult:
-        self.items.append(parameter)
+        """Append `parameter`, unless this exact object is already present
+        (see `SignalCollection.add`)."""
+
+        if not any(existing is parameter for existing in self.items):
+            self.items.append(parameter)
         return parameter
 
     def for_modality(self, modality: str) -> list[ParameterResult]:

@@ -28,6 +28,8 @@ first.
 
 from __future__ import annotations
 
+import hashlib
+import os
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
@@ -315,19 +317,26 @@ class DataModelRecorder:
         Named context artifacts that are already ``ParameterResult``/
         ``QualityFlag``/``Signal`` objects are materialized directly; bare
         numeric outputs (Milestone 1 pipelines that have not adopted Layer 1
-        objects yet) still become a ``DerivedFeature`` with just a value.
+        objects yet) still become a ``DerivedFeature`` with just a value. The
+        run's ``parameters["outputs"]`` also records a JSON-safe provenance
+        summary (method/unit/metadata) for every native result, keyed by its
+        context name, so the run's full output provenance survives even for
+        array-valued results whose ``DerivedFeature.value`` stays ``None``.
         """
 
         run = self.store.add_processing_run(
             ProcessingRun(pipeline_name=result.name, parameters={})
         )
+        output_provenance: dict[str, Any] = {}
         for name, value in result.outputs.items():
             if isinstance(value, ParameterResult):
                 self.record_parameter(value, processing_run_id=run.processing_run_id)
+                output_provenance[name] = _output_provenance_entry(value)
             elif isinstance(value, QualityFlag):
                 self.record_quality_flag(value)
             elif isinstance(value, Signal):
                 self.record_signal(value)
+                output_provenance[name] = _output_provenance_entry(value)
             elif isinstance(value, bool):
                 continue
             elif isinstance(value, (int, float)):
@@ -338,7 +347,35 @@ class DataModelRecorder:
                         value=float(value),
                     )
                 )
+        run.parameters["outputs"] = output_provenance
         return run
+
+    def record_parameter_file(
+        self, path: str | Path, *, processing_run_id: str
+    ) -> DataFile:
+        """Record a structured-export parameter artifact (e.g. the
+        ``parameter_result_arrays.npz`` archive) as a ``DataFile`` with role
+        ``"parameter"``, and link it onto the ``ProcessingRun`` that produced
+        it via ``ProcessingRun.parameter_file_id``.
+
+        Does not create a new entity type for array-valued results (per
+        ``plan/stage2/1_eit_gap_migration_implementation_plan.md`` Phase 5.3):
+        the existing ``DataFile``/``ProcessingRun`` link is reused.
+        """
+
+        data_file = self.store.add_data_file(
+            DataFile(
+                session_id=self.recording_session.session_id,
+                file_path=str(path),
+                file_format="other",
+                file_role="parameter",
+                checksum_sha256=_sha256_file(path),
+                file_size_bytes=os.path.getsize(path),
+            )
+        )
+        run = self.store.processing_runs[processing_run_id]
+        run.parameter_file_id = data_file.file_id
+        return data_file
 
 
 def _signal_type_for(signal: Signal) -> SignalType | None:
@@ -358,6 +395,25 @@ def _signal_type_for(signal: Signal) -> SignalType | None:
     if signal.modality == "flow":
         return "ventilator_flow"
     return None
+
+
+def _output_provenance_entry(value: ParameterResult | Signal) -> dict[str, Any]:
+    """Build a JSON-safe provenance summary for one pipeline-output result,
+    for ``ProcessingRun.parameters["outputs"]``."""
+
+    entry: dict[str, Any] = {
+        "type": type(value).__name__,
+        "method": getattr(value, "method", None),
+        "modality": value.modality,
+        "unit": value.unit,
+        "metadata": _json_safe_parameters(value.metadata),
+    }
+    if isinstance(value, ParameterResult):
+        entry["is_scalar"] = value.is_scalar
+    else:
+        entry["channel"] = value.channel
+        entry["processing_state"] = value.processing_state
+    return entry
 
 
 def _json_safe_parameters(parameters: Mapping[str, Any]) -> dict[str, Any]:
@@ -399,6 +455,14 @@ def _scalar_value(value: float | np.ndarray) -> float | None:
 def _infer_file_format(path: Path | str) -> FileFormat | None:
     suffix = Path(path).suffix.lower()
     return _FILE_FORMAT_BY_SUFFIX.get(suffix)
+
+
+def _sha256_file(path: str | Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _parse_timestamp(value: str) -> datetime:

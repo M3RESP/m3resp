@@ -41,6 +41,43 @@ def _upstream_metadata(
     }
 
 
+def _eitprocessing_version() -> str | None:
+    """Installed `eitprocessing` version, read from package metadata without
+    importing the package itself (so this stays optional-dependency-safe)."""
+
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("eitprocessing")
+    except PackageNotFoundError:
+        return None
+
+
+def _record_step(
+    session: M3Session, step_name: str, *, metadata: dict[str, Any]
+) -> None:
+    """Record per-step EIT provenance through the existing
+    `M3Session._record()` seam (see `plan/stage2/
+    1_eit_gap_migration_implementation_plan.md` Phase 5.2), reusing the
+    step's declared reads/writes from the registry rather than a second
+    EIT-only history mechanism."""
+
+    from m3resp.workflows.registry import get_step
+
+    definition = get_step(step_name)
+    session._record(
+        step_name,
+        "eit",
+        parameters={
+            "step": step_name,
+            "reads": sorted(definition.reads),
+            "writes": list(definition.writes),
+            "upstream_version": _eitprocessing_version(),
+            **metadata,
+        },
+    )
+
+
 def _object_array_to_float(values: Any) -> np.ndarray:
     """Convert an object-dtype array using `None` for missing entries into a
     float array with NaN in place of `None`, preserving its shape."""
@@ -170,6 +207,15 @@ def load(
         )
         session.signals.add(raw_global_impedance_signal)
 
+    _record_step(
+        session,
+        "eit.load",
+        metadata=_upstream_metadata(
+            source_function="eitprocessing.datahandling.loading.load_eit_data",
+            operation="eit.load",
+            parameters={"vendor": vendor, "loader_options": dict(loader_options or {})},
+        ),
+    )
     return {
         "raw_eit": recording.raw,
         "raw_global_impedance": recording.global_impedance,
@@ -258,6 +304,7 @@ def detect_rates(
     session.parameter_results.add(respiratory_rate_result)
     session.parameter_results.add(heart_rate_result)
 
+    _record_step(session, "eit.detect_rates", metadata=metadata)
     return {
         "respiratory_rate_hz": respiratory_rate_hz,
         "heart_rate_hz": heart_rate_hz,
@@ -299,6 +346,15 @@ def mdn_filter(
     filter_captures = result["filter_captures"]
     _add_to_collection(eit_sequence.eit_data, filtered_eit)
 
+    metadata = _upstream_metadata(
+        source_function="eitprocessing.filters.mdn.MDNFilter.apply",
+        operation="eit.mdn_filter",
+        parameters={
+            "respiratory_rate_hz": respiratory_rate_hz,
+            "heart_rate_hz": heart_rate_hz,
+            "label": label,
+        },
+    )
     filtered_eit_signal = Signal(
         values=filtered_eit.pixel_impedance,
         time=filtered_eit.time,
@@ -310,18 +366,11 @@ def mdn_filter(
         channel="pixel_impedance",
         processing_state="filtered",
         source="eitprocessing",
-        metadata=_upstream_metadata(
-            source_function="eitprocessing.filters.mdn.MDNFilter.apply",
-            operation="eit.mdn_filter",
-            parameters={
-                "respiratory_rate_hz": respiratory_rate_hz,
-                "heart_rate_hz": heart_rate_hz,
-                "label": label,
-            },
-        ),
+        metadata=dict(metadata),
     )
     session.signals.add(filtered_eit_signal)
 
+    _record_step(session, "eit.mdn_filter", metadata=metadata)
     return {
         "filtered_eit": filtered_eit,
         "filter_captures": filter_captures,
@@ -458,17 +507,17 @@ def eeli(
         breath_detector=breath_detector,
         result_label=result_label,
     )
+    metadata = _upstream_metadata(
+        source_function="eitprocessing.parameters.eeli.EELI.compute_parameter",
+        operation="eit.eeli",
+        parameters={"result_label": result_label},
+    )
     eeli_result = _sparse_data_to_array_parameter(
-        result,
-        modality="eit",
-        method="eitprocessing.EELI",
-        metadata=_upstream_metadata(
-            source_function="eitprocessing.parameters.eeli.EELI.compute_parameter",
-            operation="eit.eeli",
-            parameters={"result_label": result_label},
-        ),
+        result, modality="eit", method="eitprocessing.EELI", metadata=dict(metadata)
     )
     session.parameter_results.add(eeli_result)
+
+    _record_step(session, "eit.eeli", metadata=metadata)
     return {"eeli": result, "eeli_result": eeli_result}
 
 
@@ -517,7 +566,8 @@ def pixel_tiv(
         operation="eit.pixel_tiv",
         parameters={"tiv_timing": tiv_timing, "result_label": result_label},
     )
-    metadata.update(
+    parameter_metadata = dict(metadata)
+    parameter_metadata.update(
         {
             "time": time.tolist(),
             "shape": list(values.shape),
@@ -537,9 +587,11 @@ def pixel_tiv(
         modality="eit",
         unit=getattr(result, "unit", None),
         method="eitprocessing.TIV",
-        metadata=metadata,
+        metadata=parameter_metadata,
     )
     session.parameter_results.add(pixel_tiv_result)
+
+    _record_step(session, "eit.pixel_tiv", metadata=metadata)
     return {"pixel_tiv": result, "pixel_tiv_result": pixel_tiv_result}
 
 
@@ -617,6 +669,8 @@ def pixel_breaths(
         metadata=metadata,
     )
     session.parameter_results.add(pixel_breath_timing_result)
+
+    _record_step(session, "eit.pixel_breaths", metadata=metadata)
     return {
         "pixel_breaths": result,
         "pixel_breath_timing_result": pixel_breath_timing_result,
@@ -646,17 +700,20 @@ def roi_tiv_lungspace(
         eit_data, timing_data=timing_data, threshold=threshold
     )
     mask = result["mask"]
+    metadata = _upstream_metadata(
+        source_function="eitprocessing.roi.tiv.TIVLungspace.apply",
+        operation="eit.roi_tiv_lungspace",
+        parameters={"threshold": threshold},
+    )
     tiv_lungspace_result = _pixel_mask_to_parameter_result(
         mask,
         name="tiv_lungspace_mask",
         method="eitprocessing.TIVLungspace",
-        metadata=_upstream_metadata(
-            source_function="eitprocessing.roi.tiv.TIVLungspace.apply",
-            operation="eit.roi_tiv_lungspace",
-            parameters={"threshold": threshold},
-        ),
+        metadata=dict(metadata),
     )
     session.parameter_results.add(tiv_lungspace_result)
+
+    _record_step(session, "eit.roi_tiv_lungspace", metadata=metadata)
     return {
         "tiv_lungspace_mask": mask,
         "tiv_lungspace_captures": result["captures"],
@@ -704,17 +761,20 @@ def roi_amplitude_lungspace(
         eit_data, timing_data=timing_data, threshold=threshold
     )
     mask = result["mask"]
+    metadata = _upstream_metadata(
+        source_function="eitprocessing.roi.amplitude.AmplitudeLungspace.apply",
+        operation="eit.roi_amplitude_lungspace",
+        parameters={"threshold": threshold},
+    )
     amplitude_lungspace_result = _pixel_mask_to_parameter_result(
         mask,
         name="amplitude_lungspace_mask",
         method="eitprocessing.AmplitudeLungspace",
-        metadata=_upstream_metadata(
-            source_function="eitprocessing.roi.amplitude.AmplitudeLungspace.apply",
-            operation="eit.roi_amplitude_lungspace",
-            parameters={"threshold": threshold},
-        ),
+        metadata=dict(metadata),
     )
     session.parameter_results.add(amplitude_lungspace_result)
+
+    _record_step(session, "eit.roi_amplitude_lungspace", metadata=metadata)
     return {
         "amplitude_lungspace_mask": mask,
         "amplitude_lungspace_captures": result["captures"],
@@ -751,17 +811,20 @@ def roi_watershed(
         eit_data, timing_data=timing_data, threshold_fraction=threshold_fraction
     )
     mask = result["mask"]
+    metadata = _upstream_metadata(
+        source_function="eitprocessing.roi.watershed.WatershedLungspace.apply",
+        operation="eit.roi_watershed",
+        parameters={"threshold_fraction": threshold_fraction},
+    )
     watershed_lungspace_result = _pixel_mask_to_parameter_result(
         mask,
         name="watershed_lungspace_mask",
         method="eitprocessing.WatershedLungspace",
-        metadata=_upstream_metadata(
-            source_function="eitprocessing.roi.watershed.WatershedLungspace.apply",
-            operation="eit.roi_watershed",
-            parameters={"threshold_fraction": threshold_fraction},
-        ),
+        metadata=dict(metadata),
     )
     session.parameter_results.add(watershed_lungspace_result)
+
+    _record_step(session, "eit.roi_watershed", metadata=metadata)
     return {
         "watershed_lungspace_mask": mask,
         "watershed_captures": result["captures"],
@@ -791,20 +854,23 @@ def roi_filter_by_size(
     result = session.eit_adapter.filter_roi_by_size(
         mask, min_region_size=min_region_size, connectivity=connectivity
     )
+    metadata = _upstream_metadata(
+        source_function="eitprocessing.roi.filter_by_size.FilterROIBySize.apply",
+        operation="eit.roi_filter_by_size",
+        parameters={
+            "min_region_size": min_region_size,
+            "connectivity": connectivity,
+        },
+    )
     size_filtered_roi_result = _pixel_mask_to_parameter_result(
         result,
         name="size_filtered_roi_mask",
         method="eitprocessing.FilterROIBySize",
-        metadata=_upstream_metadata(
-            source_function="eitprocessing.roi.filter_by_size.FilterROIBySize.apply",
-            operation="eit.roi_filter_by_size",
-            parameters={
-                "min_region_size": min_region_size,
-                "connectivity": connectivity,
-            },
-        ),
+        metadata=dict(metadata),
     )
     session.parameter_results.add(size_filtered_roi_result)
+
+    _record_step(session, "eit.roi_filter_by_size", metadata=metadata)
     return {
         "size_filtered_roi_mask": result,
         "size_filtered_roi_result": size_filtered_roi_result,
