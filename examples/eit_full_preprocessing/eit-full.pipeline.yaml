@@ -1,0 +1,81 @@
+# Full EIT preprocessing pipeline (Stage 2 EIT gap migration, Phase 6).
+#
+# Exercises every EIT operation the gap migration closed onto
+# `EITProcessingAdapter`: loading, rate detection, MDN filtering, global
+# breath detection, continuous TIV/EELI, pixel-breath timing, pixel TIV, and
+# the four ROI lung-space steps. Run with:
+#
+#   m3resp run examples/eit_full_preprocessing/eit-full.pipeline.yaml
+#
+# from the repository root - `inputs.eit_file` below is relative to the
+# current working directory, same as the ROTARC/multimodal examples.
+#
+#   experiment:  study metadata; unused here (no export.rotarc_result step)
+#   outputs:     where to write results and which artifacts to produce
+#   inputs:      data paths (referenced in steps with @name)
+
+name: eit-full-preprocessing
+
+outputs:
+  dir: ../../output/eit-full-preprocessing
+  timestamped: true
+  summary_json: true
+  event_csvs: true
+  parameters_csv: false
+  structured_export: true
+
+inputs:
+  eit_file: data/source/data_from_repo/draeger_synthetic_draeger_20Hz.bin
+  vendor: draeger
+
+steps:
+  - uses: eit.load
+    with: { file: "@eit_file", vendor: "@vendor" }
+
+  - uses: eit.detect_rates
+    in:  { signal: raw_eit }
+    with: { subject_type: adult, capture: true }
+
+  - uses: eit.mdn_filter
+    in:  { signal: raw_eit }
+    with: { label: mdn_filtered }
+
+  - uses: eit.global_impedance
+    in:  { signal: filtered_eit }
+
+  - uses: eit.detect_breaths
+    in:  { signal: global_impedance }
+    with: { min_duration_s: 0.6666666667 }
+
+  - uses: eit.normalize_breaths
+
+  - uses: eit.continuous_tiv
+
+  - uses: eit.eeli
+
+  # Pixel-breath timing (per-pixel start/middle/end of in-/deflation);
+  # NaN marks the always-unavailable first/last global breath and any
+  # pixel whose breath couldn't be determined.
+  - uses: eit.pixel_breaths
+    with: { phase_correction_mode: "negative amplitude" }
+
+  - uses: eit.pixel_tiv
+    with: { tiv_timing: continuous }
+
+  - uses: eit.roi_tiv_lungspace
+    with: { threshold: 0.15 }
+
+  # See docs/pipelines.md for upstream's warning against using amplitude
+  # alone as a general-purpose functional lung-space definition - it is
+  # computed here primarily to feed eit.roi_watershed.
+  - uses: eit.roi_amplitude_lungspace
+    with: { threshold: 0.15 }
+
+  - uses: eit.roi_watershed
+    with: { threshold_fraction: 0.15 }
+
+  # Bound explicitly to the watershed mask rather than relying on an
+  # ambiguous default - eit.roi_filter_by_size.mask has no default binding.
+  - uses: eit.roi_filter_by_size
+    in:  { mask: watershed_lungspace_mask }
+    with: { min_region_size: 10, connectivity: 1 }

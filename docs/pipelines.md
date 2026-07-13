@@ -172,7 +172,7 @@ installs cleanly without them.
 
 ## Example specs
 
-Two worked examples ship with the repository:
+Three worked examples ship with the repository:
 
 - [`examples/ROTARC_example/breath-duration.pipeline.yaml`](../examples/ROTARC_example/breath-duration.pipeline.yaml) —
   computes breath-duration CV from EIT data and writes a ROTARC-style result
@@ -180,16 +180,142 @@ Two worked examples ship with the repository:
 - [`examples/multimodal_example/multimodal.pipeline.yaml`](../examples/multimodal_example/multimodal.pipeline.yaml) —
   loads EIT, EMG, and ventilator signals, synchronizes them, processes each
   modality, and exports session summaries.
+- [`examples/eit_full_preprocessing/eit-full.pipeline.yaml`](../examples/eit_full_preprocessing/eit-full.pipeline.yaml) —
+  every EIT operation closed onto `EITProcessingAdapter` by the Stage 2 EIT
+  gap migration (`plan/stage2/1_eit_gap_migration_implementation_plan.md`),
+  see below.
 
 Run them from the repository root:
 
 ```bash
 m3resp run examples/ROTARC_example/breath-duration.pipeline.yaml
 m3resp run examples/multimodal_example/multimodal.pipeline.yaml
+m3resp run examples/eit_full_preprocessing/eit-full.pipeline.yaml
 ```
 
 Update `inputs.eit_file` in the ROTARC example before running it — it contains
-a site-specific path.
+a site-specific path. The other two examples use a relative path to the
+committed synthetic Draeger fixture (`data/source/data_from_repo/`), so they
+run as-is from the repository root.
+
+### Full EIT preprocessing example
+
+`eit-full.pipeline.yaml` requires the optional `eitprocessing` dependency:
+
+```bash
+pip install "m3resp[eit]"
+```
+
+It runs the full chain from loading through pixel-resolved parameters and ROI
+lung-space masks:
+
+```text
+eit.load
+  -> eit.detect_rates
+  -> eit.mdn_filter
+  -> eit.global_impedance
+  -> eit.detect_breaths
+  -> eit.normalize_breaths
+  -> eit.continuous_tiv
+  -> eit.eeli
+  -> eit.pixel_breaths
+  -> eit.pixel_tiv
+  -> eit.roi_tiv_lungspace
+  -> eit.roi_amplitude_lungspace
+  -> eit.roi_watershed
+  -> eit.roi_filter_by_size
+  -> automatic structured export (outputs.structured_export: true)
+```
+
+`eit.roi_filter_by_size.mask` has no default binding — the example binds it
+explicitly (`in: { mask: watershed_lungspace_mask }`) rather than relying on
+an ambiguous default, since any of the three lung-space masks could otherwise
+be the "obvious" choice.
+
+Every step below also emits one or more native `Signal`/`ParameterResult`
+objects into `session.signals`/`session.parameter_results` (not shown in the
+"writes" column, which lists the raw upstream-shaped context keys used by
+later EIT steps) and records per-step provenance via `M3Session._record()`.
+
+| Step | Reads | Writes | Key parameters | Unit | Upstream method |
+|---|---|---|---|---|---|
+| `eit.load` | `session` | `raw_eit`, `raw_global_impedance`, `eit_sequence` | `file`, `vendor`, `loader_options` | (upstream-defined) | `eitprocessing.datahandling.loading.load_eit_data` |
+| `eit.detect_rates` | `signal`, `session` | `respiratory_rate_hz`, `heart_rate_hz`, `rate_detector`, `rate_captures` | `subject_type`, `welch_window_seconds`, `capture` | Hz | `eitprocessing.RateDetection` |
+| `eit.mdn_filter` | `signal`, `respiratory_rate_hz`, `heart_rate_hz`, `eit_sequence`, `session` | `filtered_eit`, `filter_captures` | `label` | (upstream-defined) | `eitprocessing.MDNFilter` |
+| `eit.global_impedance` | `signal`, `eit_sequence` | `global_impedance` | — | (upstream-defined) | `eitprocessing.EITData.get_summed_impedance` |
+| `eit.detect_breaths` | `signal` | `breath_intervals`, `breath_detector` | `min_duration_s` | s | `eitprocessing.BreathDetection` |
+| `eit.normalize_breaths` | `breath_intervals`, `session` | — (writes `session.events["eit_breaths"]`) | — | s | n/a |
+| `eit.continuous_tiv` | `signal`, `eit_sequence`, `breath_detector` | `continuous_tiv` | — | impedance difference | `eitprocessing.TIV` |
+| `eit.eeli` | `signal`, `eit_sequence`, `breath_detector`, `session` | `eeli`, `eeli_result` | `result_label` | impedance | `eitprocessing.EELI` |
+| `eit.pixel_breaths` | `eit_data`, `timing_data`, `eit_sequence`, `session` | `pixel_breaths`, `pixel_breath_timing_result` | `phase_correction_mode`, `minimum_duration_seconds`, `result_label` | s | `eitprocessing.PixelBreath` |
+| `eit.pixel_tiv` | `filtered_eit`, `signal`, `eit_sequence`, `breath_detector`, `session` | `pixel_tiv`, `pixel_tiv_result` | `tiv_timing`, `result_label` | impedance difference | `eitprocessing.TIV` |
+| `eit.roi_tiv_lungspace` | `eit_data`, `timing_data`, `session` | `tiv_lungspace_mask`, `tiv_lungspace_captures` | `threshold` (0 < x < 1) | dimensionless mask | `eitprocessing.TIVLungspace` |
+| `eit.roi_amplitude_lungspace` | `eit_data`, `timing_data`, `session` | `amplitude_lungspace_mask`, `amplitude_lungspace_captures` | `threshold` (0 < x < 1) | dimensionless mask | `eitprocessing.AmplitudeLungspace` |
+| `eit.roi_watershed` | `eit_data`, `timing_data`, `session` | `watershed_lungspace_mask`, `watershed_captures` | `threshold_fraction` (0 < x < 1) | dimensionless mask | `eitprocessing.WatershedLungspace` |
+| `eit.roi_filter_by_size` | `mask` (required, no default binding), `session` | `size_filtered_roi_mask` | `min_region_size` (> 0), `connectivity` (1 or 2) | dimensionless mask | `eitprocessing.FilterROIBySize` |
+
+**`eit.roi_amplitude_lungspace` warning:** upstream does not recommend a
+lung-space definition based on amplitude alone, since it can include
+reconstruction artifacts; it is computed here primarily to feed
+`eit.roi_watershed`. Prefer `eit.roi_tiv_lungspace` or `eit.roi_watershed`'s
+output as the functional lung-space mask for downstream analysis.
+
+**NaN in pixel and mask arrays:**
+
+- In a lung-space mask (`tiv_lungspace_mask`, `amplitude_lungspace_mask`,
+  `watershed_lungspace_mask`, `size_filtered_roi_mask`), NaN means the pixel
+  is excluded from the region of interest; a non-NaN value in `(0, 1]` means
+  it is included (optionally weighted).
+- In `pixel_breath_timing_result` (shape `(breath, row, column, landmark)`,
+  landmark = `[start_time, middle_time, end_time]`), NaN marks a pixel breath
+  that could not be determined — including the first and last global breath,
+  which `PixelBreath` never resolves by definition (it needs the breaths on
+  both sides).
+- In `pixel_tiv_result` (shape `(breath, row, column)`), an all-NaN breath is
+  kept in place rather than dropped; `metadata["valid_breath_indices"]` and
+  `metadata["valid_breath_fraction"]` let you assess coverage without
+  scanning the array.
+
+### Array archive and manifest format
+
+Array-valued `ParameterResult`s (EELI, pixel TIV, pixel-breath timing, and
+every ROI mask above) are not embedded in `parameter_results.csv` — the
+structured export (`outputs.structured_export: true`, or
+`session.export_summary(...)`) writes them into one shared,
+compressed archive instead:
+
+```text
+<output_dir>/parameter_results.csv           # scalar results inline; array
+                                              # results reference the archive
+<output_dir>/parameter_result_arrays.npz     # one entry per array result
+```
+
+Each array row in `parameter_results.csv` has `value` empty and instead
+carries:
+
+- **`value_file`** — the archive's filename (`parameter_result_arrays.npz`);
+- **`array_key`** — its key in that archive, e.g. `pixel_tivs_0` (deterministic
+  and collision-safe: `<result name>_<occurrence index>`);
+- **`shape`** / **`dtype`** — the array's shape and dtype;
+- **`time_array_key`** — set when the result's `metadata["time"]` was itself
+  array-shaped (e.g. per-pixel breath timing); that array moves into the same
+  `.npz` under `<array_key>_time`, and `metadata["time"]` in the CSV row
+  becomes a short `npz:<key>` reference instead of the raw array.
+
+`method` and the rest of `metadata` (axes, upstream parameters, provenance)
+stay in the CSV row as usual. Load the archive back with:
+
+```python
+import numpy as np
+with np.load("parameter_result_arrays.npz") as archive:
+    pixel_tiv = archive["pixel_tivs_0"]
+```
+
+When a `DataModelRecorder` is attached and a pipeline run id is available
+(`PipelineResult.processing_run_id`), the archive is also recorded as a
+`DataFile` (role `parameter`) linked onto that run's
+`ProcessingRun.parameter_file_id`. A manual `session.export_summary(...)`
+call with no associated run still writes the archive but leaves it unlinked.
 
 ## Architecture
 
