@@ -14,9 +14,9 @@ outputs:
   figures: false
 
 inputs:
-  eit_file: data/source/eit_emg_annemijn/ajM3resp_01_001_01.bin
-  emg_file: data/source/eit_emg_annemijn/opt_000_omnc.pri
-  vent_file: data/source/eit_emg_annemijn/Paw_EMG_ajM3Resp_test.txt
+  eit_file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_eit_draeger.bin
+  emg_file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_emg.Poly5
+  vent_file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_ventilator.Poly5
 
 steps:
   # Load
