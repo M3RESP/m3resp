@@ -229,6 +229,86 @@ def test_record_signal_skips_signal_with_unrecordable_modality():
     assert store.signal_streams == {}
 
 
+def test_pipeline_result_records_output_provenance_for_array_valued_results():
+    """Phase 5.2/7: `record_pipeline_result` stores an output-provenance
+    mapping on the run for every native result, and an array-valued
+    `ParameterResult` still gets a `DerivedFeature` (with a null value, since
+    the array itself lives in the parameter artifact, not the store)."""
+
+    import numpy as np
+
+    from m3resp.workflows.registry import STEP_REGISTRY
+
+    @register_step("t.array_result", writes=("mask_result",))
+    def _array_result(**kwargs: Any) -> dict[str, Any]:
+        return {
+            "mask_result": ParameterResult(
+                name="mask",
+                value=np.array([1.0, float("nan")]),
+                modality="eit",
+                unit=None,
+                method="eitprocessing.TIVLungspace",
+                metadata={"operation": "eit.roi_tiv_lungspace", "shape": [2]},
+            )
+        }
+
+    try:
+        session = M3Session()
+        store = DataModelStore()
+        session.datamodel = DataModelRecorder(session, store)
+
+        result = run_pipeline(
+            {"name": "demo", "steps": [{"uses": "t.array_result"}]}, session=session
+        )
+
+        run = store.processing_runs[result.processing_run_id]
+        outputs = run.parameters["outputs"]
+        assert outputs["mask_result"]["method"] == "eitprocessing.TIVLungspace"
+        assert outputs["mask_result"]["is_scalar"] is False
+        assert (
+            outputs["mask_result"]["metadata"]["operation"] == "eit.roi_tiv_lungspace"
+        )
+
+        features = [
+            f for f in store.derived_features.values() if f.feature_name == "mask"
+        ]
+        assert len(features) == 1
+        assert features[0].value is None
+        assert features[0].processing_run_id == result.processing_run_id
+    finally:
+        STEP_REGISTRY.pop("t.array_result", None)
+
+
+def test_record_parameter_file_links_data_file_onto_processing_run(tmp_path):
+    """Phase 5.3/7: the array archive becomes a `DataFile` with role
+    'parameter', linked onto the `ProcessingRun.parameter_file_id`."""
+
+    session = M3Session()
+    store = DataModelStore()
+    session.datamodel = DataModelRecorder(session, store)
+    session.parameter_results.add(
+        ParameterResult(name="mask", value=[1.0, 2.0], modality="eit")
+    )
+    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+
+    output_dir = session.export_summary(
+        tmp_path, processing_run_id=run.processing_run_id
+    )
+
+    stored_run = store.processing_runs[run.processing_run_id]
+    assert stored_run.parameter_file_id is not None
+
+    data_file = store.data_files[stored_run.parameter_file_id]
+    assert data_file.file_role == "parameter"
+    assert data_file.file_format == "other"
+    assert data_file.file_path == str(output_dir / "parameter_result_arrays.npz")
+    assert data_file.checksum_sha256 is not None
+    assert (
+        data_file.file_size_bytes
+        == (output_dir / "parameter_result_arrays.npz").stat().st_size
+    )
+
+
 def test_export_store_survives_array_valued_parameters(tmp_path):
     import json
 
