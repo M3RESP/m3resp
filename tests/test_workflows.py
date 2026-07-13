@@ -233,14 +233,29 @@ class FakeIntervals:
 
 
 class FakeSignal:
-    def __init__(self, label: str = "raw"):
+    def __init__(
+        self,
+        label: str = "raw",
+        *,
+        values: Any = None,
+        time: Any = None,
+    ):
+        import numpy as np
+
         self.label = label
+        self.values = np.array([0.0, 1.0, 2.0]) if values is None else values
+        self.time = np.array([0.0, 0.5, 1.0]) if time is None else time
+        self.pixel_impedance = np.zeros((len(self.time), 1, 1))
+        self.sample_frequency = 2.0
+        self.unit = None
 
     def __getitem__(self, _slice: Any) -> "FakeSignal":
-        return FakeSignal(self.label + "_sliced")
+        return FakeSignal(self.label + "_sliced", values=self.values, time=self.time)
 
     def get_summed_impedance(self, *args: Any, **kwargs: Any) -> "FakeSignal":
-        return FakeSignal("global_impedance_(filtered)")
+        return FakeSignal(
+            "global_impedance_(filtered)", values=self.values, time=self.time
+        )
 
 
 class FakeSequence:

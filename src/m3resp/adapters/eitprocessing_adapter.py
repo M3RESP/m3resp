@@ -694,6 +694,7 @@ def _continuous_data_to_signal(
     modality: Modality,
     channel: str | None,
     processing_state: ProcessingState,
+    source: str | None = None,
 ) -> Signal:
     """Convert an `eitprocessing.ContinuousData`-shaped object to a `Signal`."""
 
@@ -706,6 +707,7 @@ def _continuous_data_to_signal(
         modality=modality,
         channel=channel,
         processing_state=processing_state,
+        source=source,
     )
 
 
