@@ -161,6 +161,14 @@ def _apply_outputs(spec: PipelineSpec, result: PipelineResult) -> None:
     if out.dir is None:
         return
 
+    output_dir = result.context.values.get("_resolved_output_dir") or Path(out.dir)
+
+    if out.figures:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        from m3resp.visualization.eit_figures import save_eit_figures
+
+        save_eit_figures(result.context.values, output_dir)
+
     explicit_export_steps = {
         "export.session_summary",
         "export.rotarc_result",
@@ -170,7 +178,6 @@ def _apply_outputs(spec: PipelineSpec, result: PipelineResult) -> None:
     if step_names & explicit_export_steps:
         return
 
-    output_dir = result.context.values.get("_resolved_output_dir") or Path(out.dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     session = result.session

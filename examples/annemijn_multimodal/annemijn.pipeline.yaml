@@ -27,7 +27,7 @@ outputs:
   event_csvs: true
   parameters_csv: true
   postprocessing: true
-  figures: false
+  figures: true
 
 inputs:
   eit_file: data/source/eit_emg_annemijn/ajM3resp_03_001_01.bin

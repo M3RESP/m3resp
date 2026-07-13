@@ -23,6 +23,7 @@ outputs:
   event_csvs: true
   parameters_csv: false
   structured_export: true
+  figures: true
 
 inputs:
   eit_file: data/source/data_from_repo/draeger_synthetic_draeger_20Hz.bin

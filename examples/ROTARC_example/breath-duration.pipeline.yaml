@@ -26,6 +26,7 @@ outputs:
   event_csvs: true
   parameters_csv: false
   postprocessing: true
+  figures: true
 
 inputs:
   eit_file: /home/mahyart/Desktop/M3Resp/EIT_EMG/ajM3resp_02_001_01.bin #.../PCvPS-Blankman/raw .bin files/B001/B001_01_01.bin

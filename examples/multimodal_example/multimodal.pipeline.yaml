@@ -11,7 +11,7 @@ outputs:
   event_csvs: true
   parameters_csv: true
   postprocessing: true
-  figures: false
+  figures: true
 
 inputs:
   eit_file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_eit_draeger.bin
