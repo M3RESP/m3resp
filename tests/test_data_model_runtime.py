@@ -90,9 +90,11 @@ class TestSignal:
         assert row["modality"] == "eit"
         assert row["source"] == "subject.eit"
 
-    def test_rejects_unknown_modality(self):
-        with pytest.raises(ValueError, match="modality"):
-            Signal(values=[1.0], time=[0.0], modality="not_a_modality")
+    def test_accepts_any_modality(self):
+        # Modality is an open vocabulary: new loaders/quantity types aren't
+        # blocked by a fixed enum (only processing_state is still enforced).
+        signal = Signal(values=[1.0], time=[0.0], modality="not_a_known_modality")
+        assert signal.modality == "not_a_known_modality"
 
     def test_rejects_unknown_processing_state(self):
         with pytest.raises(ValueError, match="processing_state"):
