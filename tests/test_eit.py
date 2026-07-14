@@ -7,8 +7,9 @@ from typing import Any
 
 import pytest
 
-from m3resp import BreathEvent, M3Session, load_eit
+from m3resp import BreathEvent, M3Session
 from m3resp.adapters import EITProcessingAdapter
+from m3resp.io import load_eit
 from m3resp.modalities.eit import load as load_eit_recording
 
 

@@ -36,8 +36,7 @@ from m3resp.datamodel import (
     export_store,
     validate_store,
 )
-from m3resp.modalities.eit import load as load_eit
-from m3resp.modalities.emg import load as load_emg
+from m3resp import io
 from m3resp.workflows import (
     PipelineResult,
     available_steps,
@@ -102,9 +101,8 @@ __all__ = [
     "event_to_dict",
     "export_store",
     "get_pipeline",
+    "io",
     "link_breaths_by_time",
-    "load_eit",
-    "load_emg",
     "load_spec",
     "register_pipeline",
     "register_step",
