@@ -33,7 +33,7 @@ not rewriting the science.
 | Tracking which package/version/parameters produced a file yourself | `session.provenance` (lightweight log) or attach `session.datamodel = DataModelRecorder(session)` for a full, validated `ProcessingRun`/`DataFile`/`DerivedFeature` audit trail (see [stage2.md](stage2.md)) |
 | Shifting one recording's timestamps to match another by hand | `m3resp.compute_offsets_from_timestamps(reference_modality, timestamps)` then `m3resp.align_events_by_modality_offset` (or just `session.align_modalities(...)`) |
 | Resampling one signal onto another's sampling rate by hand | `m3resp.resample_signal(signal, target_frequency_hz)` |
-| Matching already-detected EIT/EMG/ventilator breaths by eyeballing timestamps | `m3resp.link_breaths_by_time(eit_breaths=..., emg_breaths=..., ventilator_breaths=...)` or `session.link_breaths(time_tolerance=...)` -> `LinkedBreath` objects (breath detection must already have produced the `BreathEvent`s passed in; this only matches breaths across modalities, it does not detect them) |
+| Matching already-detected breaths (EIT/EMG/ventilator, or any other modality) by eyeballing timestamps | `m3resp.link_breaths_by_time({"eit": ..., "emg": ..., "ventilator": ...})` or `session.link_breaths(time_tolerance=...)` -> `LinkedBreath` objects (breath detection must already have produced the `BreathEvent`s passed in; this only matches breaths across modalities, it does not detect them) |
 | Writing your own CSV/JSON export per project | `session.export_summary(output_dir)` (see [stage2.md](stage2.md#structured-export)) |
 
 ## What does not change

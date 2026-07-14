@@ -373,9 +373,11 @@ class M3Session:
             return events
 
         self.linked_breaths = link_breaths_by_time(
-            eit_breaths=_breaths("eit_breaths"),
-            emg_breaths=_breaths("emg_breaths"),
-            ventilator_breaths=_breaths("ventilator_breaths"),
+            {
+                "eit": _breaths("eit_breaths"),
+                "emg": _breaths("emg_breaths"),
+                "ventilator": _breaths("ventilator_breaths"),
+            },
             time_tolerance=time_tolerance,
         )
         self._record("link_breaths", parameters={"time_tolerance": time_tolerance})

@@ -33,7 +33,7 @@ def _populated_session() -> M3Session:
         modality="emg", start_time=1.1, end_time=2.1, peak_time=1.6
     )
     session.linked_breaths.append(
-        LinkedBreath(eit_breath=eit_breath, emg_breath=emg_breath, confidence=0.9)
+        LinkedBreath(breaths={"eit": eit_breath, "emg": emg_breath}, confidence=0.9)
     )
     return session
 
