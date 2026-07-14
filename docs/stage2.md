@@ -109,7 +109,10 @@ Rule of thumb for "where does my new EIT/EMG/multimodal functionality go":
    -> `workflows/steps/*.py` with `@register_step`.
 4. **A new one-call preset** ("run all of EIT/EMG/multimodal processing in
    one call") -> `presets/*.py`, registered in `presets/registry.py`.
-5. **A new cross-modality synchronization primitive** -> `synchronization/`.
+5. **A new low-level, reusable synchronization building block** (e.g. a
+   resampling method, an offset/alignment computation, a breath-linking
+   strategy - something other code composes, not a full pipeline step or
+   preset itself) -> `synchronization/`.
 6. **A new persisted/audit entity** (something that needs to be queryable,
    validated, and exported later, per the `main_v0.3.tex` data model) ->
    `datamodel/entities.py`, wired into `datamodel/recorder.py`.
