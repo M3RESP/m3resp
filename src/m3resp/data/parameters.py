@@ -12,6 +12,8 @@ from typing import Any
 
 import numpy as np
 
+from m3resp.data.units import normalize_unit
+
 
 @dataclass
 class ParameterResult:
@@ -28,6 +30,8 @@ class ParameterResult:
     - a time period, e.g. during an intervention or every 30 seconds
       (``start_time`` and ``end_time`` both set);
     - the whole signal, when none of the above are set.
+
+    ``unit`` is normalized via :func:`m3resp.data.units.normalize_unit`.
     """
 
     name: str
@@ -42,6 +46,9 @@ class ParameterResult:
     channel: str | None = None
     method: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.unit = normalize_unit(self.unit)
 
     @property
     def is_scalar(self) -> bool:

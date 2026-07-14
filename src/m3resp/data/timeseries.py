@@ -14,6 +14,8 @@ from typing import Any
 
 import numpy as np
 
+from m3resp.data.units import normalize_unit
+
 
 @dataclass
 class TimeSeries:
@@ -24,6 +26,10 @@ class TimeSeries:
     array (one scalar per timepoint, e.g. global impedance), a 2D array (one
     value per timepoint per channel/region), or higher-dimensional arrays
     (e.g. EIT pixel-impedance frames: time x rows x cols) are all valid.
+
+    ``unit`` is normalized via :func:`m3resp.data.units.normalize_unit` (e.g.
+    ``"uV"`` -> ``"µV"``), so equivalent units from different loaders end up
+    comparable instead of drifting into incompatible spellings.
     """
 
     values: np.ndarray
@@ -36,6 +42,7 @@ class TimeSeries:
     def __post_init__(self) -> None:
         self.values = np.asarray(self.values)
         self.time = np.asarray(self.time)
+        self.unit = normalize_unit(self.unit)
         if self.values.shape[0] != self.time.shape[0]:
             raise ValueError(
                 "values and time must have the same length along the time "
@@ -47,6 +54,11 @@ class TimeSeries:
         """Number of samples along the time axis."""
 
         return int(self.values.shape[0])
+
+    def __len__(self) -> int:
+        """Same as :attr:`n_samples`, so ``len(signal)`` works as expected."""
+
+        return self.n_samples
 
     @property
     def duration(self) -> float:
