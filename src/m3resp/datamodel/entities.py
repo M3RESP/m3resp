@@ -47,7 +47,9 @@ class Case(Entity):
     created_at: datetime = Field(default_factory=_utc_now)
 
 
-BodyPosition = Literal["supine", "prone", "semi_recumbent", "lateral", "other"]
+BodyPosition = Literal[
+    "supine", "prone", "semi_recumbent", "lateral", "dynamic", "other"
+]
 AcquisitionState = Literal["baseline", "intervention", "recovery", "other"]
 
 
@@ -58,13 +60,21 @@ class RecordingSession(Entity):
     case_id: str
     session_start_time: datetime | None = None
     session_end_time: datetime | None = None
+    #: The session's body position, if fixed for its whole duration. Set to
+    #: ``"dynamic"`` when position changes during the session rather than
+    #: guessing a single value - record the actual changes as
+    #: ``ClinicalEvent(event_type="position_change", ...)`` rows instead.
     body_position: BodyPosition | None = None
     acquisition_state: AcquisitionState | None = None
     operator_ref: str | None = None
     notes: str | None = None
 
 
-DeviceType = Literal["eit", "emg", "ventilator", "monitor", "acquisition_pc"]
+#: Common device types (doc Sec 7.3). Open vocabulary, not an enum: a new
+#: loading function can use any string here (e.g. a new device model) without
+#: a schema change - these are listed for documentation/IDE-completion
+#: convenience, not enforced at validation time.
+DeviceType = Literal["eit", "emg", "ventilator", "monitor", "acquisition_pc"] | str
 CalibrationStatus = Literal["valid", "expired", "unknown", "not_applicable"]
 
 
@@ -82,17 +92,49 @@ class Device(Entity):
 
 # --- Signal layer (doc Sec 7.4-7.8) ------------------------------------------
 
-SignalType = Literal[
-    "eit_waveform",
-    "eit_frame",
-    "emg_raw",
-    "emg_envelope",
-    "ventilator_pressure",
-    "ventilator_flow",
-    "ventilator_volume",
+#: Common signal types (doc Sec 7.4). Open vocabulary, not an enum: real
+#: recordings can have several distinct pressure signals (e.g. airway,
+#: esophageal, differential) from multiple devices at once, and new
+#: modalities/quantities keep showing up - these are listed for
+#: documentation/IDE-completion convenience, not enforced at validation time.
+#:
+#: - ``eit_waveform``: continuous data with a value per timepoint - 1D (e.g.
+#:   global impedance), 2D, or 3D (per-pixel impedance over time).
+#: - ``eit_frame``: a single 2D map, not a time series - either a slice of an
+#:   ``eit_waveform`` at one timepoint, or a derived 2D map (e.g. a
+#:   difference between two timepoints, or a breath-derived map like TIV).
+SignalType = (
+    Literal[
+        "eit_waveform",
+        "eit_frame",
+        "emg_raw",
+        "emg_envelope",
+        "ventilator_pressure",
+        "ventilator_flow",
+        "ventilator_volume",
+    ]
+    | str
+)
+#: - ``absolute``: a calibrated real-world clock time (e.g. NTP/atomic).
+#: - ``approximate``: a human-recorded or estimated real-world time (e.g.
+#:   noted on paper during the session) - a real timestamp, but not
+#:   calibrated, so it shouldn't be trusted to the same precision as
+#:   ``absolute``.
+#: - ``relative``: elapsed time from some reference point, not tied to a
+#:   real-world clock.
+#: - ``device_local``: the recording device's own internal clock.
+#: - ``synchronized``: has been aligned onto a common time axis with other
+#:   signals (see `m3resp.synchronization`).
+TimeBase = Literal[
+    "absolute", "approximate", "relative", "device_local", "synchronized"
 ]
-TimeBase = Literal["absolute", "relative", "device_local", "synchronized"]
 SyncMethod = Literal["common_clock", "ntp", "trigger", "manual", "none"]
+#: A coarse, human-readable summary of sync quality - not a substitute for
+#: `SignalStream.sync_uncertainty_ms`. What counts as "good" vs "acceptable"
+#: synchronization is application-dependent (e.g. millisecond precision
+#: needed for some analyses, breath-level granularity sufficient for
+#: others), so code that needs a concrete threshold should compare against
+#: `sync_uncertainty_ms` directly rather than branch on this label.
 SyncQualityLabel = Literal["good", "acceptable", "uncertain", "failed"]
 
 
@@ -147,7 +189,17 @@ class EMGChannel(Entity):
 
 
 class VentilatorSetting(Entity):
-    """Ventilator mode/settings snapshot, scoped to a session (doc Sec 7.7)."""
+    """Ventilator mode/settings snapshot, scoped to a session (doc Sec 7.7).
+
+    Settings that change during a session are handled by recording one
+    ``VentilatorSetting`` row per change - ``measurement_time`` is when this
+    particular snapshot was taken, not a single value for the whole session.
+
+    The named fields cover common settings across manufacturers; ``extras``
+    holds manufacturer/device-specific settings not covered by them (the
+    ``Entity`` base forbids arbitrary extra fields, so this is the place for
+    anything not already named here, rather than a schema change).
+    """
 
     ventilator_record_id: str = Field(default_factory=lambda: new_id("ventset"))
     session_id: str
@@ -159,6 +211,7 @@ class VentilatorSetting(Entity):
     respiratory_rate_set: float | None = None
     tidal_volume_set_ml: float | None = None
     measurement_time: datetime | None = None
+    extras: dict[str, Any] = Field(default_factory=dict)
 
 
 AsynchronyType = Literal[
