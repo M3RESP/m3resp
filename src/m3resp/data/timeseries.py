@@ -17,7 +17,14 @@ import numpy as np
 
 @dataclass
 class TimeSeries:
-    """A value array paired with its time axis."""
+    """A value array paired with its time axis.
+
+    ``values``'s leading axis must line up with ``time`` (one entry per
+    timepoint), but there's no constraint on its remaining dimensions - a 1D
+    array (one scalar per timepoint, e.g. global impedance), a 2D array (one
+    value per timepoint per channel/region), or higher-dimensional arrays
+    (e.g. EIT pixel-impedance frames: time x rows x cols) are all valid.
+    """
 
     values: np.ndarray
     time: np.ndarray
