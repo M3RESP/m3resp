@@ -30,6 +30,7 @@ class Signal(TimeSeries):
     channel: str | None = None
     source: str | None = None
     processing_state: ProcessingState = "raw"
+    method: str | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -52,6 +53,7 @@ class Signal(TimeSeries):
                 "channel": self.channel,
                 "source": self.source,
                 "processing_state": self.processing_state,
+                "method": self.method,
             }
         )
         return row
