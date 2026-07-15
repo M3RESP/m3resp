@@ -64,11 +64,30 @@ steps:
     in:  { signal: global_impedance, filtered_eit: filtered_eit }
 
   # EMG processing
+  # This channel's synthetic EMG has ECG mixed directly into it (no separate
+  # reference ECG channel here, unlike the data_from_repo fixture), so ECG
+  # detection reads it from processed_emg (source="raw_channel", the
+  # default) rather than a raw ecg_channel index.
   - uses: emg.preprocess
     with: { channel: 0, high_pass_hz: 80, envelope_window_seconds: 0.5 }
+    out: { processed_emg: processed_emg_before_ecg }
 
+  - uses: emg.ecg_detect_peaks
+    in: { processed_emg: processed_emg_before_ecg }
+
+  - uses: emg.ecg_gating
+    in: { processed_emg: processed_emg_before_ecg }
+    with: { fill_method: 1 }
+    out: { processed_emg_after_ecg: processed_emg }
+
+  # min_breath_width_seconds/prominence_factor are tuned down from their
+  # defaults (1.0 s / 0.5): this fixture's synthetic envelope bursts are
+  # narrower and lower-contrast than those defaults assume, and the tuned
+  # values recover exactly the configured 14 breaths/min (respiratory_rate_bpm
+  # in the generator config) - see docs/pipelines.md "Channel selection and
+  # time-base rules".
   - uses: emg.detect_breaths
-    with: { min_breath_width_seconds: 1.0, half_window_seconds: 0.5 }
+    with: { min_breath_width_seconds: 0.5, half_window_seconds: 0.5, prominence_factor: 0.05 }
 
   - uses: emg.peak_indices
 
@@ -82,6 +101,12 @@ steps:
     with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
 
   - uses: emg.find_occluded_breaths
+
+  - uses: emg.pocc_intervals
+
+  - uses: emg.pocc_time_product
+
+  - uses: emg.pocc_quality
 
   - uses: emg.detect_ventilator_breath
     with: { breath_width_seconds: 0.5 }

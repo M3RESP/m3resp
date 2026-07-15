@@ -1,0 +1,121 @@
+# Full EMG/ventilator preprocessing pipeline (Stage 2 ReSurfEMG gap
+# migration, Phase 7: plan/stage2/2_resurfemg_gap_migration_implementation_plan.md).
+#
+# Exercises every EMG/ventilator operation the gap migration closed onto
+# `ReSurfEMGAdapter`: loading, ECG peak detection + gating, EMG breath
+# detection, moving-baseline, on/offset detection, breath features,
+# ventilator-breath and Pocc-manoeuvre detection, Pocc prerequisites, and all
+# ten clinical quality operations. Run with:
+#
+#   m3resp run examples/emg_full_preprocessing/emg-full.pipeline.yaml
+#
+# from the repository root - `inputs.emg_file`/`vent_file` below are relative
+# to the current working directory, same as the ROTARC/multimodal examples.
+#
+# ECG removal and baseline are each one of two available alternatives (see
+# `docs/pipelines.md` "Baseline alternatives" / "ECG-removal alternatives"):
+# this pipeline picks emg.ecg_gating and emg.moving_baseline; short YAML
+# snippets showing the emg.ecg_wavelet_denoising / emg.slopesum_baseline
+# substitutes are in the docs rather than run here too, since both write the
+# same context keys (processed_emg / baseline) and are not meant to run
+# together in one pipeline.
+#
+#   outputs:  where to write results and which artifacts to produce
+#   inputs:   data paths (referenced in steps with @name)
+
+name: emg-full-preprocessing
+
+outputs:
+  dir: ../../output/emg-full-preprocessing
+  timestamped: true
+  summary_json: true
+  event_csvs: true
+  parameters_csv: false
+  structured_export: true
+
+inputs:
+  emg_file: data/source/data_from_repo/emg_data_synth_quiet_breathing.Poly5
+  vent_file: data/source/data_from_repo/vent_data_synth_quiet_breathing.Poly5
+
+steps:
+  # -- Loading ---------------------------------------------------------------
+  - uses: emg.load
+    with: { file: "@emg_file" }
+
+  - uses: emg.load_ventilator
+    with: { file: "@vent_file" }
+
+  - uses: emg.ventilator_channels
+    with: { pressure_channel: 0, flow_channel: 1, volume_channel: 2 }
+
+  # -- Preprocessing + ECG removal --------------------------------------------
+  # Channel 1 ("EMGdi") is the diaphragm EMG channel in this fixture; channel
+  # 0 ("ECG") is a dedicated reference ECG channel used for peak detection
+  # below instead of the (also ECG-contaminated) EMG channel itself.
+  - uses: emg.preprocess
+    with: { channel: 1, high_pass_hz: 80, envelope_window_seconds: 0.5 }
+    out: { processed_emg: processed_emg_before_ecg }
+
+  - uses: emg.ecg_detect_peaks
+    in: { processed_emg: processed_emg_before_ecg }
+    with: { ecg_channel: 0 }
+
+  - uses: emg.ecg_gating
+    in: { processed_emg: processed_emg_before_ecg }
+    with: { fill_method: 1 }
+    out: { processed_emg_after_ecg: processed_emg }
+
+  # -- EMG breath detection ---------------------------------------------------
+  # min_breath_width_seconds is narrower than the 1.0 s default: this
+  # fixture's "quiet breathing" envelope bursts are shorter than that,
+  # so the default finds zero breaths - see docs/pipelines.md "Channel
+  # selection and time-base rules".
+  - uses: emg.detect_breaths
+    with: { min_breath_width_seconds: 0.5, half_window_seconds: 0.5 }
+
+  - uses: emg.peak_indices
+
+  - uses: emg.moving_baseline
+    with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
+
+  - uses: emg.onoffpeak_baseline_crossing
+
+  # -- EMG breath features -----------------------------------------------------
+  - uses: emg.time_to_peak
+  - uses: emg.pseudo_slope
+  - uses: emg.amplitude
+  - uses: emg.time_product
+  - uses: emg.area_under_baseline
+  - uses: emg.respiratory_rate
+
+  # -- Ventilator breath and Pocc-manoeuvre detection -------------------------
+  - uses: emg.detect_ventilator_breath
+    with: { breath_width_seconds: 0.5 }
+
+  - uses: emg.find_occluded_breaths
+
+  - uses: emg.ventilator_respiratory_rate
+
+  - uses: emg.pocc_intervals
+
+  - uses: emg.pocc_time_product
+
+  - uses: emg.normalize_ventilator_breaths
+    with: { breath_width_seconds: 0.5 }
+
+  # -- Clinical quality steps (run whenever their inputs are present) --------
+  - uses: emg.snr_pseudo
+  - uses: emg.percentage_under_baseline
+  - uses: emg.detect_local_high_aub
+  - uses: emg.detect_extreme_time_products
+  - uses: emg.detect_non_consecutive_manoeuvres
+  - uses: emg.evaluate_bell_curve_error
+  - uses: emg.evaluate_event_timing
+  - uses: emg.evaluate_respiratory_rates
+  - uses: emg.pocc_quality
+  - uses: emg.interpeak_dist
+
+  # No explicit export step needed — the `outputs:` section above handles
+  # creating the timestamped directory and calling export_session_summary,
+  # including the native structured export (signals/parameter_results/
+  # quality CSVs and the shared parameter_result_arrays.npz archive).
