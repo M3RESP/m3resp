@@ -359,6 +359,563 @@ class ReSurfEMGAdapter:
 
         return getattr(module, function_name)(*args, **kwargs)
 
+    # Named methods for the migrated ECG/baseline/quality operations, with
+    # descriptive m3resp argument names converted to the upstream ones and
+    # validated before the call. Sample-based arguments (not seconds) are
+    # used here for exact upstream behavior; workflow steps convert from
+    # seconds and record both the requested seconds and effective sample
+    # counts. `_preprocess_default`/`_postprocess_default` and the granular
+    # workflow steps call these methods rather than the upstream functions
+    # directly, so the monolithic and granular paths share one
+    # implementation of each operation.
+
+    def detect_ecg_peaks(
+        self,
+        signal: Any,
+        *,
+        sample_frequency: float,
+        peak_fraction: float = 0.4,
+        peak_width_samples: int | None = None,
+        peak_distance_samples: int | None = None,
+        bandpass_filter: bool = True,
+    ) -> np.ndarray:
+        """Detect ECG peak sample indices in `signal` (ECG or an
+        ECG-contaminated EMG channel)."""
+
+        try:
+            from resurfemg.preprocessing.ecg_removal import detect_ecg_peaks
+        except ImportError as exc:
+            raise _emg_optional_dependency_error() from exc
+
+        array = _require_1d_array("signal", signal)
+        fs = _require_integer_valued_sample_frequency(sample_frequency)
+        return np.asarray(
+            detect_ecg_peaks(
+                array,
+                fs,
+                peak_fraction=peak_fraction,
+                peak_width_s=peak_width_samples,
+                peak_distance=peak_distance_samples,
+                bp_filter=bandpass_filter,
+            ),
+            dtype=int,
+        )
+
+    def gate_ecg(
+        self,
+        signal: Any,
+        peak_indices: Any,
+        *,
+        gate_width_samples: int = 205,
+        fill_method: int = 1,
+    ) -> np.ndarray:
+        """Gate (remove) ECG peaks from `signal` around `peak_indices`.
+
+        `fill_method`: 0 zeros, 1 interpolation (default upstream), 2 mean
+        of a neighboring segment, 3 running-RMS-based replacement.
+        """
+
+        try:
+            from resurfemg.preprocessing.ecg_removal import gating
+        except ImportError as exc:
+            raise _emg_optional_dependency_error() from exc
+
+        array = _require_1d_array("signal", signal)
+        peaks = _require_index_array("peak_indices", peak_indices)
+        if fill_method not in (0, 1, 2, 3):
+            raise ValueError(
+                f"fill_method must be one of 0, 1, 2, 3; got {fill_method!r}."
+            )
+        if gate_width_samples <= 0:
+            raise ValueError(
+                f"gate_width_samples must be positive; got {gate_width_samples!r}."
+            )
+        return np.asarray(
+            gating(
+                array,
+                peaks,
+                gate_width=gate_width_samples,
+                method=fill_method,
+            )
+        )
+
+    def wavelet_denoise_ecg(
+        self,
+        signal: Any,
+        peak_indices: Any,
+        *,
+        sample_frequency: float,
+        hard_thresholding: bool = True,
+        levels: int = 4,
+        wavelet_type: str = "db2",
+        fixed_threshold: float = 4.5,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Remove ECG artifacts from `signal` via a-trous wavelet shrinkage.
+
+        Returns `(cleaned_signal, decomposition, thresholds, gate_mask)`.
+        """
+
+        try:
+            from resurfemg.preprocessing.ecg_removal import wavelet_denoising
+        except ImportError as exc:
+            raise _emg_optional_dependency_error() from exc
+
+        array = _require_1d_array("signal", signal)
+        peaks = _require_index_array("peak_indices", peak_indices)
+        fs = _require_integer_valued_sample_frequency(sample_frequency)
+        if levels <= 0:
+            raise ValueError(f"levels must be positive; got {levels!r}.")
+        cleaned, decomposition, thresholds, gate_mask = wavelet_denoising(
+            array,
+            peaks,
+            fs,
+            hard_thresholding=hard_thresholding,
+            n=levels,
+            wavelet_type=wavelet_type,
+            fixed_threshold=fixed_threshold,
+        )
+        return (
+            np.asarray(cleaned),
+            np.asarray(decomposition),
+            np.asarray(thresholds),
+            np.asarray(gate_mask),
+        )
+
+    def moving_baseline(
+        self,
+        envelope: Any,
+        *,
+        window_samples: int,
+        step_samples: int,
+        percentile: float = 33.0,
+    ) -> np.ndarray:
+        """Compute a moving baseline over `envelope` (Grasshoff et al. 2021)."""
+
+        try:
+            from resurfemg.postprocessing.baseline import moving_baseline
+        except ImportError as exc:
+            raise _emg_optional_dependency_error() from exc
+
+        array = _require_1d_array("envelope", envelope)
+        _require_positive_int("window_samples", window_samples)
+        _require_positive_int("step_samples", step_samples)
+        _require_percentile("percentile", percentile)
+        return np.asarray(
+            moving_baseline(
+                array,
+                window_samples,
+                step_samples,
+                set_percentile=percentile,
+            )
+        )
+
+    def slopesum_baseline(
+        self,
+        envelope: Any,
+        *,
+        window_samples: int,
+        step_samples: int,
+        sample_frequency: float,
+        percentile: float = 33.0,
+        augmented_percentile: float = 25.0,
+        moving_average_samples: int | None = None,
+        percentile_window_samples: int | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, Any]:
+        """Compute the slope-sum (augmented) baseline over `envelope`.
+
+        Returns `(baseline, running_mean, running_std, running_series)` -
+        `running_series` is upstream's `pandas.Series`, kept for the
+        existing compatibility output; use the other three arrays for
+        native/export use.
+        """
+
+        try:
+            from resurfemg.postprocessing.baseline import slopesum_baseline
+        except ImportError as exc:
+            raise _emg_optional_dependency_error() from exc
+
+        array = _require_1d_array("envelope", envelope)
+        _require_positive_int("window_samples", window_samples)
+        _require_positive_int("step_samples", step_samples)
+        _require_percentile("percentile", percentile)
+        _require_percentile("augmented_percentile", augmented_percentile)
+        # `slopesum_baseline` derives `ma_window = fs // 2` internally and
+        # feeds it straight into a pandas rolling window when
+        # `moving_average_samples` is omitted - same int-only constraint as
+        # `_require_integer_valued_sample_frequency`'s docstring describes.
+        fs = _require_integer_valued_sample_frequency(sample_frequency)
+        baseline, running_mean, running_std, running_series = slopesum_baseline(
+            array,
+            window_samples,
+            step_samples,
+            fs,
+            set_percentile=percentile,
+            augm_percentile=augmented_percentile,
+            ma_window=moving_average_samples,
+            perc_window=percentile_window_samples,
+        )
+        return (
+            np.asarray(baseline),
+            np.asarray(running_mean),
+            np.asarray(running_std),
+            running_series,
+        )
+
+    def snr_pseudo(
+        self,
+        envelope: Any,
+        peak_indices: Any,
+        baseline: Any,
+        *,
+        sample_frequency: float,
+    ) -> np.ndarray:
+        """Pseudo signal-to-noise ratio per peak: peak height relative to a
+        local baseline window."""
+
+        try:
+            from resurfemg.postprocessing.quality_assessment import snr_pseudo
+        except ImportError as exc:
+            raise _emg_optional_dependency_error() from exc
+
+        array = _require_1d_array("envelope", envelope)
+        peaks = _require_index_array("peak_indices", peak_indices)
+        baseline_array = _require_1d_array("baseline", baseline)
+        fs = _require_integer_valued_sample_frequency(sample_frequency)
+        return np.asarray(snr_pseudo(array, peaks, baseline_array, fs))
+
+    def pocc_quality(
+        self,
+        pressure_signal: Any,
+        pocc_peak_indices: Any,
+        pocc_end_indices: Any,
+        pocc_time_products: Any,
+        *,
+        dp_up_10_threshold: float = 0.0,
+        dp_up_90_threshold: float = 2.0,
+        dp_up_90_norm_threshold: float = 0.8,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Evaluate occlusion-manoeuvre (Pocc) quality (Warnaar et al. 2024).
+
+        Returns `(valid_poccs, criteria_matrix)`; `criteria_matrix` rows are
+        `dp_up_10`, `dp_up_90`, `dp_up_90_norm`, in that order.
+        """
+
+        try:
+            from resurfemg.postprocessing.quality_assessment import pocc_quality
+        except ImportError as exc:
+            raise _emg_optional_dependency_error() from exc
+
+        pressure = _require_1d_array("pressure_signal", pressure_signal)
+        peaks = _require_index_array("pocc_peak_indices", pocc_peak_indices)
+        ends = _require_index_array("pocc_end_indices", pocc_end_indices)
+        time_products = _require_1d_array("pocc_time_products", pocc_time_products)
+        _require_equal_length(
+            ("pocc_peak_indices", peaks),
+            ("pocc_end_indices", ends),
+            ("pocc_time_products", time_products),
+        )
+        valid_poccs, criteria_matrix = pocc_quality(
+            pressure,
+            peaks,
+            ends,
+            time_products,
+            dp_up_10_threshold=dp_up_10_threshold,
+            dp_up_90_threshold=dp_up_90_threshold,
+            dp_up_90_norm_threshold=dp_up_90_norm_threshold,
+        )
+        return np.asarray(valid_poccs), np.asarray(criteria_matrix)
+
+    def interpeak_distance(
+        self,
+        ecg_peak_indices: Any,
+        emg_peak_indices: Any,
+        *,
+        threshold: float = 1.1,
+    ) -> bool:
+        """Whether the median ECG-to-median-EMG interpeak distance ratio is
+        within `threshold` (Warnaar et al. 2024)."""
+
+        try:
+            from resurfemg.postprocessing.quality_assessment import interpeak_dist
+        except ImportError as exc:
+            raise _emg_optional_dependency_error() from exc
+
+        ecg_peaks = _require_index_array("ecg_peak_indices", ecg_peak_indices)
+        emg_peaks = _require_index_array("emg_peak_indices", emg_peak_indices)
+        if len(ecg_peaks) < 2 or len(emg_peaks) < 2:
+            raise ValueError(
+                "interpeak_distance needs at least two peaks in each of "
+                "ecg_peak_indices and emg_peak_indices."
+            )
+        return bool(interpeak_dist(ecg_peaks, emg_peaks, threshold=threshold))
+
+    def percentage_under_baseline(
+        self,
+        signal: Any,
+        peak_indices: Any,
+        start_indices: Any,
+        end_indices: Any,
+        baseline: Any,
+        *,
+        sample_frequency: float,
+        aub_window_samples: int | None = None,
+        reference_signal: Any | None = None,
+        aub_threshold: float = 40.0,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Percentage area-under-baseline per breath (Warnaar et al. 2024).
+
+        Returns `(valid_time_products, percentages_aub, reference_values)` -
+        `reference_values` (upstream's undocumented third return value) are
+        the nadir reference levels used per breath.
+        """
+
+        try:
+            from resurfemg.postprocessing.quality_assessment import (
+                percentage_under_baseline,
+            )
+        except ImportError as exc:
+            raise _emg_optional_dependency_error() from exc
+
+        array = _require_1d_array("signal", signal)
+        peaks = _require_index_array("peak_indices", peak_indices)
+        starts = _require_index_array("start_indices", start_indices)
+        ends = _require_index_array("end_indices", end_indices)
+        baseline_array = _require_1d_array("baseline", baseline)
+        fs = _require_integer_valued_sample_frequency(sample_frequency)
+        _require_equal_length(
+            ("peak_indices", peaks),
+            ("start_indices", starts),
+            ("end_indices", ends),
+        )
+        reference = (
+            None
+            if reference_signal is None
+            else _require_1d_array("reference_signal", reference_signal)
+        )
+        valid, percentages, reference_values = percentage_under_baseline(
+            array,
+            fs,
+            peaks,
+            starts,
+            ends,
+            baseline_array,
+            aub_window_s=aub_window_samples,
+            ref_signal=reference,
+            aub_threshold=aub_threshold,
+        )
+        return np.asarray(valid), np.asarray(percentages), np.asarray(reference_values)
+
+    def detect_local_high_aub(
+        self,
+        aub_values: Any,
+        *,
+        threshold_percentile: float = 75.0,
+        threshold_factor: float = 4.0,
+    ) -> np.ndarray:
+        """Flag area-under-baseline values that are locally high outliers."""
+
+        try:
+            from resurfemg.postprocessing.quality_assessment import (
+                detect_local_high_aub,
+            )
+        except ImportError as exc:
+            raise _emg_optional_dependency_error() from exc
+
+        values = _require_1d_array("aub_values", aub_values)
+        _require_percentile("threshold_percentile", threshold_percentile)
+        return np.asarray(
+            detect_local_high_aub(
+                values,
+                threshold_percentile=threshold_percentile,
+                threshold_factor=threshold_factor,
+            )
+        )
+
+    def detect_extreme_time_products(
+        self,
+        time_products: Any,
+        *,
+        upper_percentile: float = 95.0,
+        upper_factor: float = 10.0,
+        lower_percentile: float = 5.0,
+        lower_factor: float = 0.1,
+    ) -> np.ndarray:
+        """Flag time-product (area above baseline) values outside the
+        expected percentile-based bounds."""
+
+        try:
+            from resurfemg.postprocessing.quality_assessment import (
+                detect_extreme_time_products,
+            )
+        except ImportError as exc:
+            raise _emg_optional_dependency_error() from exc
+
+        values = _require_1d_array("time_products", time_products)
+        _require_percentile("upper_percentile", upper_percentile)
+        _require_percentile("lower_percentile", lower_percentile)
+        return np.asarray(
+            detect_extreme_time_products(
+                values,
+                upper_percentile=upper_percentile,
+                upper_factor=upper_factor,
+                lower_percentile=lower_percentile,
+                lower_factor=lower_factor,
+            )
+        )
+
+    def detect_non_consecutive_manoeuvres(
+        self,
+        ventilator_breath_indices: Any,
+        manoeuvre_indices: Any,
+    ) -> np.ndarray:
+        """Flag manoeuvres (e.g. Pocc) with no supported ventilator breath
+        between them and the next manoeuvre."""
+
+        try:
+            from resurfemg.postprocessing.quality_assessment import (
+                detect_non_consecutive_manoeuvres,
+            )
+        except ImportError as exc:
+            raise _emg_optional_dependency_error() from exc
+
+        breaths = _require_index_array(
+            "ventilator_breath_indices", ventilator_breath_indices
+        )
+        manoeuvres = _require_index_array("manoeuvre_indices", manoeuvre_indices)
+        return np.asarray(detect_non_consecutive_manoeuvres(breaths, manoeuvres))
+
+    def evaluate_bell_curve_error(
+        self,
+        peak_indices: Any,
+        start_indices: Any,
+        end_indices: Any,
+        signal: Any,
+        time_products: Any,
+        *,
+        sample_frequency: float,
+        bell_window_samples: int | None = None,
+        bell_threshold: float = 40.0,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """How well each breath's envelope fits a bell curve
+        (Warnaar et al. 2024).
+
+        Returns `(valid_peak, percentage_bell_error, bell_error, y_min,
+        fitted_parameters)`.
+        """
+
+        try:
+            from resurfemg.postprocessing.quality_assessment import (
+                evaluate_bell_curve_error,
+            )
+        except ImportError as exc:
+            raise _emg_optional_dependency_error() from exc
+
+        peaks = _require_index_array("peak_indices", peak_indices)
+        starts = _require_index_array("start_indices", start_indices)
+        ends = _require_index_array("end_indices", end_indices)
+        array = _require_1d_array("signal", signal)
+        products = _require_1d_array("time_products", time_products)
+        fs = _require_integer_valued_sample_frequency(sample_frequency)
+        _require_equal_length(
+            ("peak_indices", peaks),
+            ("start_indices", starts),
+            ("end_indices", ends),
+            ("time_products", products),
+        )
+        (
+            valid_peak,
+            percentage_bell_error,
+            bell_error,
+            y_min,
+            fitted_parameters,
+        ) = evaluate_bell_curve_error(
+            peaks,
+            starts,
+            ends,
+            array,
+            fs,
+            products,
+            bell_window_s=bell_window_samples,
+            bell_threshold=bell_threshold,
+        )
+        return (
+            np.asarray(valid_peak),
+            np.asarray(percentage_bell_error),
+            np.asarray(bell_error),
+            np.asarray(y_min),
+            np.asarray(fitted_parameters),
+        )
+
+    def evaluate_event_timing(
+        self,
+        first_event_times: Any,
+        second_event_times: Any,
+        *,
+        min_delta: float = 0.0,
+        max_delta: float | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Whether `first_event_times` precede the paired `second_event_times`
+        by between `min_delta` and `max_delta` seconds.
+
+        Returns `(correct_timing, delta_time)`.
+        """
+
+        try:
+            from resurfemg.postprocessing.quality_assessment import (
+                evaluate_event_timing,
+            )
+        except ImportError as exc:
+            raise _emg_optional_dependency_error() from exc
+
+        first = _require_1d_array("first_event_times", first_event_times)
+        second = _require_1d_array("second_event_times", second_event_times)
+        _require_equal_length(
+            ("first_event_times", first), ("second_event_times", second)
+        )
+        correct_timing, delta_time = evaluate_event_timing(
+            first,
+            second,
+            delta_min=min_delta,
+            delta_max=max_delta,
+        )
+        return np.asarray(correct_timing), np.asarray(delta_time)
+
+    def evaluate_respiratory_rates(
+        self,
+        emg_breath_indices: Any,
+        recording_duration_seconds: float,
+        ventilator_respiratory_rate: float,
+        *,
+        minimum_fraction: float = 0.1,
+    ) -> tuple[float, bool]:
+        """Fraction of expected EMG breaths actually detected, relative to
+        the ventilator's respiratory rate.
+
+        Returns `(detected_fraction, criterion_met)`.
+        """
+
+        try:
+            from resurfemg.postprocessing.quality_assessment import (
+                evaluate_respiratory_rates,
+            )
+        except ImportError as exc:
+            raise _emg_optional_dependency_error() from exc
+
+        breaths = _require_index_array("emg_breath_indices", emg_breath_indices)
+        _require_finite_positive(
+            "recording_duration_seconds", recording_duration_seconds
+        )
+        _require_finite_positive(
+            "ventilator_respiratory_rate", ventilator_respiratory_rate
+        )
+        detected_fraction, criterion_met = evaluate_respiratory_rates(
+            breaths,
+            recording_duration_seconds,
+            ventilator_respiratory_rate,
+            min_fraction=minimum_fraction,
+        )
+        return float(detected_fraction), bool(criterion_met)
+
     def _preprocess_default(
         self,
         recording: Any,
@@ -562,28 +1119,24 @@ class ReSurfEMGAdapter:
 
         baseline = None
         if enabled(("baseline", "moving_baseline")):
-            moving_baseline = self.run_postprocessing_function(
-                "baseline",
-                "moving_baseline",
+            moving_baseline = self.moving_baseline(
                 envelope,
-                window_samples,
-                step_samples,
-                set_percentile=baseline_percentile,
+                window_samples=window_samples,
+                step_samples=step_samples,
+                percentile=baseline_percentile,
             )
             computed["baseline"]["moving_baseline"] = moving_baseline
             baseline = moving_baseline
 
         if enabled(("baseline", "slopesum_baseline")):
-            slopesum_baseline = self.run_postprocessing_function(
-                "baseline",
-                "slopesum_baseline",
+            slopesum_baseline = self.slopesum_baseline(
                 envelope,
-                window_samples,
-                step_samples,
-                fs,
-                set_percentile=baseline_percentile,
-                ma_window=max(1, int(fs // 2)),
-                perc_window=max(1, int(fs)),
+                window_samples=window_samples,
+                step_samples=step_samples,
+                sample_frequency=fs,
+                percentile=baseline_percentile,
+                moving_average_samples=max(1, int(fs // 2)),
+                percentile_window_samples=max(1, int(fs)),
             )
             computed["baseline"]["slopesum_baseline"] = {
                 "baseline": slopesum_baseline[0],
@@ -639,9 +1192,7 @@ class ReSurfEMGAdapter:
                 if len(ventilator_breath_indices) and len(pocc_indices):
                     computed["quality_assessment"][
                         "detect_non_consecutive_manoeuvres"
-                    ] = self.run_postprocessing_function(
-                        "quality_assessment",
-                        "detect_non_consecutive_manoeuvres",
+                    ] = self.detect_non_consecutive_manoeuvres(
                         ventilator_breath_indices,
                         pocc_indices,
                     )
@@ -754,15 +1305,11 @@ class ReSurfEMGAdapter:
                 skipped["features.respiratory_rate"] = "Needs at least two EMG breaths."
 
             if enabled(("quality_assessment", "snr_pseudo")):
-                computed["quality_assessment"]["snr_pseudo"] = (
-                    self.run_postprocessing_function(
-                        "quality_assessment",
-                        "snr_pseudo",
-                        envelope,
-                        peak_indices_array,
-                        baseline,
-                        fs,
-                    )
+                computed["quality_assessment"]["snr_pseudo"] = self.snr_pseudo(
+                    envelope,
+                    peak_indices_array,
+                    baseline,
+                    sample_frequency=fs,
                 )
             if (
                 enabled(("quality_assessment", "percentage_under_baseline"))
@@ -770,15 +1317,13 @@ class ReSurfEMGAdapter:
                 and end_indices is not None
             ):
                 computed["quality_assessment"]["percentage_under_baseline"] = (
-                    self.run_postprocessing_function(
-                        "quality_assessment",
-                        "percentage_under_baseline",
+                    self.percentage_under_baseline(
                         envelope,
-                        fs,
                         peak_indices_array,
                         start_indices,
                         end_indices,
                         baseline,
+                        sample_frequency=fs,
                     )
                 )
             if (
@@ -787,9 +1332,7 @@ class ReSurfEMGAdapter:
             ):
                 aubs = computed["features"]["area_under_baseline"][0]
                 computed["quality_assessment"]["detect_local_high_aub"] = (
-                    self.run_postprocessing_function(
-                        "quality_assessment", "detect_local_high_aub", aubs
-                    )
+                    self.detect_local_high_aub(aubs)
                 )
             if (
                 enabled(("quality_assessment", "detect_extreme_time_products"))
@@ -797,11 +1340,7 @@ class ReSurfEMGAdapter:
             ):
                 time_products = computed["features"]["time_product"]
                 computed["quality_assessment"]["detect_extreme_time_products"] = (
-                    self.run_postprocessing_function(
-                        "quality_assessment",
-                        "detect_extreme_time_products",
-                        time_products,
-                    )
+                    self.detect_extreme_time_products(time_products)
                 )
             if (
                 enabled(("quality_assessment", "evaluate_bell_curve_error"))
@@ -811,15 +1350,13 @@ class ReSurfEMGAdapter:
             ):
                 time_products = computed["features"]["time_product"]
                 computed["quality_assessment"]["evaluate_bell_curve_error"] = (
-                    self.run_postprocessing_function(
-                        "quality_assessment",
-                        "evaluate_bell_curve_error",
+                    self.evaluate_bell_curve_error(
                         peak_indices_array,
                         start_indices,
                         end_indices,
                         envelope,
-                        fs,
                         time_products,
+                        sample_frequency=fs,
                     )
                 )
             if (
@@ -831,9 +1368,7 @@ class ReSurfEMGAdapter:
                     len(peak_indices_array), len(ventilator_breath_indices)
                 )
                 computed["quality_assessment"]["evaluate_event_timing"] = (
-                    self.run_postprocessing_function(
-                        "quality_assessment",
-                        "evaluate_event_timing",
+                    self.evaluate_event_timing(
                         peak_indices_array[:paired_count] / fs,
                         ventilator_breath_indices[:paired_count]
                         / float(ventilator_signals["fs"]),
@@ -847,9 +1382,7 @@ class ReSurfEMGAdapter:
                         "ventilator_respiratory_rate"
                     ][0]
                     computed["quality_assessment"]["evaluate_respiratory_rates"] = (
-                        self.run_postprocessing_function(
-                            "quality_assessment",
-                            "evaluate_respiratory_rates",
+                        self.evaluate_respiratory_rates(
                             peak_indices_array,
                             len(envelope) / fs,
                             rr_vent,
@@ -959,6 +1492,71 @@ def _require_emg_recording(recording: Any) -> None:
         raise TypeError("EMG preprocessing expects a ReSurfEMG recording dict.")
     if "metadata" not in recording:
         raise TypeError("EMG preprocessing expects recording metadata.")
+
+
+def _emg_optional_dependency_error() -> OptionalDependencyError:
+    return OptionalDependencyError(
+        "EMG postprocessing requires the optional dependency `resurfemg`. "
+        'Install with `pip install "m3resp[emg]"`.'
+    )
+
+
+def _require_1d_array(name: str, value: Any) -> np.ndarray:
+    array = np.asarray(value, dtype=float)
+    if array.ndim != 1:
+        raise ValueError(f"{name} must be a 1D array; got shape {array.shape}.")
+    return array
+
+
+def _require_index_array(name: str, value: Any) -> np.ndarray:
+    array = np.asarray(value)
+    if array.ndim != 1:
+        raise ValueError(
+            f"{name} must be a 1D array of indices; got shape {array.shape}."
+        )
+    return array.astype(int)
+
+
+def _require_positive_int(name: str, value: int) -> None:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"{name} must be a positive integer; got {value!r}.")
+
+
+def _require_percentile(name: str, value: float) -> None:
+    if not (0.0 <= float(value) <= 100.0):
+        raise ValueError(f"{name} must be between 0 and 100; got {value!r}.")
+
+
+def _require_finite_positive(name: str, value: float) -> None:
+    if not np.isfinite(value) or value <= 0:
+        raise ValueError(f"{name} must be a finite, positive number; got {value!r}.")
+
+
+def _require_equal_length(*named_arrays: tuple[str, np.ndarray]) -> None:
+    lengths = {name: len(array) for name, array in named_arrays}
+    if len(set(lengths.values())) > 1:
+        raise ValueError(f"Arrays must have equal length; got {lengths}.")
+
+
+def _require_integer_valued_sample_frequency(sample_frequency: float) -> int:
+    """Normalize `sample_frequency` to `int` for upstream calls that need an
+    exact integer (e.g. `fs // 200` fed straight into a pandas rolling
+    window - see plan/stage2/2_resurfemg_gap_migration_implementation_plan.md
+    Phase 0.2). Only an exactly integer-valued float (`2048.0`) is
+    normalized; a genuinely fractional frequency is a clear error rather
+    than a silent rounding.
+    """
+
+    if not np.isfinite(sample_frequency) or sample_frequency <= 0:
+        raise ValueError(
+            f"sample_frequency must be finite and positive; got {sample_frequency!r}."
+        )
+    if float(sample_frequency).is_integer():
+        return int(sample_frequency)
+    raise ValueError(
+        "sample_frequency must be an exact integer value for this operation "
+        f"(ReSurfEMG requires an int internally); got {sample_frequency!r}."
+    )
 
 
 def _computed_category(postprocessed: dict[str, Any], category: str) -> dict[str, Any]:
