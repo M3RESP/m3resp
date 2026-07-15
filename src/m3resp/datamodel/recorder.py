@@ -322,6 +322,13 @@ class DataModelRecorder:
         summary (method/unit/metadata) for every native result, keyed by its
         context name, so the run's full output provenance survives even for
         array-valued results whose ``DerivedFeature.value`` stays ``None``.
+
+        A ``list``/``tuple`` of native results (e.g. one ``ParameterResult``
+        per breath - see ``plan/stage2/
+        2_resurfemg_gap_migration_implementation_plan.md`` Phase 6.1) is
+        recorded as one store entity per item, keeping each item's
+        breath/sample identity, rather than being skipped or collapsed into
+        a single annotation.
         """
 
         run = self.store.add_processing_run(
@@ -329,26 +336,51 @@ class DataModelRecorder:
         )
         output_provenance: dict[str, Any] = {}
         for name, value in result.outputs.items():
-            if isinstance(value, ParameterResult):
-                self.record_parameter(value, processing_run_id=run.processing_run_id)
-                output_provenance[name] = _output_provenance_entry(value)
-            elif isinstance(value, QualityFlag):
-                self.record_quality_flag(value)
-            elif isinstance(value, Signal):
-                self.record_signal(value)
-                output_provenance[name] = _output_provenance_entry(value)
-            elif isinstance(value, bool):
-                continue
-            elif isinstance(value, (int, float)):
-                self.store.add_derived_feature(
-                    DerivedFeature(
-                        processing_run_id=run.processing_run_id,
-                        feature_name=name,
-                        value=float(value),
-                    )
-                )
+            if isinstance(value, (list, tuple)):
+                entries = [
+                    entry
+                    for item in value
+                    if (entry := self._record_output_item(name, item, run)) is not None
+                ]
+                if entries:
+                    output_provenance[name] = entries
+            else:
+                entry = self._record_output_item(name, value, run)
+                if entry is not None:
+                    output_provenance[name] = entry
         run.parameters["outputs"] = output_provenance
         return run
+
+    def _record_output_item(
+        self, name: str, value: Any, run: ProcessingRun
+    ) -> dict[str, Any] | None:
+        """Record one pipeline-output value (not a list/tuple of them) and
+        return its provenance entry, or ``None`` for a value that has no
+        provenance entry of its own (a `QualityFlag`, or an unrecognized
+        type). `name` is the output's context key, used as the
+        `DerivedFeature.feature_name` for a bare numeric output."""
+
+        if isinstance(value, ParameterResult):
+            self.record_parameter(value, processing_run_id=run.processing_run_id)
+            return _output_provenance_entry(value)
+        if isinstance(value, QualityFlag):
+            self.record_quality_flag(value)
+            return None
+        if isinstance(value, Signal):
+            self.record_signal(value)
+            return _output_provenance_entry(value)
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            self.store.add_derived_feature(
+                DerivedFeature(
+                    processing_run_id=run.processing_run_id,
+                    feature_name=name,
+                    value=float(value),
+                )
+            )
+            return None
+        return None
 
     def record_parameter_file(
         self, path: str | Path, *, processing_run_id: str
@@ -410,6 +442,8 @@ def _output_provenance_entry(value: ParameterResult | Signal) -> dict[str, Any]:
     }
     if isinstance(value, ParameterResult):
         entry["is_scalar"] = value.is_scalar
+        entry["breath_id"] = value.breath_id
+        entry["channel"] = value.channel
     else:
         entry["channel"] = value.channel
         entry["processing_state"] = value.processing_state

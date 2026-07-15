@@ -24,7 +24,8 @@ from m3resp.core.session import (
     _normalize_ventilator_breath,
 )
 from m3resp.core.events import BreathEvent, Event
-from m3resp.data import ParameterResult, Signal
+from m3resp.data import ParameterResult, QualityFlag, Signal
+from m3resp.data.quality import Severity
 from m3resp.processing.intervals import (
     onoff_from_baseline_crossings,
     onoff_from_slope,
@@ -248,8 +249,6 @@ def peak_indices(events: Any, processed_emg: Any) -> dict[str, Any]:
 # A pipeline picks exactly one (or renames one via `out:`) - this makes the
 # baseline choice an explicit YAML decision instead of the previous silent
 # "whichever ran last wins when both are enabled" behavior.
-
-
 def _require_positive_seconds(name: str, value: float) -> None:
     if not np.isfinite(value) or value <= 0:
         raise ValueError(f"{name} must be a finite, positive number; got {value!r}.")
@@ -276,6 +275,90 @@ def _processed_channel_label_and_unit(processed_emg: Any) -> tuple[str, str | No
         else None
     )
     return label, unit
+
+
+# shared per-item identity helpers for native quality results/flags --------
+def _require_equal_length(**named_arrays: Any) -> None:
+    """Raise a clear error instead of silently truncating with
+    `min(len(...))` when paired arrays disagree in length (plan Phase 5.4:
+    "Do not truncate arrays... without reporting unmatched events")."""
+
+    lengths = {name: len(array) for name, array in named_arrays.items()}
+    if len(set(lengths.values())) > 1:
+        raise ValueError(f"Arrays must have equal length; got {lengths}.")
+
+
+def _breath_metadata(peak_index: Any, *, fs: float | None = None) -> dict[str, Any]:
+    metadata: dict[str, Any] = {"peak_sample_index": int(peak_index)}
+    if fs is not None:
+        metadata["peak_time"] = float(peak_index) / fs
+    return metadata
+
+
+def _per_breath_flags(
+    name: str,
+    valid: Any,
+    *,
+    modality: str,
+    peak_indices: Any,
+    severity: Severity = "info",
+    fs: float | None = None,
+    threshold: float | None = None,
+    extra_metadata: dict[str, Any] | None = None,
+) -> list[QualityFlag]:
+    """One `QualityFlag` per breath - `breath_id=str(position)` until a
+    stable event ID is available, with the source peak sample index
+    recorded in metadata (plan Phase 5.4)."""
+
+    _require_equal_length(valid=valid, peak_indices=peak_indices)
+    flags = []
+    for position, (is_valid, peak_index) in enumerate(zip(valid, peak_indices)):
+        metadata = _breath_metadata(peak_index, fs=fs)
+        if extra_metadata:
+            metadata.update(extra_metadata)
+        flags.append(
+            QualityFlag(
+                name=name,
+                passed=bool(is_valid),
+                severity=severity,
+                modality=modality,
+                breath_id=str(position),
+                threshold=threshold,
+                metadata=metadata,
+            )
+        )
+    return flags
+
+
+def _per_breath_results(
+    name: str,
+    values: Any,
+    *,
+    modality: str,
+    peak_indices: Any,
+    unit: str | None = None,
+    method: str | None = None,
+    fs: float | None = None,
+    extra_metadata_per_item: list[dict[str, Any]] | None = None,
+) -> list[ParameterResult]:
+    _require_equal_length(values=values, peak_indices=peak_indices)
+    results = []
+    for position, (value, peak_index) in enumerate(zip(values, peak_indices)):
+        metadata = _breath_metadata(peak_index, fs=fs)
+        if extra_metadata_per_item is not None:
+            metadata.update(extra_metadata_per_item[position])
+        results.append(
+            ParameterResult(
+                name=name,
+                value=value if np.ndim(value) > 0 else float(value),
+                modality=modality,
+                unit=unit,
+                breath_id=str(position),
+                method=method,
+                metadata=metadata,
+            )
+        )
+    return results
 
 
 @register_step(
@@ -742,6 +825,11 @@ def ecg_gating(
         method="resurfemg.gating",
         metadata=dict(gating_parameters),
     )
+    # Array-valued, so this reuses the shared parameter_result_arrays.npz
+    # exporter (plan Phase 6.3) rather than a competing EMG-specific one -
+    # session.export_summary() already routes any array-valued
+    # ParameterResult there.
+    session.parameter_results.add(gate_mask_result)
 
     _record_step(
         session,
@@ -884,6 +972,12 @@ def ecg_wavelet_denoising(
         method="resurfemg.wavelet_denoising",
         metadata=dict(wavelet_parameters),
     )
+    # All three are array-valued (decomposition/thresholds are 2D: level x
+    # sample), so they reuse the shared parameter_result_arrays.npz exporter
+    # (plan Phase 6.3) via session.export_summary() rather than a competing
+    # EMG-specific array format.
+    for array_result in (decomposition_result, thresholds_result, gate_mask_result):
+        session.parameter_results.add(array_result)
 
     _record_step(
         session,
@@ -1089,6 +1183,202 @@ def pocc_time_product(
     return {"pocc_time_products": time_products, "pocc_time_product_result": result}
 
 
+_POCC_CRITERIA_ROW_NAMES = ("dp_up_10", "dp_up_90", "dp_up_90_norm")
+
+
+@register_step(
+    "emg.pocc_quality",
+    reads={
+        "session": "session",
+        "ventilator_signals": "ventilator_signals",
+        "pocc_indices": "pocc_indices",
+        "pocc_end_indices": "pocc_end_indices",
+        "pocc_time_products": "pocc_time_products",
+    },
+    writes=(
+        "pocc_quality",
+        "pocc_quality_criteria",
+        "pocc_quality_results",
+        "pocc_quality_flags",
+    ),
+    summary="Evaluate Pocc manoeuvre quality from the pressure upslope (Warnaar et al. 2024).",
+)
+def pocc_quality(
+    session: M3Session,
+    ventilator_signals: Any,
+    pocc_indices: Any,
+    pocc_end_indices: Any,
+    pocc_time_products: Any,
+    *,
+    dp_up_10_threshold: float = 0.0,
+    dp_up_90_threshold: float = 2.0,
+    dp_up_90_norm_threshold: float = 0.8,
+) -> dict[str, Any]:
+    pressure = np.asarray(ventilator_signals["pressure"], dtype=float)
+    pressure_unit = ventilator_signals.get("unit") or "cmH2O"
+
+    valid, criteria = session.emg_adapter.pocc_quality(
+        pressure,
+        pocc_indices,
+        pocc_end_indices,
+        pocc_time_products,
+        dp_up_10_threshold=dp_up_10_threshold,
+        dp_up_90_threshold=dp_up_90_threshold,
+        dp_up_90_norm_threshold=dp_up_90_norm_threshold,
+    )
+
+    thresholds_by_row = {
+        "dp_up_10": dp_up_10_threshold,
+        "dp_up_90": dp_up_90_threshold,
+        "dp_up_90_norm": dp_up_90_norm_threshold,
+    }
+    flags = _per_breath_flags(
+        "pocc_quality",
+        valid,
+        modality="pressure",
+        peak_indices=pocc_indices,
+        extra_metadata={"pressure_sample_index_end": None},
+    )
+    # Link each flag to its Pocc end index too, not just its peak.
+    for flag, end_index in zip(flags, pocc_end_indices):
+        flag.metadata["pressure_sample_index_end"] = int(end_index)
+
+    results: list[ParameterResult] = []
+    for row_name, row_values in zip(_POCC_CRITERIA_ROW_NAMES, criteria):
+        results.extend(
+            _per_breath_results(
+                f"pocc_quality_{row_name}",
+                row_values,
+                modality="pressure",
+                peak_indices=pocc_indices,
+                unit=pressure_unit,
+                method="resurfemg.pocc_quality",
+                extra_metadata_per_item=[
+                    {"threshold": thresholds_by_row[row_name], "criterion": row_name}
+                    for _ in row_values
+                ],
+            )
+        )
+
+    for result in results:
+        session.parameter_results.add(result)
+    for flag in flags:
+        session.quality.add(flag)
+
+    _record_step(
+        session,
+        "emg.pocc_quality",
+        metadata=_upstream_metadata(
+            source_function="resurfemg.postprocessing.quality_assessment.pocc_quality",
+            operation="emg.pocc_quality",
+            parameters={
+                "dp_up_10_threshold": dp_up_10_threshold,
+                "dp_up_90_threshold": dp_up_90_threshold,
+                "dp_up_90_norm_threshold": dp_up_90_norm_threshold,
+            },
+        ),
+    )
+    return {
+        "pocc_quality": valid,
+        "pocc_quality_criteria": criteria,
+        "pocc_quality_results": results,
+        "pocc_quality_flags": flags,
+    }
+
+
+@register_step(
+    "emg.interpeak_dist",
+    reads={
+        "session": "session",
+        "ecg_peak_indices": "ecg_peak_indices",
+        "peak_indices": "peak_indices",
+        "processed_emg": "processed_emg",
+    },
+    writes=("interpeak_dist", "interpeak_dist_result", "interpeak_dist_flag"),
+    summary="Check the ECG-to-EMG median interpeak distance ratio (Warnaar et al. 2024).",
+)
+def interpeak_dist(
+    session: M3Session,
+    ecg_peak_indices: Any,
+    peak_indices: Any,
+    processed_emg: Any,
+    *,
+    threshold: float = 1.1,
+) -> dict[str, Any]:
+    # Upstream compares distances in raw samples, which is only meaningful
+    # if both peak sets share a time base - both are indices into the same
+    # processed_emg channel here, so that holds without conversion.
+    fs = float(processed_emg["fs"])
+    valid = session.emg_adapter.interpeak_distance(
+        ecg_peak_indices, peak_indices, threshold=threshold
+    )
+
+    ecg_peaks = np.asarray(ecg_peak_indices, dtype=int)
+    emg_peaks = np.asarray(peak_indices, dtype=int)
+    ecg_median_samples = float(np.median(np.diff(ecg_peaks)))
+    emg_median_samples = float(np.median(np.diff(emg_peaks)))
+    ratio = emg_median_samples / ecg_median_samples
+
+    shared_metadata = {
+        "threshold": threshold,
+        "time_base": "shared (both peak sets index the same EMG channel)",
+        "sample_frequency": fs,
+    }
+    results = [
+        ParameterResult(
+            name="interpeak_dist_ecg_median",
+            value=ecg_median_samples / fs,
+            modality="emg",
+            unit="s",
+            method="resurfemg.interpeak_dist",
+            metadata=dict(shared_metadata),
+        ),
+        ParameterResult(
+            name="interpeak_dist_emg_median",
+            value=emg_median_samples / fs,
+            modality="emg",
+            unit="s",
+            method="resurfemg.interpeak_dist",
+            metadata=dict(shared_metadata),
+        ),
+        ParameterResult(
+            name="interpeak_dist_ratio",
+            value=ratio,
+            modality="emg",
+            method="resurfemg.interpeak_dist",
+            metadata=dict(shared_metadata),
+        ),
+    ]
+    flag = QualityFlag(
+        name="interpeak_dist",
+        passed=bool(valid),
+        severity="info",
+        modality="emg",
+        value=ratio,
+        threshold=threshold,
+        metadata=dict(shared_metadata),
+    )
+
+    for result in results:
+        session.parameter_results.add(result)
+    session.quality.add(flag)
+
+    _record_step(
+        session,
+        "emg.interpeak_dist",
+        metadata=_upstream_metadata(
+            source_function="resurfemg.postprocessing.quality_assessment.interpeak_dist",
+            operation="emg.interpeak_dist",
+            parameters={"threshold": threshold},
+        ),
+    )
+    return {
+        "interpeak_dist": valid,
+        "interpeak_dist_result": results,
+        "interpeak_dist_flag": flag,
+    }
+
+
 @register_step(
     "emg.onoffpeak_baseline_crossing",
     reads={
@@ -1287,8 +1577,6 @@ def ventilator_respiratory_rate(
 
 
 # --- quality_assessment -------------------------------------------------
-
-
 @register_step(
     "emg.snr_pseudo",
     reads={
@@ -1297,11 +1585,16 @@ def ventilator_respiratory_rate(
         "peak_indices": "peak_indices",
         "baseline": "baseline",
     },
-    writes=("snr_pseudo",),
+    writes=("snr_pseudo", "snr_pseudo_results", "snr_pseudo_flags"),
     summary="Compute a pseudo signal-to-noise ratio for detected EMG breaths.",
 )
 def snr_pseudo(
-    session: M3Session, processed_emg: Any, peak_indices: Any, baseline: Any
+    session: M3Session,
+    processed_emg: Any,
+    peak_indices: Any,
+    baseline: Any,
+    *,
+    minimum_snr: float | None = None,
 ) -> dict[str, Any]:
     import numpy as np
 
@@ -1310,7 +1603,50 @@ def snr_pseudo(
     result = session.emg_adapter.snr_pseudo(
         envelope, peak_indices, baseline, sample_frequency=fs
     )
-    return {"snr_pseudo": result}
+
+    results = _per_breath_results(
+        "snr_pseudo",
+        result,
+        modality="emg",
+        peak_indices=peak_indices,
+        method="resurfemg.snr_pseudo",
+        fs=fs,
+    )
+    # A measurement only becomes a criterion when a threshold is actually
+    # configured - no invented pass/fail otherwise (see
+    # m3resp.processing.quality.quality_flag_from_result's docstring).
+    flags = (
+        _per_breath_flags(
+            "snr_pseudo",
+            result >= minimum_snr,
+            modality="emg",
+            peak_indices=peak_indices,
+            fs=fs,
+            threshold=minimum_snr,
+        )
+        if minimum_snr is not None
+        else []
+    )
+
+    for parameter_result in results:
+        session.parameter_results.add(parameter_result)
+    for flag in flags:
+        session.quality.add(flag)
+
+    _record_step(
+        session,
+        "emg.snr_pseudo",
+        metadata=_upstream_metadata(
+            source_function="resurfemg.postprocessing.quality_assessment.snr_pseudo",
+            operation="emg.snr_pseudo",
+            parameters={"minimum_snr": minimum_snr},
+        ),
+    )
+    return {
+        "snr_pseudo": result,
+        "snr_pseudo_results": results,
+        "snr_pseudo_flags": flags,
+    }
 
 
 @register_step(
@@ -1323,7 +1659,11 @@ def snr_pseudo(
         "end_indices": "end_indices",
         "baseline": "baseline",
     },
-    writes=("percentage_under_baseline",),
+    writes=(
+        "percentage_under_baseline",
+        "percentage_under_baseline_results",
+        "percentage_under_baseline_flags",
+    ),
     summary="Compute the percentage of each EMG breath spent under baseline.",
 )
 def percentage_under_baseline(
@@ -1333,11 +1673,17 @@ def percentage_under_baseline(
     start_indices: Any,
     end_indices: Any,
     baseline: Any,
+    *,
+    aub_window_seconds: float | None = None,
+    aub_threshold: float = 40.0,
 ) -> dict[str, Any]:
     import numpy as np
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
     fs = float(processed_emg["fs"])
+    aub_window_samples = (
+        max(1, int(aub_window_seconds * fs)) if aub_window_seconds is not None else None
+    )
     result = session.emg_adapter.percentage_under_baseline(
         envelope,
         peak_indices,
@@ -1345,34 +1691,213 @@ def percentage_under_baseline(
         end_indices,
         baseline,
         sample_frequency=fs,
+        aub_window_samples=aub_window_samples,
+        aub_threshold=aub_threshold,
     )
-    return {"percentage_under_baseline": result}
+    valid, percentages, reference_values = result
+
+    results = _per_breath_results(
+        "percentage_under_baseline",
+        percentages,
+        modality="emg",
+        peak_indices=peak_indices,
+        unit="%",
+        method="resurfemg.percentage_under_baseline",
+        fs=fs,
+        extra_metadata_per_item=[
+            {"reference_value": float(reference)} for reference in reference_values
+        ],
+    )
+    flags = _per_breath_flags(
+        "percentage_under_baseline",
+        valid,
+        modality="emg",
+        peak_indices=peak_indices,
+        fs=fs,
+        threshold=aub_threshold,
+    )
+
+    for parameter_result in results:
+        session.parameter_results.add(parameter_result)
+    for flag in flags:
+        session.quality.add(flag)
+
+    _record_step(
+        session,
+        "emg.percentage_under_baseline",
+        metadata=_upstream_metadata(
+            source_function="resurfemg.postprocessing.quality_assessment.percentage_under_baseline",
+            operation="emg.percentage_under_baseline",
+            parameters={
+                "aub_window_seconds": aub_window_seconds,
+                "aub_threshold": aub_threshold,
+                "effective_aub_window_samples": aub_window_samples,
+            },
+        ),
+    )
+    return {
+        "percentage_under_baseline": result,
+        "percentage_under_baseline_results": results,
+        "percentage_under_baseline_flags": flags,
+    }
 
 
 @register_step(
     "emg.detect_local_high_aub",
-    reads={"session": "session", "area_under_baseline": "area_under_baseline"},
-    writes=("detect_local_high_aub",),
+    reads={
+        "session": "session",
+        "area_under_baseline": "area_under_baseline",
+        "peak_indices": "peak_indices",
+    },
+    writes=(
+        "detect_local_high_aub",
+        "detect_local_high_aub_flags",
+        "detect_local_high_aub_threshold_result",
+    ),
     summary="Flag EMG breaths with locally elevated area-under-baseline.",
 )
 def detect_local_high_aub(
-    session: M3Session, area_under_baseline: Any
+    session: M3Session,
+    area_under_baseline: Any,
+    peak_indices: Any,
+    *,
+    threshold_percentile: float = 75.0,
+    threshold_factor: float = 4.0,
 ) -> dict[str, Any]:
     aubs = area_under_baseline[0]
-    return {"detect_local_high_aub": session.emg_adapter.detect_local_high_aub(aubs)}
+    result = session.emg_adapter.detect_local_high_aub(
+        aubs,
+        threshold_percentile=threshold_percentile,
+        threshold_factor=threshold_factor,
+    )
+    # Upstream's own formula (resurfemg.postprocessing.quality_assessment.
+    # detect_local_high_aub) - recomputed here since it only returns the
+    # boolean array, not the threshold it compared against.
+    effective_threshold = float(
+        threshold_factor
+        * np.percentile(np.asarray(aubs, dtype=float), threshold_percentile)
+    )
+
+    flags = _per_breath_flags(
+        "detect_local_high_aub",
+        result,
+        modality="emg",
+        peak_indices=peak_indices,
+        threshold=effective_threshold,
+    )
+    threshold_result = ParameterResult(
+        name="detect_local_high_aub_threshold",
+        value=effective_threshold,
+        modality="emg",
+        method="resurfemg.detect_local_high_aub",
+        metadata={
+            "threshold_percentile": threshold_percentile,
+            "threshold_factor": threshold_factor,
+        },
+    )
+
+    for flag in flags:
+        session.quality.add(flag)
+    session.parameter_results.add(threshold_result)
+
+    _record_step(
+        session,
+        "emg.detect_local_high_aub",
+        metadata=_upstream_metadata(
+            source_function="resurfemg.postprocessing.quality_assessment.detect_local_high_aub",
+            operation="emg.detect_local_high_aub",
+            parameters={
+                "threshold_percentile": threshold_percentile,
+                "threshold_factor": threshold_factor,
+            },
+        ),
+    )
+    return {
+        "detect_local_high_aub": result,
+        "detect_local_high_aub_flags": flags,
+        "detect_local_high_aub_threshold_result": threshold_result,
+    }
 
 
 @register_step(
     "emg.detect_extreme_time_products",
-    reads={"session": "session", "time_product": "time_product"},
-    writes=("detect_extreme_time_products",),
+    reads={
+        "session": "session",
+        "time_product": "time_product",
+        "peak_indices": "peak_indices",
+    },
+    writes=(
+        "detect_extreme_time_products",
+        "detect_extreme_time_products_flags",
+        "detect_extreme_time_products_bounds_result",
+    ),
     summary="Flag EMG breaths with extreme time-products.",
 )
 def detect_extreme_time_products(
-    session: M3Session, time_product: Any
+    session: M3Session,
+    time_product: Any,
+    peak_indices: Any,
+    *,
+    upper_percentile: float = 95.0,
+    upper_factor: float = 10.0,
+    lower_percentile: float = 5.0,
+    lower_factor: float = 0.1,
 ) -> dict[str, Any]:
-    result = session.emg_adapter.detect_extreme_time_products(time_product)
-    return {"detect_extreme_time_products": result}
+    result = session.emg_adapter.detect_extreme_time_products(
+        time_product,
+        upper_percentile=upper_percentile,
+        upper_factor=upper_factor,
+        lower_percentile=lower_percentile,
+        lower_factor=lower_factor,
+    )
+    values = np.asarray(time_product, dtype=float)
+    upper_bound = float(upper_factor * np.percentile(values, upper_percentile))
+    lower_bound = float(lower_factor * np.percentile(values, lower_percentile))
+
+    flags = _per_breath_flags(
+        "detect_extreme_time_products",
+        result,
+        modality="emg",
+        peak_indices=peak_indices,
+    )
+    bounds_result = ParameterResult(
+        name="detect_extreme_time_products_bounds",
+        value=np.array([lower_bound, upper_bound]),
+        modality="emg",
+        method="resurfemg.detect_extreme_time_products",
+        metadata={
+            "lower_bound": lower_bound,
+            "upper_bound": upper_bound,
+            "upper_percentile": upper_percentile,
+            "upper_factor": upper_factor,
+            "lower_percentile": lower_percentile,
+            "lower_factor": lower_factor,
+        },
+    )
+
+    for flag in flags:
+        session.quality.add(flag)
+    session.parameter_results.add(bounds_result)
+
+    _record_step(
+        session,
+        "emg.detect_extreme_time_products",
+        metadata=_upstream_metadata(
+            source_function="resurfemg.postprocessing.quality_assessment.detect_extreme_time_products",
+            operation="emg.detect_extreme_time_products",
+            parameters={
+                "upper_percentile": upper_percentile,
+                "upper_factor": upper_factor,
+                "lower_percentile": lower_percentile,
+                "lower_factor": lower_factor,
+            },
+        ),
+    )
+    return {
+        "detect_extreme_time_products": result,
+        "detect_extreme_time_products_flags": flags,
+        "detect_extreme_time_products_bounds_result": bounds_result,
+    }
 
 
 @register_step(
@@ -1382,7 +1907,10 @@ def detect_extreme_time_products(
         "ventilator_breath_indices": "ventilator_breath_indices",
         "pocc_indices": "pocc_indices",
     },
-    writes=("detect_non_consecutive_manoeuvres",),
+    writes=(
+        "detect_non_consecutive_manoeuvres",
+        "detect_non_consecutive_manoeuvres_flags",
+    ),
     summary="Flag non-consecutive occlusion manoeuvres against ventilator breaths.",
 )
 def detect_non_consecutive_manoeuvres(
@@ -1391,7 +1919,27 @@ def detect_non_consecutive_manoeuvres(
     result = session.emg_adapter.detect_non_consecutive_manoeuvres(
         ventilator_breath_indices, pocc_indices
     )
-    return {"detect_non_consecutive_manoeuvres": result}
+    flags = _per_breath_flags(
+        "detect_non_consecutive_manoeuvres",
+        result,
+        modality="pressure",
+        peak_indices=pocc_indices,
+    )
+    for flag in flags:
+        session.quality.add(flag)
+    _record_step(
+        session,
+        "emg.detect_non_consecutive_manoeuvres",
+        metadata=_upstream_metadata(
+            source_function="resurfemg.postprocessing.quality_assessment.detect_non_consecutive_manoeuvres",
+            operation="emg.detect_non_consecutive_manoeuvres",
+            parameters={},
+        ),
+    )
+    return {
+        "detect_non_consecutive_manoeuvres": result,
+        "detect_non_consecutive_manoeuvres_flags": flags,
+    }
 
 
 @register_step(
@@ -1404,7 +1952,11 @@ def detect_non_consecutive_manoeuvres(
         "processed_emg": "processed_emg",
         "time_product": "time_product",
     },
-    writes=("evaluate_bell_curve_error",),
+    writes=(
+        "evaluate_bell_curve_error",
+        "evaluate_bell_curve_error_results",
+        "evaluate_bell_curve_error_flags",
+    ),
     summary="Score how well each EMG breath matches a bell-curve shape.",
 )
 def evaluate_bell_curve_error(
@@ -1427,7 +1979,62 @@ def evaluate_bell_curve_error(
         time_product,
         sample_frequency=fs,
     )
-    return {"evaluate_bell_curve_error": result}
+    valid_peak, percentage_bell_error, bell_error, y_min, fitted_parameters = result
+
+    results = _per_breath_results(
+        "evaluate_bell_curve_error",
+        percentage_bell_error,
+        modality="emg",
+        peak_indices=peak_indices,
+        unit="%",
+        method="resurfemg.evaluate_bell_curve_error",
+        fs=fs,
+        extra_metadata_per_item=[
+            {"bell_error": float(bell_error[index]), "y_min": float(y_min[index])}
+            for index in range(len(percentage_bell_error))
+        ],
+    )
+    # Array-valued (one fitted bell-curve parameter vector per breath), so
+    # this is its own ParameterResult rather than buried in metadata - it
+    # then reuses the shared parameter_result_arrays.npz exporter (plan
+    # Phase 6.3) instead of a competing EMG-specific array format.
+    results.extend(
+        _per_breath_results(
+            "evaluate_bell_curve_error_fitted_parameters",
+            list(np.asarray(fitted_parameters)),
+            modality="emg",
+            peak_indices=peak_indices,
+            method="resurfemg.evaluate_bell_curve_error",
+            fs=fs,
+        )
+    )
+    flags = _per_breath_flags(
+        "evaluate_bell_curve_error",
+        valid_peak,
+        modality="emg",
+        peak_indices=peak_indices,
+        fs=fs,
+    )
+
+    for parameter_result in results:
+        session.parameter_results.add(parameter_result)
+    for flag in flags:
+        session.quality.add(flag)
+
+    _record_step(
+        session,
+        "emg.evaluate_bell_curve_error",
+        metadata=_upstream_metadata(
+            source_function="resurfemg.postprocessing.quality_assessment.evaluate_bell_curve_error",
+            operation="emg.evaluate_bell_curve_error",
+            parameters={},
+        ),
+    )
+    return {
+        "evaluate_bell_curve_error": result,
+        "evaluate_bell_curve_error_results": results,
+        "evaluate_bell_curve_error_flags": flags,
+    }
 
 
 @register_step(
@@ -1439,7 +2046,12 @@ def evaluate_bell_curve_error(
         "ventilator_breath_indices": "ventilator_breath_indices",
         "ventilator_signals": "ventilator_signals",
     },
-    writes=("evaluate_event_timing",),
+    writes=(
+        "evaluate_event_timing",
+        "evaluate_event_timing_results",
+        "evaluate_event_timing_flags",
+        "evaluate_event_timing_unmatched_count",
+    ),
     summary="Score the timing agreement between EMG and ventilator breaths.",
 )
 def evaluate_event_timing(
@@ -1451,12 +2063,83 @@ def evaluate_event_timing(
 ) -> dict[str, Any]:
     fs = float(processed_emg["fs"])
     vent_fs = float(ventilator_signals["fs"])
+    # Keep the raw output's existing truncation behavior (Phase 5.1: "existing
+    # pipeline consumers do not break"), but report the truncation instead of
+    # silently dropping the unmatched events (Phase 5.4).
     paired_count = min(len(peak_indices), len(ventilator_breath_indices))
+    unmatched_count = abs(len(peak_indices) - len(ventilator_breath_indices))
+    paired_emg_peaks = peak_indices[:paired_count]
+    paired_vent_peaks = ventilator_breath_indices[:paired_count]
     result = session.emg_adapter.evaluate_event_timing(
-        peak_indices[:paired_count] / fs,
-        ventilator_breath_indices[:paired_count] / vent_fs,
+        paired_emg_peaks / fs,
+        paired_vent_peaks / vent_fs,
     )
-    return {"evaluate_event_timing": result}
+    correct_timing, delta_time = result
+
+    results = _per_breath_results(
+        "evaluate_event_timing_delta",
+        delta_time,
+        modality="emg",
+        peak_indices=paired_emg_peaks,
+        unit="s",
+        method="resurfemg.evaluate_event_timing",
+        fs=fs,
+        extra_metadata_per_item=[
+            {
+                "emg_sample_index": int(paired_emg_peaks[index]),
+                "ventilator_sample_index": int(paired_vent_peaks[index]),
+                "emg_sample_frequency": fs,
+                "ventilator_sample_frequency": vent_fs,
+            }
+            for index in range(paired_count)
+        ],
+    )
+    flags = _per_breath_flags(
+        "evaluate_event_timing",
+        correct_timing,
+        modality="emg",
+        peak_indices=paired_emg_peaks,
+        fs=fs,
+    )
+    if unmatched_count:
+        flags.append(
+            QualityFlag(
+                name="evaluate_event_timing_unmatched",
+                passed=False,
+                severity="warning",
+                modality="emg",
+                message=(
+                    f"{unmatched_count} event(s) had no paired counterpart and "
+                    "were not assessed."
+                ),
+                metadata={
+                    "unmatched_count": unmatched_count,
+                    "emg_event_count": len(peak_indices),
+                    "ventilator_event_count": len(ventilator_breath_indices),
+                },
+            )
+        )
+
+    for parameter_result in results:
+        session.parameter_results.add(parameter_result)
+    for flag in flags:
+        session.quality.add(flag)
+
+    _record_step(
+        session,
+        "emg.evaluate_event_timing",
+        metadata=_upstream_metadata(
+            source_function="resurfemg.postprocessing.quality_assessment.evaluate_event_timing",
+            operation="emg.evaluate_event_timing",
+            parameters={"unmatched_count": unmatched_count},
+        ),
+    )
+    return {
+        "evaluate_event_timing": result,
+        "evaluate_event_timing_results": results,
+        "evaluate_event_timing_flags": flags,
+        "evaluate_event_timing_unmatched_count": unmatched_count,
+    }
 
 
 @register_step(
@@ -1467,7 +2150,11 @@ def evaluate_event_timing(
         "processed_emg": "processed_emg",
         "ventilator_respiratory_rate": "ventilator_respiratory_rate",
     },
-    writes=("evaluate_respiratory_rates",),
+    writes=(
+        "evaluate_respiratory_rates",
+        "evaluate_respiratory_rates_result",
+        "evaluate_respiratory_rates_flag",
+    ),
     summary="Score agreement between EMG-derived and ventilator-derived respiratory rate.",
 )
 def evaluate_respiratory_rates(
@@ -1475,19 +2162,57 @@ def evaluate_respiratory_rates(
     peak_indices: Any,
     processed_emg: Any,
     ventilator_respiratory_rate: Any,
+    *,
+    minimum_fraction: float = 0.1,
 ) -> dict[str, Any]:
     fs = float(processed_emg["fs"])
     envelope = processed_emg["envelope"]
     rr_vent = ventilator_respiratory_rate[0]
     result = session.emg_adapter.evaluate_respiratory_rates(
-        peak_indices, len(envelope) / fs, rr_vent
+        peak_indices, len(envelope) / fs, rr_vent, minimum_fraction=minimum_fraction
     )
-    return {"evaluate_respiratory_rates": result}
+    detected_fraction, criterion_met = result
+
+    parameter_result = ParameterResult(
+        name="evaluate_respiratory_rates_detected_fraction",
+        value=detected_fraction,
+        modality="emg",
+        method="resurfemg.evaluate_respiratory_rates",
+        metadata={
+            "minimum_fraction": minimum_fraction,
+            "ventilator_rr": float(rr_vent),
+        },
+    )
+    flag = QualityFlag(
+        name="evaluate_respiratory_rates",
+        passed=bool(criterion_met),
+        severity="info",
+        modality="emg",
+        value=detected_fraction,
+        threshold=minimum_fraction,
+        metadata={"ventilator_rr": float(rr_vent)},
+    )
+
+    session.parameter_results.add(parameter_result)
+    session.quality.add(flag)
+
+    _record_step(
+        session,
+        "emg.evaluate_respiratory_rates",
+        metadata=_upstream_metadata(
+            source_function="resurfemg.postprocessing.quality_assessment.evaluate_respiratory_rates",
+            operation="emg.evaluate_respiratory_rates",
+            parameters={"minimum_fraction": minimum_fraction},
+        ),
+    )
+    return {
+        "evaluate_respiratory_rates": result,
+        "evaluate_respiratory_rates_result": parameter_result,
+        "evaluate_respiratory_rates_flag": flag,
+    }
 
 
 # --- event normalization -------------------------------------------------
-
-
 @register_step(
     "emg.normalize_ventilator_breaths",
     reads={
