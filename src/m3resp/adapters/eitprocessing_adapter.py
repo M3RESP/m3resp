@@ -585,6 +585,7 @@ class EITProcessingAdapter:
                     modality="eit",
                     channel="global_impedance",
                     processing_state="filtered",
+                    method=preprocessed.get("filter_mode"),
                 )
             )
         return signals
@@ -695,6 +696,7 @@ def _continuous_data_to_signal(
     channel: str | None,
     processing_state: ProcessingState,
     source: str | None = None,
+    method: str | None = None,
 ) -> Signal:
     """Convert an `eitprocessing.ContinuousData`-shaped object to a `Signal`."""
 
@@ -708,6 +710,7 @@ def _continuous_data_to_signal(
         channel=channel,
         processing_state=processing_state,
         source=source,
+        method=method,
     )
 
 
