@@ -27,11 +27,19 @@ class Event:
 class BreathEvent:
     """A respiratory event represented on a common time axis.
 
-    This is m3resp's ``Breath`` object (see ``plan/plan_stage2.md`` Sec 10 and
-    ``plan/stage2_consolidation.md``): the sample-index fields and
-    :attr:`duration` were added here rather than introducing a parallel
+    Unlike :class:`Event`, which occurs at a single ``time``, a
+    ``BreathEvent`` spans an interval (``start_time`` to ``end_time``) - one
+    breath, not an instant.
+    The sample-index fields and :attr:`duration` were added here rather than introducing a parallel
     ``Breath`` dataclass, so EIT, EMG, and ventilator breath detectors keep
     sharing one type.
+
+    ``start_time``/``end_time``/``peak_time`` are always the authoritative,
+    real-world times - they don't need to be recomputed from an index. The
+    ``*_index`` fields are optional sample-index positions into the signal
+    that produced this breath; ``sample_frequency`` and ``signal_name``
+    identify which time axis those indices are relative to, since different
+    signals have different start times, durations, and sampling rates.
     """
 
     modality: str
@@ -41,6 +49,8 @@ class BreathEvent:
     start_index: int | None = None
     peak_index: int | None = None
     end_index: int | None = None
+    sample_frequency: float | None = None
+    signal_name: str | None = None
     source: str | None = None
     confidence: float | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -120,6 +130,8 @@ def coerce_breath_event(
             start_index=value.get("start_index"),
             peak_index=value.get("peak_index"),
             end_index=value.get("end_index"),
+            sample_frequency=_optional_float(value.get("sample_frequency")),
+            signal_name=value.get("signal_name"),
             source=value.get("source", source),
             confidence=value.get("confidence"),
             metadata=dict(value.get("metadata", {})),
@@ -140,6 +152,8 @@ def coerce_breath_event(
             start_index=getattr(value, "start_index", None),
             peak_index=getattr(value, "peak_index", None),
             end_index=getattr(value, "end_index", None),
+            sample_frequency=_optional_float(getattr(value, "sample_frequency", None)),
+            signal_name=getattr(value, "signal_name", None),
             source=getattr(value, "source", source),
             confidence=getattr(value, "confidence", None),
             metadata=dict(getattr(value, "metadata", {}) or {}),

@@ -10,44 +10,45 @@ modalities are not already on a common time axis.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from m3resp.core.events import BreathEvent
 from m3resp.data.linked_breath import LinkedBreath
 
-_MODALITY_SLOTS = ("eit", "emg", "ventilator")
-
 
 def link_breaths_by_time(
+    breaths_by_modality: Mapping[str, Sequence[BreathEvent] | None] | None = None,
     *,
-    eit_breaths: Sequence[BreathEvent] | None = None,
-    emg_breaths: Sequence[BreathEvent] | None = None,
-    ventilator_breaths: Sequence[BreathEvent] | None = None,
     time_tolerance: float = 0.5,
 ) -> list[LinkedBreath]:
-    """Link breaths from up to three modalities into `LinkedBreath` groups.
+    """Link breaths from any number of modalities into `LinkedBreath` groups.
 
-    Each breath is assigned to at most one link. Two breaths from different
-    modalities are linked when their representative times (`peak_time`,
-    falling back to the start/end midpoint) are within `time_tolerance`
-    seconds of each other; the closest available match wins. A breath with no
-    match in the other modalities still produces a `LinkedBreath` with only
-    its own slot filled, so no input breath is silently dropped.
+    `breaths_by_modality` maps an arbitrary modality name (`"eit"`, `"emg"`,
+    `"ventilator"`, or anything else - e.g. `"pressure"`, `"ultrasound"`) to
+    that modality's breath list. Each breath is assigned to at most one link.
+    Two breaths from different modalities are linked when their
+    representative times (`peak_time`, falling back to the start/end
+    midpoint) are within `time_tolerance` seconds of each other; the closest
+    available match wins. A breath with no match in the other modalities
+    still produces a `LinkedBreath` with only its own slot filled, so no
+    input breath is silently dropped.
     """
 
     if time_tolerance < 0:
         raise ValueError("time_tolerance must not be negative")
 
-    breaths_by_modality = {
-        "eit": sorted(eit_breaths or [], key=_anchor_time),
-        "emg": sorted(emg_breaths or [], key=_anchor_time),
-        "ventilator": sorted(ventilator_breaths or [], key=_anchor_time),
+    modalities = list(breaths_by_modality or {})
+    sorted_breaths = {
+        modality: sorted(
+            (breaths_by_modality or {}).get(modality) or [], key=_anchor_time
+        )
+        for modality in modalities
     }
-    used: dict[str, set[int]] = {modality: set() for modality in breaths_by_modality}
+    used: dict[str, set[int]] = {modality: set() for modality in modalities}
 
     linked: list[LinkedBreath] = []
-    for anchor_modality in _MODALITY_SLOTS:
-        for index, breath in enumerate(breaths_by_modality[anchor_modality]):
+    for anchor_modality in modalities:
+        for index, breath in enumerate(sorted_breaths[anchor_modality]):
             if index in used[anchor_modality]:
                 continue
             used[anchor_modality].add(index)
@@ -55,20 +56,18 @@ def link_breaths_by_time(
             anchor_time = _anchor_time(breath)
             max_time_diff = 0.0
 
-            for other_modality in _MODALITY_SLOTS:
+            for other_modality in modalities:
                 if other_modality == anchor_modality:
                     continue
                 match_index, time_diff = _nearest_unused(
-                    breaths_by_modality[other_modality],
+                    sorted_breaths[other_modality],
                     used[other_modality],
                     anchor_time,
                     time_tolerance,
                 )
                 if match_index is not None:
                     used[other_modality].add(match_index)
-                    group[other_modality] = breaths_by_modality[other_modality][
-                        match_index
-                    ]
+                    group[other_modality] = sorted_breaths[other_modality][match_index]
                     max_time_diff = max(max_time_diff, time_diff)
 
             confidence = (
@@ -78,9 +77,7 @@ def link_breaths_by_time(
             )
             linked.append(
                 LinkedBreath(
-                    eit_breath=group.get("eit"),
-                    emg_breath=group.get("emg"),
-                    ventilator_breath=group.get("ventilator"),
+                    breaths=group,
                     time_tolerance=time_tolerance,
                     confidence=confidence,
                 )
@@ -116,7 +113,6 @@ def _nearest_unused(
 
 
 def _linked_breath_anchor_time(linked: LinkedBreath) -> float:
-    breath = linked.eit_breath or linked.emg_breath or linked.ventilator_breath
-    if breath is None:
+    if not linked.breaths:
         raise ValueError("LinkedBreath has no breath in any modality slot")
-    return _anchor_time(breath)
+    return _anchor_time(next(iter(linked.breaths.values())))

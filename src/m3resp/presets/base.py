@@ -1,14 +1,34 @@
-"""``Pipeline`` contract for named, built-in presets (plan_stage2.md Sec 18,
-Milestone 2.4).
+"""``Pipeline`` contract for named, built-in presets.
 
-This is deliberately a thin, different mechanism from the declarative
-step-registry engine in ``m3resp.workflows``: that engine runs a
-fully custom YAML/JSON spec of arbitrary steps (Stage 1, still the right tool
-for bespoke or batch workflows). A ``Pipeline`` here is a small, named preset
-that just calls this session's own already-instrumented methods
-(``preprocess_eit``, ``detect_eit_breaths``, ...) in a fixed order, so
-``session.run_pipeline("eit")`` is a convenience shortcut, not a second
-execution engine. See ``plan/stage2_consolidation.md`` for the reasoning.
+Why this exists, in one sentence: it's a named shortcut for a sequence of
+`M3Session` method calls, not a second way of executing pipeline logic.
+
+There are two ways to run EIT/EMG/multimodal processing in m3resp, and they
+solve different problems:
+
+- ``m3resp.workflows`` (``run_pipeline(spec, session=...)``) runs a fully
+  custom YAML/JSON spec built from arbitrary, individually composable steps
+  (``eit.mdn_filter``, ``eit.global_impedance``, ...). This is for bespoke or
+  batch workflows where the exact sequence of operations varies per project -
+  see ``docs/pipelines.md``. Those granular steps are pure data transforms;
+  they don't populate `session.signals`/`parameter_results`/`quality` or
+  record provenance themselves.
+- ``Pipeline``/``session.run_pipeline("eit")`` (this module) is for the
+  common case: "run the default preprocessing and detection for this
+  modality." A concrete `Pipeline.run` just calls `M3Session`'s own
+  already-instrumented methods (``preprocess_eit``, ``detect_eit_breaths``,
+  ...) in a fixed order - it is *those methods*, not this class, that
+  populate the typed collections and record provenance. Every option those
+  methods accept is still reachable through ``config``, so this isn't a
+  rigid, fixed algorithm - it's a name for "call these methods in this
+  order," with the actual behavior fully controlled by whatever `config` is
+  passed in.
+
+No new execution machinery is written here: this deliberately avoids
+building a second, parallel step-execution engine - that would duplicate
+`m3resp.workflows` for no benefit and would need its own copy of the
+typed-collection/provenance instrumentation those session methods already
+have.
 """
 
 from __future__ import annotations

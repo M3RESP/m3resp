@@ -53,6 +53,10 @@ class M3Session:
         self.emg: EMGRecording | None = None
         self.raw: dict[str, Any] = {}
         self.processed: dict[str, Any] = {}
+        # Named alternate preprocessing results, e.g. for algorithms that
+        # need the same raw recording preprocessed differently (see
+        # preprocess_eit`/`preprocess_emg`'s `variant` parameter).
+        self.processed_variants: dict[str, dict[str, Any]] = {"eit": {}, "emg": {}}
         self.events: dict[str, Any] = {}
         self.parameters: dict[str, Any] = {}
         # Milestone 2.2 (plan/plan_stage2.md Sec 14): typed collections that
@@ -98,8 +102,20 @@ class M3Session:
         self._record("load_emg", "emg", path=str(path))
         return recording.data
 
-    def preprocess_eit(self, **kwargs: Any) -> Any:
-        """Run a provided or upstream EIT preprocessing function."""
+    def preprocess_eit(self, *, variant: str | None = None, **kwargs: Any) -> Any:
+        """Run a provided or upstream EIT preprocessing function.
+
+        By default this overwrites `session.processed["eit"]`, so a session
+        only ever keeps one preprocessed EIT result at a time. Pass
+        `variant=<name>` to also persist this result under
+        `session.processed_variants["eit"][name]`, so different downstream
+        algorithms can each get their own differently preprocessed copy of
+        the same raw recording (e.g. `preprocess_eit(filter_mode="mdn",
+        variant="mdn")` and `preprocess_eit(filter_mode="lowpass",
+        variant="lowpass")` can both coexist). See
+        `detect_eit_breaths(variant=...)` to detect breaths against a
+        specific variant.
+        """
 
         recording = self._require_raw("eit")
         preprocess = kwargs.pop("preprocess", None)
@@ -114,11 +130,18 @@ class M3Session:
             # to_quality_flags` expect, so the typed collections are only
             # populated on the default adapter path.
             self.processed["eit"] = preprocess(recording.data, **kwargs)
-        self._record("preprocess_eit", "eit", **kwargs)
+        if variant is not None:
+            self.processed_variants["eit"][variant] = self.processed["eit"]
+        self._record("preprocess_eit", "eit", variant=variant, **kwargs)
         return self.processed["eit"]
 
-    def preprocess_emg(self, **kwargs: Any) -> Any:
-        """Run EMG preprocessing through the adapter."""
+    def preprocess_emg(self, *, variant: str | None = None, **kwargs: Any) -> Any:
+        """Run EMG preprocessing through the adapter.
+
+        See `preprocess_eit` for what `variant` does - it persists this
+        result under `session.processed_variants["emg"][variant]` in
+        addition to the default `session.processed["emg"]` slot.
+        """
 
         recording = self._require_raw("emg")
         self.processed["emg"] = self.emg_adapter.preprocess(recording.data, **kwargs)
@@ -129,7 +152,9 @@ class M3Session:
             self.emg.fs = self.processed["emg"].get("fs")
         for signal in self.emg_adapter.to_signals(self.processed["emg"]):
             self.signals.add(signal)
-        self._record("preprocess_emg", "emg", **kwargs)
+        if variant is not None:
+            self.processed_variants["emg"][variant] = self.processed["emg"]
+        self._record("preprocess_emg", "emg", variant=variant, **kwargs)
         return self.processed["emg"]
 
     def synchronize_raw_modalities(
@@ -188,23 +213,54 @@ class M3Session:
         )
         return synchronized
 
-    def detect_eit_breaths(self, **kwargs: Any) -> Any:
-        """Detect EIT breaths and store normalized events."""
+    def detect_eit_breaths(self, *, variant: str | None = None, **kwargs: Any) -> Any:
+        """Detect EIT breaths and store normalized events.
 
-        data = self.processed.get("eit") or self._require_raw("eit").data
+        Pass `variant=<name>` to detect breaths against a
+        `preprocess_eit(..., variant=<name>)` result instead of the default
+        `processed["eit"]`; the events are then stored under
+        `session.events["eit_breaths:<name>"]` instead of
+        `session.events["eit_breaths"]`, so multiple variants' detections
+        can coexist.
+        """
+
+        if variant is not None:
+            data = self.processed_variants["eit"].get(variant)
+            if data is None:
+                raise MissingModalityDataError(
+                    f"No EIT preprocessing variant {variant!r}; call "
+                    f"preprocess_eit(variant={variant!r}, ...) first."
+                )
+            event_key = f"eit_breaths:{variant}"
+        else:
+            data = self.processed.get("eit") or self._require_raw("eit").data
+            event_key = "eit_breaths"
         events = self.eit_adapter.detect_breaths(data, **kwargs)
-        self.add_events("eit_breaths", events)
-        self._record("detect_eit_breaths", "eit", **kwargs)
-        return self.events["eit_breaths"]
+        self.add_events(event_key, events)
+        self._record("detect_eit_breaths", "eit", variant=variant, **kwargs)
+        return self.events[event_key]
 
-    def detect_emg_breaths(self, **kwargs: Any) -> Any:
-        """Detect EMG breaths and store normalized events."""
+    def detect_emg_breaths(self, *, variant: str | None = None, **kwargs: Any) -> Any:
+        """Detect EMG breaths and store normalized events.
 
-        data = self.processed.get("emg") or self._require_raw("emg").data
+        See `detect_eit_breaths` for what `variant` does.
+        """
+
+        if variant is not None:
+            data = self.processed_variants["emg"].get(variant)
+            if data is None:
+                raise MissingModalityDataError(
+                    f"No EMG preprocessing variant {variant!r}; call "
+                    f"preprocess_emg(variant={variant!r}, ...) first."
+                )
+            event_key = f"emg_breaths:{variant}"
+        else:
+            data = self.processed.get("emg") or self._require_raw("emg").data
+            event_key = "emg_breaths"
         events = self.emg_adapter.detect_breaths(data, **kwargs)
-        self.add_events("emg_breaths", events)
-        self._record("detect_emg_breaths", "emg", **kwargs)
-        return self.events["emg_breaths"]
+        self.add_events(event_key, events)
+        self._record("detect_emg_breaths", "emg", variant=variant, **kwargs)
+        return self.events[event_key]
 
     def add_events(self, name: str, events: Any) -> list[Any]:
         """Store a named event list while keeping `session.events` as backing data."""
@@ -317,9 +373,11 @@ class M3Session:
             return events
 
         self.linked_breaths = link_breaths_by_time(
-            eit_breaths=_breaths("eit_breaths"),
-            emg_breaths=_breaths("emg_breaths"),
-            ventilator_breaths=_breaths("ventilator_breaths"),
+            {
+                "eit": _breaths("eit_breaths"),
+                "emg": _breaths("emg_breaths"),
+                "ventilator": _breaths("ventilator_breaths"),
+            },
             time_tolerance=time_tolerance,
         )
         self._record("link_breaths", parameters={"time_tolerance": time_tolerance})

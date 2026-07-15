@@ -484,13 +484,12 @@ class ReSurfEMGAdapter:
                     "start_time": start_index / fs,
                     "end_time": end_index / fs,
                     "peak_time": int(peak_index) / fs,
+                    "start_index": start_index,
+                    "peak_index": int(peak_index),
+                    "end_index": end_index,
+                    "sample_frequency": fs,
+                    "signal_name": processed_emg["channel"],
                     "source": "resurfemg.detect_emg_breaths",
-                    "metadata": {
-                        "start_index": start_index,
-                        "peak_index": int(peak_index),
-                        "end_index": end_index,
-                        "channel": processed_emg["channel"],
-                    },
                 }
             )
 

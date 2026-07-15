@@ -57,7 +57,7 @@ def linked_breaths_to_rows(linked_breaths: list[LinkedBreath]) -> list[dict[str,
             "time_tolerance": linked.time_tolerance,
         }
         for slot in _LINKED_BREATH_SLOTS:
-            breath = getattr(linked, f"{slot}_breath")
+            breath = linked.breaths.get(slot)
             row[f"{slot}_start_time"] = None if breath is None else breath.start_time
             row[f"{slot}_end_time"] = None if breath is None else breath.end_time
             row[f"{slot}_peak_time"] = None if breath is None else breath.peak_time

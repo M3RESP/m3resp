@@ -19,7 +19,14 @@ from m3resp.datamodel.entities import DerivedFeature
 
 def test_entities_reject_unknown_coded_values():
     with pytest.raises(ValidationError):
-        Device(device_type="not_a_real_device_type")
+        Device(device_type="eit", calibration_status="not_a_real_status")
+
+
+def test_device_type_accepts_any_string():
+    # device_type is an open vocabulary: a new loading function can use any
+    # device type string without a schema change here.
+    device = Device(device_type="not_a_real_device_type")
+    assert device.device_type == "not_a_real_device_type"
 
 
 def test_store_enforces_foreign_keys():

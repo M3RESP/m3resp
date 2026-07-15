@@ -101,6 +101,9 @@ class QualityReport:
     def for_modality(self, modality: str) -> list[QualityFlag]:
         return [flag for flag in self.items if flag.modality == modality]
 
+    def for_signal(self, signal_name: str) -> list[QualityFlag]:
+        return [flag for flag in self.items if flag.signal_name == signal_name]
+
     def to_rows(self) -> list[dict[str, Any]]:
         return [asdict(flag) for flag in self.items]
 

@@ -71,12 +71,12 @@ class TestLinkBreathsByTime:
         )
 
         linked = link_breaths_by_time(
-            eit_breaths=[eit_breath], emg_breaths=[emg_breath], time_tolerance=0.5
+            {"eit": [eit_breath], "emg": [emg_breath]}, time_tolerance=0.5
         )
 
         assert len(linked) == 1
-        assert linked[0].eit_breath is eit_breath
-        assert linked[0].emg_breath is emg_breath
+        assert linked[0].breaths["eit"] is eit_breath
+        assert linked[0].breaths["emg"] is emg_breath
         assert linked[0].confidence == pytest.approx(0.8)  # 1 - 0.1/0.5
 
     def test_keeps_out_of_tolerance_breaths_as_separate_links(self):
@@ -88,7 +88,7 @@ class TestLinkBreathsByTime:
         )
 
         linked = link_breaths_by_time(
-            eit_breaths=[eit_breath], emg_breaths=[emg_breath], time_tolerance=0.5
+            {"eit": [eit_breath], "emg": [emg_breath]}, time_tolerance=0.5
         )
 
         assert len(linked) == 2
@@ -107,9 +107,11 @@ class TestLinkBreathsByTime:
         )
 
         linked = link_breaths_by_time(
-            eit_breaths=[eit_breath],
-            emg_breaths=[emg_breath],
-            ventilator_breaths=[vent_breath],
+            {
+                "eit": [eit_breath],
+                "emg": [emg_breath],
+                "ventilator": [vent_breath],
+            },
             time_tolerance=0.5,
         )
 
@@ -128,16 +130,15 @@ class TestLinkBreathsByTime:
         )
 
         linked = link_breaths_by_time(
-            eit_breaths=[eit_breath],
-            emg_breaths=[emg_near, emg_far],
+            {"eit": [eit_breath], "emg": [emg_near, emg_far]},
             time_tolerance=0.5,
         )
 
         assert len(linked) == 2
-        matched = next(link for link in linked if link.eit_breath is not None)
-        assert matched.emg_breath is emg_near
-        unmatched = next(link for link in linked if link.eit_breath is None)
-        assert unmatched.emg_breath is emg_far
+        matched = next(link for link in linked if "eit" in link.breaths)
+        assert matched.breaths["emg"] is emg_near
+        unmatched = next(link for link in linked if "eit" not in link.breaths)
+        assert unmatched.breaths["emg"] is emg_far
 
     def test_rejects_negative_tolerance(self):
         with pytest.raises(ValueError):
