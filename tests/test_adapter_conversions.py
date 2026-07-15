@@ -209,10 +209,12 @@ class TestReSurfEMGAdapterConversions:
         flags = adapter.to_quality_flags(postprocessed)
 
         by_name = {f.name: f for f in flags}
-        assert by_name["snr_pseudo"].passed is True
+        assert by_name["snr_pseudo"].passed is False
+        assert by_name["snr_pseudo"].metadata["measurement_only"] is True
         assert by_name["snr_pseudo"].value == 12.5
         assert by_name["snr_pseudo"].metadata == {
-            "source_method": "resurfemg.snr_pseudo"
+            "source_method": "resurfemg.snr_pseudo",
+            "measurement_only": True,
         }
         assert by_name["interpeak_dist"].passed is True
         assert by_name["pocc_quality"].passed is False

@@ -61,16 +61,19 @@ def test_threshold_fraction_and_timing_flags_encode_expected_pass_fail():
     assert late.metadata["valid"] == [True, False]
 
 
-def test_quality_flag_from_result_preserves_current_adapter_mapping():
+def test_quality_flag_from_result_does_not_invent_pass_fail_for_measurements():
     scalar = quality_flag_from_result(
         "snr_pseudo",
         12.5,
         modality="emg",
         source_method="resurfemg.snr_pseudo",
     )
-    assert scalar.passed
+    assert not scalar.passed
     assert scalar.value == 12.5
-    assert scalar.metadata == {"source_method": "resurfemg.snr_pseudo"}
+    assert scalar.metadata == {
+        "source_method": "resurfemg.snr_pseudo",
+        "measurement_only": True,
+    }
 
     bool_array = quality_flag_from_result(
         "detect_extreme_time_products",
@@ -81,14 +84,29 @@ def test_quality_flag_from_result_preserves_current_adapter_mapping():
     assert bool_array.value is None
     assert bool_array.metadata["shape"] == (2,)
     assert bool_array.metadata["dtype"] == "bool"
+    assert "measurement_only" not in bool_array.metadata
 
     numeric_array = quality_flag_from_result(
         "snr_pseudo",
         np.array([1.0, 2.0]),
         modality="emg",
     )
-    assert numeric_array.passed
+    assert not numeric_array.passed
     assert numeric_array.value is None
+    assert numeric_array.metadata["measurement_only"] is True
+
+    # `snr_pseudo`'s real upstream return shape: a tuple of a scalar mean and
+    # a per-peak array of a different length - `np.asarray` raises on this,
+    # so the conversion must not crash (regression for the ValueError this
+    # produced before `_safe_asarray`).
+    heterogeneous_tuple = quality_flag_from_result(
+        "snr_pseudo",
+        (21.97, np.array([21.97, 22.05, 21.97])),
+        modality="emg",
+    )
+    assert not heterogeneous_tuple.passed
+    assert heterogeneous_tuple.value is None
+    assert heterogeneous_tuple.metadata["measurement_only"] is True
 
     skipped = skipped_quality_flag(
         "quality_assessment.pocc_quality",

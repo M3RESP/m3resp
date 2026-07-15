@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 
 from m3resp.data import QualityFlag
+from m3resp.data.quality import Severity
 
 
 def threshold_flag(
@@ -17,7 +18,7 @@ def threshold_flag(
     threshold: float,
     comparison: str | Callable[[float, float], bool],
     modality: str | None = None,
-    severity: str = "info",
+    severity: Severity = "info",
 ) -> QualityFlag:
     """Create a quality flag by comparing a scalar value to a threshold."""
 
@@ -41,7 +42,7 @@ def fraction_flag(
     *,
     minimum_fraction: float,
     modality: str | None = None,
-    severity: str = "info",
+    severity: Severity = "info",
 ) -> QualityFlag:
     """Create a quality flag for a fraction that must meet a minimum value."""
 
@@ -62,7 +63,7 @@ def timing_window_flag(
     min_delta: float | None = None,
     max_delta: float | None = None,
     modality: str | None = None,
-    severity: str = "info",
+    severity: Severity = "info",
 ) -> QualityFlag:
     """Create a quality flag for event timing deltas inside a time window."""
 
@@ -94,18 +95,34 @@ def quality_flag_from_result(
     result: Any,
     *,
     modality: str | None = None,
-    severity: str = "info",
+    severity: Severity = "info",
     source_method: str | None = None,
 ) -> QualityFlag:
-    """Map a heterogeneous quality result into a native `QualityFlag`."""
+    """Map a heterogeneous quality result into a native `QualityFlag`.
 
+    Only a plain `bool` or a boolean array carries a real pass/fail
+    criterion from ReSurfEMG. Everything else - a scalar measurement, a
+    numeric array, or a heterogeneous tuple like `snr_pseudo`'s
+    `(mean, per-peak array)` - is a measurement, not a criterion, so this
+    does not invent a pass/fail meaning the upstream function never defined.
+    `passed=False` for a measurement-only result follows the same
+    "not evaluated" convention `skipped_quality_flag` uses for a skipped
+    result, not a failed check; `metadata["measurement_only"]` distinguishes
+    the two. Operation-specific conversions (Phase 5) replace this generic
+    mapping once each quality function's scientific meaning is encoded.
+    """
+
+    is_boolean, passed = _boolean_verdict(result)
+    metadata = _result_metadata(result, source_method=source_method)
+    if not is_boolean:
+        metadata["measurement_only"] = True
     return QualityFlag(
         name=name,
-        passed=_result_passed(result),
+        passed=passed,
         severity=severity,
         modality=modality,
         value=_scalar_or_none(result),
-        metadata=_result_metadata(result, source_method=source_method),
+        metadata=metadata,
     )
 
 
@@ -114,7 +131,7 @@ def skipped_quality_flag(
     reason: str,
     *,
     modality: str | None = None,
-    severity: str = "warning",
+    severity: Severity = "warning",
 ) -> QualityFlag:
     """Create a warning flag for a skipped quality calculation."""
 
@@ -156,13 +173,21 @@ def _comparison_name(comparison: str | Callable[[float, float], bool]) -> str:
     return getattr(comparison, "__name__", "callable")
 
 
-def _result_passed(value: Any) -> bool:
+def _boolean_verdict(value: Any) -> tuple[bool, bool]:
+    """Return `(is_boolean_criterion, passed)`.
+
+    `is_boolean_criterion` is `False` for anything that is not a plain
+    `bool` or a boolean array, including values `np.asarray` cannot convert
+    to a single homogeneous array at all (e.g. `snr_pseudo`'s
+    `(mean, per-peak array)` tuple, whose elements have different shapes).
+    """
+
     if isinstance(value, bool):
-        return value
-    array = np.asarray(value)
-    if array.dtype == bool:
-        return bool(array.all())
-    return True
+        return True, value
+    array = _safe_asarray(value)
+    if array is not None and array.dtype == bool:
+        return True, bool(array.all())
+    return False, False
 
 
 def _scalar_or_none(value: Any) -> float | None:
@@ -170,8 +195,8 @@ def _scalar_or_none(value: Any) -> float | None:
         return None
     if isinstance(value, (int, float)):
         return float(value)
-    array = np.asarray(value)
-    if array.ndim == 0 and array.dtype != bool:
+    array = _safe_asarray(value)
+    if array is not None and array.ndim == 0 and array.dtype != bool:
         return float(array)
     return None
 
@@ -184,8 +209,18 @@ def _result_metadata(
     metadata: dict[str, Any] = {}
     if source_method is not None:
         metadata["source_method"] = source_method
-    array = np.asarray(value)
-    if array.ndim > 0:
+    array = _safe_asarray(value)
+    if array is not None and array.ndim > 0:
         metadata["shape"] = tuple(int(dim) for dim in array.shape)
         metadata["dtype"] = str(array.dtype)
     return metadata
+
+
+def _safe_asarray(value: Any) -> np.ndarray | None:
+    """`np.asarray(value)`, or `None` if `value` has no single homogeneous
+    array shape (e.g. a tuple of differently-shaped elements)."""
+
+    try:
+        return np.asarray(value)
+    except ValueError:
+        return None
