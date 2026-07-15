@@ -6,12 +6,14 @@ reproducible synthetic respiratory datasets.
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import importlib
 import json
 import os
 import struct
 import sys
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from typing import Any, cast
@@ -471,7 +473,7 @@ def generate_emg_record(
     fs_emg = int(round(config.emg.sample_frequency_hz))
     expected_samples = int(round(config.duration_seconds * fs_emg))
     channels = []
-    for amplitude_uv in config.emg.channel_amplitudes_uv:
+    for channel_index, amplitude_uv in enumerate(config.emg.channel_amplitudes_uv):
         heart_rate_bpm = int(round(config.emg.heart_rate_bpm))
         if config.emg.heart_rate_bpm <= 0:
             heart_rate_bpm = int(
@@ -480,25 +482,26 @@ def generate_emg_record(
                     DEFAULT_RANDOM_HEART_RATE_MAX_BPM + 1,
                 )
             )
-        signal = _simulate_raw_emg_length_safe(
-            synth=synth,
-            expected_samples=expected_samples,
-            t_p_occs=np.asarray(
-                config.respiratory.occlusion_times_seconds,
-                dtype=float,
-            ),
-            t_end=config.duration_seconds,
-            fs_emg=fs_emg,
-            rr=config.respiratory.respiratory_rate_bpm,
-            ie_ratio=config.respiratory.ie_ratio,
-            tau_mus_up=config.emg.tau_mus_up_seconds,
-            tau_mus_down=config.emg.tau_mus_down_seconds,
-            emg_amp=amplitude_uv,
-            drift_amp=config.emg.drift_amplitude_uv,
-            noise_amp=config.emg.noise_amplitude_uv,
-            heart_rate=heart_rate_bpm,
-            ecg_acceleration=config.emg.ecg_acceleration,
-        )
+        with _seeded_vendor_randomness(config.seed + channel_index):
+            signal = _simulate_raw_emg_length_safe(
+                synth=synth,
+                expected_samples=expected_samples,
+                t_p_occs=np.asarray(
+                    config.respiratory.occlusion_times_seconds,
+                    dtype=float,
+                ),
+                t_end=config.duration_seconds,
+                fs_emg=fs_emg,
+                rr=config.respiratory.respiratory_rate_bpm,
+                ie_ratio=config.respiratory.ie_ratio,
+                tau_mus_up=config.emg.tau_mus_up_seconds,
+                tau_mus_down=config.emg.tau_mus_down_seconds,
+                emg_amp=amplitude_uv,
+                drift_amp=config.emg.drift_amplitude_uv,
+                noise_amp=config.emg.noise_amplitude_uv,
+                heart_rate=heart_rate_bpm,
+                ecg_acceleration=config.emg.ecg_acceleration,
+            )
         channels.append(signal)
 
     array = np.asarray(channels, dtype=np.float32)
@@ -558,14 +561,17 @@ def generate_ventilator_record(
 
     synth = _load_resurfemg_synthetic()
     fs_vent = int(round(config.ventilator.sample_frequency_hz))
-    y_vent, p_mus = synth.simulate_ventilator_data(
-        t_end=config.duration_seconds,
-        fs_vent=fs_vent,
-        p_mus_amp=config.ventilator.muscle_pressure_amplitude_cm_h2o,
-        rr=config.respiratory.respiratory_rate_bpm,
-        dp=config.ventilator.driving_pressure_cm_h2o,
-        t_p_occs=np.asarray(config.respiratory.occlusion_times_seconds, dtype=float),
-    )
+    with _seeded_vendor_randomness(config.seed):
+        y_vent, p_mus = synth.simulate_ventilator_data(
+            t_end=config.duration_seconds,
+            fs_vent=fs_vent,
+            p_mus_amp=config.ventilator.muscle_pressure_amplitude_cm_h2o,
+            rr=config.respiratory.respiratory_rate_bpm,
+            dp=config.ventilator.driving_pressure_cm_h2o,
+            t_p_occs=np.asarray(
+                config.respiratory.occlusion_times_seconds, dtype=float
+            ),
+        )
 
     array = np.asarray(y_vent, dtype=np.float32)
     p_mus = np.asarray(p_mus, dtype=np.float32)
@@ -1378,6 +1384,37 @@ def _resolve_run_output_dir(
         candidate = os.path.join(output_root, f"{timestamp}_{formatted_suffix}")
         suffix += int(DEFAULT_ONE)
     return candidate
+
+
+@contextlib.contextmanager
+def _seeded_vendor_randomness(seed: int) -> Iterator[None]:
+    """Make `resurfemg`/`neurokit2` calls reproducible for `seed`, for calls
+    that do not expose their own seed parameter.
+
+    `resurfemg.pipelines.synthetic_data.simulate_raw_emg`/
+    `simulate_ventilator_data` do not forward `config.seed` into either
+    library: their own noise (`np.random.normal`, e.g.
+    `resurfemg.data_connector.synthetic_data` lines 182/256/260/264) reads
+    NumPy's legacy global random state, seeded here via `np.random.seed`;
+    `neurokit2.ecg_simulate`'s ECG placement is called with
+    `random_state=None` (`resurfemg.pipelines.synthetic_data` line ~84),
+    which resolves to an *unseeded* `np.random.default_rng()` regardless of
+    `np.random.seed` (see `neurokit2.misc.check_random_state`) - so this
+    also temporarily patches `np.random.default_rng` to fall back to `seed`
+    when called with no explicit seed, restoring the original afterward.
+    """
+
+    np.random.seed(seed)
+    original_default_rng = np.random.default_rng
+
+    def _seeded_default_rng(seed_arg: Any = None) -> np.random.Generator:
+        return original_default_rng(seed if seed_arg is None else seed_arg)
+
+    np.random.default_rng = _seeded_default_rng  # type: ignore[assignment]
+    try:
+        yield
+    finally:
+        np.random.default_rng = original_default_rng
 
 
 def _simulate_raw_emg_length_safe(
