@@ -84,3 +84,143 @@ def test_detect_breaths_reproduces_resurfemg_peak_detection_exactly():
 
     actual_peak_indices = [round(event.peak_time * fs) for event in events]
     assert actual_peak_indices == [int(p) for p in expected_peaks]
+
+
+# -- Phase 1/8 (plan/stage2/2_resurfemg_gap_migration_implementation_plan.md):
+# the named adapter methods added for ECG/baseline operations must reproduce
+# calling the same resurfemg functions directly, exactly. -------------------
+
+
+def _synthetic_ecg_contaminated_signal(
+    fs: float = 2048.0, duration_seconds: float = 20.0
+) -> np.ndarray:
+    neurokit2 = pytest.importorskip("neurokit2")
+    ecg = np.asarray(
+        neurokit2.ecg_simulate(
+            duration=duration_seconds, sampling_rate=fs, heart_rate=75, random_state=42
+        ),
+        dtype=float,
+    )
+    time = np.arange(len(ecg)) / fs
+    emg_like = 0.05 * np.sin(2 * np.pi * 100 * time)
+    return ecg + emg_like
+
+
+def test_detect_ecg_peaks_reproduces_resurfemg_exactly():
+    from resurfemg.preprocessing.ecg_removal import detect_ecg_peaks
+
+    fs = 2048.0
+    signal = _synthetic_ecg_contaminated_signal(fs=fs)
+    expected = detect_ecg_peaks(signal, int(fs))
+
+    adapter = ReSurfEMGAdapter()
+    actual = adapter.detect_ecg_peaks(signal, sample_frequency=fs)
+
+    np.testing.assert_array_equal(actual, expected)
+
+
+@pytest.mark.parametrize("fill_method", [0, 1, 2, 3])
+def test_gate_ecg_reproduces_resurfemg_exactly_for_every_fill_method(fill_method):
+    from resurfemg.preprocessing.ecg_removal import gating
+
+    fs = 2048.0
+    signal = _synthetic_ecg_contaminated_signal(fs=fs)
+    # Peaks near (but not past) both signal boundaries, plus interior ones,
+    # exercise the plan's "boundary windows" characterization requirement.
+    peaks = np.array([50, 4096, 8192, len(signal) - 60])
+
+    expected = gating(signal, peaks, gate_width=205, method=fill_method)
+
+    adapter = ReSurfEMGAdapter()
+    actual = adapter.gate_ecg(
+        signal, peaks, gate_width_samples=205, fill_method=fill_method
+    )
+
+    np.testing.assert_array_equal(actual, expected)
+
+
+def test_wavelet_denoise_ecg_reproduces_resurfemg_exactly_including_padding():
+    from resurfemg.preprocessing.ecg_removal import wavelet_denoising
+
+    fs = 2048.0
+    # >=15 s: wavelet_denoising's internal noise-estimation window is
+    # 15 * fs samples wide (see docs/pipelines.md "ECG-removal alternatives"),
+    # so shorter signals raise inside resurfemg itself, independent of this
+    # wrapper's own behavior. 20.002 s (not 20.0 s) gives a sample count that
+    # is not already a multiple of 2**4, so real zero-padding is exercised.
+    signal = _synthetic_ecg_contaminated_signal(fs=fs, duration_seconds=20.002)
+    peaks = np.array([50, 4096, 8192, len(signal) - 60])
+
+    expected_cleaned, expected_decomposition, expected_thresholds, expected_mask = (
+        wavelet_denoising(signal, peaks, int(fs))
+    )
+
+    adapter = ReSurfEMGAdapter()
+    actual_cleaned, actual_decomposition, actual_thresholds, actual_mask = (
+        adapter.wavelet_denoise_ecg(signal, peaks, sample_frequency=fs)
+    )
+
+    np.testing.assert_array_equal(actual_cleaned, expected_cleaned)
+    np.testing.assert_array_equal(actual_decomposition, expected_decomposition)
+    np.testing.assert_array_equal(actual_thresholds, expected_thresholds)
+    np.testing.assert_array_equal(actual_mask, expected_mask)
+    # The decomposition stays at the zero-padded length; cleaned/thresholds/
+    # mask are trimmed back to the original signal length.
+    assert expected_decomposition.shape[-1] != len(signal)
+    assert expected_cleaned.shape[-1] == len(signal)
+
+
+def test_moving_baseline_reproduces_resurfemg_exactly():
+    from resurfemg.postprocessing.baseline import moving_baseline
+
+    fs = 100.0
+    envelope = _synthetic_emg_signal(fs=fs, duration_seconds=30.0) ** 2
+    window_samples = int(5.0 * fs)
+    step_samples = int(0.5 * fs)
+
+    expected = moving_baseline(
+        envelope, window_samples, step_samples, set_percentile=33.0
+    )
+
+    adapter = ReSurfEMGAdapter()
+    actual = adapter.moving_baseline(
+        envelope,
+        window_samples=window_samples,
+        step_samples=step_samples,
+        percentile=33.0,
+    )
+
+    np.testing.assert_array_equal(actual, expected)
+
+
+def test_slopesum_baseline_reproduces_resurfemg_exactly():
+    from resurfemg.postprocessing.baseline import slopesum_baseline
+
+    fs = 100.0
+    envelope = _synthetic_emg_signal(fs=fs, duration_seconds=30.0) ** 2
+    window_samples = int(5.0 * fs)
+    step_samples = int(0.5 * fs)
+
+    expected_baseline, expected_mean, expected_std, expected_series = slopesum_baseline(
+        envelope,
+        window_samples,
+        step_samples,
+        int(fs),
+        set_percentile=33.0,
+        augm_percentile=25.0,
+    )
+
+    adapter = ReSurfEMGAdapter()
+    actual_baseline, actual_mean, actual_std, actual_series = adapter.slopesum_baseline(
+        envelope,
+        window_samples=window_samples,
+        step_samples=step_samples,
+        sample_frequency=fs,
+        percentile=33.0,
+        augmented_percentile=25.0,
+    )
+
+    np.testing.assert_array_equal(actual_baseline, expected_baseline)
+    np.testing.assert_array_equal(actual_mean, expected_mean)
+    np.testing.assert_array_equal(actual_std, expected_std)
+    np.testing.assert_array_equal(actual_series.values, expected_series.values)

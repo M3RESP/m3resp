@@ -3,11 +3,26 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Literal
 
 import numpy as np
 import pandas as pd
 
 from m3resp.core.exceptions import OptionalDependencyError
+
+PaddingType = Literal[
+    "constant",
+    "edge",
+    "linear_ramp",
+    "maximum",
+    "mean",
+    "median",
+    "minimum",
+    "reflect",
+    "symmetric",
+    "wrap",
+    "empty",
+]
 
 
 def moving_average(
@@ -15,7 +30,7 @@ def moving_average(
     *,
     window_size: int,
     window_function: Callable[[int], np.ndarray] | None = None,
-    padding_type: str = "edge",
+    padding_type: PaddingType = "edge",
 ) -> np.ndarray:
     """Apply an EIT-style centered moving average with padded boundaries."""
 
@@ -45,13 +60,15 @@ def rolling_rms(
     """Compute a rolling root-mean-square envelope."""
 
     squared = pd.Series(np.power(values, 2))
-    return np.sqrt(
-        squared.rolling(
-            window=window_length,
-            min_periods=min_periods,
-            center=center,
-        ).mean()
-    ).values
+    return np.asarray(
+        np.sqrt(
+            squared.rolling(
+                window=window_length,
+                min_periods=min_periods,
+                center=center,
+            ).mean()
+        )
+    )
 
 
 def naive_rolling_rms(values: np.ndarray, *, window_length: int) -> np.ndarray:
@@ -73,14 +90,12 @@ def rolling_arv(
     """Compute a rolling average rectified value envelope."""
 
     absolute = pd.Series(np.abs(values))
-    return (
+    return np.asarray(
         absolute.rolling(
             window=window_length,
             min_periods=min_periods,
             center=center,
-        )
-        .mean()
-        .values
+        ).mean()
     )
 
 

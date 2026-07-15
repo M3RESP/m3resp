@@ -42,6 +42,7 @@ marimo viewer exposes as *Effective offset*.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -398,7 +399,7 @@ def refine_offset_by_crosscorrelation_signals(
     target: TimeSeries,
     reference: TimeSeries,
     base_offset_seconds: float,
-    **kwargs: float,
+    **kwargs: Any,
 ) -> CrossCorrelationOffsetResult:
     """:func:`refine_offset_by_crosscorrelation` for two :class:`TimeSeries`."""
 

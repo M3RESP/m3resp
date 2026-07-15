@@ -2,11 +2,41 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, overload
 
 import numpy as np
 
 from m3resp.core.exceptions import OptionalDependencyError
+
+
+@overload
+def detect_peaks(
+    values: np.ndarray,
+    *,
+    height: float | np.ndarray | None = None,
+    prominence: float | None = None,
+    width: float | None = None,
+    distance: float | None = None,
+    threshold: float | None = None,
+    invert: bool = False,
+    return_properties: Literal[False] = False,
+    **kwargs: Any,
+) -> np.ndarray: ...
+
+
+@overload
+def detect_peaks(
+    values: np.ndarray,
+    *,
+    height: float | np.ndarray | None = None,
+    prominence: float | None = None,
+    width: float | None = None,
+    distance: float | None = None,
+    threshold: float | None = None,
+    invert: bool = False,
+    return_properties: Literal[True],
+    **kwargs: Any,
+) -> tuple[np.ndarray, dict[str, Any]]: ...
 
 
 def detect_peaks(

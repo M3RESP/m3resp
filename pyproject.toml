@@ -52,6 +52,7 @@ dev = [
   "mypy",
   "types-PyYAML",
   "pandas-stubs",
+  "scipy-stubs",
 ]
 
 [project.scripts]

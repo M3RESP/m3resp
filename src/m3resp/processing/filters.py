@@ -304,6 +304,7 @@ def _capture_butterworth_parameters(
         case "highpass":
             _capture(captures, "high_pass_frequency", cutoff)
         case "bandpass":
+            assert isinstance(cutoff, tuple), "bandpass cutoff must be (low, high)"
             _capture(captures, "low_pass_frequency", cutoff[1])
             _capture(captures, "high_pass_frequency", cutoff[0])
         case "bandstop":

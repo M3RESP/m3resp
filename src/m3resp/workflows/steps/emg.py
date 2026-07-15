@@ -1317,7 +1317,11 @@ def interpeak_dist(
     emg_peaks = np.asarray(peak_indices, dtype=int)
     ecg_median_samples = float(np.median(np.diff(ecg_peaks)))
     emg_median_samples = float(np.median(np.diff(emg_peaks)))
-    ratio = emg_median_samples / ecg_median_samples
+    # Degenerate peak sets (e.g. duplicate indices) give a zero median
+    # interval; match upstream's own behavior (a RuntimeWarning plus an inf/
+    # nan ratio, not a raised error) via NumPy division instead of Python's
+    # float division, which would raise ZeroDivisionError here.
+    ratio = float(np.divide(emg_median_samples, ecg_median_samples))
 
     shared_metadata = {
         "threshold": threshold,

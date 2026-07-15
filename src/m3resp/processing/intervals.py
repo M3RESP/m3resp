@@ -111,10 +111,12 @@ def onoff_from_slope(
             new_upslope = derivative[max_upslope_index]
             y_value = data[max_upslope_index]
             dy_dt_value = derivative[max_upslope_index]
-            upslope_index_delta = np.array(
-                y_value * sample_frequency // dy_dt_value, dtype=int
-            ).astype(np.int64)
-            start_index = max([0, max_upslope_index - upslope_index_delta])
+            upslope_index_delta = int(
+                np.array(y_value * sample_frequency // dy_dt_value, dtype=int).astype(
+                    np.int64
+                )
+            )
+            start_index = max(0, max_upslope_index - upslope_index_delta)
         starts[peak_number] = start_index
 
         if len(max_downslope_indices[max_downslope_indices > peak_index]) < 1:
@@ -125,12 +127,12 @@ def onoff_from_slope(
             )
             y_value = data[max_downslope_index]
             dy_dt_value = derivative[max_downslope_index]
-            downslope_index_delta = np.array(
-                y_value * sample_frequency // dy_dt_value, dtype=int
-            ).astype(np.int64)
-            end_index = min(
-                [len(data) - 1, max_downslope_index - downslope_index_delta]
+            downslope_index_delta = int(
+                np.array(y_value * sample_frequency // dy_dt_value, dtype=int).astype(
+                    np.int64
+                )
             )
+            end_index = min(len(data) - 1, max_downslope_index - downslope_index_delta)
         ends[peak_number] = end_index
 
         if start_index > peak_index:
