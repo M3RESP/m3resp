@@ -9,7 +9,10 @@ without the optional ``resurfemg`` dependency.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
+
+import numpy as np
 
 from m3resp.adapters.resurfemg_adapter import (
     _peak_indices_from_events,
@@ -20,6 +23,7 @@ from m3resp.core.session import (
     _iter_ventilator_detections,
     _normalize_ventilator_breath,
 )
+from m3resp.data import Signal
 from m3resp.processing.intervals import (
     onoff_from_baseline_crossings,
     onoff_from_slope,
@@ -39,15 +43,117 @@ from m3resp.processing.peaks import (
 from m3resp.workflows.registry import register_step
 
 
+def _resurfemg_version() -> str | None:
+    """Installed `resurfemg` version, read from package metadata without
+    importing the package itself (so this stays optional-dependency-safe)."""
+
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("resurfemg")
+    except PackageNotFoundError:
+        return None
+
+
+def _upstream_metadata(
+    *, source_function: str, operation: str, parameters: dict[str, Any]
+) -> dict[str, Any]:
+    """Build the Stage 2 EMG provenance metadata schema shared by native
+    `Signal`/`ParameterResult` outputs (see `plan/stage2/
+    2_resurfemg_gap_migration_implementation_plan.md`, "Use one provenance
+    schema"). Mirrors `m3resp.workflows.steps.eit._upstream_metadata`."""
+
+    return {
+        "source_package": "resurfemg",
+        "source_function": source_function,
+        "implementation": "upstream_adapter",
+        "parameters": parameters,
+        "operation": operation,
+    }
+
+
+def _record_step(
+    session: M3Session, step_name: str, *, metadata: dict[str, Any]
+) -> None:
+    """Record per-step EMG provenance through the existing
+    `M3Session._record()` seam, reusing the step's declared reads/writes
+    from the registry rather than a second EMG-only history mechanism."""
+
+    from m3resp.workflows.registry import get_step
+
+    definition = get_step(step_name)
+    session._record(
+        step_name,
+        "emg",
+        parameters={
+            "step": step_name,
+            "reads": sorted(definition.reads),
+            "writes": list(definition.writes),
+            "upstream_version": _resurfemg_version(),
+            **metadata,
+        },
+    )
+
+
 @register_step(
     "emg.load",
     reads={"session": "session"},
-    writes=(),
+    writes=("emg_recording", "raw_emg_signals"),
     summary="Load an EMG recording into the session.",
 )
-def load(session: M3Session, *, file: str) -> dict[str, Any]:
-    session.load_emg(file, verbose=False)
-    return {}
+def load(
+    session: M3Session,
+    *,
+    file: str,
+    loader_options: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    if loader_options is not None and not isinstance(loader_options, Mapping):
+        raise TypeError(
+            "emg.load 'loader_options' must be a mapping of keyword arguments "
+            f"for M3Session.load_emg(), got {type(loader_options).__name__}."
+        )
+
+    session.load_emg(file, verbose=False, **dict(loader_options or {}))
+    recording = session.emg
+    assert recording is not None
+
+    metadata = dict(recording.metadata or {})
+    fs = metadata.get("fs")
+    labels = list(metadata.get("labels") or [])
+    units = list(metadata.get("units") or [])
+    raw_array = np.asarray(recording.raw) if recording.raw is not None else None
+
+    raw_emg_signals: list[Signal] = []
+    if raw_array is not None and fs:
+        time = np.arange(raw_array.shape[1], dtype=float) / float(fs)
+        for index in range(raw_array.shape[0]):
+            label = labels[index] if index < len(labels) else f"emg_{index}"
+            unit = units[index] if index < len(units) else None
+            signal = Signal(
+                values=raw_array[index],
+                time=time,
+                sample_frequency=float(fs),
+                unit=unit,
+                name=label,
+                modality="emg",
+                channel=label,
+                source=str(recording.path),
+                processing_state="raw",
+                metadata={"channel_index": index, "file_metadata": metadata},
+            )
+            session.signals.add(signal)
+            raw_emg_signals.append(signal)
+
+    _record_step(
+        session,
+        "emg.load",
+        metadata=_upstream_metadata(
+            source_function="resurfemg.data_connector.converter_functions.load_file",
+            operation="emg.load",
+            parameters={"loader_options": dict(loader_options or {})},
+        ),
+    )
+    return {"emg_recording": recording, "raw_emg_signals": raw_emg_signals}
 
 
 @register_step(
@@ -132,70 +238,233 @@ def peak_indices(events: Any, processed_emg: Any) -> dict[str, Any]:
 # "whichever ran last wins when both are enabled" behavior.
 
 
+def _require_positive_seconds(name: str, value: float) -> None:
+    if not np.isfinite(value) or value <= 0:
+        raise ValueError(f"{name} must be a finite, positive number; got {value!r}.")
+
+
+def _require_percentile(name: str, value: float) -> None:
+    if not (0.0 <= float(value) <= 100.0):
+        raise ValueError(f"{name} must be between 0 and 100; got {value!r}.")
+
+
+def _processed_channel_label_and_unit(processed_emg: Any) -> tuple[str, str | None]:
+    channel_index = processed_emg.get("channel")
+    metadata = processed_emg.get("metadata") or {}
+    labels = list(metadata.get("labels") or [])
+    units = list(metadata.get("units") or [])
+    label = (
+        labels[channel_index]
+        if isinstance(channel_index, int) and channel_index < len(labels)
+        else str(channel_index)
+    )
+    unit = (
+        units[channel_index]
+        if isinstance(channel_index, int) and channel_index < len(units)
+        else None
+    )
+    return label, unit
+
+
 @register_step(
     "emg.moving_baseline",
-    reads={"processed_emg": "processed_emg"},
-    writes=("baseline",),
+    reads={"session": "session", "processed_emg": "processed_emg"},
+    writes=("baseline", "baseline_signal"),
     summary="Compute a moving-percentile EMG baseline.",
 )
 def moving_baseline(
+    session: M3Session,
     processed_emg: Any,
     *,
     window_seconds: float = 30.0,
     step_seconds: float = 1.0,
     percentile: float = 33.0,
 ) -> dict[str, Any]:
-    import numpy as np
-    from resurfemg.postprocessing.baseline import moving_baseline as _moving_baseline
+    _require_positive_seconds("window_seconds", window_seconds)
+    _require_positive_seconds("step_seconds", step_seconds)
+    _require_percentile("percentile", percentile)
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
     fs = float(processed_emg["fs"])
     window_samples = max(1, int(window_seconds * fs))
     step_samples = max(1, int(step_seconds * fs))
-    baseline = _moving_baseline(
-        envelope, window_samples, step_samples, set_percentile=percentile
+    baseline = session.emg_adapter.moving_baseline(
+        envelope,
+        window_samples=window_samples,
+        step_samples=step_samples,
+        percentile=percentile,
     )
-    return {"baseline": baseline}
+
+    label, unit = _processed_channel_label_and_unit(processed_emg)
+    time = np.arange(len(envelope), dtype=float) / fs
+    baseline_signal = Signal(
+        values=baseline,
+        time=time,
+        sample_frequency=fs,
+        unit=unit,
+        name=f"{label}_moving_baseline",
+        modality="emg",
+        channel=label,
+        source="resurfemg",
+        processing_state="derived",
+        derived_from="processed",
+        method="resurfemg.moving_baseline",
+        metadata={
+            "requested_window_seconds": window_seconds,
+            "requested_step_seconds": step_seconds,
+            "effective_window_samples": window_samples,
+            "effective_step_samples": step_samples,
+            "percentile": percentile,
+        },
+    )
+    session.signals.add(baseline_signal)
+    _record_step(
+        session,
+        "emg.moving_baseline",
+        metadata=_upstream_metadata(
+            source_function="resurfemg.postprocessing.baseline.moving_baseline",
+            operation="emg.moving_baseline",
+            parameters={
+                "window_seconds": window_seconds,
+                "step_seconds": step_seconds,
+                "percentile": percentile,
+                "effective_window_samples": window_samples,
+                "effective_step_samples": step_samples,
+            },
+        ),
+    )
+    return {"baseline": baseline, "baseline_signal": baseline_signal}
 
 
 @register_step(
     "emg.slopesum_baseline",
-    reads={"processed_emg": "processed_emg"},
-    writes=("baseline", "slopesum_baseline_detail"),
+    reads={"session": "session", "processed_emg": "processed_emg"},
+    writes=(
+        "baseline",
+        "slopesum_baseline_detail",
+        "baseline_signal",
+        "slopesum_baseline_native_detail",
+        "baseline_running_mean_signal",
+        "baseline_running_std_signal",
+    ),
     summary="Compute a slope-sum EMG baseline.",
 )
 def slopesum_baseline(
+    session: M3Session,
     processed_emg: Any,
     *,
     window_seconds: float = 30.0,
     step_seconds: float = 1.0,
     percentile: float = 33.0,
+    augmented_percentile: float = 25.0,
+    moving_average_seconds: float = 0.5,
+    percentile_window_seconds: float = 1.0,
 ) -> dict[str, Any]:
-    import numpy as np
-    from resurfemg.postprocessing.baseline import (
-        slopesum_baseline as _slopesum_baseline,
-    )
+    _require_positive_seconds("window_seconds", window_seconds)
+    _require_positive_seconds("step_seconds", step_seconds)
+    _require_positive_seconds("moving_average_seconds", moving_average_seconds)
+    _require_positive_seconds("percentile_window_seconds", percentile_window_seconds)
+    _require_percentile("percentile", percentile)
+    _require_percentile("augmented_percentile", augmented_percentile)
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
     fs = float(processed_emg["fs"])
     window_samples = max(1, int(window_seconds * fs))
     step_samples = max(1, int(step_seconds * fs))
-    result = _slopesum_baseline(
+    moving_average_samples = max(1, int(moving_average_seconds * fs))
+    percentile_window_samples = max(1, int(percentile_window_seconds * fs))
+    baseline, running_mean, running_std, series = session.emg_adapter.slopesum_baseline(
         envelope,
-        window_samples,
-        step_samples,
-        fs,
-        set_percentile=percentile,
-        ma_window=max(1, int(fs // 2)),
-        perc_window=max(1, int(fs)),
+        window_samples=window_samples,
+        step_samples=step_samples,
+        sample_frequency=fs,
+        percentile=percentile,
+        augmented_percentile=augmented_percentile,
+        moving_average_samples=moving_average_samples,
+        percentile_window_samples=percentile_window_samples,
+    )
+
+    label, unit = _processed_channel_label_and_unit(processed_emg)
+    time = np.arange(len(envelope), dtype=float) / fs
+    effective_samples = {
+        "requested_window_seconds": window_seconds,
+        "requested_step_seconds": step_seconds,
+        "requested_moving_average_seconds": moving_average_seconds,
+        "requested_percentile_window_seconds": percentile_window_seconds,
+        "effective_window_samples": window_samples,
+        "effective_step_samples": step_samples,
+        "effective_moving_average_samples": moving_average_samples,
+        "effective_percentile_window_samples": percentile_window_samples,
+        "percentile": percentile,
+        "augmented_percentile": augmented_percentile,
+    }
+    baseline_signal = Signal(
+        values=baseline,
+        time=time,
+        sample_frequency=fs,
+        unit=unit,
+        name=f"{label}_slopesum_baseline",
+        modality="emg",
+        channel=label,
+        source="resurfemg",
+        processing_state="derived",
+        derived_from="processed",
+        method="resurfemg.slopesum_baseline",
+        metadata=dict(effective_samples),
+    )
+    running_mean_signal = Signal(
+        values=running_mean,
+        time=time,
+        sample_frequency=fs,
+        unit=unit,
+        name=f"{label}_slopesum_baseline_running_mean",
+        modality="emg",
+        channel=label,
+        source="resurfemg",
+        processing_state="derived",
+        derived_from="processed",
+        method="resurfemg.slopesum_baseline",
+    )
+    running_std_signal = Signal(
+        values=running_std,
+        time=time,
+        sample_frequency=fs,
+        unit=unit,
+        name=f"{label}_slopesum_baseline_running_std",
+        modality="emg",
+        channel=label,
+        source="resurfemg",
+        processing_state="derived",
+        derived_from="processed",
+        method="resurfemg.slopesum_baseline",
+    )
+    session.signals.add(baseline_signal)
+    session.signals.add(running_mean_signal)
+    session.signals.add(running_std_signal)
+
+    _record_step(
+        session,
+        "emg.slopesum_baseline",
+        metadata=_upstream_metadata(
+            source_function="resurfemg.postprocessing.baseline.slopesum_baseline",
+            operation="emg.slopesum_baseline",
+            parameters=effective_samples,
+        ),
     )
     return {
-        "baseline": result[0],
+        "baseline": baseline,
         "slopesum_baseline_detail": {
-            "running_mean": result[1],
-            "running_std": result[2],
-            "series": result[3],
+            "running_mean": running_mean,
+            "running_std": running_std,
+            "series": series,
         },
+        "baseline_signal": baseline_signal,
+        "slopesum_baseline_native_detail": {
+            "running_mean": running_mean,
+            "running_std": running_std,
+        },
+        "baseline_running_mean_signal": running_mean_signal,
+        "baseline_running_std_signal": running_std_signal,
     }
 
 
@@ -451,6 +720,7 @@ def ventilator_respiratory_rate(
 @register_step(
     "emg.snr_pseudo",
     reads={
+        "session": "session",
         "processed_emg": "processed_emg",
         "peak_indices": "peak_indices",
         "baseline": "baseline",
@@ -458,20 +728,23 @@ def ventilator_respiratory_rate(
     writes=("snr_pseudo",),
     summary="Compute a pseudo signal-to-noise ratio for detected EMG breaths.",
 )
-def snr_pseudo(processed_emg: Any, peak_indices: Any, baseline: Any) -> dict[str, Any]:
+def snr_pseudo(
+    session: M3Session, processed_emg: Any, peak_indices: Any, baseline: Any
+) -> dict[str, Any]:
     import numpy as np
-    from resurfemg.postprocessing.quality_assessment import (
-        snr_pseudo as _snr_pseudo,
-    )
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
     fs = float(processed_emg["fs"])
-    return {"snr_pseudo": _snr_pseudo(envelope, peak_indices, baseline, fs)}
+    result = session.emg_adapter.snr_pseudo(
+        envelope, peak_indices, baseline, sample_frequency=fs
+    )
+    return {"snr_pseudo": result}
 
 
 @register_step(
     "emg.percentage_under_baseline",
     reads={
+        "session": "session",
         "processed_emg": "processed_emg",
         "peak_indices": "peak_indices",
         "start_indices": "start_indices",
@@ -482,6 +755,7 @@ def snr_pseudo(processed_emg: Any, peak_indices: Any, baseline: Any) -> dict[str
     summary="Compute the percentage of each EMG breath spent under baseline.",
 )
 def percentage_under_baseline(
+    session: M3Session,
     processed_emg: Any,
     peak_indices: Any,
     start_indices: Any,
@@ -489,50 +763,50 @@ def percentage_under_baseline(
     baseline: Any,
 ) -> dict[str, Any]:
     import numpy as np
-    from resurfemg.postprocessing.quality_assessment import (
-        percentage_under_baseline as _percentage_under_baseline,
-    )
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
     fs = float(processed_emg["fs"])
-    result = _percentage_under_baseline(
-        envelope, fs, peak_indices, start_indices, end_indices, baseline
+    result = session.emg_adapter.percentage_under_baseline(
+        envelope,
+        peak_indices,
+        start_indices,
+        end_indices,
+        baseline,
+        sample_frequency=fs,
     )
     return {"percentage_under_baseline": result}
 
 
 @register_step(
     "emg.detect_local_high_aub",
-    reads={"area_under_baseline": "area_under_baseline"},
+    reads={"session": "session", "area_under_baseline": "area_under_baseline"},
     writes=("detect_local_high_aub",),
     summary="Flag EMG breaths with locally elevated area-under-baseline.",
 )
-def detect_local_high_aub(area_under_baseline: Any) -> dict[str, Any]:
-    from resurfemg.postprocessing.quality_assessment import (
-        detect_local_high_aub as _detect_local_high_aub,
-    )
-
+def detect_local_high_aub(
+    session: M3Session, area_under_baseline: Any
+) -> dict[str, Any]:
     aubs = area_under_baseline[0]
-    return {"detect_local_high_aub": _detect_local_high_aub(aubs)}
+    return {"detect_local_high_aub": session.emg_adapter.detect_local_high_aub(aubs)}
 
 
 @register_step(
     "emg.detect_extreme_time_products",
-    reads={"time_product": "time_product"},
+    reads={"session": "session", "time_product": "time_product"},
     writes=("detect_extreme_time_products",),
     summary="Flag EMG breaths with extreme time-products.",
 )
-def detect_extreme_time_products(time_product: Any) -> dict[str, Any]:
-    from resurfemg.postprocessing.quality_assessment import (
-        detect_extreme_time_products as _detect_extreme_time_products,
-    )
-
-    return {"detect_extreme_time_products": _detect_extreme_time_products(time_product)}
+def detect_extreme_time_products(
+    session: M3Session, time_product: Any
+) -> dict[str, Any]:
+    result = session.emg_adapter.detect_extreme_time_products(time_product)
+    return {"detect_extreme_time_products": result}
 
 
 @register_step(
     "emg.detect_non_consecutive_manoeuvres",
     reads={
+        "session": "session",
         "ventilator_breath_indices": "ventilator_breath_indices",
         "pocc_indices": "pocc_indices",
     },
@@ -540,19 +814,18 @@ def detect_extreme_time_products(time_product: Any) -> dict[str, Any]:
     summary="Flag non-consecutive occlusion manoeuvres against ventilator breaths.",
 )
 def detect_non_consecutive_manoeuvres(
-    ventilator_breath_indices: Any, pocc_indices: Any
+    session: M3Session, ventilator_breath_indices: Any, pocc_indices: Any
 ) -> dict[str, Any]:
-    from resurfemg.postprocessing.quality_assessment import (
-        detect_non_consecutive_manoeuvres as _detect_non_consecutive_manoeuvres,
+    result = session.emg_adapter.detect_non_consecutive_manoeuvres(
+        ventilator_breath_indices, pocc_indices
     )
-
-    result = _detect_non_consecutive_manoeuvres(ventilator_breath_indices, pocc_indices)
     return {"detect_non_consecutive_manoeuvres": result}
 
 
 @register_step(
     "emg.evaluate_bell_curve_error",
     reads={
+        "session": "session",
         "peak_indices": "peak_indices",
         "start_indices": "start_indices",
         "end_indices": "end_indices",
@@ -563,6 +836,7 @@ def detect_non_consecutive_manoeuvres(
     summary="Score how well each EMG breath matches a bell-curve shape.",
 )
 def evaluate_bell_curve_error(
+    session: M3Session,
     peak_indices: Any,
     start_indices: Any,
     end_indices: Any,
@@ -570,14 +844,16 @@ def evaluate_bell_curve_error(
     time_product: Any,
 ) -> dict[str, Any]:
     import numpy as np
-    from resurfemg.postprocessing.quality_assessment import (
-        evaluate_bell_curve_error as _evaluate_bell_curve_error,
-    )
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
     fs = float(processed_emg["fs"])
-    result = _evaluate_bell_curve_error(
-        peak_indices, start_indices, end_indices, envelope, fs, time_product
+    result = session.emg_adapter.evaluate_bell_curve_error(
+        peak_indices,
+        start_indices,
+        end_indices,
+        envelope,
+        time_product,
+        sample_frequency=fs,
     )
     return {"evaluate_bell_curve_error": result}
 
@@ -585,6 +861,7 @@ def evaluate_bell_curve_error(
 @register_step(
     "emg.evaluate_event_timing",
     reads={
+        "session": "session",
         "peak_indices": "peak_indices",
         "processed_emg": "processed_emg",
         "ventilator_breath_indices": "ventilator_breath_indices",
@@ -594,19 +871,16 @@ def evaluate_bell_curve_error(
     summary="Score the timing agreement between EMG and ventilator breaths.",
 )
 def evaluate_event_timing(
+    session: M3Session,
     peak_indices: Any,
     processed_emg: Any,
     ventilator_breath_indices: Any,
     ventilator_signals: Any,
 ) -> dict[str, Any]:
-    from resurfemg.postprocessing.quality_assessment import (
-        evaluate_event_timing as _evaluate_event_timing,
-    )
-
     fs = float(processed_emg["fs"])
     vent_fs = float(ventilator_signals["fs"])
     paired_count = min(len(peak_indices), len(ventilator_breath_indices))
-    result = _evaluate_event_timing(
+    result = session.emg_adapter.evaluate_event_timing(
         peak_indices[:paired_count] / fs,
         ventilator_breath_indices[:paired_count] / vent_fs,
     )
@@ -616,6 +890,7 @@ def evaluate_event_timing(
 @register_step(
     "emg.evaluate_respiratory_rates",
     reads={
+        "session": "session",
         "peak_indices": "peak_indices",
         "processed_emg": "processed_emg",
         "ventilator_respiratory_rate": "ventilator_respiratory_rate",
@@ -624,16 +899,17 @@ def evaluate_event_timing(
     summary="Score agreement between EMG-derived and ventilator-derived respiratory rate.",
 )
 def evaluate_respiratory_rates(
-    peak_indices: Any, processed_emg: Any, ventilator_respiratory_rate: Any
+    session: M3Session,
+    peak_indices: Any,
+    processed_emg: Any,
+    ventilator_respiratory_rate: Any,
 ) -> dict[str, Any]:
-    from resurfemg.postprocessing.quality_assessment import (
-        evaluate_respiratory_rates as _evaluate_respiratory_rates,
-    )
-
     fs = float(processed_emg["fs"])
     envelope = processed_emg["envelope"]
     rr_vent = ventilator_respiratory_rate[0]
-    result = _evaluate_respiratory_rates(peak_indices, len(envelope) / fs, rr_vent)
+    result = session.emg_adapter.evaluate_respiratory_rates(
+        peak_indices, len(envelope) / fs, rr_vent
+    )
     return {"evaluate_respiratory_rates": result}
 
 
