@@ -23,7 +23,8 @@ from m3resp.core.session import (
     _iter_ventilator_detections,
     _normalize_ventilator_breath,
 )
-from m3resp.data import Signal
+from m3resp.core.events import BreathEvent, Event
+from m3resp.data import ParameterResult, Signal
 from m3resp.processing.intervals import (
     onoff_from_baseline_crossings,
     onoff_from_slope,
@@ -40,6 +41,7 @@ from m3resp.processing.peaks import (
     detect_occluded_breath_peaks,
     detect_ventilator_breath_peaks,
 )
+from m3resp.processing.windows import rolling_arv
 from m3resp.workflows.registry import register_step
 
 
@@ -56,17 +58,27 @@ def _resurfemg_version() -> str | None:
 
 
 def _upstream_metadata(
-    *, source_function: str, operation: str, parameters: dict[str, Any]
+    *,
+    source_function: str,
+    operation: str,
+    parameters: dict[str, Any],
+    source_package: str = "resurfemg",
+    implementation: str = "upstream_adapter",
 ) -> dict[str, Any]:
     """Build the Stage 2 EMG provenance metadata schema shared by native
     `Signal`/`ParameterResult` outputs (see `plan/stage2/
     2_resurfemg_gap_migration_implementation_plan.md`, "Use one provenance
-    schema"). Mirrors `m3resp.workflows.steps.eit._upstream_metadata`."""
+    schema"). Mirrors `m3resp.workflows.steps.eit._upstream_metadata`.
+
+    `source_package`/`implementation` default to the ReSurfEMG-adapter case;
+    pass `source_package="m3resp"`, `implementation="m3resp.processing.<module>"`
+    for a step whose value comes from a native primitive instead.
+    """
 
     return {
-        "source_package": "resurfemg",
+        "source_package": source_package,
         "source_function": source_function,
-        "implementation": "upstream_adapter",
+        "implementation": implementation,
         "parameters": parameters,
         "operation": operation,
     }
@@ -468,6 +480,430 @@ def slopesum_baseline(
     }
 
 
+def _select_ecg_source(
+    session: M3Session,
+    processed_emg: Any,
+    *,
+    ecg_channel: int | None,
+    source: str,
+) -> tuple[np.ndarray, float, str]:
+    """Return `(array, sample_frequency, source_label)` for ECG detection.
+
+    `ecg_channel` (a raw channel-major index) takes priority over `source`
+    (a key into `processed_emg`, e.g. "raw_channel"/"filtered"/"envelope").
+    """
+
+    if ecg_channel is not None:
+        recording = session.emg
+        if recording is None or recording.raw is None:
+            raise ValueError("emg.ecg_detect_peaks needs a loaded EMG recording.")
+        raw = np.asarray(recording.raw)
+        if not (0 <= ecg_channel < raw.shape[0]):
+            raise ValueError(
+                f"ecg_channel {ecg_channel!r} is out of range; the loaded "
+                f"recording has channels 0..{raw.shape[0] - 1}."
+            )
+        raw_fs = (recording.metadata or {}).get("fs")
+        if raw_fs is None:
+            raise ValueError("emg.ecg_detect_peaks needs recording.metadata['fs'].")
+        return raw[ecg_channel], float(raw_fs), f"raw_channel[{ecg_channel}]"
+
+    if source not in processed_emg:
+        available = sorted(
+            key
+            for key, value in processed_emg.items()
+            if isinstance(value, np.ndarray) or hasattr(value, "__len__")
+        )
+        raise ValueError(
+            f"emg.ecg_detect_peaks source {source!r} is not present in "
+            f"processed_emg; available keys: {available}."
+        )
+    array = np.asarray(processed_emg[source], dtype=float)
+    fs = float(processed_emg["fs"])
+    return array, fs, source
+
+
+@register_step(
+    "emg.ecg_detect_peaks",
+    reads={"session": "session", "processed_emg": "processed_emg"},
+    writes=("ecg_peak_indices", "ecg_peak_events", "ecg_peak_count_result"),
+    summary="Detect ECG peak sample indices in an EMG/ECG channel.",
+)
+def ecg_detect_peaks(
+    session: M3Session,
+    processed_emg: Any,
+    *,
+    ecg_channel: int | None = None,
+    source: str = "raw_channel",
+    peak_fraction: float = 0.4,
+    peak_width_seconds: float | None = None,
+    peak_distance_seconds: float | None = None,
+    bandpass_filter: bool = True,
+) -> dict[str, Any]:
+    array, fs, source_label = _select_ecg_source(
+        session, processed_emg, ecg_channel=ecg_channel, source=source
+    )
+    peak_width_samples = (
+        max(1, int(peak_width_seconds * fs)) if peak_width_seconds is not None else None
+    )
+    peak_distance_samples = (
+        max(1, int(peak_distance_seconds * fs))
+        if peak_distance_seconds is not None
+        else None
+    )
+
+    indices = session.emg_adapter.detect_ecg_peaks(
+        array,
+        sample_frequency=fs,
+        peak_fraction=peak_fraction,
+        peak_width_samples=peak_width_samples,
+        peak_distance_samples=peak_distance_samples,
+        bandpass_filter=bandpass_filter,
+    )
+
+    detection_parameters = {
+        "source": source_label,
+        "peak_fraction": peak_fraction,
+        "requested_peak_width_seconds": peak_width_seconds,
+        "requested_peak_distance_seconds": peak_distance_seconds,
+        "effective_peak_width_samples": peak_width_samples,
+        "effective_peak_distance_samples": peak_distance_samples,
+        "bandpass_filter": bandpass_filter,
+    }
+    events = [
+        Event(
+            name="ecg_peak",
+            modality="emg",
+            time=float(index) / fs,
+            sample_index=int(index),
+            metadata=dict(detection_parameters),
+        )
+        for index in indices
+    ]
+    session.add_events("ecg_peaks", events)
+
+    count_result = ParameterResult(
+        name="ecg_peak_count",
+        value=float(len(indices)),
+        modality="emg",
+        method="resurfemg.detect_ecg_peaks",
+        metadata=detection_parameters,
+    )
+
+    _record_step(
+        session,
+        "emg.ecg_detect_peaks",
+        metadata=_upstream_metadata(
+            source_function="resurfemg.preprocessing.ecg_removal.detect_ecg_peaks",
+            operation="emg.ecg_detect_peaks",
+            parameters=detection_parameters,
+        ),
+    )
+    return {
+        "ecg_peak_indices": indices,
+        "ecg_peak_events": events,
+        "ecg_peak_count_result": count_result,
+    }
+
+
+def _build_gate_mask(
+    n_samples: int, peak_indices: Any, *, gate_width_samples: int
+) -> np.ndarray:
+    """A boolean mask marking the (clipped-to-bounds) gated region around
+    each peak. Purely descriptive - built from the same effective gate
+    width used for the cleaned array, but never fed back into it."""
+
+    mask = np.zeros(n_samples, dtype=bool)
+    half_width = gate_width_samples // 2
+    for peak in peak_indices:
+        start = max(0, int(peak) - half_width)
+        end = min(n_samples, int(peak) + half_width)
+        mask[start:end] = True
+    return mask
+
+
+def _update_session_after_ecg_removal(
+    session: M3Session,
+    processed_emg_after_ecg: dict[str, Any],
+) -> None:
+    """Update `session.processed["emg"]` and the `EMGRecording` filtered/
+    envelope fields so existing breath detection operates on the
+    ECG-cleaned data (mirrors what `M3Session.preprocess_emg` does)."""
+
+    session.processed["emg"] = processed_emg_after_ecg
+    if session.emg is not None:
+        session.emg.filtered = processed_emg_after_ecg.get("filtered")
+        session.emg.envelope = processed_emg_after_ecg.get("envelope")
+
+
+@register_step(
+    "emg.ecg_gating",
+    reads={
+        "session": "session",
+        "processed_emg": "processed_emg",
+        "ecg_peak_indices": "ecg_peak_indices",
+    },
+    writes=(
+        "ecg_gated_emg",
+        "processed_emg_after_ecg",
+        "ecg_gated_signal",
+        "ecg_gate_mask_result",
+    ),
+    summary="Remove ECG peaks from EMG by gating (zero/interpolate/replace).",
+)
+def ecg_gating(
+    session: M3Session,
+    processed_emg: Any,
+    ecg_peak_indices: Any,
+    *,
+    source: str = "filtered",
+    gate_width_seconds: float | None = None,
+    gate_width_samples: int | None = None,
+    fill_method: int = 1,
+    envelope_window_seconds: float | None = None,
+) -> dict[str, Any]:
+    if gate_width_seconds is not None and gate_width_samples is not None:
+        raise ValueError(
+            "emg.ecg_gating: set only one of gate_width_seconds or "
+            "gate_width_samples, not both."
+        )
+    if source not in processed_emg:
+        raise ValueError(
+            f"emg.ecg_gating source {source!r} is not present in processed_emg; "
+            f"available keys: {sorted(processed_emg.keys())}."
+        )
+
+    array = np.asarray(processed_emg[source], dtype=float)
+    fs = float(processed_emg["fs"])
+    if gate_width_seconds is not None:
+        effective_gate_width_samples = max(1, int(gate_width_seconds * fs))
+    elif gate_width_samples is not None:
+        effective_gate_width_samples = gate_width_samples
+    else:
+        effective_gate_width_samples = 205  # resurfemg's own default
+
+    gated = session.emg_adapter.gate_ecg(
+        array,
+        ecg_peak_indices,
+        gate_width_samples=effective_gate_width_samples,
+        fill_method=fill_method,
+    )
+    gate_mask = _build_gate_mask(
+        len(array), ecg_peak_indices, gate_width_samples=effective_gate_width_samples
+    )
+
+    original_window_seconds = (processed_emg.get("filter") or {}).get(
+        "envelope_window_seconds"
+    )
+    effective_envelope_window_seconds = (
+        envelope_window_seconds
+        if envelope_window_seconds is not None
+        else original_window_seconds
+    )
+    envelope = processed_emg.get("envelope")
+    if effective_envelope_window_seconds is not None:
+        envelope_window_samples = max(1, int(effective_envelope_window_seconds * fs))
+        envelope = rolling_arv(gated, window_length=envelope_window_samples)
+
+    processed_emg_after_ecg = {**processed_emg, "filtered": gated, "envelope": envelope}
+    _update_session_after_ecg_removal(session, processed_emg_after_ecg)
+
+    label, unit = _processed_channel_label_and_unit(processed_emg)
+    time = np.arange(len(gated), dtype=float) / fs
+    gating_parameters = {
+        "source": source,
+        "requested_gate_width_seconds": gate_width_seconds,
+        "requested_gate_width_samples": gate_width_samples,
+        "effective_gate_width_samples": effective_gate_width_samples,
+        "fill_method": fill_method,
+        "effective_envelope_window_seconds": effective_envelope_window_seconds,
+    }
+    ecg_gated_signal = Signal(
+        values=gated,
+        time=time,
+        sample_frequency=fs,
+        unit=unit,
+        name=f"{label}_ecg_gated",
+        modality="emg",
+        channel=label,
+        source="resurfemg",
+        processing_state="filtered",
+        derived_from="processed",
+        method="resurfemg.gating",
+        metadata=dict(gating_parameters),
+    )
+    session.signals.add(ecg_gated_signal)
+
+    gate_mask_result = ParameterResult(
+        name="ecg_gate_mask",
+        value=gate_mask,
+        modality="emg",
+        channel=label,
+        method="resurfemg.gating",
+        metadata=dict(gating_parameters),
+    )
+
+    _record_step(
+        session,
+        "emg.ecg_gating",
+        metadata=_upstream_metadata(
+            source_function="resurfemg.preprocessing.ecg_removal.gating",
+            operation="emg.ecg_gating",
+            parameters=gating_parameters,
+        ),
+    )
+    return {
+        "ecg_gated_emg": gated,
+        "processed_emg_after_ecg": processed_emg_after_ecg,
+        "ecg_gated_signal": ecg_gated_signal,
+        "ecg_gate_mask_result": gate_mask_result,
+    }
+
+
+@register_step(
+    "emg.ecg_wavelet_denoising",
+    reads={
+        "session": "session",
+        "processed_emg": "processed_emg",
+        "ecg_peak_indices": "ecg_peak_indices",
+    },
+    writes=(
+        "ecg_wavelet_cleaned_emg",
+        "processed_emg_after_ecg",
+        "ecg_wavelet_cleaned_signal",
+        "wavelet_decomposition_result",
+        "wavelet_thresholds_result",
+        "wavelet_gate_mask_result",
+    ),
+    summary="Remove ECG peaks from EMG by a-trous wavelet shrinkage.",
+)
+def ecg_wavelet_denoising(
+    session: M3Session,
+    processed_emg: Any,
+    ecg_peak_indices: Any,
+    *,
+    source: str = "filtered",
+    hard_thresholding: bool = True,
+    levels: int = 4,
+    wavelet_type: str = "db2",
+    fixed_threshold: float = 4.5,
+    envelope_window_seconds: float | None = None,
+) -> dict[str, Any]:
+    if source not in processed_emg:
+        raise ValueError(
+            f"emg.ecg_wavelet_denoising source {source!r} is not present in "
+            f"processed_emg; available keys: {sorted(processed_emg.keys())}."
+        )
+
+    array = np.asarray(processed_emg[source], dtype=float)
+    fs = float(processed_emg["fs"])
+    original_length = len(array)
+    padded_length = int(np.ceil(original_length / 2**levels) * 2**levels)
+
+    cleaned, decomposition, thresholds, gate_mask = (
+        session.emg_adapter.wavelet_denoise_ecg(
+            array,
+            ecg_peak_indices,
+            sample_frequency=fs,
+            hard_thresholding=hard_thresholding,
+            levels=levels,
+            wavelet_type=wavelet_type,
+            fixed_threshold=fixed_threshold,
+        )
+    )
+
+    original_window_seconds = (processed_emg.get("filter") or {}).get(
+        "envelope_window_seconds"
+    )
+    effective_envelope_window_seconds = (
+        envelope_window_seconds
+        if envelope_window_seconds is not None
+        else original_window_seconds
+    )
+    envelope = processed_emg.get("envelope")
+    if effective_envelope_window_seconds is not None:
+        envelope_window_samples = max(1, int(effective_envelope_window_seconds * fs))
+        envelope = rolling_arv(cleaned, window_length=envelope_window_samples)
+
+    processed_emg_after_ecg = {
+        **processed_emg,
+        "filtered": cleaned,
+        "envelope": envelope,
+    }
+    _update_session_after_ecg_removal(session, processed_emg_after_ecg)
+
+    label, unit = _processed_channel_label_and_unit(processed_emg)
+    time = np.arange(len(cleaned), dtype=float) / fs
+    wavelet_parameters = {
+        "source": source,
+        "hard_thresholding": hard_thresholding,
+        "levels": levels,
+        "wavelet_type": wavelet_type,
+        "fixed_threshold": fixed_threshold,
+        "original_length": original_length,
+        "padded_length": padded_length,
+        "effective_envelope_window_seconds": effective_envelope_window_seconds,
+    }
+    ecg_wavelet_cleaned_signal = Signal(
+        values=cleaned,
+        time=time,
+        sample_frequency=fs,
+        unit=unit,
+        name=f"{label}_ecg_wavelet_cleaned",
+        modality="emg",
+        channel=label,
+        source="resurfemg",
+        processing_state="filtered",
+        derived_from="processed",
+        method="resurfemg.wavelet_denoising",
+        metadata=dict(wavelet_parameters),
+    )
+    session.signals.add(ecg_wavelet_cleaned_signal)
+
+    decomposition_result = ParameterResult(
+        name="ecg_wavelet_decomposition",
+        value=decomposition,
+        modality="emg",
+        channel=label,
+        method="resurfemg.wavelet_denoising",
+        metadata={**wavelet_parameters, "axes": ["level", "sample"]},
+    )
+    thresholds_result = ParameterResult(
+        name="ecg_wavelet_thresholds",
+        value=thresholds,
+        modality="emg",
+        channel=label,
+        method="resurfemg.wavelet_denoising",
+        metadata={**wavelet_parameters, "axes": ["level", "sample"]},
+    )
+    gate_mask_result = ParameterResult(
+        name="ecg_wavelet_gate_mask",
+        value=gate_mask,
+        modality="emg",
+        channel=label,
+        method="resurfemg.wavelet_denoising",
+        metadata=dict(wavelet_parameters),
+    )
+
+    _record_step(
+        session,
+        "emg.ecg_wavelet_denoising",
+        metadata=_upstream_metadata(
+            source_function="resurfemg.preprocessing.ecg_removal.wavelet_denoising",
+            operation="emg.ecg_wavelet_denoising",
+            parameters=wavelet_parameters,
+        ),
+    )
+    return {
+        "ecg_wavelet_cleaned_emg": cleaned,
+        "processed_emg_after_ecg": processed_emg_after_ecg,
+        "ecg_wavelet_cleaned_signal": ecg_wavelet_cleaned_signal,
+        "wavelet_decomposition_result": decomposition_result,
+        "wavelet_thresholds_result": thresholds_result,
+        "wavelet_gate_mask_result": gate_mask_result,
+    }
+
+
 # --- event_detection ------------------------------------------------------
 
 
@@ -515,6 +951,142 @@ def find_occluded_breaths(
         peep=peep,
     )
     return {"pocc_indices": np.asarray(indices, dtype=int)}
+
+
+@register_step(
+    "emg.pocc_intervals",
+    reads={
+        "session": "session",
+        "ventilator_signals": "ventilator_signals",
+        "pocc_indices": "pocc_indices",
+    },
+    writes=(
+        "pocc_start_indices",
+        "pocc_end_indices",
+        "pocc_interval_validity",
+        "pocc_events",
+    ),
+    summary="Find Pocc manoeuvre start/end indices from the pressure channel.",
+)
+def pocc_intervals(
+    session: M3Session,
+    ventilator_signals: Any,
+    pocc_indices: Any,
+    *,
+    peep: float | None = None,
+) -> dict[str, Any]:
+    pressure = np.asarray(ventilator_signals["pressure"], dtype=float)
+    fs = float(ventilator_signals["fs"])
+    peaks = np.asarray(pocc_indices, dtype=int)
+
+    # Same PEEP rule as emg.find_occluded_breaths, so pocc_indices (detected
+    # against this same baseline) and these intervals stay consistent.
+    effective_peep = peep if peep is not None else float(np.nanmedian(pressure))
+    baseline = np.full(pressure.shape, effective_peep)
+
+    starts, ends, valid_starts, valid_ends, valid_peaks = onoff_from_baseline_crossings(
+        pressure, baseline, peaks
+    )
+
+    events: list[BreathEvent] = []
+    for index, peak in enumerate(peaks):
+        events.append(
+            BreathEvent(
+                modality="pressure",
+                start_time=float(starts[index]) / fs,
+                end_time=float(ends[index]) / fs,
+                peak_time=float(peak) / fs,
+                start_index=int(starts[index]),
+                peak_index=int(peak),
+                end_index=int(ends[index]),
+                sample_frequency=fs,
+                signal_name="pressure",
+                source="m3resp.processing.intervals.onoff_from_baseline_crossings",
+                metadata={
+                    "event_type": "pocc",
+                    "peep": effective_peep,
+                    "valid": bool(valid_peaks[index]),
+                    "valid_start": bool(valid_starts[index]),
+                    "valid_end": bool(valid_ends[index]),
+                },
+            )
+        )
+    session.add_events("pocc_breaths", events)
+
+    _record_step(
+        session,
+        "emg.pocc_intervals",
+        metadata=_upstream_metadata(
+            source_function="m3resp.processing.intervals.onoff_from_baseline_crossings",
+            operation="emg.pocc_intervals",
+            parameters={"peep": effective_peep, "requested_peep": peep},
+            source_package="m3resp",
+            implementation="m3resp.processing.intervals",
+        ),
+    )
+    return {
+        "pocc_start_indices": starts,
+        "pocc_end_indices": ends,
+        "pocc_interval_validity": np.asarray(valid_peaks, dtype=bool),
+        "pocc_events": events,
+    }
+
+
+@register_step(
+    "emg.pocc_time_product",
+    reads={
+        "session": "session",
+        "ventilator_signals": "ventilator_signals",
+        "pocc_start_indices": "pocc_start_indices",
+        "pocc_end_indices": "pocc_end_indices",
+    },
+    writes=("pocc_time_products", "pocc_time_product_result"),
+    summary="Compute the pressure-time product for each Pocc manoeuvre.",
+)
+def pocc_time_product(
+    session: M3Session,
+    ventilator_signals: Any,
+    pocc_start_indices: Any,
+    pocc_end_indices: Any,
+    *,
+    peep: float | None = None,
+) -> dict[str, Any]:
+    pressure = np.asarray(ventilator_signals["pressure"], dtype=float)
+    fs = float(ventilator_signals["fs"])
+    effective_peep = peep if peep is not None else float(np.nanmedian(pressure))
+    baseline = np.full(pressure.shape, effective_peep)
+
+    time_products = window_integral(
+        pressure, fs, pocc_start_indices, pocc_end_indices, baseline
+    )
+
+    pressure_unit = ventilator_signals.get("unit") or "cmH2O"
+    parameters = {"peep": effective_peep, "requested_peep": peep}
+    result = ParameterResult(
+        name="pocc_time_product",
+        value=time_products,
+        modality="pressure",
+        unit=f"{pressure_unit}*s",
+        method="m3resp.processing.metrics.window_integral",
+        metadata={
+            **parameters,
+            "start_indices": np.asarray(pocc_start_indices, dtype=int).tolist(),
+            "end_indices": np.asarray(pocc_end_indices, dtype=int).tolist(),
+        },
+    )
+
+    _record_step(
+        session,
+        "emg.pocc_time_product",
+        metadata=_upstream_metadata(
+            source_function="m3resp.processing.metrics.window_integral",
+            operation="emg.pocc_time_product",
+            parameters=parameters,
+            source_package="m3resp",
+            implementation="m3resp.processing.metrics",
+        ),
+    )
+    return {"pocc_time_products": time_products, "pocc_time_product_result": result}
 
 
 @register_step(

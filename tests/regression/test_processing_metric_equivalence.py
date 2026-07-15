@@ -94,6 +94,35 @@ def test_resurfemg_feature_primitives_match_upstream():
     np.testing.assert_array_equal(actual_rate[1], expected_rate[1])
 
 
+def test_window_integral_matches_upstream_time_product_for_negative_deflections():
+    """Stage 2 ReSurfEMG gap migration Phase 4 (plan/stage2/
+    2_resurfemg_gap_migration_implementation_plan.md) requires this before
+    `emg.pocc_time_product` can use `window_integral`: a Pocc manoeuvre is a
+    *negative* airway-pressure deflection below PEEP, unlike the
+    baseline-crossing-above-zero EMG breaths the main equivalence test above
+    covers. Both `window_integral` and upstream `time_product` take
+    `abs(trapezoid(...))`, so they must agree here too.
+    """
+
+    pytest.importorskip("resurfemg.postprocessing.features")
+    from resurfemg.postprocessing.features import time_product
+
+    fs = 100.0
+    time = np.arange(int(fs * 6)) / fs
+    peep = 5.0
+    # A pressure signal that dips *below* peep (an occlusion attempt),
+    # never crossing back above it inside the window.
+    pressure = peep - np.maximum(0, np.sin(2 * np.pi * 0.5 * time)) * 3.0
+    baseline = np.full(pressure.shape, peep)
+    start_indices = np.array([20, 220, 420])
+    end_indices = np.array([70, 270, 470])
+
+    np.testing.assert_allclose(
+        window_integral(pressure, fs, start_indices, end_indices, baseline),
+        time_product(pressure, fs, start_indices, end_indices, baseline),
+    )
+
+
 def test_eit_tidal_variation_matches_tiv_private_calculation():
     _add_sibling_checkout_to_path("eitprocessing")
     pytest.importorskip("eitprocessing")
