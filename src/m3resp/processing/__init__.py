@@ -10,6 +10,10 @@ from m3resp.processing.filters import (
     lowpass_filter,
     notch_filter,
 )
+from m3resp.processing.ecg import (
+    EstimatedECGSubtractionResult,
+    estimated_ecg_subtraction,
+)
 from m3resp.processing.intervals import (
     baseline_crossings,
     onoff_from_baseline_crossings,
@@ -66,6 +70,8 @@ __all__ = [
     "detect_peaks",
     "detect_peaks_above_moving_average",
     "detect_ventilator_breath_peaks",
+    "EstimatedECGSubtractionResult",
+    "estimated_ecg_subtraction",
     "fraction_flag",
     "harmonic_notch_filter",
     "highpass_filter",

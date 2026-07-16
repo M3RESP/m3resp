@@ -25,6 +25,7 @@ _MIGRATED_EMG_STEPS = (
     "emg.slopesum_baseline",
     "emg.ecg_detect_peaks",
     "emg.ecg_gating",
+    "emg.ecg_estimated_subtraction",
     "emg.ecg_wavelet_denoising",
     "emg.pocc_intervals",
     "emg.pocc_time_product",
@@ -60,10 +61,12 @@ def test_registered_reads_and_writes_match_the_alternative_step_pairs():
     assert "baseline" in slopesum.writes
     assert moving.writes != slopesum.writes  # slopesum has more native outputs
 
-    gating = get_step("emg.ecg_gating")
-    wavelet = get_step("emg.ecg_wavelet_denoising")
-    assert "processed_emg_after_ecg" in gating.writes
-    assert "processed_emg_after_ecg" in wavelet.writes
+    for name in (
+        "emg.ecg_gating",
+        "emg.ecg_estimated_subtraction",
+        "emg.ecg_wavelet_denoising",
+    ):
+        assert "processed_emg_after_ecg" in get_step(name).writes
 
 
 @pytest.mark.parametrize(
@@ -75,6 +78,7 @@ def test_registered_reads_and_writes_match_the_alternative_step_pairs():
         "emg.interpeak_dist",
         "emg.ecg_detect_peaks",
         "emg.ecg_gating",
+        "emg.ecg_estimated_subtraction",
         "emg.ecg_wavelet_denoising",
     ],
 )
