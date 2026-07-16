@@ -9,6 +9,7 @@ import warnings
 
 from m3resp.workflows.spec import (
     PipelineSpec,
+    SpecExecutionConfig,
     SpecExperimentConfig,
     SpecOutputsConfig,
     StepSpec,
@@ -24,6 +25,7 @@ warnings.warn(
 
 __all__ = [
     "PipelineSpec",
+    "SpecExecutionConfig",
     "SpecExperimentConfig",
     "SpecOutputsConfig",
     "StepSpec",

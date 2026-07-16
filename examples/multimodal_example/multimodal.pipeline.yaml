@@ -1,6 +1,9 @@
 # Full multimodal (EIT + EMG + ventilator) pipeline.
 #
-# Run with: python -m m3resp run multimodal.pipeline.yaml
+# Run with: m3resp run examples/multimodal_example/multimodal.pipeline.yaml
+# from the repository root - path-typed `with:`/`inputs:` values (like the
+# *_file entries below) resolve relative to this spec file's own directory,
+# same as `outputs.dir`, not the process working directory.
 
 name: multimodal
 
@@ -14,9 +17,9 @@ outputs:
   figures: true
 
 inputs:
-  eit_file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_eit_draeger.bin
-  emg_file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_emg.Poly5
-  vent_file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_ventilator.Poly5
+  eit_file: ../../data/source/synthetic/20260610_153009/m3resp_multimodal_1_eit_draeger.bin
+  emg_file: ../../data/source/synthetic/20260610_153009/m3resp_multimodal_1_emg.Poly5
+  vent_file: ../../data/source/synthetic/20260610_153009/m3resp_multimodal_1_ventilator.Poly5
 
 steps:
   # Load

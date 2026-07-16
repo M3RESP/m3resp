@@ -7,8 +7,8 @@
     "timepoint": null
   },
   "inputs": {
-    "eit_file": "data/source/eit_emg_annemijn/ajM3resp_03_001_01.bin",
-    "emg_file": "data/source/eit_emg_annemijn/Paw_EMG_ajM3Resp_test.txt"
+    "eit_file": "../../data/source/eit_emg_annemijn/ajM3resp_03_001_01.bin",
+    "emg_file": "../../data/source/eit_emg_annemijn/Paw_EMG_ajM3Resp_test.txt"
   },
   "name": "annemijn_multimodal",
   "outputs": {
@@ -23,7 +23,7 @@
   },
   "steps": [
     {
-      "id": null,
+      "id": "step_000_eit_load",
       "in": {},
       "out": {},
       "uses": "eit.load",
@@ -33,7 +33,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_001_emg_load",
       "in": {},
       "out": {},
       "uses": "emg.load",
@@ -42,7 +42,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_002_sync_estimate_offset",
       "in": {},
       "out": {},
       "uses": "sync.estimate_offset",
@@ -64,7 +64,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_003_sync_apply_estimated_offset",
       "in": {
         "offset_seconds": "estimated_offset_seconds"
       },
@@ -78,7 +78,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_004_eit_detect_rates",
       "in": {
         "signal": "raw_eit"
       },
@@ -91,7 +91,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_005_eit_mdn_filter",
       "in": {
         "signal": "raw_eit"
       },
@@ -102,7 +102,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_006_eit_global_impedance",
       "in": {
         "signal": "filtered_eit"
       },
@@ -111,7 +111,7 @@
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_007_eit_detect_breaths",
       "in": {
         "signal": "global_impedance"
       },
@@ -122,14 +122,14 @@
       }
     },
     {
-      "id": null,
+      "id": "step_008_eit_normalize_breaths",
       "in": {},
       "out": {},
       "uses": "eit.normalize_breaths",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_009_eit_continuous_tiv",
       "in": {
         "signal": "global_impedance"
       },
@@ -138,7 +138,7 @@
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_010_eit_eeli",
       "in": {
         "signal": "global_impedance"
       },
@@ -147,7 +147,7 @@
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_011_eit_pixel_tiv",
       "in": {
         "filtered_eit": "filtered_eit",
         "signal": "global_impedance"
@@ -157,7 +157,7 @@
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_012_emg_preprocess",
       "in": {},
       "out": {
         "processed_emg": "processed_emg_before_ecg"
@@ -172,7 +172,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_013_emg_ecg_detect_peaks",
       "in": {
         "processed_emg": "processed_emg_before_ecg"
       },
@@ -183,7 +183,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_014_emg_ecg_gating",
       "in": {
         "processed_emg": "processed_emg_before_ecg"
       },
@@ -197,7 +197,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_015_emg_detect_breaths",
       "in": {},
       "out": {},
       "uses": "emg.detect_breaths",
@@ -207,14 +207,14 @@
       }
     },
     {
-      "id": null,
+      "id": "step_016_emg_peak_indices",
       "in": {},
       "out": {},
       "uses": "emg.peak_indices",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_017_emg_slopesum_baseline",
       "in": {},
       "out": {},
       "uses": "emg.slopesum_baseline",
@@ -225,21 +225,21 @@
       }
     },
     {
-      "id": null,
+      "id": "step_018_emg_onoffpeak_baseline_crossing",
       "in": {},
       "out": {},
       "uses": "emg.onoffpeak_baseline_crossing",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_019_emg_snr_pseudo",
       "in": {},
       "out": {},
       "uses": "emg.snr_pseudo",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_020_emg_percentage_under_baseline",
       "in": {},
       "out": {},
       "uses": "emg.percentage_under_baseline",

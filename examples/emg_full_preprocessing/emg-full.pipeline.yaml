@@ -9,8 +9,9 @@
 #
 #   m3resp run examples/emg_full_preprocessing/emg-full.pipeline.yaml
 #
-# from the repository root - `inputs.emg_file`/`vent_file` below are relative
-# to the current working directory, same as the ROTARC/multimodal examples.
+# from the repository root - path-typed `with:`/`inputs:` values (like
+# `inputs.emg_file`/`vent_file` below) resolve relative to this spec file's
+# own directory, same as `outputs.dir`, not the process working directory.
 #
 # ECG removal and baseline are each one of two available alternatives (see
 # `docs/pipelines.md` "Baseline alternatives" / "ECG-removal alternatives"):
@@ -34,8 +35,8 @@ outputs:
   structured_export: true
 
 inputs:
-  emg_file: data/source/data_from_repo/emg_data_synth_quiet_breathing.Poly5
-  vent_file: data/source/data_from_repo/vent_data_synth_quiet_breathing.Poly5
+  emg_file: ../../data/source/data_from_repo/emg_data_synth_quiet_breathing.Poly5
+  vent_file: ../../data/source/data_from_repo/vent_data_synth_quiet_breathing.Poly5
 
 steps:
   # -- Loading ---------------------------------------------------------------

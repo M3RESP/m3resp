@@ -15,8 +15,9 @@
 #
 # Run from the repo root with:
 #   python -m m3resp run examples/annemijn_multimodal/annemijn.pipeline.yaml
-# `inputs:` paths are resolved relative to the working directory (the repo
-# root); `outputs.dir` is resolved relative to this spec file.
+# Path-typed `with:`/`inputs:` values (like the *_file entries below) are
+# resolved relative to this spec file's own directory, same as `outputs.dir`,
+# not the process working directory.
 
 name: annemijn_multimodal
 
@@ -30,8 +31,8 @@ outputs:
   figures: true
 
 inputs:
-  eit_file: data/source/eit_emg_annemijn/ajM3resp_03_001_01.bin
-  emg_file: data/source/eit_emg_annemijn/Paw_EMG_ajM3Resp_test.txt
+  eit_file: ../../data/source/eit_emg_annemijn/ajM3resp_03_001_01.bin
+  emg_file: ../../data/source/eit_emg_annemijn/Paw_EMG_ajM3Resp_test.txt
 
 steps:
   # Load

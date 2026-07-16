@@ -88,7 +88,13 @@ The four keys for each step:
 - **`in`** — maps a step's parameter name to the context key it reads from.
   Leave it out to use the step's default binding.
 - **`with`** — static parameters passed directly to the step function. A string
-  value starting with `@` is resolved from `inputs`.
+  value starting with `@` is resolved from `inputs`; this applies recursively
+  inside lists and mappings, so `with: {paths: ["@a", "@b"]}` resolves both
+  entries. Write `@@text` to get the literal string `@text` instead of a
+  reference. A parameter a step declares as a `path` (e.g. `eit.load`'s
+  `file`) resolves relative to the spec file's own directory, not the
+  process working directory — same as `outputs.dir` below — after any `@`
+  reference is substituted.
 - **`out`** — renames a step's natural output names to different context keys.
   Useful when you want to run the same step twice and keep both outputs.
 
@@ -101,6 +107,15 @@ The four keys for each step:
   calls `export_session_summary` automatically.
 - **`experiment`** — study metadata used by `export.rotarc_result` for output
   file naming (`subject_id`, `mode`, `timepoint`, `run_identifier`, `selection`).
+- **`metadata`** — a free, JSON-serializable mapping for study/site/session
+  notes that are not part of file naming (unlike `experiment`).
+- **`execution`** — reproducibility controls: `error_policy` (only
+  `fail_fast` is supported) and an optional `seed`, recorded but not yet
+  threaded into any step.
+- **`schema_version`** — omit it for the permissive legacy parser (unknown
+  keys ignored, booleans loosely coerced with a `FutureWarning`). Set it to
+  `1` for strict parsing: unknown top-level/step keys and non-boolean
+  booleans become hard errors instead.
 
 ### Timestamped output directories
 

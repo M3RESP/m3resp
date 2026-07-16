@@ -7,8 +7,8 @@
     "timepoint": null
   },
   "inputs": {
-    "emg_file": "data/source/data_from_repo/emg_data_synth_quiet_breathing.Poly5",
-    "vent_file": "data/source/data_from_repo/vent_data_synth_quiet_breathing.Poly5"
+    "emg_file": "../../data/source/data_from_repo/emg_data_synth_quiet_breathing.Poly5",
+    "vent_file": "../../data/source/data_from_repo/vent_data_synth_quiet_breathing.Poly5"
   },
   "name": "emg-full-preprocessing",
   "outputs": {
@@ -23,7 +23,7 @@
   },
   "steps": [
     {
-      "id": null,
+      "id": "step_000_emg_load",
       "in": {},
       "out": {},
       "uses": "emg.load",
@@ -32,7 +32,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_001_emg_load_ventilator",
       "in": {},
       "out": {},
       "uses": "emg.load_ventilator",
@@ -41,7 +41,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_002_emg_ventilator_channels",
       "in": {},
       "out": {},
       "uses": "emg.ventilator_channels",
@@ -52,7 +52,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_003_emg_preprocess",
       "in": {},
       "out": {
         "processed_emg": "processed_emg_before_ecg"
@@ -65,7 +65,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_004_emg_ecg_detect_peaks",
       "in": {
         "processed_emg": "processed_emg_before_ecg"
       },
@@ -76,7 +76,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_005_emg_ecg_gating",
       "in": {
         "processed_emg": "processed_emg_before_ecg"
       },
@@ -89,7 +89,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_006_emg_detect_breaths",
       "in": {},
       "out": {},
       "uses": "emg.detect_breaths",
@@ -99,14 +99,14 @@
       }
     },
     {
-      "id": null,
+      "id": "step_007_emg_peak_indices",
       "in": {},
       "out": {},
       "uses": "emg.peak_indices",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_008_emg_moving_baseline",
       "in": {},
       "out": {},
       "uses": "emg.moving_baseline",
@@ -117,56 +117,56 @@
       }
     },
     {
-      "id": null,
+      "id": "step_009_emg_onoffpeak_baseline_crossing",
       "in": {},
       "out": {},
       "uses": "emg.onoffpeak_baseline_crossing",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_010_emg_time_to_peak",
       "in": {},
       "out": {},
       "uses": "emg.time_to_peak",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_011_emg_pseudo_slope",
       "in": {},
       "out": {},
       "uses": "emg.pseudo_slope",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_012_emg_amplitude",
       "in": {},
       "out": {},
       "uses": "emg.amplitude",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_013_emg_time_product",
       "in": {},
       "out": {},
       "uses": "emg.time_product",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_014_emg_area_under_baseline",
       "in": {},
       "out": {},
       "uses": "emg.area_under_baseline",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_015_emg_respiratory_rate",
       "in": {},
       "out": {},
       "uses": "emg.respiratory_rate",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_016_emg_detect_ventilator_breath",
       "in": {},
       "out": {},
       "uses": "emg.detect_ventilator_breath",
@@ -175,35 +175,35 @@
       }
     },
     {
-      "id": null,
+      "id": "step_017_emg_find_occluded_breaths",
       "in": {},
       "out": {},
       "uses": "emg.find_occluded_breaths",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_018_emg_ventilator_respiratory_rate",
       "in": {},
       "out": {},
       "uses": "emg.ventilator_respiratory_rate",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_019_emg_pocc_intervals",
       "in": {},
       "out": {},
       "uses": "emg.pocc_intervals",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_020_emg_pocc_time_product",
       "in": {},
       "out": {},
       "uses": "emg.pocc_time_product",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_021_emg_normalize_ventilator_breaths",
       "in": {},
       "out": {},
       "uses": "emg.normalize_ventilator_breaths",
@@ -212,70 +212,70 @@
       }
     },
     {
-      "id": null,
+      "id": "step_022_emg_snr_pseudo",
       "in": {},
       "out": {},
       "uses": "emg.snr_pseudo",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_023_emg_percentage_under_baseline",
       "in": {},
       "out": {},
       "uses": "emg.percentage_under_baseline",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_024_emg_detect_local_high_aub",
       "in": {},
       "out": {},
       "uses": "emg.detect_local_high_aub",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_025_emg_detect_extreme_time_products",
       "in": {},
       "out": {},
       "uses": "emg.detect_extreme_time_products",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_026_emg_detect_non_consecutive_manoeuvres",
       "in": {},
       "out": {},
       "uses": "emg.detect_non_consecutive_manoeuvres",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_027_emg_evaluate_bell_curve_error",
       "in": {},
       "out": {},
       "uses": "emg.evaluate_bell_curve_error",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_028_emg_evaluate_event_timing",
       "in": {},
       "out": {},
       "uses": "emg.evaluate_event_timing",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_029_emg_evaluate_respiratory_rates",
       "in": {},
       "out": {},
       "uses": "emg.evaluate_respiratory_rates",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_030_emg_pocc_quality",
       "in": {},
       "out": {},
       "uses": "emg.pocc_quality",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_031_emg_interpeak_dist",
       "in": {},
       "out": {},
       "uses": "emg.interpeak_dist",

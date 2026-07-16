@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from m3resp.core.exceptions import PipelineSpecError
+from m3resp.core.path_helper import resolve_optional_path
 from m3resp.core.session import M3Session
-from m3resp.workflows.context import SESSION_KEY, PipelineContext
+from m3resp.workflows.context import SESSION_KEY, PipelineContext, iter_input_references
 from m3resp.workflows.registry import StepDefinition, get_step
 from m3resp.workflows.spec import PipelineSpec, StepSpec, load_spec
 
@@ -72,6 +73,7 @@ def run_pipeline(
     ctx = PipelineContext(
         session=session or M3Session(eit_adapter=eit_adapter, emg_adapter=emg_adapter),
         inputs=dict(parsed.inputs),
+        root=parsed.root,
     )
     for key, value in (extra_context or {}).items():
         ctx.set(key, value)
@@ -283,7 +285,8 @@ def _maybe_log_summary(
 
 def validate_spec(spec: PipelineSpec, *, available: set[str] | None = None) -> None:
     """Statically check that every step's inputs are produced before use,
-    and that no two steps write to the same context key without explicit renaming.
+    that no two steps write to the same context key without explicit renaming,
+    and that every ``@name`` input reference names a declared pipeline input.
 
     ``available`` lists extra context keys seeded outside the spec.
     """
@@ -314,6 +317,13 @@ def validate_spec(spec: PipelineSpec, *, available: set[str] | None = None) -> N
                     f"'{context_key}', which is not produced by an earlier step "
                     f"or declared in inputs."
                 )
+        for ref in _referenced_inputs(step_spec):
+            if ref not in spec.inputs:
+                available_inputs = ", ".join(sorted(spec.inputs)) or "(none)"
+                raise PipelineSpecError(
+                    f"Step #{position} '{step_spec.uses}' references unknown "
+                    f"input '@{ref}'. Declared inputs: {available_inputs}."
+                )
         step_label = f"step #{position} '{step_spec.uses}'"
         for context_key in _output_context_keys(definition, step_spec):
             if context_key in produced and context_key not in seeded:
@@ -323,6 +333,13 @@ def validate_spec(spec: PipelineSpec, *, available: set[str] | None = None) -> N
                     f"{produced[context_key]}. Use 'out:' to rename one of the outputs."
                 )
             produced[context_key] = step_label
+
+
+def _referenced_inputs(step_spec: StepSpec) -> set[str]:
+    refs: set[str] = set()
+    for raw_value in step_spec.params.values():
+        refs.update(iter_input_references(raw_value))
+    return refs
 
 
 def _required_context_keys(definition: StepDefinition, step_spec: StepSpec) -> set[str]:
@@ -359,13 +376,21 @@ def _bind_arguments(
             )
         kwargs[param] = ctx.get(context_key)
 
+    path_params = {p.name for p in definition.parameters if p.value_type == "path"}
     for param, raw_value in step_spec.params.items():
         if param in kwargs:
             raise PipelineSpecError(
                 f"Step #{position} '{step_spec.uses}' binds parameter '{param}' "
                 f"through both 'in' and 'with'."
             )
-        kwargs[param] = ctx.resolve_input(raw_value)
+        resolved = ctx.resolve_input(raw_value)
+        if param in path_params and isinstance(resolved, str):
+            # Phase 2.5: a path-typed static parameter resolves relative to the
+            # spec root, not the process working directory - after @ref
+            # substitution, since an @-referenced pipeline input can itself be
+            # a relative path (see docs/pipelines.md's path-resolution note).
+            resolved = str(resolve_optional_path(ctx.root, resolved))
+        kwargs[param] = resolved
     return kwargs
 
 

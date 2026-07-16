@@ -7,8 +7,9 @@
 #
 #   m3resp run examples/eit_full_preprocessing/eit-full.pipeline.yaml
 #
-# from the repository root - `inputs.eit_file` below is relative to the
-# current working directory, same as the ROTARC/multimodal examples.
+# from the repository root - path-typed `with:`/`inputs:` values (like
+# `inputs.eit_file` below) resolve relative to this spec file's own
+# directory, same as `outputs.dir`, not the process working directory.
 #
 #   experiment:  study metadata; unused here (no export.rotarc_result step)
 #   outputs:     where to write results and which artifacts to produce
@@ -26,7 +27,7 @@ outputs:
   figures: true
 
 inputs:
-  eit_file: data/source/data_from_repo/draeger_synthetic_draeger_20Hz.bin
+  eit_file: ../../data/source/data_from_repo/draeger_synthetic_draeger_20Hz.bin
   vendor: draeger
 
 steps:

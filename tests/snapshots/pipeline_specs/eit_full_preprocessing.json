@@ -7,7 +7,7 @@
     "timepoint": null
   },
   "inputs": {
-    "eit_file": "data/source/data_from_repo/draeger_synthetic_draeger_20Hz.bin",
+    "eit_file": "../../data/source/data_from_repo/draeger_synthetic_draeger_20Hz.bin",
     "vendor": "draeger"
   },
   "name": "eit-full-preprocessing",
@@ -23,7 +23,7 @@
   },
   "steps": [
     {
-      "id": null,
+      "id": "step_000_eit_load",
       "in": {},
       "out": {},
       "uses": "eit.load",
@@ -33,7 +33,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_001_eit_detect_rates",
       "in": {
         "signal": "raw_eit"
       },
@@ -45,7 +45,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_002_eit_mdn_filter",
       "in": {
         "signal": "raw_eit"
       },
@@ -56,7 +56,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_003_eit_global_impedance",
       "in": {
         "signal": "filtered_eit"
       },
@@ -65,7 +65,7 @@
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_004_eit_detect_breaths",
       "in": {
         "signal": "global_impedance"
       },
@@ -76,28 +76,28 @@
       }
     },
     {
-      "id": null,
+      "id": "step_005_eit_normalize_breaths",
       "in": {},
       "out": {},
       "uses": "eit.normalize_breaths",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_006_eit_continuous_tiv",
       "in": {},
       "out": {},
       "uses": "eit.continuous_tiv",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_007_eit_eeli",
       "in": {},
       "out": {},
       "uses": "eit.eeli",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_008_eit_pixel_breaths",
       "in": {},
       "out": {},
       "uses": "eit.pixel_breaths",
@@ -106,7 +106,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_009_eit_pixel_tiv",
       "in": {},
       "out": {},
       "uses": "eit.pixel_tiv",
@@ -115,7 +115,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_010_eit_roi_tiv_lungspace",
       "in": {},
       "out": {},
       "uses": "eit.roi_tiv_lungspace",
@@ -124,7 +124,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_011_eit_roi_amplitude_lungspace",
       "in": {},
       "out": {},
       "uses": "eit.roi_amplitude_lungspace",
@@ -133,7 +133,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_012_eit_roi_watershed",
       "in": {},
       "out": {},
       "uses": "eit.roi_watershed",
@@ -142,7 +142,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_013_eit_roi_filter_by_size",
       "in": {
         "mask": "watershed_lungspace_mask"
       },

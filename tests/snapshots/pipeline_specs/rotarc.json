@@ -23,7 +23,7 @@
   },
   "steps": [
     {
-      "id": null,
+      "id": "step_000_eit_load",
       "in": {},
       "out": {},
       "uses": "eit.load",
@@ -33,7 +33,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_001_eit_slice",
       "in": {
         "signal": "raw_eit"
       },
@@ -48,7 +48,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_002_eit_detect_rates",
       "in": {
         "signal": "selected_eit"
       },
@@ -59,7 +59,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_003_eit_mdn_filter",
       "in": {
         "signal": "raw_eit"
       },
@@ -68,7 +68,7 @@
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_004_eit_global_impedance",
       "in": {
         "signal": "filtered_eit"
       },
@@ -77,7 +77,7 @@
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_005_eit_slice",
       "in": {
         "signal": "global_impedance"
       },
@@ -92,7 +92,7 @@
       }
     },
     {
-      "id": null,
+      "id": "step_006_eit_detect_breaths",
       "in": {
         "signal": "detection_signal"
       },
@@ -103,14 +103,14 @@
       }
     },
     {
-      "id": null,
+      "id": "step_007_eit_normalize_breaths",
       "in": {},
       "out": {},
       "uses": "eit.normalize_breaths",
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_008_metric_interval_cv",
       "in": {
         "intervals": "breath_intervals"
       },
@@ -121,7 +121,7 @@
       "with": {}
     },
     {
-      "id": null,
+      "id": "step_009_export_rotarc_result",
       "in": {
         "value": "breath_duration_cv"
       },
