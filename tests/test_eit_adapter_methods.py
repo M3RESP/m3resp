@@ -18,7 +18,7 @@ from typing import Any
 import pytest
 
 from m3resp.adapters import EITProcessingAdapter
-from m3resp.adapters.eitprocessing_adapter import _add_to_collection
+from m3resp.adapters.eitprocessing_adapter import add_to_collection
 from m3resp.core.exceptions import OptionalDependencyError
 
 pytest.importorskip("eitprocessing")
@@ -60,13 +60,13 @@ def loaded_chain() -> dict[str, Any]:
     filtered_gi = filtered_eit.get_summed_impedance(
         return_label="global_impedance_(mdn_filtered)"
     )
-    _add_to_collection(sequence.continuous_data, filtered_gi)
+    add_to_collection(sequence.continuous_data, filtered_gi)
 
     breath_detector = BreathDetection(minimum_duration=2 / 3)
     breaths = breath_detector.find_breaths(
         filtered_gi, result_label="eit_breaths", store=False
     )
-    _add_to_collection(sequence.interval_data, breaths)
+    add_to_collection(sequence.interval_data, breaths)
 
     return {
         "adapter": adapter,

@@ -20,7 +20,7 @@ import json
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import yaml
 from pydantic import (
@@ -30,6 +30,7 @@ from pydantic import (
     StrictBool,
     StrictInt,
     ValidationError,
+    model_validator,
 )
 
 from m3resp.core.exceptions import PipelineSpecError
@@ -37,6 +38,13 @@ from m3resp.core.path_helper import resolve_optional_path
 
 #: schema_version values this release of m3resp understands.
 _SUPPORTED_SCHEMA_VERSIONS = (1,)
+
+
+#: Phase 6.2: replaces the old "any explicit export step present" heuristic.
+#: ``None`` means "not stated" - only ever valid for a legacy (unversioned)
+#: spec, where the effective mode is inferred from the spec's steps with a
+#: diagnostic; a versioned spec must state it whenever ``dir`` is set.
+OutputMode = Literal["automatic", "explicit", "none"]
 
 
 @dataclass(frozen=True)
@@ -48,6 +56,7 @@ class SpecOutputsConfig:
     """
 
     dir: Path | None = None
+    mode: OutputMode | None = None
     timestamped: bool = True
     summary_json: bool = True
     event_csvs: bool = True
@@ -55,6 +64,9 @@ class SpecOutputsConfig:
     postprocessing: bool = False
     structured_export: bool = False
     figures: bool = False
+    #: Phase 6.3: compute sha256 checksums for input/output files in the run
+    #: manifest. Off by default - hashing large recordings is not free.
+    checksums: bool = False
 
 
 @dataclass(frozen=True)
@@ -184,6 +196,7 @@ class _OutputsDocument(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dir: str | None = None
+    mode: Literal["automatic", "explicit", "none"] | None = None
     timestamped: StrictBool = True
     summary_json: StrictBool = True
     event_csvs: StrictBool = True
@@ -191,6 +204,22 @@ class _OutputsDocument(BaseModel):
     postprocessing: StrictBool = False
     structured_export: StrictBool = False
     figures: StrictBool = False
+    checksums: StrictBool = False
+
+    @model_validator(mode="after")
+    def _check_mode_and_dir_agree(self) -> "_OutputsDocument":
+        # Phase 6.2: "reject contradictory combinations rather than guessing."
+        if self.mode in ("automatic", "explicit") and self.dir is None:
+            raise ValueError(
+                f"outputs.mode={self.mode!r} requires outputs.dir to be set "
+                "(nothing to write into otherwise)."
+            )
+        if self.dir is not None and self.mode is None:
+            raise ValueError(
+                "outputs.mode must be set ('automatic', 'explicit', or "
+                "'none') whenever outputs.dir is set in a versioned spec."
+            )
+        return self
 
 
 class _ExperimentDocument(BaseModel):
@@ -274,6 +303,7 @@ def _parse_versioned_spec(raw: dict[str, Any], *, root: Path) -> PipelineSpec:
         steps=steps,
         outputs=SpecOutputsConfig(
             dir=resolved_dir,
+            mode=document.outputs.mode,
             timestamped=document.outputs.timestamped,
             summary_json=document.outputs.summary_json,
             event_csvs=document.outputs.event_csvs,
@@ -281,6 +311,7 @@ def _parse_versioned_spec(raw: dict[str, Any], *, root: Path) -> PipelineSpec:
             postprocessing=document.outputs.postprocessing,
             structured_export=document.outputs.structured_export,
             figures=document.outputs.figures,
+            checksums=document.outputs.checksums,
         ),
         experiment=SpecExperimentConfig(
             subject_id=document.experiment.subject_id,
@@ -360,14 +391,38 @@ def _legacy_bool(value: Any, default: bool, *, field_name: str) -> bool:
     return bool(value)
 
 
+_OUTPUT_MODES: tuple[OutputMode, ...] = ("automatic", "explicit", "none")
+
+
+def _parse_legacy_output_mode(raw: Any) -> OutputMode | None:
+    """A legacy spec may opt in to an explicit ``outputs.mode`` (Phase 6.2);
+    when omitted, the engine infers it from the spec's steps with a
+    diagnostic. Unlike a versioned spec, this is never required."""
+
+    if raw is None:
+        return None
+    if raw not in _OUTPUT_MODES:
+        raise PipelineSpecError(
+            f"Pipeline 'outputs.mode' must be one of {_OUTPUT_MODES}, got {raw!r}."
+        )
+    return cast(OutputMode, raw)
+
+
 def _parse_legacy_outputs(raw: Any, *, root: Path) -> SpecOutputsConfig:
     if not raw:
         return SpecOutputsConfig()
     if not isinstance(raw, dict):
         raise PipelineSpecError("Pipeline 'outputs' must be a mapping.")
     resolved_dir = resolve_optional_path(root, raw.get("dir"))
+    mode = _parse_legacy_output_mode(raw.get("mode"))
+    if mode in ("automatic", "explicit") and resolved_dir is None:
+        raise PipelineSpecError(
+            f"Pipeline 'outputs.mode' {mode!r} requires 'outputs.dir' to be "
+            "set (nothing to write into otherwise)."
+        )
     return SpecOutputsConfig(
         dir=resolved_dir,
+        mode=mode,
         timestamped=_legacy_bool(
             raw.get("timestamped"), True, field_name="timestamped"
         ),
@@ -385,6 +440,7 @@ def _parse_legacy_outputs(raw: Any, *, root: Path) -> SpecOutputsConfig:
             raw.get("structured_export"), False, field_name="structured_export"
         ),
         figures=_legacy_bool(raw.get("figures"), False, field_name="figures"),
+        checksums=_legacy_bool(raw.get("checksums"), False, field_name="checksums"),
     )
 
 

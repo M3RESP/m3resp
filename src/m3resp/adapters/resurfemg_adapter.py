@@ -1097,7 +1097,7 @@ class ReSurfEMGAdapter:
         }
         skipped: dict[str, str] = {}
 
-        peak_indices = _peak_indices_from_events(events, fs)
+        peak_indices = peak_indices_from_events(events, fs)
         peak_indices_array = np.asarray(peak_indices, dtype=int)
         unavailable_reason = _missing_postprocessing_dependency()
         if unavailable_reason is not None:
@@ -1146,7 +1146,7 @@ class ReSurfEMGAdapter:
             }
             baseline = slopesum_baseline[0]
 
-        ventilator_signals = _ventilator_signals(
+        vent_signals = ventilator_signals(
             ventilator,
             pressure_channel=ventilator_pressure_channel,
             flow_channel=ventilator_flow_channel,
@@ -1155,10 +1155,10 @@ class ReSurfEMGAdapter:
         )
 
         ventilator_breath_indices = np.asarray([], dtype=int)
-        if ventilator_signals is not None:
-            v_vent = ventilator_signals["volume"]
-            p_vent = ventilator_signals["pressure"]
-            vent_fs = float(ventilator_signals["fs"])
+        if vent_signals is not None:
+            v_vent = vent_signals["volume"]
+            p_vent = vent_signals["pressure"]
+            vent_fs = float(vent_signals["fs"])
             vent_width_samples = max(1, int(ventilator_breath_width_seconds * vent_fs))
             if enabled(("event_detection", "detect_ventilator_breath")):
                 ventilator_breath_indices = np.asarray(
@@ -1361,7 +1361,7 @@ class ReSurfEMGAdapter:
                 )
             if (
                 enabled(("quality_assessment", "evaluate_event_timing"))
-                and ventilator_signals is not None
+                and vent_signals is not None
                 and len(ventilator_breath_indices)
             ):
                 paired_count = min(
@@ -1371,7 +1371,7 @@ class ReSurfEMGAdapter:
                     self.evaluate_event_timing(
                         peak_indices_array[:paired_count] / fs,
                         ventilator_breath_indices[:paired_count]
-                        / float(ventilator_signals["fs"]),
+                        / float(vent_signals["fs"]),
                     )
                 )
                 if (
@@ -1452,7 +1452,7 @@ class ReSurfEMGAdapter:
         }
 
 
-def _ventilator_signals(
+def ventilator_signals(
     ventilator: Any | None,
     *,
     pressure_channel: int,
@@ -1573,7 +1573,7 @@ def _as_parameter_value(value: Any) -> float | np.ndarray:
     return np.asarray(value)
 
 
-def _peak_indices_from_events(
+def peak_indices_from_events(
     events: Sequence[BreathEvent] | None, fs: float
 ) -> list[int]:
     if events is None:

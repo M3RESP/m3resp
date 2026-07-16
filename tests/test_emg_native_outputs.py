@@ -59,7 +59,11 @@ class TestEmgLoad:
         assert len(result.session.signals) == len(signals)
 
     def test_loader_options_must_be_a_mapping(self):
-        with pytest.raises(TypeError, match="loader_options"):
+        # Caught by Phase 3.3 static parameter-type validation before
+        # execution ever reaches emg.load's own runtime TypeError check.
+        from m3resp.core.exceptions import PipelineSpecError
+
+        with pytest.raises(PipelineSpecError, match="loader_options"):
             run_pipeline(
                 {
                     "name": "emg-load-bad-options",

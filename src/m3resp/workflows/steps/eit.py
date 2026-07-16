@@ -15,8 +15,8 @@ from typing import Any, Literal, cast
 import numpy as np
 
 from m3resp.adapters.eitprocessing_adapter import (
-    _add_to_collection,
-    _continuous_data_to_signal,
+    add_to_collection,
+    continuous_data_to_signal,
 )
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult, Signal
@@ -269,7 +269,7 @@ def load(
 
     raw_global_impedance_signal = None
     if recording.global_impedance is not None:
-        raw_global_impedance_signal = _continuous_data_to_signal(
+        raw_global_impedance_signal = continuous_data_to_signal(
             recording.global_impedance,
             modality="eit",
             channel="global_impedance",
@@ -593,7 +593,7 @@ def mdn_filter(
     )
     filtered_eit = result["filtered_eit"]
     filter_captures = result["filter_captures"]
-    _add_to_collection(eit_sequence.eit_data, filtered_eit)
+    add_to_collection(eit_sequence.eit_data, filtered_eit)
 
     metadata = _upstream_metadata(
         source_function="eitprocessing.filters.mdn.MDNFilter.apply",
@@ -737,7 +737,7 @@ def butterworth_filter(
     filtered_eit.name = f"{mode.title()}-filtered EIT data"
     filtered_eit.description = f"EIT data filtered with a {mode} Butterworth filter."
     filtered_eit.pixel_impedance = filtered_pixels
-    _add_to_collection(eit_sequence.eit_data, filtered_eit)
+    add_to_collection(eit_sequence.eit_data, filtered_eit)
     return {"filtered_eit": filtered_eit, "filter_captures": captures}
 
 
@@ -777,7 +777,7 @@ def butterworth_filter(
 )
 def global_impedance(signal: Any, eit_sequence: Any) -> dict[str, Any]:
     summed = signal.get_summed_impedance()
-    _add_to_collection(eit_sequence.continuous_data, summed)
+    add_to_collection(eit_sequence.continuous_data, summed)
     return {"global_impedance": summed}
 
 
@@ -914,7 +914,7 @@ def continuous_tiv(
     result: Any = TIV(breath_detection=breath_detector).compute_parameter(
         signal, sequence=eit_sequence, store=False, result_label="continuous_tivs"
     )
-    _add_to_collection(eit_sequence.sparse_data, result)
+    add_to_collection(eit_sequence.sparse_data, result)
     return {"continuous_tiv": result}
 
 

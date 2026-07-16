@@ -15,13 +15,13 @@ from typing import Any
 import numpy as np
 
 from m3resp.adapters.resurfemg_adapter import (
-    _peak_indices_from_events,
-    _ventilator_signals,
+    peak_indices_from_events,
+    ventilator_signals,
 )
 from m3resp.core.session import (
     M3Session,
-    _iter_ventilator_detections,
-    _normalize_ventilator_breath,
+    iter_ventilator_detections,
+    normalize_ventilator_breath,
 )
 from m3resp.core.events import BreathEvent, Event
 from m3resp.data import ParameterResult, QualityFlag, Signal
@@ -318,7 +318,7 @@ def ventilator_channels(
     volume_channel: int = 2,
     fs: float | None = None,
 ) -> dict[str, Any]:
-    signals = _ventilator_signals(
+    signals = ventilator_signals(
         ventilator_raw,
         pressure_channel=pressure_channel,
         flow_channel=flow_channel,
@@ -426,9 +426,7 @@ def peak_indices(events: Any, processed_emg: Any) -> dict[str, Any]:
     import numpy as np
 
     fs = float(processed_emg["fs"])
-    return {
-        "peak_indices": np.asarray(_peak_indices_from_events(events, fs), dtype=int)
-    }
+    return {"peak_indices": np.asarray(peak_indices_from_events(events, fs), dtype=int)}
 
 
 # --- baseline -----------------------------------------------------------
@@ -1157,9 +1155,9 @@ def _update_session_after_ecg_removal(
         "'source', builds a template, and subtracts the estimated ECG artifact "
         "from the EMG channel. An alternative to emg.ecg_gating/"
         "emg.ecg_wavelet_denoising that does not consume emg.ecg_detect_peaks. "
-        "Only the most GUI-relevant outputs are individually described here; "
-        "the remaining diagnostic arrays (candidate/corrected/rejected/restored "
-        "QRS indices, normalized template) are still returned but undocumented."
+        "The candidate/corrected/rejected/restored QRS-index and template "
+        "outputs are compatibility-only diagnostics for reviewing detected "
+        "beats, not part of the native public result."
     ),
     category="preprocessing",
     modality="emg",
@@ -1275,6 +1273,12 @@ def _update_session_after_ecg_removal(
             description="Cleaned (ECG-removed) EMG array.",
         ),
         StepArtifact(
+            name="processed_emg_after_ecg",
+            artifact_type="emg_processed_bundle",
+            description="Updated processed-EMG bundle with the cleaned signal as its 'filtered'/'envelope'.",
+            public=False,
+        ),
+        StepArtifact(
             name="ees_cleaned_signal",
             artifact_type="signal",
             description="Native Signal wrapping the cleaned EMG.",
@@ -1285,6 +1289,18 @@ def _update_session_after_ecg_removal(
             description="Native Signal wrapping the estimated ECG artifact that was subtracted.",
         ),
         StepArtifact(
+            name="ees_detection_signal",
+            artifact_type="signal",
+            description="Native Signal of the QRS-detection signal used to find beats.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="ees_dynamic_threshold_signal",
+            artifact_type="signal",
+            description="Native Signal of the dynamic detection threshold over time.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
             name="ees_r_peak_indices",
             artifact_type="index_array",
             description="Detected R-peak sample indices.",
@@ -1293,6 +1309,51 @@ def _update_session_after_ecg_removal(
             name="ees_qrs_events",
             artifact_type="event_list",
             description="Native Event per detected QRS beat.",
+        ),
+        StepArtifact(
+            name="ees_candidate_peaks_result",
+            artifact_type="parameter_result",
+            description="Native array-valued ParameterResult: initially detected candidate peak indices.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="ees_corrected_peaks_result",
+            artifact_type="parameter_result",
+            description="Native array-valued ParameterResult: candidate peaks after correction.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="ees_rejected_peaks_result",
+            artifact_type="parameter_result",
+            description="Native array-valued ParameterResult: peaks rejected during correction.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="ees_restored_peaks_result",
+            artifact_type="parameter_result",
+            description="Native array-valued ParameterResult: peaks restored by periodicity.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="ees_qrs_indices_result",
+            artifact_type="parameter_result",
+            axes=("beat", "wave_q_r_s"),
+            description="Native array-valued ParameterResult: Q/R/S sample index per detected beat.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="ees_normalized_segments_result",
+            artifact_type="parameter_result",
+            axes=("beat", "template_sample"),
+            description="Native array-valued ParameterResult: each beat's segment normalized onto the template timebase.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="ees_template_result",
+            artifact_type="parameter_result",
+            axes=("template_sample",),
+            description="Native array-valued ParameterResult: the fitted QRS template.",
+            compatibility_only=True,
         ),
     ),
 )
@@ -1611,6 +1672,12 @@ def ecg_estimated_subtraction(
             description="Gated EMG array.",
         ),
         StepArtifact(
+            name="processed_emg_after_ecg",
+            artifact_type="emg_processed_bundle",
+            description="Updated processed-EMG bundle with the gated signal as its 'filtered'/'envelope'.",
+            public=False,
+        ),
+        StepArtifact(
             name="ecg_gated_signal",
             artifact_type="signal",
             description="Native Signal wrapping the gated EMG.",
@@ -1818,6 +1885,12 @@ def ecg_gating(
             name="ecg_wavelet_cleaned_emg",
             artifact_type="signal_array",
             description="Cleaned EMG array.",
+        ),
+        StepArtifact(
+            name="processed_emg_after_ecg",
+            artifact_type="emg_processed_bundle",
+            description="Updated processed-EMG bundle with the cleaned signal as its 'filtered'/'envelope'.",
+            public=False,
         ),
         StepArtifact(
             name="ecg_wavelet_cleaned_signal",
@@ -4198,10 +4271,10 @@ def normalize_ventilator_breaths(
 ) -> dict[str, Any]:
     fs = float(ventilator_signals["fs"])
     events = [
-        _normalize_ventilator_breath(
+        normalize_ventilator_breath(
             detection, fs=fs, width_seconds=breath_width_seconds
         )
-        for detection in _iter_ventilator_detections(ventilator_breath_indices)
+        for detection in iter_ventilator_detections(ventilator_breath_indices)
     ]
     session.add_events("ventilator_breaths", events)
     return {}

@@ -432,6 +432,11 @@ def step_capability_state(name: str) -> str:
 def describe_step(name: str) -> StepDescription:
     """Return the JSON-safe discovery description for one registered step."""
 
+    # Ensure the built-in step package is imported, like available_steps()/
+    # describe_steps() already do - otherwise a fresh process that calls
+    # this directly (e.g. `m3resp describe <op>`) sees an empty registry.
+    from m3resp.workflows import steps  # noqa: F401
+
     definition = get_step(name)
     return StepDescription(
         name=definition.name,

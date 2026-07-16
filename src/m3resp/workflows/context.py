@@ -18,6 +18,15 @@ from m3resp.core.session import M3Session
 #: Context key under which the backing session is always available.
 SESSION_KEY = "session"
 
+#: Context key under which ``run_spec()`` seeds the one resolved,
+#: possibly-timestamped output directory shared by every export path in a
+#: run (Phase 6.1 of the pipeline-structure plan). A custom export step
+#: should bind its output-directory parameter to this documented constant
+#: (``reads={"output_dir": RESOLVED_OUTPUT_DIR_KEY}``) rather than
+#: hand-typing the string, e.g. ``export.rotarc_result``/
+#: ``export.session_summary`` already do.
+RESOLVED_OUTPUT_DIR_KEY = "_resolved_output_dir"
+
 _REF_PREFIX = "@"
 _ESCAPE_PREFIX = "@@"
 
@@ -54,6 +63,33 @@ def iter_input_references(value: Any) -> Iterator[str]:
     elif isinstance(value, dict):
         for item in value.values():
             yield from iter_input_references(item)
+
+
+def resolve_value(value: Any, inputs: dict[str, Any]) -> Any:
+    """Resolve a ``with:`` value against a plain ``inputs`` mapping.
+
+    This is the session-free core of :meth:`PipelineContext.resolve_input`,
+    reusable at compile/validation time (Phase 3.1) when no
+    :class:`PipelineContext` exists yet - resolution only ever depends on the
+    spec's declared ``inputs``, never on anything a step produces.
+    """
+
+    if is_escaped_literal(value):
+        return value[1:]
+    if is_input_reference(value):
+        ref = value[1:]
+        if ref not in inputs:
+            available = ", ".join(sorted(inputs)) or "(none)"
+            raise PipelineSpecError(
+                f"Pipeline references unknown input '@{ref}'. "
+                f"Declared inputs: {available}."
+            )
+        return inputs[ref]
+    if isinstance(value, list):
+        return [resolve_value(item, inputs) for item in value]
+    if isinstance(value, dict):
+        return {key: resolve_value(item, inputs) for key, item in value.items()}
+    return value
 
 
 @dataclass
@@ -102,19 +138,4 @@ class PipelineContext:
         it (``@@foo`` resolves to the literal string ``"@foo"``).
         """
 
-        if is_escaped_literal(value):
-            return value[1:]
-        if is_input_reference(value):
-            ref = value[1:]
-            if ref not in self.inputs:
-                available = ", ".join(sorted(self.inputs)) or "(none)"
-                raise PipelineSpecError(
-                    f"Pipeline references unknown input '@{ref}'. "
-                    f"Declared inputs: {available}."
-                )
-            return self.inputs[ref]
-        if isinstance(value, list):
-            return [self.resolve_input(item) for item in value]
-        if isinstance(value, dict):
-            return {key: self.resolve_input(item) for key, item in value.items()}
-        return value
+        return resolve_value(value, self.inputs)

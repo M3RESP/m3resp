@@ -323,12 +323,20 @@ class DataModelRecorder:
         context name, so the run's full output provenance survives even for
         array-valued results whose ``DerivedFeature.value`` stays ``None``.
 
-        A ``list``/``tuple`` of native results (e.g. one ``ParameterResult``
-        per breath - see ``plan/stage2/
-        2_resurfemg_gap_migration_implementation_plan.md`` Phase 6.1) is
-        recorded as one store entity per item, keeping each item's
-        breath/sample identity, rather than being skipped or collapsed into
-        a single annotation.
+        A ``list``/``tuple``/``dict`` of native results, at any nesting depth
+        (e.g. one ``ParameterResult`` per breath - see ``plan/stage2/
+        2_resurfemg_gap_migration_implementation_plan.md`` Phase 6.1 - or a
+        mapping of named sub-results), is recorded as one store entity per
+        leaf item, keeping each item's breath/sample identity, rather than
+        being skipped or collapsed into a single annotation (Phase 5.2 of
+        ``plan/stage2/3_pipeline_structure_implementation_plan.md``).
+
+        Every ``DataFile`` this recorder has resolved so far (from earlier
+        ``record_signal``/``record_provenance`` calls, and from any raw
+        ``Signal`` this same run produces) is linked onto
+        ``run.input_file_ids`` (Phase 5.3) - precise for the common one
+        pipeline per session case; a session that runs more than one
+        pipeline will over-attribute earlier files to a later run's inputs.
         """
 
         run = self.store.add_processing_run(
@@ -336,26 +344,36 @@ class DataModelRecorder:
         )
         output_provenance: dict[str, Any] = {}
         for name, value in result.outputs.items():
-            if isinstance(value, (list, tuple)):
-                entries = [
-                    entry
-                    for item in value
-                    if (entry := self._record_output_item(name, item, run)) is not None
-                ]
-                if entries:
-                    output_provenance[name] = entries
-            else:
-                entry = self._record_output_item(name, value, run)
-                if entry is not None:
-                    output_provenance[name] = entry
+            entry = self._record_output_value(name, value, run)
+            if entry is not None:
+                output_provenance[name] = entry
         run.parameters["outputs"] = output_provenance
+        run.input_file_ids = sorted(set(self._files.values()))
         return run
+
+    def _record_output_value(self, name: str, value: Any, run: ProcessingRun) -> Any:
+        """Recursively record one pipeline-output value, at any nesting
+        depth of list/tuple/dict, returning a provenance entry mirroring
+        the input's shape (or ``None`` if it had none)."""
+
+        if isinstance(value, list | tuple):
+            entries = [self._record_output_value(name, item, run) for item in value]
+            entries = [entry for entry in entries if entry is not None]
+            return entries or None
+        if isinstance(value, dict):
+            mapped = {
+                str(key): self._record_output_value(f"{name}.{key}", item, run)
+                for key, item in value.items()
+            }
+            mapped = {key: entry for key, entry in mapped.items() if entry is not None}
+            return mapped or None
+        return self._record_output_item(name, value, run)
 
     def _record_output_item(
         self, name: str, value: Any, run: ProcessingRun
     ) -> dict[str, Any] | None:
-        """Record one pipeline-output value (not a list/tuple of them) and
-        return its provenance entry, or ``None`` for a value that has no
+        """Record one pipeline-output value (not a list/tuple/dict of them)
+        and return its provenance entry, or ``None`` for a value that has no
         provenance entry of its own (a `QualityFlag`, or an unrecognized
         type). `name` is the output's context key, used as the
         `DerivedFeature.feature_name` for a bare numeric output."""

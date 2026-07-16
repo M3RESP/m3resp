@@ -67,7 +67,7 @@ class EITProcessingAdapter:
             name=f"Global impedance ({label})",
             description="Global impedance calculated from EIT pixel data.",
         )
-        _add_to_collection(sequence.continuous_data, global_impedance)
+        add_to_collection(sequence.continuous_data, global_impedance)
         return global_impedance
 
     # -- Phase 1: reusable adapter operations ----------------------------------
@@ -185,7 +185,7 @@ class EITProcessingAdapter:
             result_label=result_label,
         )
         if sequence is not None:
-            _add_to_collection(sequence.interval_data, result)
+            add_to_collection(sequence.interval_data, result)
         return result
 
     def compute_eeli(
@@ -209,7 +209,7 @@ class EITProcessingAdapter:
             store=False,
             result_label=result_label,
         )
-        _add_to_collection(sequence.sparse_data, result)
+        add_to_collection(sequence.sparse_data, result)
         return result
 
     def compute_pixel_tiv(
@@ -237,7 +237,7 @@ class EITProcessingAdapter:
             store=False,
             result_label=result_label,
         )
-        _add_to_collection(sequence.sparse_data, result)
+        add_to_collection(sequence.sparse_data, result)
         return result
 
     def compute_tiv_lungspace(
@@ -437,14 +437,14 @@ class EITProcessingAdapter:
             filtered_eit.pixel_impedance = filtered_pixels
 
         if filtered_eit is not raw_eit:
-            _add_to_collection(sequence.eit_data, filtered_eit)
+            add_to_collection(sequence.eit_data, filtered_eit)
             if include_global_impedance:
                 filtered_global_impedance = filtered_eit.get_summed_impedance(
                     return_label=f"global_impedance_({filtered_eit.label})",
                     name=f"Global impedance ({filtered_eit.label})",
                     description="Global impedance calculated from filtered EIT data.",
                 )
-                _add_to_collection(sequence.continuous_data, filtered_global_impedance)
+                add_to_collection(sequence.continuous_data, filtered_global_impedance)
 
         breath_detector = None
         breath_intervals = None
@@ -463,7 +463,7 @@ class EITProcessingAdapter:
                 result_label="eit_breaths",
                 store=False,
             )
-            _add_to_collection(sequence.interval_data, breath_intervals)
+            add_to_collection(sequence.interval_data, breath_intervals)
 
         # `compute_breath_intervals` is guaranteed True here (validated above
         # whenever any of these three outputs is requested), so
@@ -479,7 +479,7 @@ class EITProcessingAdapter:
                 store=False,
                 result_label="continuous_tivs",
             )
-            _add_to_collection(sequence.sparse_data, continuous_tiv)
+            add_to_collection(sequence.sparse_data, continuous_tiv)
 
         if compute_eeli:
             assert breath_detector is not None
@@ -569,7 +569,7 @@ class EITProcessingAdapter:
         raw_gi = preprocessed.get("raw_global_impedance")
         if raw_gi is not None:
             signals.append(
-                _continuous_data_to_signal(
+                continuous_data_to_signal(
                     raw_gi,
                     modality="eit",
                     channel="global_impedance",
@@ -580,7 +580,7 @@ class EITProcessingAdapter:
         filtered_gi = preprocessed.get("filtered_global_impedance")
         if filtered_gi is not None and filtered_gi is not raw_gi:
             signals.append(
-                _continuous_data_to_signal(
+                continuous_data_to_signal(
                     filtered_gi,
                     modality="eit",
                     channel="global_impedance",
@@ -670,7 +670,7 @@ def _require_eit_sequence(sequence: Any) -> None:
         raise KeyError("EIT preprocessing requires sequence.eit_data['raw'].")
 
 
-def _add_to_collection(collection: Any, value: Any) -> None:
+def add_to_collection(collection: Any, value: Any) -> None:
     try:
         collection.add(value, overwrite=True)
     except TypeError:
@@ -689,7 +689,7 @@ def _breath_intervals_to_dicts(breath_intervals: Any) -> list[dict[str, Any]]:
     ]
 
 
-def _continuous_data_to_signal(
+def continuous_data_to_signal(
     obj: Any,
     *,
     modality: Modality,

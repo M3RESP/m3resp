@@ -21,6 +21,7 @@ from m3resp.data.collections import (
     SignalCollection,
 )
 from m3resp.data.linked_breath import LinkedBreath
+from m3resp.data.processing import ProcessingHistory
 from m3resp.export.session_export import export_session_summary
 from m3resp.modalities.eit import EITRecording, load as load_eit_recording
 from m3resp.modalities.emg import EMGRecording, load as load_emg_recording
@@ -73,6 +74,15 @@ class M3Session:
         self.linked_breaths: list[LinkedBreath] = []
         self.metadata = _coerce_metadata(metadata)
         self.provenance: list[ProvenanceRecord] = []
+        # Stage 2 pipeline-structure Phase 5.1: a universal, engine-populated
+        # log of every executed workflow step (name/bindings/parameters/
+        # timing), independent of whether any step function calls
+        # `self._record()` itself. Distinct from `provenance` (the older,
+        # session-method-level "action + modality" log) and from the
+        # datamodel's per-pipeline `ProcessingRun` (see
+        # `m3resp.workflows.engine.run_pipeline` and
+        # `DataModelRecorder.record_pipeline_result`).
+        self.processing_history = ProcessingHistory()
         # Stage 2 data model wrapper (opt-in, see m3resp.datamodel). ``None``
         # leaves Stage 1 behavior completely unchanged.
         self.datamodel: DataModelRecorder | None = None
@@ -494,12 +504,12 @@ class M3Session:
             else float(ventilator_breath_width_seconds)
         )
         return [
-            _normalize_ventilator_breath(
+            normalize_ventilator_breath(
                 detection,
                 fs=fs,
                 width_seconds=width_seconds,
             )
-            for detection in _iter_ventilator_detections(detections)
+            for detection in iter_ventilator_detections(detections)
         ]
 
 
@@ -763,7 +773,7 @@ def _infer_eit_sample_frequency(recording: EITRecording) -> float | None:
     return None
 
 
-def _iter_ventilator_detections(detections: Any) -> list[Any]:
+def iter_ventilator_detections(detections: Any) -> list[Any]:
     if isinstance(detections, (BreathEvent, Event, Mapping)):
         return [detections]
     if hasattr(detections, "tolist"):
@@ -771,7 +781,7 @@ def _iter_ventilator_detections(detections: Any) -> list[Any]:
     return list(detections)
 
 
-def _normalize_ventilator_breath(
+def normalize_ventilator_breath(
     detection: Any,
     *,
     fs: float | None,

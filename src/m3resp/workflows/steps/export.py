@@ -7,6 +7,7 @@ from typing import Any
 
 from m3resp.core.session import M3Session
 from m3resp.export.session_export import export_session_summary
+from m3resp.workflows.context import RESOLVED_OUTPUT_DIR_KEY
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 from m3resp.workflows.utils import write_json
 
@@ -191,7 +192,7 @@ def session_summary(
         "value": "cv",
         "_spec_outputs": "_spec_outputs",
         "_spec_experiment": "_spec_experiment",
-        "_resolved_output_dir": "_resolved_output_dir",
+        "_resolved_output_dir": RESOLVED_OUTPUT_DIR_KEY,
         "session": "session",
     },
     writes=("result_path",),
@@ -214,6 +215,29 @@ def session_summary(
             artifact_type="m3session",
             default_context_key="session",
             description="Session whose accumulated results are exported alongside the result file.",
+            public=False,
+        ),
+        StepArtifact(
+            name="_spec_outputs",
+            artifact_type="spec_outputs_config",
+            default_context_key="_spec_outputs",
+            description="The spec's own 'outputs:' section, auto-injected by run_spec (internal engine plumbing, not user-bindable).",
+            public=False,
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="_spec_experiment",
+            artifact_type="spec_experiment_config",
+            default_context_key="_spec_experiment",
+            description="The spec's own 'experiment:' section, auto-injected by run_spec (internal engine plumbing, not user-bindable).",
+            public=False,
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="_resolved_output_dir",
+            artifact_type="directory_path",
+            default_context_key=RESOLVED_OUTPUT_DIR_KEY,
+            description="The run's one resolved output directory, auto-injected by run_spec (see RESOLVED_OUTPUT_DIR_KEY).",
             public=False,
         ),
     ),

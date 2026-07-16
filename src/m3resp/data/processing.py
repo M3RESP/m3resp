@@ -31,6 +31,10 @@ class ProcessingStep:
     timestamp: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
+    #: Stage 2 pipeline-structure Phase 5.1: the step's outcome
+    #: ("succeeded"/"failed"/"cancelled"), so a universal per-step log entry
+    #: also carries what happened, not just what was configured.
+    status: str = "succeeded"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
