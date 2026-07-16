@@ -46,7 +46,18 @@ from m3resp.processing.peaks import (
     detect_ventilator_breath_peaks,
 )
 from m3resp.processing.windows import rolling_arv
-from m3resp.workflows.registry import register_step
+from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
+
+#: Steps that call resurfemg directly or through ReSurfEMGAdapter declare this.
+_RESURFEMG = ("resurfemg",)
+
+_SESSION_ARTIFACT = StepArtifact(
+    name="session",
+    artifact_type="m3session",
+    default_context_key="session",
+    description="Backing M3Session the step reads from and/or records provenance onto.",
+    public=False,
+)
 
 
 def _resurfemg_version() -> str | None:
@@ -116,6 +127,41 @@ def _record_step(
     reads={"session": "session"},
     writes=("emg_recording", "raw_emg_signals"),
     summary="Load an EMG recording into the session.",
+    description="Load an EMG recording file through ReSurfEMGAdapter and expose its raw channels as native Signals.",
+    category="loading",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    input_artifacts=(_SESSION_ARTIFACT,),
+    parameters=(
+        StepParameter(
+            name="file",
+            value_type="path",
+            required=True,
+            path_kind="file",
+            description="EMG recording file to load.",
+        ),
+        StepParameter(
+            name="loader_options",
+            value_type="mapping",
+            required=False,
+            default=None,
+            description="Extra keyword arguments forwarded to M3Session.load_emg().",
+            advanced=True,
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="emg_recording",
+            artifact_type="emg_recording",
+            description="Raw upstream EMGRecording object.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="raw_emg_signals",
+            artifact_type="signal_list",
+            description="Native Signal per raw EMG channel.",
+        ),
+    ),
 )
 def load(
     session: M3Session,
@@ -177,6 +223,28 @@ def load(
     reads={"session": "session"},
     writes=("ventilator_raw",),
     summary="Load a ventilator recording into the session.",
+    description="Load a ventilator recording file through ReSurfEMGAdapter.",
+    category="loading",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    input_artifacts=(_SESSION_ARTIFACT,),
+    parameters=(
+        StepParameter(
+            name="file",
+            value_type="path",
+            required=True,
+            path_kind="file",
+            description="Ventilator recording file to load.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="ventilator_raw",
+            artifact_type="ventilator_recording",
+            description="Raw upstream ventilator recording dict.",
+            compatibility_only=True,
+        ),
+    ),
 )
 def load_ventilator(session: M3Session, *, file: str) -> dict[str, Any]:
     recording = session.emg_adapter.load(str(file), verbose=False)
@@ -191,6 +259,56 @@ def load_ventilator(session: M3Session, *, file: str) -> dict[str, Any]:
     reads={"ventilator_raw": "ventilator_raw"},
     writes=("ventilator_signals",),
     summary="Split a raw ventilator recording into pressure/flow/volume channels.",
+    description="Split a raw ventilator recording into named pressure/flow/volume channel arrays plus sample frequency.",
+    category="preprocessing",
+    modality="emg",
+    input_artifacts=(
+        StepArtifact(
+            name="ventilator_raw",
+            artifact_type="ventilator_recording",
+            description="Raw ventilator recording from 'emg.load_ventilator'.",
+            compatibility_only=True,
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="pressure_channel",
+            value_type="integer",
+            default=0,
+            minimum=0,
+            description="Channel index of airway pressure.",
+        ),
+        StepParameter(
+            name="flow_channel",
+            value_type="integer",
+            default=1,
+            minimum=0,
+            description="Channel index of flow.",
+        ),
+        StepParameter(
+            name="volume_channel",
+            value_type="integer",
+            default=2,
+            minimum=0,
+            description="Channel index of volume.",
+        ),
+        StepParameter(
+            name="fs",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="Hz",
+            description="Sample frequency override; defaults to the recording's own metadata.",
+            advanced=True,
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="ventilator_signals",
+            artifact_type="ventilator_channel_bundle",
+            description="Mapping of 'pressure'/'flow'/'volume' arrays plus 'fs'.",
+        ),
+    ),
 )
 def ventilator_channels(
     ventilator_raw: Any,
@@ -215,6 +333,28 @@ def ventilator_channels(
     reads={"session": "session"},
     writes=("processed_emg",),
     summary="Filter EMG and compute its envelope.",
+    description="Filter the loaded EMG recording and compute its envelope via ReSurfEMGAdapter.preprocess. Accepts arbitrary adapter keyword arguments beyond 'variant'.",
+    category="preprocessing",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    input_artifacts=(_SESSION_ARTIFACT,),
+    parameters=(
+        StepParameter(
+            name="variant",
+            value_type="string",
+            required=False,
+            default=None,
+            description="Store this preprocessing under a named variant instead of the default slot.",
+            advanced=True,
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Mapping of 'filtered'/'envelope'/'fs'/'channel'/'metadata'.",
+        ),
+    ),
 )
 def preprocess(session: M3Session, **kwargs: Any) -> dict[str, Any]:
     return {"processed_emg": session.preprocess_emg(**kwargs)}
@@ -225,6 +365,28 @@ def preprocess(session: M3Session, **kwargs: Any) -> dict[str, Any]:
     reads={"session": "session"},
     writes=("emg_breath_events",),
     summary="Detect EMG breaths from the envelope.",
+    description="Detect EMG breaths from the processed envelope via ReSurfEMGAdapter.detect_breaths. Accepts arbitrary adapter keyword arguments beyond 'variant'.",
+    category="detection",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    input_artifacts=(_SESSION_ARTIFACT,),
+    parameters=(
+        StepParameter(
+            name="variant",
+            value_type="string",
+            required=False,
+            default=None,
+            description="Detect breaths on a named preprocessing variant instead of the default slot.",
+            advanced=True,
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="emg_breath_events",
+            artifact_type="breath_event_list",
+            description="Detected EMG breath events.",
+        ),
+    ),
 )
 def detect_breaths(session: M3Session, **kwargs: Any) -> dict[str, Any]:
     events = session.detect_emg_breaths(**kwargs)
@@ -236,6 +398,29 @@ def detect_breaths(session: M3Session, **kwargs: Any) -> dict[str, Any]:
     reads={"events": "emg_breath_events", "processed_emg": "processed_emg"},
     writes=("peak_indices",),
     summary="Derive EMG breath peak sample indices from detected breath events.",
+    description="Convert detected EMG breath events into peak sample indices into the processed envelope.",
+    category="detection",
+    modality="emg",
+    input_artifacts=(
+        StepArtifact(
+            name="events",
+            artifact_type="breath_event_list",
+            default_context_key="emg_breath_events",
+            description="Detected EMG breath events from 'emg.detect_breaths'.",
+        ),
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying 'fs'.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="peak_indices",
+            artifact_type="index_array",
+            description="Breath peak sample indices.",
+        ),
+    ),
 )
 def peak_indices(events: Any, processed_emg: Any) -> dict[str, Any]:
     import numpy as np
@@ -369,6 +554,58 @@ def _per_breath_results(
     reads={"session": "session", "processed_emg": "processed_emg"},
     writes=("baseline", "baseline_signal"),
     summary="Compute a moving-percentile EMG baseline.",
+    description="Compute a moving-percentile baseline of the EMG envelope via ReSurfEMGAdapter.moving_baseline.",
+    category="baseline",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    alternatives=("emg.slopesum_baseline",),
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying the envelope and 'fs'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="window_seconds",
+            value_type="number",
+            default=30.0,
+            unit="s",
+            minimum=0,
+            description="Moving-percentile window length.",
+        ),
+        StepParameter(
+            name="step_seconds",
+            value_type="number",
+            default=1.0,
+            unit="s",
+            minimum=0,
+            description="Step between successive baseline windows.",
+        ),
+        StepParameter(
+            name="percentile",
+            value_type="number",
+            default=33.0,
+            minimum=0,
+            maximum=100,
+            description="Percentile of the envelope computed within each window.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="baseline",
+            artifact_type="signal_array",
+            unit=None,
+            description="Moving-percentile baseline array, one value per envelope sample.",
+        ),
+        StepArtifact(
+            name="baseline_signal",
+            artifact_type="signal",
+            description="Native Signal wrapping the baseline.",
+        ),
+    ),
 )
 def moving_baseline(
     session: M3Session,
@@ -446,6 +683,103 @@ def moving_baseline(
         "baseline_running_std_signal",
     ),
     summary="Compute a slope-sum EMG baseline.",
+    description="Compute a slope-sum baseline of the EMG envelope via ReSurfEMGAdapter.slopesum_baseline.",
+    category="baseline",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    alternatives=("emg.moving_baseline",),
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying the envelope and 'fs'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="window_seconds",
+            value_type="number",
+            default=30.0,
+            unit="s",
+            minimum=0,
+            description="Moving-percentile window length.",
+        ),
+        StepParameter(
+            name="step_seconds",
+            value_type="number",
+            default=1.0,
+            unit="s",
+            minimum=0,
+            description="Step between successive baseline windows.",
+        ),
+        StepParameter(
+            name="percentile",
+            value_type="number",
+            default=33.0,
+            minimum=0,
+            maximum=100,
+            description="Percentile used for the primary baseline.",
+        ),
+        StepParameter(
+            name="augmented_percentile",
+            value_type="number",
+            default=25.0,
+            minimum=0,
+            maximum=100,
+            description="Percentile used for the augmented (running mean/std) baseline.",
+        ),
+        StepParameter(
+            name="moving_average_seconds",
+            value_type="number",
+            default=0.5,
+            unit="s",
+            minimum=0,
+            description="Smoothing window for the running mean/std.",
+        ),
+        StepParameter(
+            name="percentile_window_seconds",
+            value_type="number",
+            default=1.0,
+            unit="s",
+            minimum=0,
+            description="Window used when recomputing the percentile series.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="baseline",
+            artifact_type="signal_array",
+            description="Slope-sum baseline array, one value per envelope sample.",
+        ),
+        StepArtifact(
+            name="slopesum_baseline_detail",
+            artifact_type="diagnostic_summary",
+            description="Running mean/std plus the intermediate slope-sum series.",
+            public=False,
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="baseline_signal",
+            artifact_type="signal",
+            description="Native Signal wrapping the baseline.",
+        ),
+        StepArtifact(
+            name="slopesum_baseline_native_detail",
+            artifact_type="mapping",
+            description="Native running mean/std, without the raw upstream series.",
+        ),
+        StepArtifact(
+            name="baseline_running_mean_signal",
+            artifact_type="signal",
+            description="Native Signal wrapping the running mean.",
+        ),
+        StepArtifact(
+            name="baseline_running_std_signal",
+            artifact_type="signal",
+            description="Native Signal wrapping the running std.",
+        ),
+    ),
 )
 def slopesum_baseline(
     session: M3Session,
@@ -614,6 +948,81 @@ def _select_ecg_source(
     reads={"session": "session", "processed_emg": "processed_emg"},
     writes=("ecg_peak_indices", "ecg_peak_events", "ecg_peak_count_result"),
     summary="Detect ECG peak sample indices in an EMG/ECG channel.",
+    description="Detect ECG (R-wave-like) peaks in a raw channel or a processed_emg key, via ReSurfEMGAdapter.detect_ecg_peaks. Prerequisite for emg.ecg_gating/emg.ecg_wavelet_denoising.",
+    category="preprocessing",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle, used when 'ecg_channel' is unset.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="ecg_channel",
+            value_type="integer",
+            required=False,
+            default=None,
+            minimum=0,
+            description="Raw channel-major index carrying ECG. Takes priority over 'source' when set.",
+        ),
+        StepParameter(
+            name="source",
+            value_type="string",
+            default="raw_channel",
+            description="Key into processed_emg to detect ECG on, when 'ecg_channel' is unset.",
+        ),
+        StepParameter(
+            name="peak_fraction",
+            value_type="number",
+            default=0.4,
+            minimum=0,
+            maximum=1,
+            description="Detection threshold as a fraction of signal amplitude.",
+        ),
+        StepParameter(
+            name="peak_width_seconds",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="s",
+            description="Minimum peak width. Defaults to the detector's own choice when unset.",
+        ),
+        StepParameter(
+            name="peak_distance_seconds",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="s",
+            description="Minimum distance between peaks. Defaults to the detector's own choice when unset.",
+        ),
+        StepParameter(
+            name="bandpass_filter",
+            value_type="boolean",
+            default=True,
+            description="Bandpass-filter the source before peak detection.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="ecg_peak_indices",
+            artifact_type="index_array",
+            description="Detected ECG peak sample indices.",
+        ),
+        StepArtifact(
+            name="ecg_peak_events",
+            artifact_type="event_list",
+            description="Native Event per detected ECG peak.",
+        ),
+        StepArtifact(
+            name="ecg_peak_count_result",
+            artifact_type="parameter_result",
+            description="Native ParameterResult: count of detected ECG peaks.",
+        ),
+    ),
 )
 def ecg_detect_peaks(
     session: M3Session,
@@ -743,6 +1152,149 @@ def _update_session_after_ecg_removal(
         "ees_template_result",
     ),
     summary="Estimate and subtract ECG artifacts using a QRS template.",
+    description=(
+        "Native Estimated ECG Subtraction (EES): detects QRS beats directly in "
+        "'source', builds a template, and subtracts the estimated ECG artifact "
+        "from the EMG channel. An alternative to emg.ecg_gating/"
+        "emg.ecg_wavelet_denoising that does not consume emg.ecg_detect_peaks. "
+        "Only the most GUI-relevant outputs are individually described here; "
+        "the remaining diagnostic arrays (candidate/corrected/rejected/restored "
+        "QRS indices, normalized template) are still returned but undocumented."
+    ),
+    category="preprocessing",
+    modality="emg",
+    optional_packages=(),
+    alternatives=("emg.ecg_gating", "emg.ecg_wavelet_denoising"),
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying 'source' and 'fs'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="source",
+            value_type="string",
+            default="filtered",
+            description="Key into processed_emg to clean.",
+        ),
+        StepParameter(
+            name="detection_low_hz",
+            value_type="number",
+            default=4.0,
+            unit="Hz",
+            description="Lower edge of the QRS-detection bandpass filter.",
+        ),
+        StepParameter(
+            name="detection_high_hz",
+            value_type="number",
+            default=50.0,
+            unit="Hz",
+            description="Upper edge of the QRS-detection bandpass filter.",
+        ),
+        StepParameter(
+            name="filter_order",
+            value_type="integer",
+            default=4,
+            minimum=1,
+            description="Detection bandpass filter order.",
+        ),
+        StepParameter(
+            name="detection_smoothing_seconds",
+            value_type="number",
+            default=0.0167,
+            unit="s",
+            description="Smoothing applied to the detection signal.",
+        ),
+        StepParameter(
+            name="threshold_interval_seconds",
+            value_type="number",
+            default=0.5,
+            unit="s",
+            description="Interval over which the dynamic detection threshold is recomputed.",
+        ),
+        StepParameter(
+            name="threshold_smoothing_seconds",
+            value_type="number",
+            default=0.0125,
+            unit="s",
+            description="Smoothing applied to the dynamic threshold.",
+        ),
+        StepParameter(
+            name="qrs_window_seconds",
+            value_type="number",
+            default=0.3,
+            unit="s",
+            description="Window around each detected beat used to build the QRS template.",
+        ),
+        StepParameter(
+            name="inter_qrs_tolerance",
+            value_type="number",
+            default=0.66,
+            description="Fraction of the median inter-beat interval tolerated when validating beats.",
+        ),
+        StepParameter(
+            name="minimum_template_beats",
+            value_type="integer",
+            default=3,
+            minimum=1,
+            description="Minimum number of beats required to build a stable template.",
+        ),
+        StepParameter(
+            name="minimum_qrs_interval_seconds",
+            value_type="number",
+            required=False,
+            default=0.25,
+            unit="s",
+            description="Shortest accepted inter-beat interval.",
+        ),
+        StepParameter(
+            name="maximum_qrs_interval_seconds",
+            value_type="number",
+            required=False,
+            default=2.0,
+            unit="s",
+            description="Longest accepted inter-beat interval.",
+        ),
+        StepParameter(
+            name="envelope_window_seconds",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="s",
+            description="Envelope recomputation window on the cleaned signal. Defaults to the original preprocessing window.",
+            advanced=True,
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="ees_cleaned_emg",
+            artifact_type="signal_array",
+            description="Cleaned (ECG-removed) EMG array.",
+        ),
+        StepArtifact(
+            name="ees_cleaned_signal",
+            artifact_type="signal",
+            description="Native Signal wrapping the cleaned EMG.",
+        ),
+        StepArtifact(
+            name="ees_estimated_ecg_signal",
+            artifact_type="signal",
+            description="Native Signal wrapping the estimated ECG artifact that was subtracted.",
+        ),
+        StepArtifact(
+            name="ees_r_peak_indices",
+            artifact_type="index_array",
+            description="Detected R-peak sample indices.",
+        ),
+        StepArtifact(
+            name="ees_qrs_events",
+            artifact_type="event_list",
+            description="Native Event per detected QRS beat.",
+        ),
+    ),
 )
 def ecg_estimated_subtraction(
     session: M3Session,
@@ -994,6 +1546,81 @@ def ecg_estimated_subtraction(
         "ecg_gate_mask_result",
     ),
     summary="Remove ECG peaks from EMG by gating (zero/interpolate/replace).",
+    description="Remove ECG peaks from an EMG channel by gating each detected peak (zero/interpolate/replace), via ReSurfEMGAdapter.gate_ecg.",
+    category="preprocessing",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    alternatives=("emg.ecg_wavelet_denoising", "emg.ecg_estimated_subtraction"),
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying 'source' and 'fs'.",
+        ),
+        StepArtifact(
+            name="ecg_peak_indices",
+            artifact_type="index_array",
+            description="ECG peak indices from 'emg.ecg_detect_peaks'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="source",
+            value_type="string",
+            default="filtered",
+            description="Key into processed_emg to gate.",
+        ),
+        StepParameter(
+            name="gate_width_seconds",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="s",
+            description="Gate width in seconds. Mutually exclusive with 'gate_width_samples'.",
+        ),
+        StepParameter(
+            name="gate_width_samples",
+            value_type="integer",
+            required=False,
+            default=None,
+            minimum=1,
+            description="Gate width in samples. Mutually exclusive with 'gate_width_seconds'. Defaults to 205 samples (resurfemg's own default) when both are unset.",
+        ),
+        StepParameter(
+            name="fill_method",
+            value_type="integer",
+            default=1,
+            choices=(0, 1, 2, 3),
+            description="Gate fill strategy: 0 zeros, 1 interpolation, 2 mean of a neighboring segment, 3 running-RMS-based replacement.",
+        ),
+        StepParameter(
+            name="envelope_window_seconds",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="s",
+            description="Envelope recomputation window on the gated signal. Defaults to the original preprocessing window.",
+            advanced=True,
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="ecg_gated_emg",
+            artifact_type="signal_array",
+            description="Gated EMG array.",
+        ),
+        StepArtifact(
+            name="ecg_gated_signal",
+            artifact_type="signal",
+            description="Native Signal wrapping the gated EMG.",
+        ),
+        StepArtifact(
+            name="ecg_gate_mask_result",
+            artifact_type="parameter_result",
+            description="Native array-valued ParameterResult: boolean mask of gated samples.",
+        ),
+    ),
 )
 def ecg_gating(
     session: M3Session,
@@ -1125,6 +1752,96 @@ def ecg_gating(
         "wavelet_gate_mask_result",
     ),
     summary="Remove ECG peaks from EMG by a-trous wavelet shrinkage.",
+    description="Remove ECG peaks from an EMG channel via a-trous wavelet shrinkage around each detected peak, via ReSurfEMGAdapter.wavelet_denoise_ecg.",
+    category="preprocessing",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    alternatives=("emg.ecg_gating", "emg.ecg_estimated_subtraction"),
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying 'source' and 'fs'.",
+        ),
+        StepArtifact(
+            name="ecg_peak_indices",
+            artifact_type="index_array",
+            description="ECG peak indices from 'emg.ecg_detect_peaks'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="source",
+            value_type="string",
+            default="filtered",
+            description="Key into processed_emg to denoise.",
+        ),
+        StepParameter(
+            name="hard_thresholding",
+            value_type="boolean",
+            default=True,
+            description="Use hard (vs. soft) wavelet-coefficient thresholding.",
+        ),
+        StepParameter(
+            name="levels",
+            value_type="integer",
+            default=4,
+            minimum=1,
+            description="Number of a-trous wavelet decomposition levels.",
+        ),
+        StepParameter(
+            name="wavelet_type",
+            value_type="string",
+            default="db2",
+            description="Wavelet family (PyWavelets name, e.g. 'db2').",
+        ),
+        StepParameter(
+            name="fixed_threshold",
+            value_type="number",
+            default=4.5,
+            minimum=0,
+            description="Fixed wavelet-coefficient shrinkage threshold.",
+        ),
+        StepParameter(
+            name="envelope_window_seconds",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="s",
+            description="Envelope recomputation window on the cleaned signal. Defaults to the original preprocessing window.",
+            advanced=True,
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="ecg_wavelet_cleaned_emg",
+            artifact_type="signal_array",
+            description="Cleaned EMG array.",
+        ),
+        StepArtifact(
+            name="ecg_wavelet_cleaned_signal",
+            artifact_type="signal",
+            description="Native Signal wrapping the cleaned EMG.",
+        ),
+        StepArtifact(
+            name="wavelet_decomposition_result",
+            artifact_type="parameter_result",
+            axes=("level", "sample"),
+            description="Native array-valued ParameterResult: wavelet decomposition coefficients.",
+        ),
+        StepArtifact(
+            name="wavelet_thresholds_result",
+            artifact_type="parameter_result",
+            axes=("level", "sample"),
+            description="Native array-valued ParameterResult: per-level thresholds applied.",
+        ),
+        StepArtifact(
+            name="wavelet_gate_mask_result",
+            artifact_type="parameter_result",
+            description="Native array-valued ParameterResult: boolean mask of denoised samples.",
+        ),
+    ),
 )
 def ecg_wavelet_denoising(
     session: M3Session,
@@ -1267,6 +1984,33 @@ def ecg_wavelet_denoising(
     reads={"ventilator_signals": "ventilator_signals"},
     writes=("ventilator_breath_indices",),
     summary="Detect ventilator breaths from the ventilator volume channel.",
+    description="Detect ventilator breath peaks from the volume channel.",
+    category="detection",
+    modality="emg",
+    input_artifacts=(
+        StepArtifact(
+            name="ventilator_signals",
+            artifact_type="ventilator_channel_bundle",
+            description="Ventilator channel bundle from 'emg.ventilator_channels'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="breath_width_seconds",
+            value_type="number",
+            default=0.5,
+            unit="s",
+            minimum=0,
+            description="Minimum breath width.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="ventilator_breath_indices",
+            artifact_type="index_array",
+            description="Detected ventilator breath peak sample indices.",
+        ),
+    ),
 )
 def detect_ventilator_breath(
     ventilator_signals: Any, *, breath_width_seconds: float = 0.5
@@ -1290,6 +2034,33 @@ def detect_ventilator_breath(
     reads={"ventilator_signals": "ventilator_signals"},
     writes=("pocc_indices",),
     summary="Detect occluded (Pocc) breaths from the ventilator pressure channel.",
+    description="Detect occlusion (Pocc) manoeuvre peaks from the pressure channel.",
+    category="detection",
+    modality="emg",
+    input_artifacts=(
+        StepArtifact(
+            name="ventilator_signals",
+            artifact_type="ventilator_channel_bundle",
+            description="Ventilator channel bundle from 'emg.ventilator_channels'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="peep",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="cmH2O",
+            description="PEEP baseline. Defaults to the median pressure when unset.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="pocc_indices",
+            artifact_type="index_array",
+            description="Detected Pocc manoeuvre peak sample indices.",
+        ),
+    ),
 )
 def find_occluded_breaths(
     ventilator_signals: Any, *, peep: float | None = None
@@ -1322,6 +2093,54 @@ def find_occluded_breaths(
         "pocc_events",
     ),
     summary="Find Pocc manoeuvre start/end indices from the pressure channel.",
+    description="Find Pocc manoeuvre start/end indices around each detected peak via baseline crossing, and record BreathEvents.",
+    category="detection",
+    modality="emg",
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="ventilator_signals",
+            artifact_type="ventilator_channel_bundle",
+            description="Ventilator channel bundle from 'emg.ventilator_channels'.",
+        ),
+        StepArtifact(
+            name="pocc_indices",
+            artifact_type="index_array",
+            description="Pocc peak indices from 'emg.find_occluded_breaths'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="peep",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="cmH2O",
+            description="PEEP baseline. Should match the value used in 'emg.find_occluded_breaths'; defaults to the median pressure when unset.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="pocc_start_indices",
+            artifact_type="index_array",
+            description="Pocc manoeuvre start sample indices.",
+        ),
+        StepArtifact(
+            name="pocc_end_indices",
+            artifact_type="index_array",
+            description="Pocc manoeuvre end sample indices.",
+        ),
+        StepArtifact(
+            name="pocc_interval_validity",
+            artifact_type="boolean_array",
+            description="Whether each manoeuvre's start/end crossing was found.",
+        ),
+        StepArtifact(
+            name="pocc_events",
+            artifact_type="breath_event_list",
+            description="Native BreathEvent per Pocc manoeuvre.",
+        ),
+    ),
 )
 def pocc_intervals(
     session: M3Session,
@@ -1397,6 +2216,51 @@ def pocc_intervals(
     },
     writes=("pocc_time_products", "pocc_time_product_result"),
     summary="Compute the pressure-time product for each Pocc manoeuvre.",
+    description="Integrate pressure above the PEEP baseline over each Pocc manoeuvre's start/end window.",
+    category="parameters",
+    modality="emg",
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="ventilator_signals",
+            artifact_type="ventilator_channel_bundle",
+            description="Ventilator channel bundle from 'emg.ventilator_channels'.",
+        ),
+        StepArtifact(
+            name="pocc_start_indices",
+            artifact_type="index_array",
+            description="Pocc manoeuvre start indices from 'emg.pocc_intervals'.",
+        ),
+        StepArtifact(
+            name="pocc_end_indices",
+            artifact_type="index_array",
+            description="Pocc manoeuvre end indices from 'emg.pocc_intervals'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="peep",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="cmH2O",
+            description="PEEP baseline. Should match the value used in 'emg.pocc_intervals'; defaults to the median pressure when unset.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="pocc_time_products",
+            artifact_type="array",
+            unit="cmH2O*s",
+            description="Pressure-time product per Pocc manoeuvre.",
+        ),
+        StepArtifact(
+            name="pocc_time_product_result",
+            artifact_type="parameter_result",
+            unit="cmH2O*s",
+            description="Native array-valued ParameterResult of the same values.",
+        ),
+    ),
 )
 def pocc_time_product(
     session: M3Session,
@@ -1463,6 +2327,77 @@ _POCC_CRITERIA_ROW_NAMES = ("dp_up_10", "dp_up_90", "dp_up_90_norm")
         "pocc_quality_flags",
     ),
     summary="Evaluate Pocc manoeuvre quality from the pressure upslope (Warnaar et al. 2024).",
+    description="Evaluate Pocc manoeuvre validity from the pressure upslope shape against three configurable thresholds (Warnaar et al. 2024), producing one QualityFlag and three criterion measurements per manoeuvre.",
+    category="quality",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="ventilator_signals",
+            artifact_type="ventilator_channel_bundle",
+            description="Ventilator channel bundle supplying pressure.",
+        ),
+        StepArtifact(
+            name="pocc_indices",
+            artifact_type="index_array",
+            description="Pocc peak indices from 'emg.find_occluded_breaths'.",
+        ),
+        StepArtifact(
+            name="pocc_end_indices",
+            artifact_type="index_array",
+            description="Pocc end indices from 'emg.pocc_intervals'.",
+        ),
+        StepArtifact(
+            name="pocc_time_products",
+            artifact_type="array",
+            description="Pocc time products from 'emg.pocc_time_product'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="dp_up_10_threshold",
+            value_type="number",
+            default=0.0,
+            description="Minimum acceptable dP at 10% of the upslope.",
+        ),
+        StepParameter(
+            name="dp_up_90_threshold",
+            value_type="number",
+            default=2.0,
+            description="Minimum acceptable dP at 90% of the upslope.",
+        ),
+        StepParameter(
+            name="dp_up_90_norm_threshold",
+            value_type="number",
+            default=0.8,
+            description="Minimum acceptable normalized dP at 90% of the upslope.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="pocc_quality",
+            artifact_type="boolean_array",
+            description="Overall pass/fail per manoeuvre.",
+        ),
+        StepArtifact(
+            name="pocc_quality_criteria",
+            artifact_type="array",
+            axes=("criterion", "manoeuvre"),
+            description="Raw upstream 3-by-N criteria matrix.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="pocc_quality_results",
+            artifact_type="parameter_result_list",
+            description="Native ParameterResult per manoeuvre per criterion (dp_up_10/dp_up_90/dp_up_90_norm).",
+        ),
+        StepArtifact(
+            name="pocc_quality_flags",
+            artifact_type="quality_flag_list",
+            description="Native QualityFlag per manoeuvre.",
+        ),
+    ),
 )
 def pocc_quality(
     session: M3Session,
@@ -1557,6 +2492,55 @@ def pocc_quality(
     },
     writes=("interpeak_dist", "interpeak_dist_result", "interpeak_dist_flag"),
     summary="Check the ECG-to-EMG median interpeak distance ratio (Warnaar et al. 2024).",
+    description="Check that the median EMG-to-ECG interpeak distance ratio stays under a threshold, as a proxy for adequate ECG removal (Warnaar et al. 2024).",
+    category="quality",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="ecg_peak_indices",
+            artifact_type="index_array",
+            description="ECG peak indices from 'emg.ecg_detect_peaks'.",
+        ),
+        StepArtifact(
+            name="peak_indices",
+            artifact_type="index_array",
+            description="EMG breath peak indices.",
+        ),
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying 'fs'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="threshold",
+            value_type="number",
+            default=1.1,
+            minimum=0,
+            description="Maximum acceptable EMG/ECG median interpeak distance ratio.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="interpeak_dist",
+            artifact_type="boolean_metric",
+            description="Whether the ratio passes the threshold.",
+        ),
+        StepArtifact(
+            name="interpeak_dist_result",
+            artifact_type="parameter_result_list",
+            unit="s",
+            description="Native ParameterResults: ECG median distance, EMG median distance, and their ratio.",
+        ),
+        StepArtifact(
+            name="interpeak_dist_flag",
+            artifact_type="quality_flag",
+            description="Native QualityFlag for the overall check.",
+        ),
+    ),
 )
 def interpeak_dist(
     session: M3Session,
@@ -1653,6 +2637,39 @@ def interpeak_dist(
     },
     writes=("start_indices", "end_indices"),
     summary="Find EMG breath on/offset indices by baseline crossing.",
+    description="Find each breath's onset/offset sample indices where the envelope crosses the baseline.",
+    category="detection",
+    modality="emg",
+    alternatives=("emg.onoffpeak_slope_extrapolation",),
+    input_artifacts=(
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying the envelope.",
+        ),
+        StepArtifact(
+            name="baseline",
+            artifact_type="signal_array",
+            description="Baseline from 'emg.moving_baseline' or 'emg.slopesum_baseline'.",
+        ),
+        StepArtifact(
+            name="peak_indices",
+            artifact_type="index_array",
+            description="Breath peak indices from 'emg.peak_indices'.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="start_indices",
+            artifact_type="index_array",
+            description="Breath onset sample indices.",
+        ),
+        StepArtifact(
+            name="end_indices",
+            artifact_type="index_array",
+            description="Breath offset sample indices.",
+        ),
+    ),
 )
 def onoffpeak_baseline_crossing(
     processed_emg: Any, baseline: Any, peak_indices: Any
@@ -1671,6 +2688,39 @@ def onoffpeak_baseline_crossing(
     reads={"processed_emg": "processed_emg", "peak_indices": "peak_indices"},
     writes=("onoffpeak_slope_result",),
     summary="Find EMG breath on/offset indices by slope extrapolation.",
+    description="Find each breath's onset/offset sample indices by extrapolating the steepest envelope slope near each peak.",
+    category="detection",
+    modality="emg",
+    alternatives=("emg.onoffpeak_baseline_crossing",),
+    input_artifacts=(
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying the envelope and 'fs'.",
+        ),
+        StepArtifact(
+            name="peak_indices",
+            artifact_type="index_array",
+            description="Breath peak indices from 'emg.peak_indices'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="slope_window_seconds",
+            value_type="number",
+            default=0.5,
+            unit="s",
+            minimum=0,
+            description="Window around each peak used to estimate the slope.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="onoffpeak_slope_result",
+            artifact_type="onoff_result",
+            description="Start/end indices plus slope-extrapolation diagnostics.",
+        ),
+    ),
 )
 def onoffpeak_slope_extrapolation(
     processed_emg: Any, peak_indices: Any, *, slope_window_seconds: float = 0.5
@@ -1701,6 +2751,34 @@ def onoffpeak_slope_extrapolation(
     },
     writes=("time_to_peak",),
     summary="Compute EMG breath time-to-peak.",
+    description="Compute the time from breath onset to peak for each detected breath.",
+    category="features",
+    modality="emg",
+    input_artifacts=(
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying the envelope and 'fs'.",
+        ),
+        StepArtifact(
+            name="start_indices",
+            artifact_type="index_array",
+            description="Breath onset indices.",
+        ),
+        StepArtifact(
+            name="end_indices",
+            artifact_type="index_array",
+            description="Breath offset indices.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="time_to_peak",
+            artifact_type="array",
+            unit="s",
+            description="Time-to-peak per breath.",
+        ),
+    ),
 )
 def time_to_peak(
     processed_emg: Any, start_indices: Any, end_indices: Any
@@ -1720,6 +2798,33 @@ def time_to_peak(
     },
     writes=("pseudo_slope",),
     summary="Compute EMG breath pseudo-slope.",
+    description="Compute the pseudo-slope (rise rate) of the envelope for each detected breath.",
+    category="features",
+    modality="emg",
+    input_artifacts=(
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying the envelope.",
+        ),
+        StepArtifact(
+            name="start_indices",
+            artifact_type="index_array",
+            description="Breath onset indices.",
+        ),
+        StepArtifact(
+            name="end_indices",
+            artifact_type="index_array",
+            description="Breath offset indices.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="pseudo_slope",
+            artifact_type="array",
+            description="Pseudo-slope per breath.",
+        ),
+    ),
 )
 def pseudo_slope(
     processed_emg: Any, start_indices: Any, end_indices: Any
@@ -1739,6 +2844,33 @@ def pseudo_slope(
     },
     writes=("amplitude",),
     summary="Compute EMG breath amplitude above baseline.",
+    description="Compute the envelope amplitude above baseline at each breath peak.",
+    category="features",
+    modality="emg",
+    input_artifacts=(
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying the envelope.",
+        ),
+        StepArtifact(
+            name="peak_indices",
+            artifact_type="index_array",
+            description="Breath peak indices.",
+        ),
+        StepArtifact(
+            name="baseline",
+            artifact_type="signal_array",
+            description="Baseline from 'emg.moving_baseline' or 'emg.slopesum_baseline'.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="amplitude",
+            artifact_type="array",
+            description="Amplitude above baseline per breath.",
+        ),
+    ),
 )
 def amplitude(processed_emg: Any, peak_indices: Any, baseline: Any) -> dict[str, Any]:
     import numpy as np
@@ -1757,6 +2889,38 @@ def amplitude(processed_emg: Any, peak_indices: Any, baseline: Any) -> dict[str,
     },
     writes=("time_product",),
     summary="Compute EMG breath time-product (area above baseline).",
+    description="Integrate the envelope above baseline over each breath's onset/offset window.",
+    category="features",
+    modality="emg",
+    input_artifacts=(
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying the envelope and 'fs'.",
+        ),
+        StepArtifact(
+            name="start_indices",
+            artifact_type="index_array",
+            description="Breath onset indices.",
+        ),
+        StepArtifact(
+            name="end_indices",
+            artifact_type="index_array",
+            description="Breath offset indices.",
+        ),
+        StepArtifact(
+            name="baseline",
+            artifact_type="signal_array",
+            description="Baseline from 'emg.moving_baseline' or 'emg.slopesum_baseline'.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="time_product",
+            artifact_type="array",
+            description="Time-product per breath.",
+        ),
+    ),
 )
 def time_product(
     processed_emg: Any, start_indices: Any, end_indices: Any, baseline: Any
@@ -1783,6 +2947,53 @@ def time_product(
     },
     writes=("area_under_baseline",),
     summary="Compute EMG area under baseline around each breath peak.",
+    description="Compute the area of the envelope that dips under baseline within a window around each breath peak.",
+    category="features",
+    modality="emg",
+    input_artifacts=(
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying the envelope and 'fs'.",
+        ),
+        StepArtifact(
+            name="peak_indices",
+            artifact_type="index_array",
+            description="Breath peak indices.",
+        ),
+        StepArtifact(
+            name="start_indices",
+            artifact_type="index_array",
+            description="Breath onset indices.",
+        ),
+        StepArtifact(
+            name="end_indices",
+            artifact_type="index_array",
+            description="Breath offset indices.",
+        ),
+        StepArtifact(
+            name="baseline",
+            artifact_type="signal_array",
+            description="Baseline from 'emg.moving_baseline' or 'emg.slopesum_baseline'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="window_seconds",
+            value_type="number",
+            default=5.0,
+            unit="s",
+            minimum=0,
+            description="Window around each peak searched for under-baseline area.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="area_under_baseline",
+            artifact_type="array",
+            description="Area-under-baseline result per breath, and supporting arrays.",
+        ),
+    ),
 )
 def area_under_baseline(
     processed_emg: Any,
@@ -1815,6 +3026,29 @@ def area_under_baseline(
     reads={"peak_indices": "peak_indices", "processed_emg": "processed_emg"},
     writes=("respiratory_rate",),
     summary="Compute respiratory rate from detected EMG breath peaks.",
+    description="Compute respiratory rate from the detected EMG breath peak indices.",
+    category="parameters",
+    modality="emg",
+    input_artifacts=(
+        StepArtifact(
+            name="peak_indices",
+            artifact_type="index_array",
+            description="Breath peak indices.",
+        ),
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying 'fs'.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="respiratory_rate",
+            artifact_type="scalar_metric",
+            unit="breaths/min",
+            description="EMG-derived respiratory rate.",
+        ),
+    ),
 )
 def respiratory_rate(peak_indices: Any, processed_emg: Any) -> dict[str, Any]:
     fs = float(processed_emg["fs"])
@@ -1829,6 +3063,29 @@ def respiratory_rate(peak_indices: Any, processed_emg: Any) -> dict[str, Any]:
     },
     writes=("ventilator_respiratory_rate",),
     summary="Compute respiratory rate from detected ventilator breaths.",
+    description="Compute respiratory rate from the detected ventilator breath peak indices.",
+    category="parameters",
+    modality="emg",
+    input_artifacts=(
+        StepArtifact(
+            name="ventilator_breath_indices",
+            artifact_type="index_array",
+            description="Ventilator breath peak indices from 'emg.detect_ventilator_breath'.",
+        ),
+        StepArtifact(
+            name="ventilator_signals",
+            artifact_type="ventilator_channel_bundle",
+            description="Ventilator channel bundle supplying 'fs'.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="ventilator_respiratory_rate",
+            artifact_type="scalar_metric",
+            unit="breaths/min",
+            description="Ventilator-derived respiratory rate.",
+        ),
+    ),
 )
 def ventilator_respiratory_rate(
     ventilator_breath_indices: Any, ventilator_signals: Any
@@ -1852,6 +3109,55 @@ def ventilator_respiratory_rate(
     },
     writes=("snr_pseudo", "snr_pseudo_results", "snr_pseudo_flags"),
     summary="Compute a pseudo signal-to-noise ratio for detected EMG breaths.",
+    description="Compute a pseudo signal-to-noise ratio per breath. A measurement only becomes a pass/fail criterion when 'minimum_snr' is set; otherwise only the measurement is produced.",
+    category="quality",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying the envelope and 'fs'.",
+        ),
+        StepArtifact(
+            name="peak_indices",
+            artifact_type="index_array",
+            description="Breath peak indices.",
+        ),
+        StepArtifact(
+            name="baseline",
+            artifact_type="signal_array",
+            description="Baseline from 'emg.moving_baseline' or 'emg.slopesum_baseline'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="minimum_snr",
+            value_type="number",
+            required=False,
+            default=None,
+            description="Minimum acceptable SNR. When unset, only the measurement is produced, with no pass/fail flags.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="snr_pseudo",
+            artifact_type="array",
+            description="Pseudo-SNR per breath.",
+        ),
+        StepArtifact(
+            name="snr_pseudo_results",
+            artifact_type="parameter_result_list",
+            description="Native ParameterResult per breath.",
+        ),
+        StepArtifact(
+            name="snr_pseudo_flags",
+            artifact_type="quality_flag_list",
+            required=False,
+            description="Native QualityFlag per breath, only when 'minimum_snr' is set.",
+        ),
+    ),
 )
 def snr_pseudo(
     session: M3Session,
@@ -1930,6 +3236,76 @@ def snr_pseudo(
         "percentage_under_baseline_flags",
     ),
     summary="Compute the percentage of each EMG breath spent under baseline.",
+    description="Compute the percentage of each breath's window spent with the envelope under baseline, flagging breaths above 'aub_threshold'.",
+    category="quality",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying the envelope and 'fs'.",
+        ),
+        StepArtifact(
+            name="peak_indices",
+            artifact_type="index_array",
+            description="Breath peak indices.",
+        ),
+        StepArtifact(
+            name="start_indices",
+            artifact_type="index_array",
+            description="Breath onset indices.",
+        ),
+        StepArtifact(
+            name="end_indices",
+            artifact_type="index_array",
+            description="Breath offset indices.",
+        ),
+        StepArtifact(
+            name="baseline",
+            artifact_type="signal_array",
+            description="Baseline from 'emg.moving_baseline' or 'emg.slopesum_baseline'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="aub_window_seconds",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="s",
+            description="Window searched for under-baseline area. Defaults to the breath's own onset/offset window when unset.",
+        ),
+        StepParameter(
+            name="aub_threshold",
+            value_type="number",
+            default=40.0,
+            minimum=0,
+            maximum=100,
+            unit="%",
+            description="Maximum acceptable percentage under baseline.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="percentage_under_baseline",
+            artifact_type="array",
+            description="Raw upstream (valid, percentages, reference_values) tuple.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="percentage_under_baseline_results",
+            artifact_type="parameter_result_list",
+            unit="%",
+            description="Native ParameterResult per breath.",
+        ),
+        StepArtifact(
+            name="percentage_under_baseline_flags",
+            artifact_type="quality_flag_list",
+            description="Native QualityFlag per breath.",
+        ),
+    ),
 )
 def percentage_under_baseline(
     session: M3Session,
@@ -2020,6 +3396,57 @@ def percentage_under_baseline(
         "detect_local_high_aub_threshold_result",
     ),
     summary="Flag EMG breaths with locally elevated area-under-baseline.",
+    description="Flag breaths whose area-under-baseline exceeds 'threshold_factor' times a local percentile of the recording's own area-under-baseline values.",
+    category="quality",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="area_under_baseline",
+            artifact_type="array",
+            description="Area-under-baseline values from 'emg.area_under_baseline'.",
+        ),
+        StepArtifact(
+            name="peak_indices",
+            artifact_type="index_array",
+            description="Breath peak indices.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="threshold_percentile",
+            value_type="number",
+            default=75.0,
+            minimum=0,
+            maximum=100,
+            description="Percentile of area-under-baseline used as the local reference.",
+        ),
+        StepParameter(
+            name="threshold_factor",
+            value_type="number",
+            default=4.0,
+            minimum=0,
+            description="Multiplier applied to the reference percentile to get the flagging threshold.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="detect_local_high_aub",
+            artifact_type="boolean_array",
+            description="Whether each breath is flagged.",
+        ),
+        StepArtifact(
+            name="detect_local_high_aub_flags",
+            artifact_type="quality_flag_list",
+            description="Native QualityFlag per breath.",
+        ),
+        StepArtifact(
+            name="detect_local_high_aub_threshold_result",
+            artifact_type="parameter_result",
+            description="Native ParameterResult: the effective threshold used.",
+        ),
+    ),
 )
 def detect_local_high_aub(
     session: M3Session,
@@ -2097,6 +3524,72 @@ def detect_local_high_aub(
         "detect_extreme_time_products_bounds_result",
     ),
     summary="Flag EMG breaths with extreme time-products.",
+    description="Flag breaths whose time-product falls outside percentile-derived upper/lower bounds of the recording's own time-products.",
+    category="quality",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="time_product",
+            artifact_type="array",
+            description="Time-products from 'emg.time_product'.",
+        ),
+        StepArtifact(
+            name="peak_indices",
+            artifact_type="index_array",
+            description="Breath peak indices.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="upper_percentile",
+            value_type="number",
+            default=95.0,
+            minimum=0,
+            maximum=100,
+            description="Percentile of time-products used as the upper reference.",
+        ),
+        StepParameter(
+            name="upper_factor",
+            value_type="number",
+            default=10.0,
+            minimum=0,
+            description="Multiplier applied to the upper reference percentile.",
+        ),
+        StepParameter(
+            name="lower_percentile",
+            value_type="number",
+            default=5.0,
+            minimum=0,
+            maximum=100,
+            description="Percentile of time-products used as the lower reference.",
+        ),
+        StepParameter(
+            name="lower_factor",
+            value_type="number",
+            default=0.1,
+            minimum=0,
+            description="Multiplier applied to the lower reference percentile.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="detect_extreme_time_products",
+            artifact_type="boolean_array",
+            description="Whether each breath is flagged.",
+        ),
+        StepArtifact(
+            name="detect_extreme_time_products_flags",
+            artifact_type="quality_flag_list",
+            description="Native QualityFlag per breath.",
+        ),
+        StepArtifact(
+            name="detect_extreme_time_products_bounds_result",
+            artifact_type="parameter_result",
+            description="Native ParameterResult: [lower_bound, upper_bound].",
+        ),
+    ),
 )
 def detect_extreme_time_products(
     session: M3Session,
@@ -2177,6 +3670,35 @@ def detect_extreme_time_products(
         "detect_non_consecutive_manoeuvres_flags",
     ),
     summary="Flag non-consecutive occlusion manoeuvres against ventilator breaths.",
+    description="Flag Pocc manoeuvres that are not consecutive ventilator breaths, since a valid occlusion trial requires uninterrupted breaths.",
+    category="quality",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="ventilator_breath_indices",
+            artifact_type="index_array",
+            description="Ventilator breath peak indices.",
+        ),
+        StepArtifact(
+            name="pocc_indices",
+            artifact_type="index_array",
+            description="Pocc manoeuvre peak indices.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="detect_non_consecutive_manoeuvres",
+            artifact_type="boolean_array",
+            description="Whether each manoeuvre is flagged as non-consecutive.",
+        ),
+        StepArtifact(
+            name="detect_non_consecutive_manoeuvres_flags",
+            artifact_type="quality_flag_list",
+            description="Native QualityFlag per manoeuvre.",
+        ),
+    ),
 )
 def detect_non_consecutive_manoeuvres(
     session: M3Session, ventilator_breath_indices: Any, pocc_indices: Any
@@ -2223,6 +3745,57 @@ def detect_non_consecutive_manoeuvres(
         "evaluate_bell_curve_error_flags",
     ),
     summary="Score how well each EMG breath matches a bell-curve shape.",
+    description="Fit a bell curve to each breath's envelope window and score the fit error as a percentage of the time-product.",
+    category="quality",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="peak_indices",
+            artifact_type="index_array",
+            description="Breath peak indices.",
+        ),
+        StepArtifact(
+            name="start_indices",
+            artifact_type="index_array",
+            description="Breath onset indices.",
+        ),
+        StepArtifact(
+            name="end_indices",
+            artifact_type="index_array",
+            description="Breath offset indices.",
+        ),
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying the envelope and 'fs'.",
+        ),
+        StepArtifact(
+            name="time_product",
+            artifact_type="array",
+            description="Time-products from 'emg.time_product', used to normalize the fit error.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="evaluate_bell_curve_error",
+            artifact_type="array",
+            description="Raw upstream (valid, percentage_error, error, y_min, fitted_parameters) tuple.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="evaluate_bell_curve_error_results",
+            artifact_type="parameter_result_list",
+            unit="%",
+            description="Native ParameterResult per breath (percentage error) plus one array-valued ParameterResult per breath for the fitted bell-curve parameters.",
+        ),
+        StepArtifact(
+            name="evaluate_bell_curve_error_flags",
+            artifact_type="quality_flag_list",
+            description="Native QualityFlag per breath.",
+        ),
+    ),
 )
 def evaluate_bell_curve_error(
     session: M3Session,
@@ -2318,6 +3891,57 @@ def evaluate_bell_curve_error(
         "evaluate_event_timing_unmatched_count",
     ),
     summary="Score the timing agreement between EMG and ventilator breaths.",
+    description="Pair EMG and ventilator breaths index-by-index and score their timing agreement. Any unpaired breaths at the end (from unequal counts) are reported as a separate warning flag, not silently dropped.",
+    category="quality",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="peak_indices",
+            artifact_type="index_array",
+            description="EMG breath peak indices.",
+        ),
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying 'fs'.",
+        ),
+        StepArtifact(
+            name="ventilator_breath_indices",
+            artifact_type="index_array",
+            description="Ventilator breath peak indices.",
+        ),
+        StepArtifact(
+            name="ventilator_signals",
+            artifact_type="ventilator_channel_bundle",
+            description="Ventilator channel bundle supplying 'fs'.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="evaluate_event_timing",
+            artifact_type="array",
+            description="Raw upstream (correct_timing, delta_time) tuple.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="evaluate_event_timing_results",
+            artifact_type="parameter_result_list",
+            unit="s",
+            description="Native ParameterResult (timing delta) per paired breath.",
+        ),
+        StepArtifact(
+            name="evaluate_event_timing_flags",
+            artifact_type="quality_flag_list",
+            description="Native QualityFlag per paired breath, plus one warning flag when breaths were unpaired.",
+        ),
+        StepArtifact(
+            name="evaluate_event_timing_unmatched_count",
+            artifact_type="count",
+            description="Number of unpaired breaths, from unequal EMG/ventilator breath counts.",
+        ),
+    ),
 )
 def evaluate_event_timing(
     session: M3Session,
@@ -2421,6 +4045,57 @@ def evaluate_event_timing(
         "evaluate_respiratory_rates_flag",
     ),
     summary="Score agreement between EMG-derived and ventilator-derived respiratory rate.",
+    description="Check that the fraction of EMG breaths detected relative to the ventilator-derived respiratory rate exceeds 'minimum_fraction'.",
+    category="quality",
+    modality="emg",
+    optional_packages=_RESURFEMG,
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="peak_indices",
+            artifact_type="index_array",
+            description="EMG breath peak indices.",
+        ),
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying 'fs' and the envelope's duration.",
+        ),
+        StepArtifact(
+            name="ventilator_respiratory_rate",
+            artifact_type="scalar_metric",
+            unit="breaths/min",
+            description="Ventilator-derived respiratory rate from 'emg.ventilator_respiratory_rate'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="minimum_fraction",
+            value_type="number",
+            default=0.1,
+            minimum=0,
+            maximum=1,
+            description="Minimum acceptable fraction of expected EMG breaths detected.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="evaluate_respiratory_rates",
+            artifact_type="array",
+            description="Raw upstream (detected_fraction, criterion_met) tuple.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="evaluate_respiratory_rates_result",
+            artifact_type="parameter_result",
+            description="Native ParameterResult: detected fraction.",
+        ),
+        StepArtifact(
+            name="evaluate_respiratory_rates_flag",
+            artifact_type="quality_flag",
+            description="Native QualityFlag for the overall check.",
+        ),
+    ),
 )
 def evaluate_respiratory_rates(
     session: M3Session,
@@ -2487,6 +4162,32 @@ def evaluate_respiratory_rates(
     },
     writes=(),
     summary="Normalize detected ventilator breath indices into session events.",
+    description="Convert detected ventilator breath peak indices into native BreathEvents and store them on the session as 'ventilator_breaths'.",
+    category="detection",
+    modality="emg",
+    input_artifacts=(
+        StepArtifact(
+            name="ventilator_breath_indices",
+            artifact_type="index_array",
+            description="Ventilator breath peak indices from 'emg.detect_ventilator_breath'.",
+        ),
+        StepArtifact(
+            name="ventilator_signals",
+            artifact_type="ventilator_channel_bundle",
+            description="Ventilator channel bundle supplying 'fs'.",
+        ),
+        _SESSION_ARTIFACT,
+    ),
+    parameters=(
+        StepParameter(
+            name="breath_width_seconds",
+            value_type="number",
+            default=0.5,
+            unit="s",
+            minimum=0,
+            description="Assumed breath width used to derive start/end times around each peak.",
+        ),
+    ),
 )
 def normalize_ventilator_breaths(
     ventilator_breath_indices: Any,
