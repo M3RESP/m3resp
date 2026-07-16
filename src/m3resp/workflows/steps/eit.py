@@ -20,8 +20,21 @@ from m3resp.adapters.eitprocessing_adapter import (
 )
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult, Signal
-from m3resp.workflows.registry import register_step
+from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 from m3resp.workflows.utils import slice_signal_by_mode
+
+#: Every eit.* step ultimately calls eitprocessing, directly or through
+#: EITProcessingAdapter, so all of them declare the same optional dependency.
+_EITPROCESSING = ("eitprocessing",)
+
+#: Input/output for the session artifact shared by nearly every step.
+_SESSION_ARTIFACT = StepArtifact(
+    name="session",
+    artifact_type="m3session",
+    default_context_key="session",
+    description="Backing M3Session the step reads from and/or records provenance onto.",
+    public=False,
+)
 
 
 def _upstream_metadata(
@@ -178,6 +191,64 @@ def _pixel_mask_to_parameter_result(
         "raw_global_impedance_signal",
     ),
     summary="Load an EIT recording into the session.",
+    description="Load a vendor EIT recording file through EITProcessingAdapter and expose the raw pixel/global-impedance data.",
+    category="loading",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    input_artifacts=(_SESSION_ARTIFACT,),
+    parameters=(
+        StepParameter(
+            name="file",
+            value_type="path",
+            required=True,
+            path_kind="file",
+            description="EIT recording file to load.",
+        ),
+        StepParameter(
+            name="vendor",
+            value_type="choice",
+            required=False,
+            default=None,
+            choices=("draeger", "sentec", "timpel"),
+            description="Recording vendor. Required unless a custom loader was injected into the adapter.",
+        ),
+        StepParameter(
+            name="loader_options",
+            value_type="mapping",
+            required=False,
+            default=None,
+            description="Extra keyword arguments forwarded to M3Session.load_eit().",
+            advanced=True,
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="raw_eit",
+            artifact_type="eit_pixel_signal",
+            description="Raw upstream EITData object (pixel impedance).",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="raw_global_impedance",
+            artifact_type="eit_global_impedance",
+            required=False,
+            description="Raw upstream summed/global impedance signal object, when present.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="eit_sequence",
+            artifact_type="eit_sequence",
+            description="Upstream EIT Sequence container used by downstream adapter calls.",
+            public=False,
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="raw_global_impedance_signal",
+            artifact_type="signal",
+            required=False,
+            description="Native Signal wrapping the raw global impedance, when present.",
+        ),
+    ),
 )
 def load(
     session: M3Session,
@@ -229,6 +300,48 @@ def load(
     reads={"signal": "raw_eit"},
     writes=("result",),
     summary="Slice an EIT signal by sample index or time.",
+    description="Slice any upstream EIT signal by sample index or time window, e.g. to select a detection window.",
+    category="preprocessing",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    input_artifacts=(
+        StepArtifact(
+            name="signal",
+            artifact_type="eit_pixel_signal",
+            default_context_key="raw_eit",
+            description="Upstream EIT signal to slice.",
+            compatibility_only=True,
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="start",
+            value_type="number",
+            required=True,
+            description="Slice start: a sample index (mode='index') or seconds (mode='time').",
+        ),
+        StepParameter(
+            name="end",
+            value_type="number",
+            required=True,
+            description="Slice end: a sample index (mode='index') or seconds (mode='time').",
+        ),
+        StepParameter(
+            name="mode",
+            value_type="choice",
+            default="index",
+            choices=("index", "time"),
+            description="Whether 'start'/'end' are sample indices or seconds.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="result",
+            artifact_type="eit_pixel_signal",
+            description="Sliced signal, of the same type as the input.",
+            compatibility_only=True,
+        ),
+    ),
 )
 def slice_signal(
     signal: Any, *, start: int | float, end: int | float, mode: str = "index"
@@ -250,6 +363,83 @@ def slice_signal(
         "heart_rate_result",
     ),
     summary="Estimate respiratory and heart rate from an EIT signal.",
+    description="Estimate respiratory and heart rate from an EIT signal via eitprocessing's RateDetection.",
+    category="detection",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    input_artifacts=(
+        StepArtifact(
+            name="signal",
+            artifact_type="eit_pixel_signal",
+            default_context_key="selected_eit",
+            description="EIT signal (typically the detection-window slice) to estimate rates from.",
+            compatibility_only=True,
+        ),
+        _SESSION_ARTIFACT,
+    ),
+    parameters=(
+        StepParameter(
+            name="subject_type",
+            value_type="choice",
+            default="adult",
+            choices=("adult", "neonate"),
+            description="Subject type; changes the expected respiratory/heart rate search bands.",
+        ),
+        StepParameter(
+            name="welch_window_seconds",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="s",
+            description="Welch PSD window length. Defaults to the detector's own choice when unset.",
+        ),
+        StepParameter(
+            name="capture",
+            value_type="boolean",
+            default=False,
+            description="Capture intermediate detector diagnostics into 'rate_captures'.",
+            advanced=True,
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="respiratory_rate_hz",
+            artifact_type="scalar_metric",
+            unit="Hz",
+            description="Estimated respiratory rate.",
+        ),
+        StepArtifact(
+            name="heart_rate_hz",
+            artifact_type="scalar_metric",
+            unit="Hz",
+            description="Estimated heart rate.",
+        ),
+        StepArtifact(
+            name="rate_detector",
+            artifact_type="eit_rate_detector",
+            description="Configured upstream RateDetection instance, reusable by later steps.",
+            public=False,
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="rate_captures",
+            artifact_type="diagnostic_summary",
+            required=False,
+            description="Intermediate detector diagnostics, when 'capture' is set.",
+        ),
+        StepArtifact(
+            name="respiratory_rate_result",
+            artifact_type="parameter_result",
+            unit="Hz",
+            description="Native ParameterResult for the respiratory rate.",
+        ),
+        StepArtifact(
+            name="heart_rate_result",
+            artifact_type="parameter_result",
+            unit="Hz",
+            description="Native ParameterResult for the heart rate.",
+        ),
+    ),
 )
 def detect_rates(
     signal: Any,
@@ -326,6 +516,65 @@ def detect_rates(
     },
     writes=("filtered_eit", "filter_captures", "filtered_eit_signal"),
     summary="Apply an MDN heart-rate-removal filter to EIT data.",
+    description="Apply eitprocessing's MDN filter to remove the cardiac (heart-rate) component from EIT pixel data.",
+    category="preprocessing",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    input_artifacts=(
+        StepArtifact(
+            name="signal",
+            artifact_type="eit_pixel_signal",
+            description="Upstream EIT pixel signal to filter.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="respiratory_rate_hz",
+            artifact_type="scalar_metric",
+            unit="Hz",
+            description="Respiratory rate used to separate the cardiac component.",
+        ),
+        StepArtifact(
+            name="heart_rate_hz",
+            artifact_type="scalar_metric",
+            unit="Hz",
+            description="Heart rate to remove.",
+        ),
+        StepArtifact(
+            name="eit_sequence",
+            artifact_type="eit_sequence",
+            default_context_key="eit_sequence",
+            description="Sequence the filtered signal is added onto.",
+            public=False,
+            compatibility_only=True,
+        ),
+        _SESSION_ARTIFACT,
+    ),
+    parameters=(
+        StepParameter(
+            name="label",
+            value_type="string",
+            default="filtered",
+            description="Label assigned to the filtered signal.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="filtered_eit",
+            artifact_type="eit_pixel_signal",
+            description="MDN-filtered upstream EIT signal.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="filter_captures",
+            artifact_type="diagnostic_summary",
+            description="Intermediate MDN filter diagnostics.",
+        ),
+        StepArtifact(
+            name="filtered_eit_signal",
+            artifact_type="signal",
+            description="Native Signal wrapping the filtered pixel impedance.",
+        ),
+    ),
 )
 def mdn_filter(
     signal: Any,
@@ -383,6 +632,78 @@ def mdn_filter(
     reads={"signal": "raw_eit", "eit_sequence": "eit_sequence"},
     writes=("filtered_eit", "filter_captures"),
     summary="Apply a lowpass/bandpass Butterworth filter to EIT pixel data.",
+    description="Apply a lowpass or bandpass Butterworth filter to EIT pixel impedance, as an alternative to eit.mdn_filter.",
+    category="preprocessing",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    alternatives=("eit.mdn_filter",),
+    input_artifacts=(
+        StepArtifact(
+            name="signal",
+            artifact_type="eit_pixel_signal",
+            default_context_key="raw_eit",
+            description="Upstream EIT pixel signal to filter.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="eit_sequence",
+            artifact_type="eit_sequence",
+            description="Sequence the filtered signal is added onto.",
+            public=False,
+            compatibility_only=True,
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="mode",
+            value_type="choice",
+            default="lowpass",
+            choices=("lowpass", "bandpass"),
+            description="Filter type. 'bandpass' uses ('highpass_hz', 'lowpass_hz') as the passband.",
+        ),
+        StepParameter(
+            name="lowpass_hz",
+            value_type="number",
+            default=1.0,
+            unit="Hz",
+            minimum=0,
+            description="Lowpass cutoff (also the bandpass upper edge).",
+        ),
+        StepParameter(
+            name="highpass_hz",
+            value_type="number",
+            default=0.05,
+            unit="Hz",
+            minimum=0,
+            description="Bandpass lower edge; unused when mode='lowpass'.",
+        ),
+        StepParameter(
+            name="order",
+            value_type="integer",
+            default=4,
+            minimum=1,
+            description="Butterworth filter order.",
+        ),
+        StepParameter(
+            name="label",
+            value_type="string",
+            default="filtered",
+            description="Label assigned to the filtered signal.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="filtered_eit",
+            artifact_type="eit_pixel_signal",
+            description="Butterworth-filtered upstream EIT signal.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="filter_captures",
+            artifact_type="diagnostic_summary",
+            description="Intermediate Butterworth filter diagnostics.",
+        ),
+    ),
 )
 def butterworth_filter(
     signal: Any,
@@ -425,6 +746,34 @@ def butterworth_filter(
     reads={"signal": "filtered_eit", "eit_sequence": "eit_sequence"},
     writes=("global_impedance",),
     summary="Compute and store the summed (global) impedance of an EIT signal.",
+    description="Sum pixel impedance across the image to produce the single-channel global impedance waveform used for breath detection.",
+    category="preprocessing",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    input_artifacts=(
+        StepArtifact(
+            name="signal",
+            artifact_type="eit_pixel_signal",
+            default_context_key="filtered_eit",
+            description="Filtered EIT pixel signal to sum.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="eit_sequence",
+            artifact_type="eit_sequence",
+            description="Sequence the summed signal is added onto.",
+            public=False,
+            compatibility_only=True,
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="global_impedance",
+            artifact_type="eit_global_impedance",
+            description="Summed (global) impedance waveform.",
+            compatibility_only=True,
+        ),
+    ),
 )
 def global_impedance(signal: Any, eit_sequence: Any) -> dict[str, Any]:
     summed = signal.get_summed_impedance()
@@ -437,6 +786,44 @@ def global_impedance(signal: Any, eit_sequence: Any) -> dict[str, Any]:
     reads={"signal": "detection_signal"},
     writes=("breath_intervals", "breath_detector"),
     summary="Detect breaths on a continuous EIT impedance signal.",
+    description="Detect breath start/end times on the global impedance waveform via eitprocessing's BreathDetection.",
+    category="detection",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    input_artifacts=(
+        StepArtifact(
+            name="signal",
+            artifact_type="eit_global_impedance",
+            default_context_key="detection_signal",
+            description="Continuous impedance signal (typically the detection-window slice) to detect breaths on.",
+            compatibility_only=True,
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="min_duration_s",
+            value_type="number",
+            default=2 / 3,
+            unit="s",
+            minimum=0,
+            description="Minimum breath duration accepted by the detector.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="breath_intervals",
+            artifact_type="interval_collection",
+            description="Detected breath intervals.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="breath_detector",
+            artifact_type="eit_breath_detector",
+            description="Configured upstream BreathDetection instance, reusable by later steps.",
+            public=False,
+            compatibility_only=True,
+        ),
+    ),
 )
 def detect_breaths(signal: Any, *, min_duration_s: float = 2 / 3) -> dict[str, Any]:
     from eitprocessing.features.breath_detection import BreathDetection
@@ -453,6 +840,20 @@ def detect_breaths(signal: Any, *, min_duration_s: float = 2 / 3) -> dict[str, A
     reads={"breath_intervals": "breath_intervals", "session": "session"},
     writes=(),
     summary="Normalize detected EIT breath intervals into session events.",
+    description="Convert detected EIT breath intervals into native BreathEvents and store them on the session as 'eit_breaths'.",
+    category="detection",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    input_artifacts=(
+        StepArtifact(
+            name="breath_intervals",
+            artifact_type="interval_collection",
+            default_context_key="breath_intervals",
+            description="Breath intervals from 'eit.detect_breaths' to normalize.",
+            compatibility_only=True,
+        ),
+        _SESSION_ARTIFACT,
+    ),
 )
 def normalize_breaths(breath_intervals: Any, session: M3Session) -> dict[str, Any]:
     events = session.eit_adapter.detect_breaths({"breath_intervals": breath_intervals})
@@ -469,6 +870,41 @@ def normalize_breaths(breath_intervals: Any, session: M3Session) -> dict[str, An
     },
     writes=("continuous_tiv",),
     summary="Compute continuous tidal impedance variation (TIV).",
+    description="Compute per-breath tidal impedance variation on the global impedance waveform via eitprocessing's TIV.",
+    category="parameters",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    input_artifacts=(
+        StepArtifact(
+            name="signal",
+            artifact_type="eit_global_impedance",
+            default_context_key="global_impedance",
+            description="Global impedance waveform to compute TIV on.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="eit_sequence",
+            artifact_type="eit_sequence",
+            description="Sequence the result is added onto.",
+            public=False,
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="breath_detector",
+            artifact_type="eit_breath_detector",
+            description="Configured breath detector from 'eit.detect_breaths'.",
+            public=False,
+            compatibility_only=True,
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="continuous_tiv",
+            artifact_type="eit_sparse_data",
+            description="Per-breath continuous TIV values (upstream SparseData).",
+            compatibility_only=True,
+        ),
+    ),
 )
 def continuous_tiv(
     signal: Any, eit_sequence: Any, breath_detector: Any
@@ -492,6 +928,56 @@ def continuous_tiv(
     },
     writes=("eeli", "eeli_result"),
     summary="Compute end-expiratory lung impedance (EELI).",
+    description="Compute per-breath end-expiratory lung impedance (EELI) via eitprocessing's EELI parameter.",
+    category="parameters",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    input_artifacts=(
+        StepArtifact(
+            name="signal",
+            artifact_type="eit_global_impedance",
+            default_context_key="global_impedance",
+            description="Global impedance waveform to compute EELI on.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="eit_sequence",
+            artifact_type="eit_sequence",
+            description="Sequence the result is added onto.",
+            public=False,
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="breath_detector",
+            artifact_type="eit_breath_detector",
+            description="Configured breath detector from 'eit.detect_breaths'.",
+            public=False,
+            compatibility_only=True,
+        ),
+        _SESSION_ARTIFACT,
+    ),
+    parameters=(
+        StepParameter(
+            name="result_label",
+            value_type="string",
+            default="continuous_eelis",
+            description="Label the upstream result is stored under.",
+            advanced=True,
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="eeli",
+            artifact_type="eit_sparse_data",
+            description="Per-breath EELI values (upstream SparseData).",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="eeli_result",
+            artifact_type="parameter_result",
+            description="Native array-valued ParameterResult for EELI, one value per breath.",
+        ),
+    ),
 )
 def eeli(
     signal: Any,
@@ -532,6 +1018,70 @@ def eeli(
     },
     writes=("pixel_tiv", "pixel_tiv_result"),
     summary="Compute per-pixel tidal impedance variation (TIV).",
+    description="Compute per-breath, per-pixel tidal impedance variation via eitprocessing's TIV.compute_pixel_parameter.",
+    category="parameters",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    input_artifacts=(
+        StepArtifact(
+            name="filtered_eit",
+            artifact_type="eit_pixel_signal",
+            description="Filtered EIT pixel signal to compute per-pixel TIV on.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="signal",
+            artifact_type="eit_global_impedance",
+            default_context_key="global_impedance",
+            description="Global impedance waveform supplying breath timing.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="eit_sequence",
+            artifact_type="eit_sequence",
+            description="Sequence the result is added onto.",
+            public=False,
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="breath_detector",
+            artifact_type="eit_breath_detector",
+            description="Configured breath detector from 'eit.detect_breaths'.",
+            public=False,
+            compatibility_only=True,
+        ),
+        _SESSION_ARTIFACT,
+    ),
+    parameters=(
+        StepParameter(
+            name="tiv_timing",
+            value_type="choice",
+            default="continuous",
+            choices=("pixel", "continuous"),
+            description="Whether breath timing is taken per-pixel or from the continuous (global) signal.",
+        ),
+        StepParameter(
+            name="result_label",
+            value_type="string",
+            default="pixel_tivs",
+            description="Label the upstream result is stored under.",
+            advanced=True,
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="pixel_tiv",
+            artifact_type="eit_sparse_data",
+            description="Per-breath, per-pixel TIV values (upstream SparseData).",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="pixel_tiv_result",
+            artifact_type="parameter_result",
+            description="Native array-valued ParameterResult, shape (breath, row, column).",
+            axes=("breath", "row", "column"),
+        ),
+    ),
 )
 def pixel_tiv(
     filtered_eit: Any,
@@ -608,6 +1158,74 @@ _ALLOWED_PIXEL_BREATH_PHASE_MODES = {"negative amplitude", "phase shift", "none"
     },
     writes=("pixel_breaths", "pixel_breath_timing_result"),
     summary="Detect per-pixel breath timing (start/middle/end of in-/deflation).",
+    description="Detect per-pixel breath start/middle/end timing via eitprocessing's PixelBreath.",
+    category="detection",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    input_artifacts=(
+        StepArtifact(
+            name="eit_data",
+            artifact_type="eit_pixel_signal",
+            default_context_key="filtered_eit",
+            description="Filtered EIT pixel signal to detect pixel breaths on.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="timing_data",
+            artifact_type="eit_global_impedance",
+            default_context_key="global_impedance",
+            description="Global impedance waveform supplying overall breath timing.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="eit_sequence",
+            artifact_type="eit_sequence",
+            description="Sequence the result is added onto.",
+            public=False,
+            compatibility_only=True,
+        ),
+        _SESSION_ARTIFACT,
+    ),
+    parameters=(
+        StepParameter(
+            name="phase_correction_mode",
+            value_type="choice",
+            required=False,
+            default="negative amplitude",
+            choices=("negative amplitude", "phase shift", "none"),
+            description="Per-pixel phase correction method. Null is also accepted, equivalent to 'none'.",
+        ),
+        StepParameter(
+            name="minimum_duration_seconds",
+            value_type="number",
+            default=2 / 3,
+            unit="s",
+            minimum=0,
+            description="Minimum per-pixel breath duration accepted.",
+        ),
+        StepParameter(
+            name="result_label",
+            value_type="string",
+            default="pixel_breaths",
+            description="Label the upstream result is stored under.",
+            advanced=True,
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="pixel_breaths",
+            artifact_type="eit_sparse_data",
+            description="Per-pixel breath objects (upstream SparseData of Breath | None).",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="pixel_breath_timing_result",
+            artifact_type="parameter_result",
+            unit="s",
+            description="Native array-valued ParameterResult of [start, middle, end] landmark times.",
+            axes=("breath", "row", "column", "landmark"),
+        ),
+    ),
 )
 def pixel_breaths(
     eit_data: Any,
@@ -686,6 +1304,56 @@ def pixel_breaths(
     },
     writes=("tiv_lungspace_mask", "tiv_lungspace_captures", "tiv_lungspace_result"),
     summary="Threshold mean pixel TIV into a functional lung-space mask.",
+    description="Threshold mean per-pixel TIV into a boolean/NaN-excluded functional lung-space mask via eitprocessing's TIVLungspace.",
+    category="roi",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    input_artifacts=(
+        StepArtifact(
+            name="eit_data",
+            artifact_type="eit_pixel_signal",
+            default_context_key="filtered_eit",
+            description="Filtered EIT pixel signal to derive the mask from.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="timing_data",
+            artifact_type="eit_global_impedance",
+            default_context_key="global_impedance",
+            description="Global impedance waveform supplying breath timing.",
+            compatibility_only=True,
+        ),
+        _SESSION_ARTIFACT,
+    ),
+    parameters=(
+        StepParameter(
+            name="threshold",
+            value_type="number",
+            default=0.15,
+            minimum=0.0,
+            maximum=1.0,
+            description="Fraction of the maximum mean pixel TIV a pixel must reach to be included. Must be strictly between 0 and 1.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="tiv_lungspace_mask",
+            artifact_type="roi_mask",
+            description="Upstream PixelMask; excluded pixels are NaN.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="tiv_lungspace_captures",
+            artifact_type="diagnostic_summary",
+            description="Intermediate mask-derivation diagnostics.",
+        ),
+        StepArtifact(
+            name="tiv_lungspace_result",
+            artifact_type="parameter_result",
+            description="Native array-valued ParameterResult (row, column), NaN for excluded pixels.",
+            axes=("row", "column"),
+        ),
+    ),
 )
 def roi_tiv_lungspace(
     eit_data: Any,
@@ -736,6 +1404,62 @@ def roi_tiv_lungspace(
     summary=(
         "Threshold mean pixel amplitude into a lung-space mask (not "
         "recommended alone; supports eit.roi_watershed)."
+    ),
+    description=(
+        "Threshold mean pixel amplitude into a lung-space mask via "
+        "eitprocessing's AmplitudeLungspace. Not recommended as a "
+        "general-purpose functional lung-space definition on its own "
+        "(may include reconstruction artifacts); intended to support "
+        "eit.roi_watershed."
+    ),
+    category="roi",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    input_artifacts=(
+        StepArtifact(
+            name="eit_data",
+            artifact_type="eit_pixel_signal",
+            default_context_key="filtered_eit",
+            description="Filtered EIT pixel signal to derive the mask from.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="timing_data",
+            artifact_type="eit_global_impedance",
+            default_context_key="global_impedance",
+            description="Global impedance waveform supplying breath timing.",
+            compatibility_only=True,
+        ),
+        _SESSION_ARTIFACT,
+    ),
+    parameters=(
+        StepParameter(
+            name="threshold",
+            value_type="number",
+            default=0.15,
+            minimum=0.0,
+            maximum=1.0,
+            description="Fraction of the maximum mean pixel amplitude a pixel must reach to be included. Must be strictly between 0 and 1.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="amplitude_lungspace_mask",
+            artifact_type="roi_mask",
+            description="Upstream PixelMask; excluded pixels are NaN.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="amplitude_lungspace_captures",
+            artifact_type="diagnostic_summary",
+            description="Intermediate mask-derivation diagnostics.",
+        ),
+        StepArtifact(
+            name="amplitude_lungspace_result",
+            artifact_type="parameter_result",
+            description="Native array-valued ParameterResult (row, column), NaN for excluded pixels.",
+            axes=("row", "column"),
+        ),
     ),
 )
 def roi_amplitude_lungspace(
@@ -795,6 +1519,56 @@ def roi_amplitude_lungspace(
         "watershed_lungspace_result",
     ),
     summary="Derive a lung-space mask with the watershed method (pendelluft-aware).",
+    description="Derive a lung-space mask via eitprocessing's watershed method, which stays pendelluft-aware unlike a simple threshold.",
+    category="roi",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    input_artifacts=(
+        StepArtifact(
+            name="eit_data",
+            artifact_type="eit_pixel_signal",
+            default_context_key="filtered_eit",
+            description="Filtered EIT pixel signal to derive the mask from.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="timing_data",
+            artifact_type="eit_global_impedance",
+            default_context_key="global_impedance",
+            description="Global impedance waveform supplying breath timing.",
+            compatibility_only=True,
+        ),
+        _SESSION_ARTIFACT,
+    ),
+    parameters=(
+        StepParameter(
+            name="threshold_fraction",
+            value_type="number",
+            default=0.15,
+            minimum=0.0,
+            maximum=1.0,
+            description="Watershed threshold fraction. Must be strictly between 0 and 1.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="watershed_lungspace_mask",
+            artifact_type="roi_mask",
+            description="Upstream PixelMask; excluded pixels are NaN.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="watershed_captures",
+            artifact_type="diagnostic_summary",
+            description="Intermediate mask-derivation diagnostics.",
+        ),
+        StepArtifact(
+            name="watershed_lungspace_result",
+            artifact_type="parameter_result",
+            description="Native array-valued ParameterResult (row, column), NaN for excluded pixels.",
+            axes=("row", "column"),
+        ),
+    ),
 )
 def roi_watershed(
     eit_data: Any,
@@ -837,6 +1611,50 @@ def roi_watershed(
     reads={"mask": None, "session": "session"},
     writes=("size_filtered_roi_mask", "size_filtered_roi_result"),
     summary="Keep only connected mask regions at or above a minimum size.",
+    description="Drop connected regions of a lung-space mask smaller than a minimum pixel count, via eitprocessing's FilterROIBySize.",
+    category="roi",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    input_artifacts=(
+        StepArtifact(
+            name="mask",
+            artifact_type="roi_mask",
+            description="Lung-space mask to filter, e.g. from 'eit.roi_watershed'.",
+            compatibility_only=True,
+        ),
+        _SESSION_ARTIFACT,
+    ),
+    parameters=(
+        StepParameter(
+            name="min_region_size",
+            value_type="integer",
+            default=10,
+            minimum=1,
+            unit="pixels",
+            description="Minimum connected-region size kept.",
+        ),
+        StepParameter(
+            name="connectivity",
+            value_type="integer",
+            default=1,
+            choices=(1, 2),
+            description="Pixel connectivity: 1 (4-connected) or 2 (8-connected).",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="size_filtered_roi_mask",
+            artifact_type="roi_mask",
+            description="Upstream PixelMask with small regions dropped.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="size_filtered_roi_result",
+            artifact_type="parameter_result",
+            description="Native array-valued ParameterResult (row, column), NaN for excluded pixels.",
+            axes=("row", "column"),
+        ),
+    ),
 )
 def roi_filter_by_size(
     mask: Any,
