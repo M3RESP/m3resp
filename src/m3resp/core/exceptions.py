@@ -29,5 +29,9 @@ class PipelineSpecError(PipelineError):
     """Raised when a pipeline spec is malformed or fails static validation."""
 
 
+class StepMetadataError(PipelineError):
+    """Raised when a step's registered GUI/discovery metadata is inconsistent."""
+
+
 class UnknownPipelineError(PipelineError):
     """Raised when ``M3Session.run_pipeline`` references an unregistered name."""
