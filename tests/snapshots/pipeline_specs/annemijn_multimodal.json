@@ -1,0 +1,249 @@
+{
+  "experiment": {
+    "mode": null,
+    "run_identifier": null,
+    "selection": "selected",
+    "subject_id": null,
+    "timepoint": null
+  },
+  "inputs": {
+    "eit_file": "data/source/eit_emg_annemijn/ajM3resp_03_001_01.bin",
+    "emg_file": "data/source/eit_emg_annemijn/Paw_EMG_ajM3Resp_test.txt"
+  },
+  "name": "annemijn_multimodal",
+  "outputs": {
+    "dir": "output/annemijn-multimodal-summary",
+    "event_csvs": true,
+    "figures": true,
+    "parameters_csv": true,
+    "postprocessing": true,
+    "structured_export": false,
+    "summary_json": true,
+    "timestamped": true
+  },
+  "steps": [
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "eit.load",
+      "with": {
+        "file": "@eit_file",
+        "vendor": "draeger"
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.load",
+      "with": {
+        "file": "@emg_file"
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "sync.estimate_offset",
+      "with": {
+        "crosscorrelation_kwargs": {
+          "max_lag_seconds": 10.0,
+          "window": [
+            60.0,
+            180.0
+          ]
+        },
+        "emg_channel": 1,
+        "emg_source": "emg",
+        "method": "interference+crosscorrelation",
+        "reference_channel": 0,
+        "reference_source": "emg",
+        "target_channel": 0,
+        "target_source": "eit"
+      }
+    },
+    {
+      "id": null,
+      "in": {
+        "offset_seconds": "estimated_offset_seconds"
+      },
+      "out": {},
+      "uses": "sync.apply_estimated_offset",
+      "with": {
+        "source_modalities": [
+          "emg"
+        ],
+        "target_modality": "eit"
+      }
+    },
+    {
+      "id": null,
+      "in": {
+        "signal": "raw_eit"
+      },
+      "out": {},
+      "uses": "eit.detect_rates",
+      "with": {
+        "capture": true,
+        "subject_type": "adult",
+        "welch_window_seconds": 30.0
+      }
+    },
+    {
+      "id": null,
+      "in": {
+        "signal": "raw_eit"
+      },
+      "out": {},
+      "uses": "eit.mdn_filter",
+      "with": {
+        "label": "mdn_filtered"
+      }
+    },
+    {
+      "id": null,
+      "in": {
+        "signal": "filtered_eit"
+      },
+      "out": {},
+      "uses": "eit.global_impedance",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {
+        "signal": "global_impedance"
+      },
+      "out": {},
+      "uses": "eit.detect_breaths",
+      "with": {
+        "min_duration_s": 0.6666666667
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "eit.normalize_breaths",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {
+        "signal": "global_impedance"
+      },
+      "out": {},
+      "uses": "eit.continuous_tiv",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {
+        "signal": "global_impedance"
+      },
+      "out": {},
+      "uses": "eit.eeli",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {
+        "filtered_eit": "filtered_eit",
+        "signal": "global_impedance"
+      },
+      "out": {},
+      "uses": "eit.pixel_tiv",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {
+        "processed_emg": "processed_emg_before_ecg"
+      },
+      "uses": "emg.preprocess",
+      "with": {
+        "channel": 1,
+        "envelope_window_seconds": 0.5,
+        "high_pass_hz": 80,
+        "notch_base_frequency": 50.0,
+        "notch_quality_factor": 30.0
+      }
+    },
+    {
+      "id": null,
+      "in": {
+        "processed_emg": "processed_emg_before_ecg"
+      },
+      "out": {},
+      "uses": "emg.ecg_detect_peaks",
+      "with": {
+        "source": "filtered"
+      }
+    },
+    {
+      "id": null,
+      "in": {
+        "processed_emg": "processed_emg_before_ecg"
+      },
+      "out": {
+        "processed_emg_after_ecg": "processed_emg"
+      },
+      "uses": "emg.ecg_gating",
+      "with": {
+        "fill_method": 1,
+        "source": "filtered"
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_breaths",
+      "with": {
+        "half_window_seconds": 0.5,
+        "min_breath_width_seconds": 1.0
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.peak_indices",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.slopesum_baseline",
+      "with": {
+        "percentile": 33.0,
+        "step_seconds": 1.0,
+        "window_seconds": 30.0
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.onoffpeak_baseline_crossing",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.snr_pseudo",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.percentage_under_baseline",
+      "with": {}
+    }
+  ]
+}

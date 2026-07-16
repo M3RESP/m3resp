@@ -1,0 +1,277 @@
+{
+  "experiment": {
+    "mode": null,
+    "run_identifier": null,
+    "selection": "selected",
+    "subject_id": null,
+    "timepoint": null
+  },
+  "inputs": {
+    "eit_file": "data/source/synthetic/20260610_153009/m3resp_multimodal_1_eit_draeger.bin",
+    "emg_file": "data/source/synthetic/20260610_153009/m3resp_multimodal_1_emg.Poly5",
+    "vent_file": "data/source/synthetic/20260610_153009/m3resp_multimodal_1_ventilator.Poly5"
+  },
+  "name": "multimodal",
+  "outputs": {
+    "dir": "output/multimodal-summary",
+    "event_csvs": true,
+    "figures": true,
+    "parameters_csv": true,
+    "postprocessing": true,
+    "structured_export": false,
+    "summary_json": true,
+    "timestamped": true
+  },
+  "steps": [
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "eit.load",
+      "with": {
+        "file": "@eit_file",
+        "vendor": "draeger"
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.load",
+      "with": {
+        "file": "@emg_file"
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.load_ventilator",
+      "with": {
+        "file": "@vent_file"
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "session.sync_raw",
+      "with": {
+        "method": "manual_offset",
+        "offset_seconds": {
+          "eit": 0.0,
+          "emg": -2.0,
+          "vent": 0.0
+        },
+        "reference_modality": "vent"
+      }
+    },
+    {
+      "id": null,
+      "in": {
+        "signal": "raw_eit"
+      },
+      "out": {},
+      "uses": "eit.detect_rates",
+      "with": {
+        "capture": true,
+        "subject_type": "adult",
+        "welch_window_seconds": 30.0
+      }
+    },
+    {
+      "id": null,
+      "in": {
+        "signal": "raw_eit"
+      },
+      "out": {},
+      "uses": "eit.mdn_filter",
+      "with": {
+        "label": "mdn_filtered"
+      }
+    },
+    {
+      "id": null,
+      "in": {
+        "signal": "filtered_eit"
+      },
+      "out": {},
+      "uses": "eit.global_impedance",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {
+        "signal": "global_impedance"
+      },
+      "out": {},
+      "uses": "eit.detect_breaths",
+      "with": {
+        "min_duration_s": 0.6666666667
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "eit.normalize_breaths",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {
+        "signal": "global_impedance"
+      },
+      "out": {},
+      "uses": "eit.continuous_tiv",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {
+        "signal": "global_impedance"
+      },
+      "out": {},
+      "uses": "eit.eeli",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {
+        "filtered_eit": "filtered_eit",
+        "signal": "global_impedance"
+      },
+      "out": {},
+      "uses": "eit.pixel_tiv",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {
+        "processed_emg": "processed_emg_before_ecg"
+      },
+      "uses": "emg.preprocess",
+      "with": {
+        "channel": 0,
+        "envelope_window_seconds": 0.5,
+        "high_pass_hz": 80
+      }
+    },
+    {
+      "id": null,
+      "in": {
+        "processed_emg": "processed_emg_before_ecg"
+      },
+      "out": {},
+      "uses": "emg.ecg_detect_peaks",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {
+        "processed_emg": "processed_emg_before_ecg"
+      },
+      "out": {
+        "processed_emg_after_ecg": "processed_emg"
+      },
+      "uses": "emg.ecg_gating",
+      "with": {
+        "fill_method": 1
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_breaths",
+      "with": {
+        "half_window_seconds": 0.5,
+        "min_breath_width_seconds": 0.5,
+        "prominence_factor": 0.05
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.peak_indices",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.ventilator_channels",
+      "with": {
+        "flow_channel": 1,
+        "pressure_channel": 0,
+        "volume_channel": 2
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.slopesum_baseline",
+      "with": {
+        "percentile": 33.0,
+        "step_seconds": 1.0,
+        "window_seconds": 30.0
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.find_occluded_breaths",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.pocc_intervals",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.pocc_time_product",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.pocc_quality",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_ventilator_breath",
+      "with": {
+        "breath_width_seconds": 0.5
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_non_consecutive_manoeuvres",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.normalize_ventilator_breaths",
+      "with": {
+        "breath_width_seconds": 0.5
+      }
+    }
+  ]
+}

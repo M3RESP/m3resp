@@ -1,0 +1,285 @@
+{
+  "experiment": {
+    "mode": null,
+    "run_identifier": null,
+    "selection": "selected",
+    "subject_id": null,
+    "timepoint": null
+  },
+  "inputs": {
+    "emg_file": "data/source/data_from_repo/emg_data_synth_quiet_breathing.Poly5",
+    "vent_file": "data/source/data_from_repo/vent_data_synth_quiet_breathing.Poly5"
+  },
+  "name": "emg-full-preprocessing",
+  "outputs": {
+    "dir": "output/emg-full-preprocessing",
+    "event_csvs": true,
+    "figures": false,
+    "parameters_csv": false,
+    "postprocessing": false,
+    "structured_export": true,
+    "summary_json": true,
+    "timestamped": true
+  },
+  "steps": [
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.load",
+      "with": {
+        "file": "@emg_file"
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.load_ventilator",
+      "with": {
+        "file": "@vent_file"
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.ventilator_channels",
+      "with": {
+        "flow_channel": 1,
+        "pressure_channel": 0,
+        "volume_channel": 2
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {
+        "processed_emg": "processed_emg_before_ecg"
+      },
+      "uses": "emg.preprocess",
+      "with": {
+        "channel": 1,
+        "envelope_window_seconds": 0.5,
+        "high_pass_hz": 80
+      }
+    },
+    {
+      "id": null,
+      "in": {
+        "processed_emg": "processed_emg_before_ecg"
+      },
+      "out": {},
+      "uses": "emg.ecg_detect_peaks",
+      "with": {
+        "ecg_channel": 0
+      }
+    },
+    {
+      "id": null,
+      "in": {
+        "processed_emg": "processed_emg_before_ecg"
+      },
+      "out": {
+        "processed_emg_after_ecg": "processed_emg"
+      },
+      "uses": "emg.ecg_gating",
+      "with": {
+        "fill_method": 1
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_breaths",
+      "with": {
+        "half_window_seconds": 0.5,
+        "min_breath_width_seconds": 0.5
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.peak_indices",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.moving_baseline",
+      "with": {
+        "percentile": 33.0,
+        "step_seconds": 1.0,
+        "window_seconds": 30.0
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.onoffpeak_baseline_crossing",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.time_to_peak",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.pseudo_slope",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.amplitude",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.time_product",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.area_under_baseline",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.respiratory_rate",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_ventilator_breath",
+      "with": {
+        "breath_width_seconds": 0.5
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.find_occluded_breaths",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.ventilator_respiratory_rate",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.pocc_intervals",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.pocc_time_product",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.normalize_ventilator_breaths",
+      "with": {
+        "breath_width_seconds": 0.5
+      }
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.snr_pseudo",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.percentage_under_baseline",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_local_high_aub",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_extreme_time_products",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_non_consecutive_manoeuvres",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.evaluate_bell_curve_error",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.evaluate_event_timing",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.evaluate_respiratory_rates",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.pocc_quality",
+      "with": {}
+    },
+    {
+      "id": null,
+      "in": {},
+      "out": {},
+      "uses": "emg.interpeak_dist",
+      "with": {}
+    }
+  ]
+}
