@@ -22,7 +22,10 @@ import numpy as np
 from m3resp.core.session import M3Session
 from m3resp.data.timeseries import TimeSeries
 from m3resp.synchronization.offset_estimation import estimate_sync_offset
-from m3resp.workflows.registry import register_step
+from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
+
+#: Raw signal sources ``sync.estimate_offset`` can pull from (see `_raw_source`).
+_SIGNAL_SOURCES = ("eit", "emg", "vent")
 
 
 def _dict_array(obj: Any) -> dict[str, Any] | None:
@@ -122,6 +125,134 @@ def _raw_source(
     reads={"session": "session"},
     writes=("estimated_offset_seconds", "offset_estimation"),
     summary="Estimate the EIT-to-Biopac time offset from the raw signals.",
+    description=(
+        "Estimate the constant time offset that aligns the EIT recording to "
+        "the Biopac/EMG clock from the raw, un-cropped signals. Run after the "
+        "'*.load' steps but before 'session.sync_raw'/'sync.apply_estimated_offset'."
+    ),
+    category="synchronization",
+    modality=None,
+    input_artifacts=(
+        StepArtifact(
+            name="session",
+            artifact_type="m3session",
+            default_context_key="session",
+            description=(
+                "Backing M3Session with the raw, un-cropped emg/vent/eit "
+                "recordings still attached."
+            ),
+            public=False,
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="method",
+            value_type="choice",
+            default="interference",
+            choices=(
+                "manual",
+                "interference",
+                "crosscorrelation",
+                "interference+crosscorrelation",
+            ),
+            description=(
+                "'manual': return manual_offset_seconds unchanged. "
+                "'interference': interference-anchor estimate (falls back to "
+                "the manual offset if no edge is found). 'crosscorrelation': "
+                "cross-correlation refinement of the manual offset. "
+                "'interference+crosscorrelation': anchor, then refine."
+            ),
+        ),
+        StepParameter(
+            name="emg_source",
+            value_type="choice",
+            default="emg",
+            choices=_SIGNAL_SOURCES,
+            description="Raw source carrying the interference-bearing sEMG channel.",
+        ),
+        StepParameter(
+            name="emg_channel",
+            value_type="integer",
+            default=0,
+            minimum=0,
+            description="Channel index of the interference-bearing sEMG within 'emg_source'.",
+        ),
+        StepParameter(
+            name="target_source",
+            value_type="choice",
+            default="eit",
+            choices=_SIGNAL_SOURCES,
+            description="Raw source for the breathing target signal, normally EIT global impedance.",
+        ),
+        StepParameter(
+            name="target_channel",
+            value_type="integer",
+            default=0,
+            minimum=0,
+            description="Channel index of the breathing target within 'target_source'.",
+        ),
+        StepParameter(
+            name="reference_source",
+            value_type="choice",
+            default="vent",
+            choices=_SIGNAL_SOURCES,
+            description="Raw source for the reference breathing signal used for cross-correlation.",
+        ),
+        StepParameter(
+            name="reference_channel",
+            value_type="integer",
+            default=0,
+            minimum=0,
+            description="Channel index of the reference breathing signal within 'reference_source'.",
+        ),
+        StepParameter(
+            name="reference_duration_seconds",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="s",
+            description=(
+                "Reference duration for the interference method. Defaults to "
+                "the target signal's duration when unset."
+            ),
+        ),
+        StepParameter(
+            name="manual_offset_seconds",
+            value_type="number",
+            default=0.0,
+            unit="s",
+            description="Fallback/base offset used by the 'manual' method and as the interference fallback.",
+        ),
+        StepParameter(
+            name="interference_kwargs",
+            value_type="mapping",
+            required=False,
+            default=None,
+            description="Advanced keyword overrides forwarded to the interference estimator.",
+            advanced=True,
+        ),
+        StepParameter(
+            name="crosscorrelation_kwargs",
+            value_type="mapping",
+            required=False,
+            default=None,
+            description="Advanced keyword overrides forwarded to the cross-correlation estimator.",
+            advanced=True,
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="estimated_offset_seconds",
+            artifact_type="scalar_metric",
+            unit="s",
+            description="Estimated offset, ready to bind onto 'session.sync_raw's offset_seconds.",
+        ),
+        StepArtifact(
+            name="offset_estimation",
+            artifact_type="diagnostic_summary",
+            description="JSON-friendly summary of what each estimator found, for provenance/QA.",
+        ),
+    ),
 )
 def estimate_offset(
     session: M3Session,
@@ -217,6 +348,50 @@ def estimate_offset(
     },
     writes=("sync_summary",),
     summary="Apply an estimated EIT-to-source offset to the raw modalities.",
+    description=(
+        "Crop source-clock raw modalities so they start with the target "
+        "modality, using the offset 'sync.estimate_offset' reported. The "
+        "target modality is held at zero; each source modality is cropped by "
+        "the negative estimate."
+    ),
+    category="synchronization",
+    input_artifacts=(
+        StepArtifact(
+            name="session",
+            artifact_type="m3session",
+            default_context_key="session",
+            description="Backing M3Session whose raw modality signals are cropped in place.",
+            public=False,
+        ),
+        StepArtifact(
+            name="offset_seconds",
+            artifact_type="scalar_metric",
+            default_context_key="estimated_offset_seconds",
+            unit="s",
+            description="Estimated target-clock-t0-on-source-clock offset, as written by 'sync.estimate_offset'.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="target_modality",
+            value_type="string",
+            default="eit",
+            description="Modality held at zero offset; every source modality is cropped relative to it.",
+        ),
+        StepParameter(
+            name="source_modalities",
+            value_type="list",
+            default=("emg", "vent"),
+            description="Modalities cropped by the negative estimated offset. Must not include 'target_modality'.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="sync_summary",
+            artifact_type="sync_summary",
+            description="Per-modality applied offset and before/after trace summary.",
+        ),
+    ),
 )
 def apply_estimated_offset(
     session: M3Session,

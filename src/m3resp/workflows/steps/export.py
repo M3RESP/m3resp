@@ -7,7 +7,7 @@ from typing import Any
 
 from m3resp.core.session import M3Session
 from m3resp.export.session_export import export_session_summary
-from m3resp.workflows.registry import register_step
+from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 from m3resp.workflows.utils import write_json
 
 
@@ -16,6 +16,38 @@ from m3resp.workflows.utils import write_json
     reads={"value": "value"},
     writes=("result_path",),
     summary="Write a single scalar value to a text file.",
+    description="Write a single scalar value to a plain text file, formatted to a fixed decimal precision.",
+    category="export",
+    input_artifacts=(
+        StepArtifact(
+            name="value",
+            artifact_type="scalar_metric",
+            description="Scalar value to write.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="path",
+            value_type="path",
+            required=True,
+            path_kind="file",
+            description="Output file path.",
+        ),
+        StepParameter(
+            name="precision",
+            value_type="integer",
+            default=8,
+            minimum=0,
+            description="Number of decimal places written.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="result_path",
+            artifact_type="file_path",
+            description="Path to the written text file.",
+        ),
+    ),
 )
 def scalar_file(value: float, *, path: str, precision: int = 8) -> dict[str, Any]:
     target = Path(path)
@@ -29,6 +61,31 @@ def scalar_file(value: float, *, path: str, precision: int = 8) -> dict[str, Any
     reads={"payload": "summary"},
     writes=("json_path",),
     summary="Write a mapping payload to a JSON file.",
+    description="Write a JSON-safe mapping payload to disk as a formatted JSON file.",
+    category="export",
+    input_artifacts=(
+        StepArtifact(
+            name="payload",
+            artifact_type="mapping",
+            description="JSON-safe mapping to write.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="path",
+            value_type="path",
+            required=True,
+            path_kind="file",
+            description="Output file path.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="json_path",
+            artifact_type="file_path",
+            description="Path to the written JSON file.",
+        ),
+    ),
 )
 def json_file(payload: dict[str, Any], *, path: str) -> dict[str, Any]:
     target = Path(path)
@@ -42,6 +99,67 @@ def json_file(payload: dict[str, Any], *, path: str) -> dict[str, Any]:
     reads={"session": "session"},
     writes=("output_dir",),
     summary="Export the session summary (JSON, event CSVs, parameters) to disk.",
+    description=(
+        "Export the full session summary to a directory: JSON summary, event "
+        "CSVs, parameters CSV, postprocessing artifacts, and/or the "
+        "structured (array + scalar) export, each independently toggleable."
+    ),
+    category="export",
+    input_artifacts=(
+        StepArtifact(
+            name="session",
+            artifact_type="m3session",
+            default_context_key="session",
+            description="Session whose accumulated results are exported.",
+            public=False,
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="output_dir",
+            value_type="path",
+            required=True,
+            path_kind="directory",
+            description="Directory the summary is written into (created if missing).",
+        ),
+        StepParameter(
+            name="summary_json",
+            value_type="boolean",
+            default=True,
+            description="Write a JSON session summary.",
+        ),
+        StepParameter(
+            name="event_csvs",
+            value_type="boolean",
+            default=True,
+            description="Write one CSV per event collection.",
+        ),
+        StepParameter(
+            name="parameters_csv",
+            value_type="boolean",
+            default=True,
+            description="Write a CSV of scalar derived parameters.",
+        ),
+        StepParameter(
+            name="postprocessing",
+            value_type="boolean",
+            default=True,
+            description="Write postprocessing (figure/report) artifacts.",
+        ),
+        StepParameter(
+            name="structured_export",
+            value_type="boolean",
+            default=True,
+            description="Write the structured scalar-CSV plus array-archive export.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="output_dir",
+            artifact_type="directory_path",
+            description="Directory the summary was written into.",
+        ),
+    ),
 )
 def session_summary(
     session: M3Session,
@@ -78,6 +196,43 @@ def session_summary(
     },
     writes=("result_path",),
     summary="Write ROTARC breath-duration CV to a named result file and rotarc_summary.json.",
+    description=(
+        "ROTARC-specific export: derives the output path from the spec's "
+        "'experiment:'/'outputs:' sections, writes the scalar result plus "
+        "'rotarc_summary.json', and runs the same session export as "
+        "'export.session_summary' alongside it."
+    ),
+    category="export",
+    input_artifacts=(
+        StepArtifact(
+            name="value",
+            artifact_type="scalar_metric",
+            description="Breath-duration CV to write.",
+        ),
+        StepArtifact(
+            name="session",
+            artifact_type="m3session",
+            default_context_key="session",
+            description="Session whose accumulated results are exported alongside the result file.",
+            public=False,
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="precision",
+            value_type="integer",
+            default=8,
+            minimum=0,
+            description="Number of decimal places written to the result file.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="result_path",
+            artifact_type="file_path",
+            description="Path to the written per-subject result file.",
+        ),
+    ),
 )
 def rotarc_result(
     value: float,
