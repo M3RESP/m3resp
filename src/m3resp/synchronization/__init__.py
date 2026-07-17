@@ -25,6 +25,10 @@ from m3resp.synchronization.offset_estimation import (
 )
 from m3resp.synchronization.resampling import resample_signal
 from m3resp.synchronization.timebase import Timebase
+from m3resp.synchronization.ventilator import (
+    iter_ventilator_detections,
+    normalize_ventilator_breath,
+)
 
 __all__ = [
     "CrossCorrelationOffsetResult",
@@ -42,7 +46,9 @@ __all__ = [
     "estimate_offset_from_interference_signal",
     "estimate_sync_offset",
     "interference_power",
+    "iter_ventilator_detections",
     "link_breaths_by_time",
+    "normalize_ventilator_breath",
     "refine_offset_by_crosscorrelation",
     "refine_offset_by_crosscorrelation_signals",
     "resample_signal",

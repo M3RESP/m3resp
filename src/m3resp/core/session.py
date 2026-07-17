@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
-
 from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
 from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
-from m3resp.core.events import BreathEvent, Event, coerce_breath_event
+from m3resp.core.events import BreathEvent
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.core.metadata import SessionMetadata
 from m3resp.core.provenance import ProvenanceRecord, record
@@ -27,8 +24,20 @@ from m3resp.export.session_export import export_session_summary
 from m3resp.modalities.eit import EITRecording, load as load_eit_recording
 from m3resp.modalities.emg import EMGRecording, load as load_emg_recording
 from m3resp.synchronization.alignment import align_events_by_modality_offset
+from m3resp.synchronization.cropping import (
+    _crop_loaded_modality,
+    _normalize_modality,
+    _offsets_relative_to_reference,
+    _raw_synchronization_traces,
+    _resolve_alignment_offsets,
+)
 from m3resp.synchronization.linking import link_breaths_by_time
 from m3resp.synchronization.multimodal_parameters import compute_multimodal_parameters
+from m3resp.synchronization.ventilator import (
+    _infer_ventilator_fs,
+    iter_ventilator_detections,
+    normalize_ventilator_breath,
+)
 
 if TYPE_CHECKING:
     from m3resp.datamodel.recorder import DataModelRecorder
@@ -552,313 +561,3 @@ def _coerce_metadata(
     if isinstance(metadata, SessionMetadata):
         return metadata
     return SessionMetadata(attributes=dict(metadata))
-
-
-def _resolve_alignment_offsets(
-    offset_seconds: float | Mapping[str, float],
-) -> dict[str, float]:
-    if isinstance(offset_seconds, Mapping):
-        offsets = {"eit": 0.0, "emg": 0.0, "vent": 0.0}
-        for modality, offset in offset_seconds.items():
-            offsets[_normalize_modality(modality)] = float(offset)
-        return offsets
-    return {"eit": 0.0, "emg": float(offset_seconds), "vent": 0.0}
-
-
-def _offsets_relative_to_reference(
-    offsets: Mapping[str, float],
-    reference_modality: str,
-) -> dict[str, float]:
-    reference = _normalize_modality(reference_modality)
-    reference_offset = float(offsets.get(reference, 0.0))
-    return {
-        _normalize_modality(modality): float(offset) - reference_offset
-        for modality, offset in offsets.items()
-    }
-
-
-def _normalize_modality(modality: str) -> str:
-    normalized = str(modality).lower()
-    if normalized in {"ventilator", "ventilation"}:
-        return "vent"
-    return normalized
-
-
-def _crop_loaded_modality(session: M3Session, modality: str, offset: float) -> int:
-    if offset == 0.0:
-        return 0
-    if modality == "emg" and session.emg is not None:
-        return _crop_emg_recording(session.emg, offset)
-    if modality == "vent":
-        ventilator = session.raw.get("vent")
-        return _crop_recording_dict(ventilator, offset)
-    if modality == "eit" and session.eit is not None:
-        return _crop_eit_recording(session.eit, offset)
-    return 0
-
-
-def _raw_synchronization_traces(session: M3Session, modality: str) -> dict[str, Any]:
-    if modality == "emg" and session.emg is not None:
-        trace = _emg_raw_trace(session.emg)
-        return {"emg": trace} if trace is not None else {}
-    if modality == "eit" and session.eit is not None:
-        trace = _eit_raw_trace(session.eit)
-        return {"eit": trace} if trace is not None else {}
-    if modality == "vent":
-        return _ventilator_raw_traces(session.raw.get("vent"))
-    return {}
-
-
-def _emg_raw_trace(recording: EMGRecording) -> dict[str, Any] | None:
-    data = recording.data if isinstance(recording.data, dict) else None
-    metadata = data.get("metadata", {}) if isinstance(data, dict) else {}
-    labels = metadata.get("labels") or []
-    units = metadata.get("units") or []
-    label = labels[0] if labels else "emg_0"
-    unit = units[0] if units else "a.u."
-    return _recording_dict_trace(
-        data,
-        title=f"EMG raw ({label})",
-        ylabel=f"EMG amplitude ({unit})" if unit else "EMG amplitude",
-    )
-
-
-def _recording_dict_trace(
-    recording: Any,
-    *,
-    title: str,
-    ylabel: str,
-    channel: int = 0,
-) -> dict[str, Any] | None:
-    if not isinstance(recording, dict) or "array" not in recording:
-        return None
-    metadata = recording.get("metadata") or {}
-    fs = metadata.get("fs")
-    if fs is None:
-        return None
-    array = np.asarray(recording["array"], dtype=float)
-    if array.ndim == 0 or array.size == 0:
-        return None
-    if array.ndim > 1 and channel >= array.shape[0]:
-        return None
-    values = array[channel] if array.ndim > 1 else array
-    time = np.arange(len(values), dtype=float) / float(fs)
-    return {
-        "title": title,
-        "time": time.tolist(),
-        "values": np.asarray(values, dtype=float).tolist(),
-        "ylabel": ylabel,
-    }
-
-
-def _ventilator_raw_traces(recording: Any) -> dict[str, Any]:
-    pressure = _recording_dict_trace(
-        recording,
-        title="Ventilator pressure",
-        ylabel="Pressure",
-        channel=0,
-    )
-    flow = _recording_dict_trace(
-        recording,
-        title="Ventilator flow",
-        ylabel="Flow",
-        channel=1,
-    )
-    volume = _recording_dict_trace(
-        recording,
-        title="Ventilator volume",
-        ylabel="Volume",
-        channel=2,
-    )
-    traces: dict[str, Any] = {}
-    if pressure is not None:
-        traces["vent_pressure"] = pressure
-    if flow is not None:
-        traces["vent_flow"] = flow
-    if volume is not None:
-        traces["vent_volume"] = volume
-    return traces
-
-
-def _eit_raw_trace(recording: EITRecording) -> dict[str, Any] | None:
-    signal = recording.global_impedance
-    if signal is None:
-        return None
-    time = getattr(signal, "time", None)
-    values = getattr(signal, "values", None)
-    if time is None or values is None:
-        return None
-    return {
-        "title": "EIT raw global impedance",
-        "time": np.asarray(time, dtype=float).tolist(),
-        "values": np.asarray(values, dtype=float).tolist(),
-        "ylabel": getattr(signal, "label", "global_impedance_(raw)"),
-    }
-
-
-def _crop_emg_recording(recording: EMGRecording, offset: float) -> int:
-    cropped = _crop_recording_dict(recording.data, offset)
-    if not cropped:
-        return 0
-    if isinstance(recording.data, dict):
-        recording.raw = recording.data.get("array")
-        recording.metadata = recording.data.get("metadata")
-    return cropped
-
-
-def _crop_recording_dict(recording: Any, offset: float) -> int:
-    if not isinstance(recording, dict) or "array" not in recording:
-        return 0
-    metadata = recording.get("metadata") or {}
-    fs = metadata.get("fs")
-    if fs is None:
-        return 0
-    array, n_samples = _crop_sample_array(recording["array"], float(fs), offset)
-    if not n_samples:
-        return 0
-    recording["array"] = array
-    return n_samples
-
-
-def _crop_eit_recording(recording: EITRecording, offset: float) -> int:
-    sequence = recording.data
-    fs = _infer_eit_sample_frequency(recording)
-    if fs is None:
-        return 0
-
-    n_samples = 0
-    if recording.raw is not None:
-        n_samples = max(n_samples, _crop_eit_like_object(recording.raw, fs, offset))
-    if recording.global_impedance is not None:
-        n_samples = max(
-            n_samples,
-            _crop_eit_like_object(recording.global_impedance, fs, offset),
-        )
-    for collection_name in ("eit_data", "continuous_data"):
-        collection = getattr(sequence, collection_name, None)
-        if isinstance(collection, Mapping):
-            for item in collection.values():
-                n_samples = max(n_samples, _crop_eit_like_object(item, fs, offset))
-    return n_samples
-
-
-def _crop_eit_like_object(obj: Any, fs: float, offset: float) -> int:
-    n_samples = 0
-    for attr in ("pixel_impedance", "values", "time"):
-        if not hasattr(obj, attr):
-            continue
-        values = getattr(obj, attr)
-        cropped, cropped_samples = _crop_sample_array(
-            values,
-            fs,
-            offset,
-            sample_axis=0,
-        )
-        if cropped_samples:
-            setattr(obj, attr, cropped)
-            n_samples = max(n_samples, cropped_samples)
-    return n_samples
-
-
-def _crop_sample_array(
-    values: Any,
-    fs: float,
-    offset: float,
-    sample_axis: int | None = None,
-) -> tuple[Any, int]:
-    array = np.asarray(values)
-    if array.size == 0:
-        return values, 0
-
-    if sample_axis is None:
-        sample_axis = 1 if array.ndim > 1 and array.shape[1] >= array.shape[0] else 0
-    n_samples = int(round(abs(offset) * float(fs)))
-    axis_len = array.shape[sample_axis]
-    if n_samples <= 0 or n_samples >= axis_len:
-        return values, 0
-
-    if offset < 0:
-        sample_slice = slice(n_samples, None)
-    else:
-        sample_slice = slice(None, axis_len - n_samples)
-    slices = [slice(None)] * array.ndim
-    slices[sample_axis] = sample_slice
-    cropped = array[tuple(slices)]
-    if isinstance(values, list):
-        return cropped.tolist(), n_samples
-    return cropped, n_samples
-
-
-def _infer_eit_sample_frequency(recording: EITRecording) -> float | None:
-    for obj in (recording.raw, recording.global_impedance, recording.data):
-        for attr in ("sample_frequency", "sample_frequency_hz", "fs"):
-            value = getattr(obj, attr, None)
-            if value is not None:
-                return float(value)
-        metadata = getattr(obj, "metadata", None)
-        if isinstance(metadata, Mapping):
-            for key in ("sample_frequency", "sample_frequency_hz", "fs"):
-                value = metadata.get(key)
-                if value is not None:
-                    return float(value)
-    return None
-
-
-def iter_ventilator_detections(detections: Any) -> list[Any]:
-    if isinstance(detections, (BreathEvent, Event, Mapping)):
-        return [detections]
-    if hasattr(detections, "tolist"):
-        detections = detections.tolist()
-    return list(detections)
-
-
-def normalize_ventilator_breath(
-    detection: Any,
-    *,
-    fs: float | None,
-    width_seconds: float,
-) -> BreathEvent:
-    if isinstance(detection, BreathEvent):
-        return replace(detection, modality="vent")
-    if isinstance(detection, Mapping):
-        breath = coerce_breath_event(detection, modality="vent", source="ventilator")
-        return replace(breath, modality="vent")
-
-    if hasattr(detection, "start_time") and hasattr(detection, "end_time"):
-        breath = coerce_breath_event(detection, modality="vent", source="ventilator")
-        return replace(breath, modality="vent")
-
-    if fs is None:
-        raise ValueError(
-            "Ventilator breath indices require a ventilator sampling rate. "
-            "Pass ventilator_fs or include metadata['fs'] in the ventilator input."
-        )
-
-    sample_index = int(detection)
-    peak_time = sample_index / float(fs)
-    half_width = width_seconds / 2
-    return BreathEvent(
-        modality="vent",
-        start_time=max(0.0, peak_time - half_width),
-        end_time=peak_time + half_width,
-        peak_time=peak_time,
-        source="resurfemg.detect_ventilator_breath",
-        metadata={
-            "sample_index": sample_index,
-            "fs": float(fs),
-            "width_seconds": width_seconds,
-        },
-    )
-
-
-def _infer_ventilator_fs(
-    ventilator: Any | None,
-    ventilator_fs: float | None,
-) -> float | None:
-    if ventilator_fs is not None:
-        return float(ventilator_fs)
-    if isinstance(ventilator, Mapping):
-        metadata = ventilator.get("metadata", {})
-        if isinstance(metadata, Mapping) and metadata.get("fs") is not None:
-            return float(metadata["fs"])
-    return None

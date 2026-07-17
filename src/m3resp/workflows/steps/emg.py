@@ -18,12 +18,12 @@ from m3resp.adapters.resurfemg_adapter import (
     peak_indices_from_events,
     ventilator_signals,
 )
-from m3resp.core.session import (
-    M3Session,
+from m3resp.core.session import M3Session
+from m3resp.core.events import BreathEvent, Event
+from m3resp.synchronization.ventilator import (
     iter_ventilator_detections,
     normalize_ventilator_breath,
 )
-from m3resp.core.events import BreathEvent, Event
 from m3resp.data import ParameterResult, QualityFlag, Signal
 from m3resp.data.quality import Severity
 from m3resp.processing.intervals import (
