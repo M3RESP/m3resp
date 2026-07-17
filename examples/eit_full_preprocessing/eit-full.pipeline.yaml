@@ -11,14 +11,21 @@
 # `inputs.eit_file` below) resolve relative to this spec file's own
 # directory, same as `outputs.dir`, not the process working directory.
 #
+# `schema_version: 1` (Stage 2 pipeline-structure Phase 2/9) enables strict
+# parsing: unknown keys and non-boolean flags are hard errors instead of a
+# permissive/deprecated coercion. Every step below has an explicit `id:` so
+# GUI/provenance references to a specific step survive reordering.
+#
 #   experiment:  study metadata; unused here (no export.rotarc_result step)
 #   outputs:     where to write results and which artifacts to produce
 #   inputs:      data paths (referenced in steps with @name)
 
+schema_version: 1
 name: eit-full-preprocessing
 
 outputs:
   dir: ../../output/eit-full-preprocessing
+  mode: automatic
   timestamped: true
   summary_json: true
   event_csvs: true
@@ -31,53 +38,67 @@ inputs:
   vendor: draeger
 
 steps:
-  - uses: eit.load
+  - id: load
+    uses: eit.load
     with: { file: "@eit_file", vendor: "@vendor" }
 
-  - uses: eit.detect_rates
+  - id: detect_rates
+    uses: eit.detect_rates
     in:  { signal: raw_eit }
     with: { subject_type: adult, capture: true }
 
-  - uses: eit.mdn_filter
+  - id: mdn_filter
+    uses: eit.mdn_filter
     in:  { signal: raw_eit }
     with: { label: mdn_filtered }
 
-  - uses: eit.global_impedance
+  - id: global_impedance
+    uses: eit.global_impedance
     in:  { signal: filtered_eit }
 
-  - uses: eit.detect_breaths
+  - id: detect_breaths
+    uses: eit.detect_breaths
     in:  { signal: global_impedance }
     with: { min_duration_s: 0.6666666667 }
 
-  - uses: eit.normalize_breaths
+  - id: normalize_breaths
+    uses: eit.normalize_breaths
 
-  - uses: eit.continuous_tiv
+  - id: continuous_tiv
+    uses: eit.continuous_tiv
 
-  - uses: eit.eeli
+  - id: eeli
+    uses: eit.eeli
 
   # Pixel-breath timing (per-pixel start/middle/end of in-/deflation);
   # NaN marks the always-unavailable first/last global breath and any
   # pixel whose breath couldn't be determined.
-  - uses: eit.pixel_breaths
+  - id: pixel_breaths
+    uses: eit.pixel_breaths
     with: { phase_correction_mode: "negative amplitude" }
 
-  - uses: eit.pixel_tiv
+  - id: pixel_tiv
+    uses: eit.pixel_tiv
     with: { tiv_timing: continuous }
 
-  - uses: eit.roi_tiv_lungspace
+  - id: roi_tiv_lungspace
+    uses: eit.roi_tiv_lungspace
     with: { threshold: 0.15 }
 
   # See docs/pipelines.md for upstream's warning against using amplitude
   # alone as a general-purpose functional lung-space definition - it is
   # computed here primarily to feed eit.roi_watershed.
-  - uses: eit.roi_amplitude_lungspace
+  - id: roi_amplitude_lungspace
+    uses: eit.roi_amplitude_lungspace
     with: { threshold: 0.15 }
 
-  - uses: eit.roi_watershed
+  - id: roi_watershed
+    uses: eit.roi_watershed
     with: { threshold_fraction: 0.15 }
 
   # Bound explicitly to the watershed mask rather than relying on an
   # ambiguous default - eit.roi_filter_by_size.mask has no default binding.
-  - uses: eit.roi_filter_by_size
+  - id: roi_filter_by_size
+    uses: eit.roi_filter_by_size
     in:  { mask: watershed_lungspace_mask }
     with: { min_region_size: 10, connectivity: 1 }

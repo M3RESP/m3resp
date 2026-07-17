@@ -1,9 +1,8 @@
-"""Tests for the Phase 1 typed step metadata (StepParameter/StepArtifact) and
+"""Tests for the typed step metadata (StepParameter/StepArtifact) and
 discovery API added to ``m3resp.workflows.registry``.
 
-See ``plan/stage2/3_pipeline_structure_implementation_plan.md`` Phase 1: this
-metadata is additive and optional per step, backfilled module by module, so a
-step declaring none of it must remain fully valid (most built-ins still do).
+This metadata is additive and optional per step, backfilled module by module,
+so a step declaring none of it must remain fully valid (most built-ins still do).
 """
 
 from __future__ import annotations
@@ -129,6 +128,45 @@ def test_rejects_minimum_greater_than_maximum():
         )
         def _bad(*, x: Any) -> dict[str, Any]:
             return {}
+
+
+def test_rejects_mutually_exclusive_group_naming_an_undeclared_parameter():
+    with pytest.raises(StepMetadataError, match="not a declared parameter"):
+
+        @register_step(
+            "meta_test.bad_mutex_unknown_name",
+            parameters=(StepParameter(name="a", value_type="number"),),
+            mutually_exclusive_parameters=(("a", "b"),),
+        )
+        def _bad(*, a: Any = None, b: Any = None) -> dict[str, Any]:
+            return {}
+
+
+def test_rejects_mutually_exclusive_group_with_fewer_than_two_names():
+    with pytest.raises(StepMetadataError, match="fewer than two names"):
+
+        @register_step(
+            "meta_test.bad_mutex_singleton",
+            parameters=(StepParameter(name="a", value_type="number"),),
+            mutually_exclusive_parameters=(("a",),),
+        )
+        def _bad(*, a: Any = None) -> dict[str, Any]:
+            return {}
+
+
+def test_accepts_a_valid_mutually_exclusive_group():
+    @register_step(
+        "meta_test.good_mutex",
+        parameters=(
+            StepParameter(name="a", value_type="number", default=None),
+            StepParameter(name="b", value_type="number", default=None),
+        ),
+        mutually_exclusive_parameters=(("a", "b"),),
+    )
+    def _good(*, a: Any = None, b: Any = None) -> dict[str, Any]:
+        return {}
+
+    STEP_REGISTRY.pop("meta_test.good_mutex", None)
 
 
 def test_rejects_default_not_in_choices():

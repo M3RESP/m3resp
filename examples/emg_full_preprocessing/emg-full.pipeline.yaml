@@ -21,13 +21,18 @@
 # same context keys (processed_emg / baseline) and are not meant to run
 # together in one pipeline.
 #
+# `schema_version: 1` enables strict parsing (Stage 2 Phase 2/9); every step
+# below has an explicit `id:` so GUI/provenance references survive reordering.
+#
 #   outputs:  where to write results and which artifacts to produce
 #   inputs:   data paths (referenced in steps with @name)
 
+schema_version: 1
 name: emg-full-preprocessing
 
 outputs:
   dir: ../../output/emg-full-preprocessing
+  mode: automatic
   timestamped: true
   summary_json: true
   event_csvs: true
@@ -40,28 +45,34 @@ inputs:
 
 steps:
   # -- Loading ---------------------------------------------------------------
-  - uses: emg.load
+  - id: load
+    uses: emg.load
     with: { file: "@emg_file" }
 
-  - uses: emg.load_ventilator
+  - id: load_ventilator
+    uses: emg.load_ventilator
     with: { file: "@vent_file" }
 
-  - uses: emg.ventilator_channels
+  - id: ventilator_channels
+    uses: emg.ventilator_channels
     with: { pressure_channel: 0, flow_channel: 1, volume_channel: 2 }
 
   # -- Preprocessing + ECG removal --------------------------------------------
   # Channel 1 ("EMGdi") is the diaphragm EMG channel in this fixture; channel
   # 0 ("ECG") is a dedicated reference ECG channel used for peak detection
   # below instead of the (also ECG-contaminated) EMG channel itself.
-  - uses: emg.preprocess
+  - id: preprocess
+    uses: emg.preprocess
     with: { channel: 1, high_pass_hz: 80, envelope_window_seconds: 0.5 }
     out: { processed_emg: processed_emg_before_ecg }
 
-  - uses: emg.ecg_detect_peaks
+  - id: ecg_detect_peaks
+    uses: emg.ecg_detect_peaks
     in: { processed_emg: processed_emg_before_ecg }
     with: { ecg_channel: 0 }
 
-  - uses: emg.ecg_gating
+  - id: ecg_gating
+    uses: emg.ecg_gating
     in: { processed_emg: processed_emg_before_ecg }
     with: { fill_method: 1 }
     out: { processed_emg_after_ecg: processed_emg }
@@ -71,50 +82,76 @@ steps:
   # fixture's "quiet breathing" envelope bursts are shorter than that,
   # so the default finds zero breaths - see docs/pipelines.md "Channel
   # selection and time-base rules".
-  - uses: emg.detect_breaths
+  - id: detect_breaths
+    uses: emg.detect_breaths
     with: { min_breath_width_seconds: 0.5, half_window_seconds: 0.5 }
 
-  - uses: emg.peak_indices
+  - id: peak_indices
+    uses: emg.peak_indices
 
-  - uses: emg.moving_baseline
+  - id: moving_baseline
+    uses: emg.moving_baseline
     with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
 
-  - uses: emg.onoffpeak_baseline_crossing
+  - id: onoffpeak_baseline_crossing
+    uses: emg.onoffpeak_baseline_crossing
 
   # -- EMG breath features -----------------------------------------------------
-  - uses: emg.time_to_peak
-  - uses: emg.pseudo_slope
-  - uses: emg.amplitude
-  - uses: emg.time_product
-  - uses: emg.area_under_baseline
-  - uses: emg.respiratory_rate
+  - id: time_to_peak
+    uses: emg.time_to_peak
+  - id: pseudo_slope
+    uses: emg.pseudo_slope
+  - id: amplitude
+    uses: emg.amplitude
+  - id: time_product
+    uses: emg.time_product
+  - id: area_under_baseline
+    uses: emg.area_under_baseline
+  - id: respiratory_rate
+    uses: emg.respiratory_rate
 
   # -- Ventilator breath and Pocc-manoeuvre detection -------------------------
-  - uses: emg.detect_ventilator_breath
+  - id: detect_ventilator_breath
+    uses: emg.detect_ventilator_breath
     with: { breath_width_seconds: 0.5 }
 
-  - uses: emg.find_occluded_breaths
+  - id: find_occluded_breaths
+    uses: emg.find_occluded_breaths
 
-  - uses: emg.ventilator_respiratory_rate
+  - id: ventilator_respiratory_rate
+    uses: emg.ventilator_respiratory_rate
 
-  - uses: emg.pocc_intervals
+  - id: pocc_intervals
+    uses: emg.pocc_intervals
 
-  - uses: emg.pocc_time_product
+  - id: pocc_time_product
+    uses: emg.pocc_time_product
 
-  - uses: emg.normalize_ventilator_breaths
+  - id: normalize_ventilator_breaths
+    uses: emg.normalize_ventilator_breaths
     with: { breath_width_seconds: 0.5 }
 
   # -- Clinical quality steps (run whenever their inputs are present) --------
-  - uses: emg.snr_pseudo
-  - uses: emg.percentage_under_baseline
-  - uses: emg.detect_local_high_aub
-  - uses: emg.detect_extreme_time_products
-  - uses: emg.detect_non_consecutive_manoeuvres
-  - uses: emg.evaluate_bell_curve_error
-  - uses: emg.evaluate_event_timing
-  - uses: emg.evaluate_respiratory_rates
-  - uses: emg.pocc_quality
-  - uses: emg.interpeak_dist
+  - id: snr_pseudo
+    uses: emg.snr_pseudo
+  - id: percentage_under_baseline
+    uses: emg.percentage_under_baseline
+  - id: detect_local_high_aub
+    uses: emg.detect_local_high_aub
+  - id: detect_extreme_time_products
+    uses: emg.detect_extreme_time_products
+  - id: detect_non_consecutive_manoeuvres
+    uses: emg.detect_non_consecutive_manoeuvres
+  - id: evaluate_bell_curve_error
+    uses: emg.evaluate_bell_curve_error
+  - id: evaluate_event_timing
+    uses: emg.evaluate_event_timing
+  - id: evaluate_respiratory_rates
+    uses: emg.evaluate_respiratory_rates
+  - id: pocc_quality
+    uses: emg.pocc_quality
+  - id: interpeak_dist
+    uses: emg.interpeak_dist
 
   # No explicit export step needed — the `outputs:` section above handles
   # creating the timestamped directory and calling export_session_summary,

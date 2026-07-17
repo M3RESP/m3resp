@@ -1,4 +1,8 @@
-# Full multimodal (EIT + EMG + ventilator) pipeline.
+# Smaller, introductory multimodal (EIT + EMG + ventilator) pipeline - a
+# shorter chain than the full example, easier to read end-to-end. For the
+# complete EIT+EMG+ventilator chain (every operation, `schema_version: 1`,
+# stable step ids), see
+# `examples/multimodal_full/multimodal-full.pipeline.yaml`.
 #
 # Run with: m3resp run examples/multimodal_example/multimodal.pipeline.yaml
 # from the repository root - path-typed `with:`/`inputs:` values (like the

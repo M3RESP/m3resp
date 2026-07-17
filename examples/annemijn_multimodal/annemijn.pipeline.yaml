@@ -13,6 +13,11 @@
 # the ventilation reference for synchronization and visualization; ventilator-
 # only processing (flow/volume, occlusions, ventilator breaths) remains omitted.
 #
+# This is a dataset-specific multimodal example (the eit_emg_annemijn
+# recording has no ventilator and needs a bespoke sync method); for the
+# canonical, fully-general EIT+EMG+ventilator chain see
+# `examples/multimodal_full/multimodal-full.pipeline.yaml`.
+#
 # Run from the repo root with:
 #   python -m m3resp run examples/annemijn_multimodal/annemijn.pipeline.yaml
 # Path-typed `with:`/`inputs:` values (like the *_file entries below) are

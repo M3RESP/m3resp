@@ -44,6 +44,12 @@ _NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
 #: Context/output names reserved by the engine; a step must not write to them.
 _RESERVED_OUTPUT_NAMES = frozenset(("session",))
 
+#: Sentinel ``StepArtifact.artifact_type`` for a genuine passthrough step
+#: (e.g. ``eit.slice``, which accepts/returns whatever signal type it was
+#: given) - exempt from the compiler's artifact-type compatibility check
+#: (Phase 10 of the pipeline-structure plan) on whichever side declares it.
+ANY_ARTIFACT_TYPE = "any"
+
 
 @dataclass(frozen=True)
 class StepParameter:
@@ -132,6 +138,13 @@ class StepDefinition:
     #: Static (``with:``) parameter metadata. Optional during migration; see
     #: the module docstring.
     parameters: tuple[StepParameter, ...] = ()
+    #: Groups of parameter names that must not be set together in the same
+    #: step invocation (e.g. ``emg.ecg_gating``'s ``gate_width_seconds``/
+    #: ``gate_width_samples``) - a structural, compile-time constraint on top
+    #: of each parameter's own type/range/choice checks (Phase 10 of the
+    #: pipeline-structure plan). Every name in every group must be a declared
+    #: parameter; checked at registration time.
+    mutually_exclusive_parameters: tuple[tuple[str, ...], ...] = ()
     #: Artifact metadata for ``reads``/``requires`` context keys.
     input_artifacts: tuple[StepArtifact, ...] = ()
     #: Artifact metadata for ``writes`` context keys.
@@ -171,6 +184,7 @@ def register_step(
     summary: str = "",
     description: str = "",
     parameters: tuple[StepParameter, ...] = (),
+    mutually_exclusive_parameters: tuple[tuple[str, ...], ...] = (),
     input_artifacts: tuple[StepArtifact, ...] = (),
     output_artifacts: tuple[StepArtifact, ...] = (),
     modality: str | None = None,
@@ -206,6 +220,9 @@ def register_step(
             summary=summary or (func.__doc__ or "").strip().split("\n", 1)[0],
             description=description,
             parameters=tuple(parameters),
+            mutually_exclusive_parameters=tuple(
+                tuple(group) for group in mutually_exclusive_parameters
+            ),
             input_artifacts=tuple(input_artifacts),
             output_artifacts=tuple(output_artifacts),
             modality=modality,
@@ -250,6 +267,7 @@ def _validate_step_definition(definition: StepDefinition) -> None:
             )
 
     _validate_parameters(definition)
+    _validate_mutually_exclusive_parameters(definition)
     _validate_artifacts(definition.name, "input_artifacts", definition.input_artifacts)
     _validate_artifacts(
         definition.name, "output_artifacts", definition.output_artifacts
@@ -318,6 +336,25 @@ def _validate_parameters_against_signature(definition: StepDefinition) -> None:
                 f"Step '{definition.name}' declares parameter '{param.name}', "
                 "which is not a keyword argument of its function."
             )
+
+
+def _validate_mutually_exclusive_parameters(definition: StepDefinition) -> None:
+    if not definition.mutually_exclusive_parameters:
+        return
+
+    declared = {p.name for p in definition.parameters}
+    for group in definition.mutually_exclusive_parameters:
+        if len(group) < 2:
+            raise StepMetadataError(
+                f"Step '{definition.name}' declares a mutually-exclusive "
+                f"parameter group with fewer than two names: {group!r}."
+            )
+        for name in group:
+            if name not in declared:
+                raise StepMetadataError(
+                    f"Step '{definition.name}' declares mutually-exclusive "
+                    f"group {group!r}, but '{name}' is not a declared parameter."
+                )
 
 
 def _validate_artifacts(

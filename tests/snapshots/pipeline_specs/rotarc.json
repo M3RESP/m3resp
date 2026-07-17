@@ -15,15 +15,17 @@
     "dir": "output/rotarc-breath-duration",
     "event_csvs": true,
     "figures": true,
+    "mode": "explicit",
     "parameters_csv": false,
     "postprocessing": true,
     "structured_export": false,
     "summary_json": true,
     "timestamped": true
   },
+  "schema_version": 1,
   "steps": [
     {
-      "id": "step_000_eit_load",
+      "id": "load",
       "in": {},
       "out": {},
       "uses": "eit.load",
@@ -33,7 +35,7 @@
       }
     },
     {
-      "id": "step_001_eit_slice",
+      "id": "slice_raw",
       "in": {
         "signal": "raw_eit"
       },
@@ -48,7 +50,7 @@
       }
     },
     {
-      "id": "step_002_eit_detect_rates",
+      "id": "detect_rates",
       "in": {
         "signal": "selected_eit"
       },
@@ -59,7 +61,7 @@
       }
     },
     {
-      "id": "step_003_eit_mdn_filter",
+      "id": "mdn_filter",
       "in": {
         "signal": "raw_eit"
       },
@@ -68,7 +70,7 @@
       "with": {}
     },
     {
-      "id": "step_004_eit_global_impedance",
+      "id": "global_impedance",
       "in": {
         "signal": "filtered_eit"
       },
@@ -77,7 +79,7 @@
       "with": {}
     },
     {
-      "id": "step_005_eit_slice",
+      "id": "slice_global_impedance",
       "in": {
         "signal": "global_impedance"
       },
@@ -92,7 +94,7 @@
       }
     },
     {
-      "id": "step_006_eit_detect_breaths",
+      "id": "detect_breaths",
       "in": {
         "signal": "detection_signal"
       },
@@ -103,14 +105,14 @@
       }
     },
     {
-      "id": "step_007_eit_normalize_breaths",
+      "id": "normalize_breaths",
       "in": {},
       "out": {},
       "uses": "eit.normalize_breaths",
       "with": {}
     },
     {
-      "id": "step_008_metric_interval_cv",
+      "id": "breath_duration_cv",
       "in": {
         "intervals": "breath_intervals"
       },
@@ -121,7 +123,7 @@
       "with": {}
     },
     {
-      "id": "step_009_export_rotarc_result",
+      "id": "rotarc_result",
       "in": {
         "value": "breath_duration_cv"
       },

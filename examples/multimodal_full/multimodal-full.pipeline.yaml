@@ -1,0 +1,230 @@
+# Full multimodal (EIT + EMG + ventilator) pipeline (Stage 2
+# pipeline-structure Phase 9) - the canonical, most complete multimodal
+# example. Loads all three sources, performs raw synchronization *before*
+# any modality-specific preprocessing, then runs the full EIT and EMG/
+# ventilator processing chains (the same operations exercised individually
+# in eit-full.pipeline.yaml / emg-full.pipeline.yaml), then exports native
+# results. It does not add back any post-detection alignment step - raw
+# synchronization via `session.sync_raw` is the only cross-modality timing
+# adjustment in this pipeline.
+#
+# For a smaller, easier-to-read introduction to multimodal pipelines, see
+# `examples/multimodal_example/multimodal.pipeline.yaml`.
+#
+# Run with:
+#   m3resp run examples/multimodal_full/multimodal-full.pipeline.yaml
+# from the repository root - path-typed `with:`/`inputs:` values (like the
+# *_file entries below) resolve relative to this spec file's own directory,
+# same as `outputs.dir`, not the process working directory.
+#
+# `schema_version: 1` enables strict parsing (Stage 2 Phase 2/9); every step
+# below has an explicit `id:` so GUI/provenance references survive
+# reordering.
+
+schema_version: 1
+name: multimodal-full
+
+outputs:
+  dir: ../../output/multimodal-full-summary
+  mode: automatic
+  timestamped: true
+  summary_json: true
+  event_csvs: true
+  parameters_csv: true
+  structured_export: true
+  postprocessing: true
+  figures: true
+
+inputs:
+  eit_file: ../../data/source/synthetic/20260610_153009/m3resp_multimodal_1_eit_draeger.bin
+  emg_file: ../../data/source/synthetic/20260610_153009/m3resp_multimodal_1_emg.Poly5
+  vent_file: ../../data/source/synthetic/20260610_153009/m3resp_multimodal_1_ventilator.Poly5
+
+steps:
+  # -- Loading -----------------------------------------------------------------
+  - id: load_eit
+    uses: eit.load
+    with: { file: "@eit_file", vendor: draeger }
+
+  - id: load_emg
+    uses: emg.load
+    with: { file: "@emg_file" }
+
+  - id: load_ventilator
+    uses: emg.load_ventilator
+    with: { file: "@vent_file" }
+
+  # -- Raw synchronization, before any preprocessing ----------------------------
+  - id: sync_raw
+    uses: session.sync_raw
+    with:
+      method: manual_offset
+      offset_seconds: { eit: 0.0, emg: -2.0, vent: 0.0 }
+      reference_modality: vent
+
+  # -- EIT processing (full chain, see eit-full.pipeline.yaml) -----------------
+  - id: detect_rates
+    uses: eit.detect_rates
+    in:  { signal: raw_eit }
+    with: { subject_type: adult, welch_window_seconds: 30.0, capture: true }
+
+  - id: mdn_filter
+    uses: eit.mdn_filter
+    in:  { signal: raw_eit }
+    with: { label: mdn_filtered }
+
+  - id: global_impedance
+    uses: eit.global_impedance
+    in:  { signal: filtered_eit }
+
+  - id: detect_breaths_eit
+    uses: eit.detect_breaths
+    in:  { signal: global_impedance }
+    with: { min_duration_s: 0.6666666667 }
+
+  - id: normalize_breaths
+    uses: eit.normalize_breaths
+
+  - id: continuous_tiv
+    uses: eit.continuous_tiv
+    in:  { signal: global_impedance }
+
+  - id: eeli
+    uses: eit.eeli
+    in:  { signal: global_impedance }
+
+  - id: pixel_breaths
+    uses: eit.pixel_breaths
+    with: { phase_correction_mode: "negative amplitude" }
+
+  - id: pixel_tiv
+    uses: eit.pixel_tiv
+    in:  { signal: global_impedance, filtered_eit: filtered_eit }
+    with: { tiv_timing: continuous }
+
+  - id: roi_tiv_lungspace
+    uses: eit.roi_tiv_lungspace
+    with: { threshold: 0.15 }
+
+  - id: roi_amplitude_lungspace
+    uses: eit.roi_amplitude_lungspace
+    with: { threshold: 0.15 }
+
+  - id: roi_watershed
+    uses: eit.roi_watershed
+    with: { threshold_fraction: 0.15 }
+
+  - id: roi_filter_by_size
+    uses: eit.roi_filter_by_size
+    in:  { mask: watershed_lungspace_mask }
+    with: { min_region_size: 10, connectivity: 1 }
+
+  # -- EMG processing (full chain, see emg-full.pipeline.yaml) -----------------
+  # This channel's synthetic EMG has ECG mixed directly into it (no separate
+  # reference ECG channel here, unlike the data_from_repo fixture), so ECG
+  # detection reads it from processed_emg (source="raw_channel", the
+  # default) rather than a raw ecg_channel index.
+  - id: preprocess
+    uses: emg.preprocess
+    with: { channel: 0, high_pass_hz: 80, envelope_window_seconds: 0.5 }
+    out: { processed_emg: processed_emg_before_ecg }
+
+  - id: ecg_detect_peaks
+    uses: emg.ecg_detect_peaks
+    in: { processed_emg: processed_emg_before_ecg }
+
+  - id: ecg_gating
+    uses: emg.ecg_gating
+    in: { processed_emg: processed_emg_before_ecg }
+    with: { fill_method: 1 }
+    out: { processed_emg_after_ecg: processed_emg }
+
+  # min_breath_width_seconds/prominence_factor are tuned down from their
+  # defaults (1.0 s / 0.5): this fixture's synthetic envelope bursts are
+  # narrower and lower-contrast than those defaults assume, and the tuned
+  # values recover exactly the configured 14 breaths/min (respiratory_rate_bpm
+  # in the generator config) - see docs/pipelines.md "Channel selection and
+  # time-base rules".
+  - id: detect_breaths_emg
+    uses: emg.detect_breaths
+    with: { min_breath_width_seconds: 0.5, half_window_seconds: 0.5, prominence_factor: 0.05 }
+
+  - id: peak_indices
+    uses: emg.peak_indices
+
+  - id: ventilator_channels
+    uses: emg.ventilator_channels
+    with:
+      pressure_channel: 0
+      flow_channel: 1
+      volume_channel: 2
+
+  - id: slopesum_baseline
+    uses: emg.slopesum_baseline
+    with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
+
+  - id: onoffpeak_baseline_crossing
+    uses: emg.onoffpeak_baseline_crossing
+
+  # -- EMG breath features ------------------------------------------------------
+  - id: time_to_peak
+    uses: emg.time_to_peak
+  - id: pseudo_slope
+    uses: emg.pseudo_slope
+  - id: amplitude
+    uses: emg.amplitude
+  - id: time_product
+    uses: emg.time_product
+  - id: area_under_baseline
+    uses: emg.area_under_baseline
+  - id: respiratory_rate
+    uses: emg.respiratory_rate
+
+  # -- Ventilator breath and Pocc-manoeuvre detection ---------------------------
+  - id: find_occluded_breaths
+    uses: emg.find_occluded_breaths
+
+  - id: pocc_intervals
+    uses: emg.pocc_intervals
+
+  - id: pocc_time_product
+    uses: emg.pocc_time_product
+
+  - id: pocc_quality
+    uses: emg.pocc_quality
+
+  - id: detect_ventilator_breath
+    uses: emg.detect_ventilator_breath
+    with: { breath_width_seconds: 0.5 }
+
+  - id: ventilator_respiratory_rate
+    uses: emg.ventilator_respiratory_rate
+
+  - id: detect_non_consecutive_manoeuvres
+    uses: emg.detect_non_consecutive_manoeuvres
+
+  - id: normalize_ventilator_breaths
+    uses: emg.normalize_ventilator_breaths
+    with: { breath_width_seconds: 0.5 }
+
+  # -- Clinical quality steps (run whenever their inputs are present) ----------
+  - id: snr_pseudo
+    uses: emg.snr_pseudo
+  - id: percentage_under_baseline
+    uses: emg.percentage_under_baseline
+  - id: detect_local_high_aub
+    uses: emg.detect_local_high_aub
+  - id: detect_extreme_time_products
+    uses: emg.detect_extreme_time_products
+  - id: evaluate_bell_curve_error
+    uses: emg.evaluate_bell_curve_error
+  - id: evaluate_event_timing
+    uses: emg.evaluate_event_timing
+  - id: evaluate_respiratory_rates
+    uses: emg.evaluate_respiratory_rates
+  - id: interpeak_dist
+    uses: emg.interpeak_dist
+
+  # No explicit export step needed — the `outputs:` section above handles
+  # creating the timestamped directory and calling export_session_summary,
+  # including the native structured export.

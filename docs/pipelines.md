@@ -6,6 +6,11 @@ shared context, runs one operation, and writes its outputs back. The engine
 validates that every step's inputs are produced before it runs, so wiring
 mistakes are caught immediately with a clear error.
 
+This is the declarative engine (`m3resp.workflows`). For the smaller, named
+`Pipeline`/preset mechanism (`session.run_pipeline("eit" | "emg" |
+"multimodal")`), see
+[developer/pipeline-contracts.md](developer/pipeline-contracts.md).
+
 ## Running a pipeline
 
 From the command line:
@@ -117,6 +122,48 @@ The four keys for each step:
   `1` for strict parsing: unknown top-level/step keys and non-boolean
   booleans become hard errors instead.
 
+### Strict (`schema_version: 1`) versus legacy specs
+
+A spec with no top-level `schema_version` key is parsed by the permissive
+legacy parser: unknown top-level/step keys are silently ignored, and a
+non-boolean `outputs.*` flag (e.g. `"yes"`) is coerced with `bool()` behind a
+`FutureWarning` rather than rejected. This exists for backward compatibility
+with specs written before Stage 2; new specs should set `schema_version: 1`.
+
+A versioned spec (`schema_version: 1`) is parsed strictly by a pydantic
+model: an unknown key anywhere (top level, a step, `outputs`, `experiment`,
+`execution`) is a hard `PipelineSpecError`, every boolean must be a real
+YAML/JSON boolean, and `outputs.mode` must be set explicitly whenever
+`outputs.dir` is set (see "Output modes" below — a legacy spec may still
+omit it and let the engine infer it). Both parsers build the same
+`PipelineSpec`/`StepSpec` dataclasses, so the engine, `compile_pipeline`, and
+every step behave identically either way; only what gets accepted at parse
+time differs. All five example specs under `examples/` use
+`schema_version: 1`, except the two smaller introductory ones
+(`multimodal_example`, `annemijn_multimodal`) which are kept legacy on
+purpose, as a lower-ceremony starting point.
+
+### Step ids
+
+Every step gets a stable `id`: an explicit `id:` in the spec is used as-is
+(and must be unique across the spec), otherwise the engine generates
+`step_{position:03d}_{operation}` (e.g. `step_003_eit.detect_breaths`).
+A generated id changes if you reorder or insert steps, so anything that
+needs to reference *this specific step* across runs or across spec edits —
+a GUI's per-step provenance link, a downstream tool reading
+`run_manifest.json`'s `step_records` — should use an explicit `id:` instead:
+
+```yaml
+steps:
+  - id: detect_breaths
+    uses: eit.detect_breaths
+    in: { signal: global_impedance }
+```
+
+Every step in `eit-full.pipeline.yaml`, `emg-full.pipeline.yaml`,
+`multimodal-full.pipeline.yaml`, and `breath-duration.pipeline.yaml` declares
+an explicit `id:` for this reason.
+
 ### Timestamped output directories
 
 Set `outputs.timestamped: true` to give every run its own subfolder
@@ -150,6 +197,147 @@ def my_thing(session, output_dir, **kwargs) -> dict:
         raise ValueError("export.my_thing requires 'outputs.dir' to be set.")
     ...
 ```
+
+### Output modes
+
+`outputs.mode` (Phase 6.2) states, explicitly, what happens to `outputs.dir`
+after the pipeline runs:
+
+| Mode | Behavior |
+|---|---|
+| `automatic` | The engine calls `export_session_summary` itself once the run succeeds — the same behavior as omitting an explicit export step. Use this when the spec has no `export.*` step, e.g. `eit-full.pipeline.yaml`/`emg-full.pipeline.yaml`/`multimodal-full.pipeline.yaml`. |
+| `explicit` | The engine writes nothing on its own; the spec's own `export.*` step(s) (already run during execution, e.g. `export.rotarc_result`) are entirely responsible for what lands in `outputs.dir`. Use this whenever the spec has its own export step, so output is never written twice. |
+| `none` | Nothing is written to `outputs.dir` at all (still useful for `outputs.figures` alone, or for a spec run purely for its in-memory result). |
+
+A versioned (`schema_version: 1`) spec must set `mode` explicitly whenever
+`dir` is set — this is enforced at parse time — precisely so a reader never
+has to guess which of the three behaviors above will happen. A legacy spec
+may omit it; the engine then infers `explicit` if any `export.*` step is
+present, `automatic` otherwise, and warns with a `FutureWarning` that this
+inference is deprecated. Regardless of mode, `outputs.figures` (when true)
+is written for a successful run before the mode branches, and *nothing* in
+`outputs:` is written for a failed or cancelled run except the run manifest
+below (Phase 6.4: no success summary after a failure).
+
+### Validation and readiness
+
+Two distinct checks are available before running anything, both without
+importing `eitprocessing`/`resurfemg` or touching the filesystem for
+anything but the readiness check itself:
+
+- **Structural** validation (`m3resp validate spec.yaml`, or
+  `validate_pipeline(spec)` from `m3resp.workflows.compiler`) checks that the
+  spec parses, every `uses` name is a registered step, every step's inputs
+  are bound to something produced earlier (or a declared default), every
+  static parameter has the right value type, and no unknown/duplicate names
+  exist. This is always safe to run and always cheap — it never imports an
+  optional package or reads a data file.
+- **Readiness** validation (`m3resp validate --readiness spec.yaml`, or
+  `validate_pipeline(spec, readiness=True)`) additionally checks things that
+  depend on *this* machine/environment: whether a step's declared optional
+  package (`eitprocessing`/`resurfemg`) is actually importable, and whether a
+  `path`-typed parameter's file actually exists on disk. A readiness
+  diagnostic is expected and correct, not a bug, when it fires for the right
+  reason — e.g. `breath-duration.pipeline.yaml`'s `eit_file` is a private,
+  site-specific path (see its "USER TEMPLATE" banner) and reports
+  `missing_file` on any machine other than that researcher's.
+
+Both return every independent problem found in one pass (a
+`ValidationReport` with separate `structural`/`readiness` diagnostic tuples,
+each JSON-safe via `.as_dict()`), rather than raising on the first one, so a
+GUI or CI job can show a complete list instead of a fix-one-rerun loop.
+`compile_pipeline(spec)` raises on the first structural error instead of
+collecting them — it is meant for "give me the resolved plan or fail," not
+for validation reporting.
+
+### Execution lifecycle: progress, warnings, cancellation, failure
+
+A run is more than success/failure. `run_pipeline`/`run_spec` accept an
+optional `event_sink` callback and `cancellation_token`, and every
+`PipelineResult` carries a full accounting of what happened:
+
+- **Progress events** — if `event_sink` is supplied, it is called with a
+  framework-neutral event for `pipeline_started`, each step's
+  `step_started`/`step_completed`/`step_failed`/`step_warning`, and the
+  run's own `pipeline_completed`/`pipeline_failed`/`pipeline_cancelled`. A
+  GUI wires this straight to a progress bar without importing anything
+  m3resp-internal beyond the event shape itself.
+- **Warnings** — every Python warning raised inside a step (including one
+  raised immediately before that step's own exception — this ordering is
+  deliberately preserved, not dropped) is captured and attached to that
+  step's `StepExecutionRecord`, and also collected onto
+  `PipelineResult.warnings`, rather than only printing to stderr.
+- **Cancellation** — a `CancellationToken` is checked before and after each
+  step; calling `.cancel()` on it (the CLI does this from a `SIGINT`
+  handler, Ctrl-C) lets the current step finish, then stops before the next
+  one starts. The result's `status` becomes `"cancelled"`, not `"failed"` —
+  completed work and its manifest are preserved, not discarded.
+- **Failure** — a step's own exception is wrapped in
+  `PipelineExecutionError` (carrying `step_id`/`position`/`operation_id`,
+  the run's `run_id`/`started_at`, and every `step_record` up to the
+  failure, with the original exception as `__cause__`), so a caller always
+  gets structured context, not just a bare traceback.
+
+### Run manifests
+
+Whenever `outputs.dir` is set and the resolved mode is not `"none"`,
+`run_spec` writes `<output_dir>/run_manifest.json` — once with
+`status: "running"` before any step executes, then atomically replaced
+(temp file + `os.replace()`, so a reader never observes a half-written file)
+with the terminal state once the run finishes, *including on failure or
+cancellation*. The manifest is JSON: `run_id`, `status`, `pipeline_name`,
+`schema_version`, timestamps, the spec's resolved `root`/`description`,
+`inputs` (with any key containing `password`/`secret`/`token`/`credential`/
+`api_key` redacted), the execution context, every step record, every
+diagnostic/warning, an `error` block on failure, and (only when
+`outputs.checksums: true`) a sha256 of every existing file referenced by a
+`path`-typed step parameter. A crashed run therefore always leaves an
+honestly-marked-`"failed"` manifest behind instead of nothing.
+
+### Native versus compatibility artifacts
+
+Every context key a step reads or writes is a typed `StepArtifact`
+(`m3resp steps --details` / `m3resp describe <op>` show these). Several
+steps write two forms of the same result: a **native** `Signal`/`Event`/
+`ParameterResult`/`QualityFlag` object with full provenance
+(`method`/`metadata.source_function`), and a **compatibility** output that
+keeps the exact raw shape (e.g. a `pandas.Series`) older consumers already
+expect. Both are typed and both are exported; prefer the native form in new
+code; compatibility outputs exist so upgrading an EMG/EIT step's
+implementation never breaks an existing consumer of its raw shape. See the
+EMG step table below for the specific native/compatibility pairs on the
+EMG/ventilator side.
+
+### GUI discovery and the `PipelineService` boundary
+
+`m3resp.workflows.service.PipelineService` is the intended integration
+surface for a GUI or any other application embedding m3resp — every method
+takes a spec (path/dict/`PipelineSpec`) and returns only JSON-safe
+dictionaries, never a live `M3Session`, adapter instance, upstream package
+object, NumPy array, or callable:
+
+```python
+from m3resp.workflows.service import PipelineService
+
+service = PipelineService()
+service.list_capabilities(prefix="eit.")       # every eit.* step's discovery description
+service.describe_capability("eit.detect_rates") # one step, incl. capability state
+service.validate_pipeline(spec, readiness=True) # ValidationReport.as_dict()
+service.compile_pipeline(spec)                  # CompiledPipeline.as_dict()
+service.run_pipeline(spec, event_sink=..., cancellation_token=...)  # run summary
+```
+
+`list_capabilities`/`describe_capability` (backed by `describe_steps`/
+`describe_step` in `workflows/registry.py`) let a GUI render step pickers
+and per-step parameter forms, and disable/grey out an operation whose
+optional package (`eitprocessing`/`resurfemg`) is not installed, all without
+importing that package or inspecting a function's signature —
+`step_capability_state` reports `"available"`, `"missing_optional_dependency"`,
+or `"deprecated"` per step. `event_sink`/`cancellation_token` are the one
+exception to "JSON-safe only": they are the caller's own objects, passed
+through unchanged to the engine (see "Execution lifecycle" above) — GUI
+threading/process management is the caller's responsibility, not this
+service's.
 
 ## Built-in steps
 
@@ -187,37 +375,80 @@ installs cleanly without them.
 
 ## Example specs
 
-Worked examples ship with the repository:
+Worked examples ship with the repository. All except the two smaller
+introductory ones use `schema_version: 1` and declare an explicit
+`outputs.mode` (see above); every step in the `schema_version: 1` examples
+has a stable, explicit `id:`.
 
 - [`examples/ROTARC_example/breath-duration.pipeline.yaml`](../examples/ROTARC_example/breath-duration.pipeline.yaml) —
   computes breath-duration CV from EIT data and writes a ROTARC-style result
-  file.
+  file (`outputs.mode: explicit`, since `export.rotarc_result` is its own
+  export step). Its `inputs.eit_file` is a private, site-specific path —
+  point it at your own recording before running it (see the file's
+  "USER TEMPLATE" banner); `m3resp validate --readiness` correctly reports
+  it missing on any other machine.
+- [`examples/eit_full_preprocessing/eit-full.pipeline.yaml`](../examples/eit_full_preprocessing/eit-full.pipeline.yaml) —
+  every EIT operation the Stage 2 EIT gap migration closed onto
+  `EITProcessingAdapter`: loading, rate detection, MDN filtering, global
+  breath detection, continuous TIV/EELI, pixel-breath timing, pixel TIV, and
+  the four ROI lung-space steps (`outputs.mode: automatic`).
 - [`examples/emg_full_preprocessing/emg-full.pipeline.yaml`](../examples/emg_full_preprocessing/emg-full.pipeline.yaml) —
   every EMG/ventilator operation the Stage 2 ReSurfEMG gap migration closed
   onto `ReSurfEMGAdapter`: loading, ECG detection + gating, breath detection,
   moving-baseline, on/offset detection, breath features, ventilator/Pocc
   detection and prerequisites, and all ten clinical quality operations. See
   ["EMG/ventilator pipelines"](#emgventilator-pipelines) below.
+- [`examples/multimodal_full/multimodal-full.pipeline.yaml`](../examples/multimodal_full/multimodal-full.pipeline.yaml) —
+  the canonical, most complete multimodal example: loads EIT + EMG +
+  ventilator, performs raw synchronization via `session.sync_raw` *before*
+  any modality-specific preprocessing, then runs the full EIT and EMG/
+  ventilator chains above, then exports native results. Does not restore any
+  post-detection alignment step — raw sync is the only cross-modality timing
+  adjustment.
 - [`examples/multimodal_example/multimodal.pipeline.yaml`](../examples/multimodal_example/multimodal.pipeline.yaml) —
-  loads EIT, EMG, and ventilator signals, synchronizes them, processes each
-  modality (including ECG removal and Pocc quality), and exports session
-  summaries.
+  a smaller, introductory multimodal pipeline (legacy spec, no
+  `schema_version`); shorter than `multimodal-full` and easier to read
+  end-to-end.
 - [`examples/annemijn_multimodal/annemijn.pipeline.yaml`](../examples/annemijn_multimodal/annemijn.pipeline.yaml) —
   real EIT + diaphragm sEMG + airway-pressure recording; ECG-contaminated
   surface EMG cleaned with `emg.ecg_gating` before breath detection. No
-  ventilator in this recording, so no Pocc steps.
+  ventilator in this recording, so no Pocc steps; uses a dataset-specific
+  `sync.estimate_offset` method rather than `session.sync_raw`.
 
 Run them from the repository root:
 
 ```bash
 m3resp run examples/ROTARC_example/breath-duration.pipeline.yaml
+m3resp run examples/eit_full_preprocessing/eit-full.pipeline.yaml
 m3resp run examples/emg_full_preprocessing/emg-full.pipeline.yaml
+m3resp run examples/multimodal_full/multimodal-full.pipeline.yaml
 m3resp run examples/multimodal_example/multimodal.pipeline.yaml
 m3resp run examples/annemijn_multimodal/annemijn.pipeline.yaml
 ```
 
 Update `inputs.eit_file` in the ROTARC example before running it — it contains
 a site-specific path.
+
+### CLI reference
+
+`m3resp` has four subcommands, plus stable, documented exit codes so a
+calling script can distinguish failure categories without parsing output:
+
+| Command | Purpose |
+|---|---|
+| `m3resp run spec.yaml [--dry-run] [--debug]` | Execute a spec end-to-end. `--dry-run` compiles and prints the resolved plan (`compile_pipeline(...).as_dict()`) without running any step; `--debug` prints a full traceback instead of a short message on error. Ctrl-C cooperatively cancels (finishes the current step, keeps completed work and its manifest, exits `EXIT_CANCELLED`). |
+| `m3resp validate spec.yaml [--readiness] [--json]` | Structural (and, with `--readiness`, capability/file-existence) validation without running anything — see "Validation and readiness" above. |
+| `m3resp steps [--details] [--json]` | List every registered step; `--details` adds parameters/artifacts/capability state per step. |
+| `m3resp describe <operation>` | One step's full discovery description (e.g. `m3resp describe eit.detect_rates`). |
+
+| Exit code | Meaning |
+|---:|---|
+| `0` | Success. |
+| `1` | Usage error (bad CLI arguments). |
+| `2` | Invalid spec — structural validation failed, or the spec path could not be read. |
+| `3` | Readiness failure — `validate --readiness` found a missing optional package or file. |
+| `4` | Execution failure — a step raised during `run`. |
+| `5` | Cancelled — Ctrl-C during `run`. |
 
 ## EMG/ventilator pipelines
 

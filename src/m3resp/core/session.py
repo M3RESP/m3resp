@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -21,12 +21,14 @@ from m3resp.data.collections import (
     SignalCollection,
 )
 from m3resp.data.linked_breath import LinkedBreath
+from m3resp.data.parameters import ParameterResult
 from m3resp.data.processing import ProcessingHistory
 from m3resp.export.session_export import export_session_summary
 from m3resp.modalities.eit import EITRecording, load as load_eit_recording
 from m3resp.modalities.emg import EMGRecording, load as load_emg_recording
 from m3resp.synchronization.alignment import align_events_by_modality_offset
 from m3resp.synchronization.linking import link_breaths_by_time
+from m3resp.synchronization.multimodal_parameters import compute_multimodal_parameters
 
 if TYPE_CHECKING:
     from m3resp.datamodel.recorder import DataModelRecorder
@@ -392,6 +394,35 @@ class M3Session:
         )
         self._record("link_breaths", parameters={"time_tolerance": time_tolerance})
         return self.linked_breaths
+
+    def compute_multimodal_parameters(
+        self,
+        *,
+        delay_pairs: Sequence[tuple[str, str]] | None = None,
+        duration_pairs: Sequence[tuple[str, str]] | None = None,
+        anchor: str = "start",
+    ) -> list[ParameterResult]:
+        """Compute timing-delay/duration-difference/event-agreement
+        `ParameterResult`s from `self.linked_breaths` (plan_stage2.md Sec 21).
+
+        Call `link_breaths` first; an empty `self.linked_breaths` yields an
+        empty result rather than raising. Results are added to
+        `self.parameter_results` and also returned.
+        """
+
+        results = compute_multimodal_parameters(
+            self.linked_breaths,
+            delay_pairs=delay_pairs,
+            duration_pairs=duration_pairs,
+            anchor=anchor,
+        )
+        for parameter in results:
+            self.parameter_results.add(parameter)
+        self._record(
+            "compute_multimodal_parameters",
+            parameters={"anchor": anchor, "n_linked_breaths": len(self.linked_breaths)},
+        )
+        return results
 
     def run_pipeline(
         self, name: str, *, config: Mapping[str, Mapping[str, Any]] | None = None

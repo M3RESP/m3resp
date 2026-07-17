@@ -1612,6 +1612,7 @@ def ecg_estimated_subtraction(
     modality="emg",
     optional_packages=_RESURFEMG,
     alternatives=("emg.ecg_wavelet_denoising", "emg.ecg_estimated_subtraction"),
+    mutually_exclusive_parameters=(("gate_width_seconds", "gate_width_samples"),),
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(

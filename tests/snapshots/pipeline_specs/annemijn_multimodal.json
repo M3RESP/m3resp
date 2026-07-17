@@ -15,12 +15,14 @@
     "dir": "output/annemijn-multimodal-summary",
     "event_csvs": true,
     "figures": true,
+    "mode": null,
     "parameters_csv": true,
     "postprocessing": true,
     "structured_export": false,
     "summary_json": true,
     "timestamped": true
   },
+  "schema_version": null,
   "steps": [
     {
       "id": "step_000_eit_load",

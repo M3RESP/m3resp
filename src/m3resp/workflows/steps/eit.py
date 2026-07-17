@@ -20,7 +20,12 @@ from m3resp.adapters.eitprocessing_adapter import (
 )
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult, Signal
-from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
+from m3resp.workflows.registry import (
+    ANY_ARTIFACT_TYPE,
+    StepArtifact,
+    StepParameter,
+    register_step,
+)
 from m3resp.workflows.utils import slice_signal_by_mode
 
 #: Every eit.* step ultimately calls eitprocessing, directly or through
@@ -307,9 +312,13 @@ def load(
     input_artifacts=(
         StepArtifact(
             name="signal",
-            artifact_type="eit_pixel_signal",
+            # Genuine passthrough - this step accepts *any* upstream EIT
+            # signal (raw, filtered, global impedance, ...), not one fixed
+            # type, so it uses the "any" sentinel rather than a specific
+            # artifact type (Phase 10 artifact-type compatibility check).
+            artifact_type=ANY_ARTIFACT_TYPE,
             default_context_key="raw_eit",
-            description="Upstream EIT signal to slice.",
+            description="Upstream EIT signal to slice (any signal type).",
             compatibility_only=True,
         ),
     ),
@@ -337,7 +346,7 @@ def load(
     output_artifacts=(
         StepArtifact(
             name="result",
-            artifact_type="eit_pixel_signal",
+            artifact_type=ANY_ARTIFACT_TYPE,
             description="Sliced signal, of the same type as the input.",
             compatibility_only=True,
         ),

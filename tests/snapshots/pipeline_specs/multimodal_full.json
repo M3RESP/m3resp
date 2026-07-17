@@ -11,22 +11,22 @@
     "emg_file": "../../data/source/synthetic/20260610_153009/m3resp_multimodal_1_emg.Poly5",
     "vent_file": "../../data/source/synthetic/20260610_153009/m3resp_multimodal_1_ventilator.Poly5"
   },
-  "name": "multimodal",
+  "name": "multimodal-full",
   "outputs": {
-    "dir": "output/multimodal-summary",
+    "dir": "output/multimodal-full-summary",
     "event_csvs": true,
     "figures": true,
-    "mode": null,
+    "mode": "automatic",
     "parameters_csv": true,
     "postprocessing": true,
-    "structured_export": false,
+    "structured_export": true,
     "summary_json": true,
     "timestamped": true
   },
-  "schema_version": null,
+  "schema_version": 1,
   "steps": [
     {
-      "id": "step_000_eit_load",
+      "id": "load_eit",
       "in": {},
       "out": {},
       "uses": "eit.load",
@@ -36,7 +36,7 @@
       }
     },
     {
-      "id": "step_001_emg_load",
+      "id": "load_emg",
       "in": {},
       "out": {},
       "uses": "emg.load",
@@ -45,7 +45,7 @@
       }
     },
     {
-      "id": "step_002_emg_load_ventilator",
+      "id": "load_ventilator",
       "in": {},
       "out": {},
       "uses": "emg.load_ventilator",
@@ -54,7 +54,7 @@
       }
     },
     {
-      "id": "step_003_session_sync_raw",
+      "id": "sync_raw",
       "in": {},
       "out": {},
       "uses": "session.sync_raw",
@@ -69,7 +69,7 @@
       }
     },
     {
-      "id": "step_004_eit_detect_rates",
+      "id": "detect_rates",
       "in": {
         "signal": "raw_eit"
       },
@@ -82,7 +82,7 @@
       }
     },
     {
-      "id": "step_005_eit_mdn_filter",
+      "id": "mdn_filter",
       "in": {
         "signal": "raw_eit"
       },
@@ -93,7 +93,7 @@
       }
     },
     {
-      "id": "step_006_eit_global_impedance",
+      "id": "global_impedance",
       "in": {
         "signal": "filtered_eit"
       },
@@ -102,7 +102,7 @@
       "with": {}
     },
     {
-      "id": "step_007_eit_detect_breaths",
+      "id": "detect_breaths_eit",
       "in": {
         "signal": "global_impedance"
       },
@@ -113,14 +113,14 @@
       }
     },
     {
-      "id": "step_008_eit_normalize_breaths",
+      "id": "normalize_breaths",
       "in": {},
       "out": {},
       "uses": "eit.normalize_breaths",
       "with": {}
     },
     {
-      "id": "step_009_eit_continuous_tiv",
+      "id": "continuous_tiv",
       "in": {
         "signal": "global_impedance"
       },
@@ -129,7 +129,7 @@
       "with": {}
     },
     {
-      "id": "step_010_eit_eeli",
+      "id": "eeli",
       "in": {
         "signal": "global_impedance"
       },
@@ -138,17 +138,67 @@
       "with": {}
     },
     {
-      "id": "step_011_eit_pixel_tiv",
+      "id": "pixel_breaths",
+      "in": {},
+      "out": {},
+      "uses": "eit.pixel_breaths",
+      "with": {
+        "phase_correction_mode": "negative amplitude"
+      }
+    },
+    {
+      "id": "pixel_tiv",
       "in": {
         "filtered_eit": "filtered_eit",
         "signal": "global_impedance"
       },
       "out": {},
       "uses": "eit.pixel_tiv",
-      "with": {}
+      "with": {
+        "tiv_timing": "continuous"
+      }
     },
     {
-      "id": "step_012_emg_preprocess",
+      "id": "roi_tiv_lungspace",
+      "in": {},
+      "out": {},
+      "uses": "eit.roi_tiv_lungspace",
+      "with": {
+        "threshold": 0.15
+      }
+    },
+    {
+      "id": "roi_amplitude_lungspace",
+      "in": {},
+      "out": {},
+      "uses": "eit.roi_amplitude_lungspace",
+      "with": {
+        "threshold": 0.15
+      }
+    },
+    {
+      "id": "roi_watershed",
+      "in": {},
+      "out": {},
+      "uses": "eit.roi_watershed",
+      "with": {
+        "threshold_fraction": 0.15
+      }
+    },
+    {
+      "id": "roi_filter_by_size",
+      "in": {
+        "mask": "watershed_lungspace_mask"
+      },
+      "out": {},
+      "uses": "eit.roi_filter_by_size",
+      "with": {
+        "connectivity": 1,
+        "min_region_size": 10
+      }
+    },
+    {
+      "id": "preprocess",
       "in": {},
       "out": {
         "processed_emg": "processed_emg_before_ecg"
@@ -161,7 +211,7 @@
       }
     },
     {
-      "id": "step_013_emg_ecg_detect_peaks",
+      "id": "ecg_detect_peaks",
       "in": {
         "processed_emg": "processed_emg_before_ecg"
       },
@@ -170,7 +220,7 @@
       "with": {}
     },
     {
-      "id": "step_014_emg_ecg_gating",
+      "id": "ecg_gating",
       "in": {
         "processed_emg": "processed_emg_before_ecg"
       },
@@ -183,7 +233,7 @@
       }
     },
     {
-      "id": "step_015_emg_detect_breaths",
+      "id": "detect_breaths_emg",
       "in": {},
       "out": {},
       "uses": "emg.detect_breaths",
@@ -194,14 +244,14 @@
       }
     },
     {
-      "id": "step_016_emg_peak_indices",
+      "id": "peak_indices",
       "in": {},
       "out": {},
       "uses": "emg.peak_indices",
       "with": {}
     },
     {
-      "id": "step_017_emg_ventilator_channels",
+      "id": "ventilator_channels",
       "in": {},
       "out": {},
       "uses": "emg.ventilator_channels",
@@ -212,7 +262,7 @@
       }
     },
     {
-      "id": "step_018_emg_slopesum_baseline",
+      "id": "slopesum_baseline",
       "in": {},
       "out": {},
       "uses": "emg.slopesum_baseline",
@@ -223,35 +273,84 @@
       }
     },
     {
-      "id": "step_019_emg_find_occluded_breaths",
+      "id": "onoffpeak_baseline_crossing",
+      "in": {},
+      "out": {},
+      "uses": "emg.onoffpeak_baseline_crossing",
+      "with": {}
+    },
+    {
+      "id": "time_to_peak",
+      "in": {},
+      "out": {},
+      "uses": "emg.time_to_peak",
+      "with": {}
+    },
+    {
+      "id": "pseudo_slope",
+      "in": {},
+      "out": {},
+      "uses": "emg.pseudo_slope",
+      "with": {}
+    },
+    {
+      "id": "amplitude",
+      "in": {},
+      "out": {},
+      "uses": "emg.amplitude",
+      "with": {}
+    },
+    {
+      "id": "time_product",
+      "in": {},
+      "out": {},
+      "uses": "emg.time_product",
+      "with": {}
+    },
+    {
+      "id": "area_under_baseline",
+      "in": {},
+      "out": {},
+      "uses": "emg.area_under_baseline",
+      "with": {}
+    },
+    {
+      "id": "respiratory_rate",
+      "in": {},
+      "out": {},
+      "uses": "emg.respiratory_rate",
+      "with": {}
+    },
+    {
+      "id": "find_occluded_breaths",
       "in": {},
       "out": {},
       "uses": "emg.find_occluded_breaths",
       "with": {}
     },
     {
-      "id": "step_020_emg_pocc_intervals",
+      "id": "pocc_intervals",
       "in": {},
       "out": {},
       "uses": "emg.pocc_intervals",
       "with": {}
     },
     {
-      "id": "step_021_emg_pocc_time_product",
+      "id": "pocc_time_product",
       "in": {},
       "out": {},
       "uses": "emg.pocc_time_product",
       "with": {}
     },
     {
-      "id": "step_022_emg_pocc_quality",
+      "id": "pocc_quality",
       "in": {},
       "out": {},
       "uses": "emg.pocc_quality",
       "with": {}
     },
     {
-      "id": "step_023_emg_detect_ventilator_breath",
+      "id": "detect_ventilator_breath",
       "in": {},
       "out": {},
       "uses": "emg.detect_ventilator_breath",
@@ -260,20 +359,83 @@
       }
     },
     {
-      "id": "step_024_emg_detect_non_consecutive_manoeuvres",
+      "id": "ventilator_respiratory_rate",
+      "in": {},
+      "out": {},
+      "uses": "emg.ventilator_respiratory_rate",
+      "with": {}
+    },
+    {
+      "id": "detect_non_consecutive_manoeuvres",
       "in": {},
       "out": {},
       "uses": "emg.detect_non_consecutive_manoeuvres",
       "with": {}
     },
     {
-      "id": "step_025_emg_normalize_ventilator_breaths",
+      "id": "normalize_ventilator_breaths",
       "in": {},
       "out": {},
       "uses": "emg.normalize_ventilator_breaths",
       "with": {
         "breath_width_seconds": 0.5
       }
+    },
+    {
+      "id": "snr_pseudo",
+      "in": {},
+      "out": {},
+      "uses": "emg.snr_pseudo",
+      "with": {}
+    },
+    {
+      "id": "percentage_under_baseline",
+      "in": {},
+      "out": {},
+      "uses": "emg.percentage_under_baseline",
+      "with": {}
+    },
+    {
+      "id": "detect_local_high_aub",
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_local_high_aub",
+      "with": {}
+    },
+    {
+      "id": "detect_extreme_time_products",
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_extreme_time_products",
+      "with": {}
+    },
+    {
+      "id": "evaluate_bell_curve_error",
+      "in": {},
+      "out": {},
+      "uses": "emg.evaluate_bell_curve_error",
+      "with": {}
+    },
+    {
+      "id": "evaluate_event_timing",
+      "in": {},
+      "out": {},
+      "uses": "emg.evaluate_event_timing",
+      "with": {}
+    },
+    {
+      "id": "evaluate_respiratory_rates",
+      "in": {},
+      "out": {},
+      "uses": "emg.evaluate_respiratory_rates",
+      "with": {}
+    },
+    {
+      "id": "interpeak_dist",
+      "in": {},
+      "out": {},
+      "uses": "emg.interpeak_dist",
+      "with": {}
     }
   ]
 }

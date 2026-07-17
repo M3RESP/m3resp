@@ -2,10 +2,23 @@
 #
 # Run with: python -m m3resp run breath-duration.pipeline.yaml
 #
+# `schema_version: 1` enables strict parsing (Stage 2 Phase 2/9); every step
+# below has an explicit `id:` so GUI/provenance references survive
+# reordering. `outputs.mode: explicit` because `export.rotarc_result` below
+# is itself the pipeline's export step - the `outputs:` section only
+# supplies the settings it reads (dir/timestamped/summary_json/...), it does
+# not also run an automatic export.
+#
 #   experiment:  study metadata; drives the output filename
 #   outputs:     where to write results and which artifacts to produce
 #   inputs:      data paths (referenced in steps with @name)
+#
+# *** USER TEMPLATE - `inputs.eit_file` below is a private, site-specific ***
+# *** absolute path (a researcher's local recording), not a repo fixture. ***
+# *** Point it at your own `.bin` file before running; this cannot be a   ***
+# *** portable spec-relative path like the other examples in `examples/`.***
 
+schema_version: 1
 name: rotarc-breath-duration
 
 experiment:
@@ -17,6 +30,7 @@ experiment:
 
 outputs:
   dir: ../../output/rotarc-breath-duration
+  mode: explicit
   # export.rotarc_result honors this: results land under
   # <dir>/<timestamp>/subject_results/<run_identifier>/... instead of
   # overwriting the same folder on every run. Set to false to go back to a
@@ -33,7 +47,8 @@ inputs:
   vendor: draeger
 
 steps:
-  - uses: eit.load
+  - id: load
+    uses: eit.load
     with: { file: "@eit_file", vendor: "@vendor" }
 
   # start/end are sample indices into eit_file above (0:1550 = the full
@@ -42,38 +57,47 @@ steps:
   # different recording - an out-of-range slice fails silently (empty
   # result) rather than raising, and shows up later as a confusing crash
   # in rate/breath detection.
-  - uses: eit.slice
+  - id: slice_raw
+    uses: eit.slice
     in:  { signal: raw_eit }
     with: { start: 0, end: 1550, mode: index }
     out: { result: selected_eit }
 
-  - uses: eit.detect_rates
+  - id: detect_rates
+    uses: eit.detect_rates
     in:  { signal: selected_eit }
     with: { subject_type: adult }
 
-  - uses: eit.mdn_filter
+  - id: mdn_filter
+    uses: eit.mdn_filter
     in:  { signal: raw_eit }
 
-  - uses: eit.global_impedance
+  - id: global_impedance
+    uses: eit.global_impedance
     in:  { signal: filtered_eit }
 
-  - uses: eit.slice
+  - id: slice_global_impedance
+    uses: eit.slice
     in:  { signal: global_impedance }
     with: { start: 0, end: 1550, mode: index }
     out: { result: detection_signal }
 
-  - uses: eit.detect_breaths
+  - id: detect_breaths
+    uses: eit.detect_breaths
     in:  { signal: detection_signal }
     with: { min_duration_s: 0.6666666667 }
 
-  - uses: eit.normalize_breaths
+  - id: normalize_breaths
+    uses: eit.normalize_breaths
 
-  - uses: metric.interval_cv
+  - id: breath_duration_cv
+    uses: metric.interval_cv
     in:  { intervals: breath_intervals }
     out: { cv: breath_duration_cv }
 
   # Writes <outputs.dir>/subject_results/<run_identifier>/<subject>-<mode>-<tp>-<selection>.txt
   # and rotarc_summary.json, then exports event CSVs per the outputs: section.
-  - uses: export.rotarc_result
+  - id: rotarc_result
+    uses: export.rotarc_result
     in:  { value: breath_duration_cv }
     with: { precision: 8 }

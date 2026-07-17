@@ -1,7 +1,4 @@
-"""Stage 2 pipeline-structure Phase 0 baseline (see
-``plan/stage2/3_pipeline_structure_implementation_plan.md``).
-
-Freezes today's public ``m3resp.workflows`` behavior *before* the schema
+"""Freezes today's public ``m3resp.workflows`` behavior *before* the schema
 migration (typed metadata, versioned specs, compiled plans, ...) begins, so a
 regression in the parser/engine shows up as a failing snapshot diff instead of
 a silent behavior change. Do not "fix" a failing snapshot by regenerating it
@@ -48,6 +45,9 @@ EXAMPLE_SPECS: dict[str, Path] = {
     "emg_full_preprocessing": EXAMPLES_DIR
     / "emg_full_preprocessing"
     / "emg-full.pipeline.yaml",
+    "multimodal_full": EXAMPLES_DIR
+    / "multimodal_full"
+    / "multimodal-full.pipeline.yaml",
 }
 
 
@@ -76,10 +76,12 @@ def normalize_spec(spec: PipelineSpec) -> dict[str, Any]:
     )
     return {
         "name": spec.name,
+        "schema_version": spec.schema_version,
         "inputs": spec.inputs,
         "steps": [_normalize_step(step) for step in spec.steps],
         "outputs": {
             "dir": outputs_dir,
+            "mode": spec.outputs.mode,
             "timestamped": spec.outputs.timestamped,
             "summary_json": spec.outputs.summary_json,
             "event_csvs": spec.outputs.event_csvs,
@@ -104,7 +106,7 @@ def normalize_spec(spec: PipelineSpec) -> dict[str, Any]:
 
 
 def test_workflows_public_api_is_stable():
-    """Guards the symbols the Phase 0 compatibility shim will need to
+    """Guards the symbols compatibility shim will need to
     re-export from a future ``m3resp.pipeline`` package."""
 
     assert callable(run_pipeline)

@@ -33,7 +33,13 @@ from m3resp.workflows.lifecycle import (
     summarize_output_value,
     utc_now_iso,
 )
-from m3resp.workflows.registry import StepDefinition, StepParameter, get_step
+from m3resp.workflows.registry import (
+    ANY_ARTIFACT_TYPE,
+    StepArtifact,
+    StepDefinition,
+    StepParameter,
+    get_step,
+)
 from m3resp.workflows.spec import PipelineSpec, StepSpec, load_spec
 
 if TYPE_CHECKING:
@@ -57,7 +63,7 @@ def _is_number_or_mapping_of_numbers(value: Any) -> bool:
     return _is_number(value)
 
 
-#: Parameter value-type checkers for Phase 3.3 static validation. ``choice``
+#: Parameter value-type checkers for static validation. ``choice``
 #: is checked separately via its ``choices`` tuple, not by Python type.
 _PARAM_TYPE_CHECKS: dict[str, Any] = {
     "boolean": lambda v: isinstance(v, bool),
@@ -70,6 +76,22 @@ _PARAM_TYPE_CHECKS: dict[str, Any] = {
 }
 
 _STEPS_REGISTERED = False
+
+#: Context keys the engine itself seeds before any step runs (
+#: ``session``/``_spec_outputs``/``_spec_experiment``/``_resolved_output_dir``/
+#: ``_run_timestamp``) - a spec must never rename a step's output onto one of
+#: these via ``out:`` ("immutable seeded/reserved keys"), since
+#: doing so would silently replace the engine's own binding (e.g. the live
+#: ``M3Session``) with whatever that step happens to return.
+_RESERVED_ENGINE_KEYS = frozenset(
+    (
+        SESSION_KEY,
+        "_spec_outputs",
+        "_spec_experiment",
+        RESOLVED_OUTPUT_DIR_KEY,
+        "_run_timestamp",
+    )
+)
 
 
 def _ensure_steps_registered() -> None:
@@ -97,7 +119,7 @@ class PipelineResult:
     #: when a `DataModelRecorder` is attached to the session. `None`
     #: otherwise (including for a session without a recorder).
     processing_run_id: str | None = None
-    #: Phase 4.7 additions. All additive; existing fields above are unchanged.
+    #: All additive; existing fields above are unchanged.
     run_id: str | None = None
     status: PipelineStatus = "pending"
     started_at: str | None = None
@@ -109,7 +131,6 @@ class PipelineResult:
     warnings: tuple[CapturedWarning, ...] = ()
     execution_context: ExecutionContext | None = None
     resolved_output_dir: Path | None = None
-    #: Populated once Phase 6 writes a run manifest; `None` until then.
     manifest_path: Path | None = None
 
     @property
@@ -141,14 +162,14 @@ def run_pipeline(
     validation.
 
     ``event_sink``, if given, receives one JSON-safe progress event per call
-    (Phase 4.4: ``pipeline_started``, ``step_started``, ``step_warning``,
+    (``pipeline_started``, ``step_started``, ``step_warning``,
     ``step_completed``, ``step_failed``, ``pipeline_completed``,
     ``pipeline_failed``, ``pipeline_cancelled``). ``cancellation_token`` is
-    checked before and after each step (Phase 4.5); cancellation preserves
+    checked before and after each step; cancellation preserves
     already-completed work rather than rolling it back.
 
     A step function's own exception is re-raised wrapped in
-    ``PipelineExecutionError`` (Phase 4.2), with the original exception
+    ``PipelineExecutionError``, with the original exception
     available as ``__cause__``.
     """
 
@@ -310,7 +331,7 @@ def run_pipeline(
 
 
 def _resolve_output_mode(spec: PipelineSpec) -> tuple[str, bool]:
-    """Phase 6.2: replaces the old "any of three hardcoded export step names
+    """replaces the old "any of three hardcoded export step names
     present" heuristic with an explicit ``outputs.mode``.
 
     Returns ``(mode, was_inferred)``. A versioned spec always states its
@@ -355,7 +376,7 @@ def run_spec(
     once with ``status: "running"`` before any step executes, then
     atomically replaced with the terminal state - including on failure, so
     a crashed run leaves an honestly-marked-failed manifest rather than
-    nothing (Phase 6.3/6.4).
+    nothing.
     """
 
     from m3resp.workflows.manifest import build_manifest, write_manifest_atomic
@@ -437,7 +458,7 @@ def run_spec(
 def _write_failed_manifest(
     manifest_path: Path, spec: PipelineSpec, exc: PipelineExecutionError
 ) -> None:
-    """Phase 6.4: a failed run still gets a manifest, honestly marked
+    """a failed run still gets a manifest, honestly marked
     ``"failed"`` - never left as ``"running"`` and never mistaken for a
     success, using whatever step records were gathered before the failure."""
 
@@ -469,7 +490,7 @@ def _write_result_manifest(
     result: PipelineResult,
     output_dir: Path | None,
 ) -> Path:
-    """Phase 6.3/6.4: the terminal manifest for a run that returned normally
+    """the terminal manifest for a run that returned normally
     - ``"succeeded"`` or ``"cancelled"``, both honestly distinguished from
     ``"failed"`` (see ``_write_failed_manifest``) and from ``"running"``."""
 
@@ -503,11 +524,11 @@ def _write_result_manifest(
 def _apply_outputs(spec: PipelineSpec, result: PipelineResult, *, mode: str) -> None:
     """Apply the spec's ``outputs:`` section after the pipeline has run.
 
-    ``mode`` (Phase 6.2) replaces the old "any explicit export step present"
+    ``mode`` replaces the old "any explicit export step present"
     heuristic: ``"none"`` writes nothing, ``"explicit"`` leaves output
     entirely to the spec's own declared export steps (already run during
     execution), and ``"automatic"`` performs session export here - but only
-    for a run that actually succeeded (Phase 6.4: never write a success
+    for a run that actually succeeded (never write a success
     summary after a failed or cancelled run).
     """
 
@@ -637,7 +658,7 @@ def validate_spec(spec: PipelineSpec, *, available: set[str] | None = None) -> N
     that no two steps write to the same context key without explicit renaming,
     and that every ``@name`` input reference names a declared pipeline input.
 
-    Compatibility wrapper (Phase 3.6) around :func:`collect_diagnostics`:
+    Compatibility wrapper around :func:`collect_diagnostics`:
     raises ``PipelineSpecError`` using the first error-severity diagnostic's
     message when any exist. Call :func:`collect_diagnostics` directly to get
     every independent problem in one pass instead of only the first.
@@ -657,7 +678,7 @@ def validate_spec(spec: PipelineSpec, *, available: set[str] | None = None) -> N
 def collect_diagnostics(
     spec: PipelineSpec, *, available: set[str] | None = None
 ) -> list[Diagnostic]:
-    """Return every independent structural problem in ``spec`` (Phase 3.2/3.3/3.6).
+    """Return every independent structural problem in ``spec``.
 
     Does not raise. Unlike ``validate_spec()``, this reports every violation
     found in one pass rather than stopping at the first, and returns
@@ -682,6 +703,11 @@ def collect_diagnostics(
     }
     # Maps context key -> label of the step that produced it, for messages.
     produced: dict[str, str] = {key: "pipeline seed" for key in seeded}
+    # Maps context key -> declared StepArtifact.artifact_type of whatever
+    # produced it, for the artifact-type compatibility check below. Only
+    # populated where a producer actually declares one (additive metadata),
+    # so an undeclared key is simply skipped, never flagged.
+    produced_artifact_type: dict[str, str] = {SESSION_KEY: "m3session"}
 
     for position, step_spec in enumerate(spec.steps):
         step_label = f"step #{position} '{step_spec.uses}'"
@@ -702,14 +728,27 @@ def collect_diagnostics(
             continue  # cannot check bindings without a definition
 
         diagnostics.extend(
-            _check_bindings(step_spec, definition, position, step_label, produced)
+            _check_bindings(
+                step_spec,
+                definition,
+                position,
+                step_label,
+                produced,
+                produced_artifact_type,
+            )
         )
         diagnostics.extend(
             _check_static_parameters(
                 step_spec, definition, spec.inputs, position, step_label
             )
         )
+        diagnostics.extend(
+            _check_mutually_exclusive_parameters(
+                step_spec, definition, position, step_label
+            )
+        )
 
+        output_artifacts_by_name = {a.name: a for a in definition.output_artifacts}
         for name in definition.writes:
             context_key = step_spec.outputs.get(name, name)
             if context_key in produced and context_key not in seeded:
@@ -728,6 +767,9 @@ def collect_diagnostics(
                     )
                 )
             produced[context_key] = step_label
+            artifact = output_artifacts_by_name.get(name)
+            if artifact is not None:
+                produced_artifact_type[context_key] = artifact.artifact_type
 
     return diagnostics
 
@@ -738,8 +780,10 @@ def _check_bindings(
     position: int,
     step_label: str,
     produced: dict[str, str],
+    produced_artifact_type: dict[str, str],
 ) -> list[Diagnostic]:
     diagnostics: list[Diagnostic] = []
+    input_artifacts_by_name = {a.name: a for a in definition.input_artifacts}
 
     for param in step_spec.inputs:
         if param not in definition.reads:
@@ -770,6 +814,25 @@ def _check_bindings(
                     step_position=position,
                     operation_id=step_spec.uses,
                     suggestion=f"Declared outputs: {list(definition.writes)}",
+                )
+            )
+
+    for name in definition.writes:
+        output_context_key = step_spec.outputs.get(name, name)
+        if output_context_key in _RESERVED_ENGINE_KEYS:
+            diagnostics.append(
+                Diagnostic(
+                    severity="error",
+                    code="reserved_context_key_overwrite",
+                    message=(
+                        f"{step_label} writes output '{name}' to reserved "
+                        f"context key '{output_context_key}', which the engine "
+                        "seeds before any step runs. Rename this output via "
+                        "'out:' to a different context key."
+                    ),
+                    step_id=step_spec.id,
+                    step_position=position,
+                    operation_id=step_spec.uses,
                 )
             )
 
@@ -818,6 +881,18 @@ def _check_bindings(
                     operation_id=step_spec.uses,
                 )
             )
+        else:
+            diagnostics.extend(
+                _check_artifact_type_compatibility(
+                    param,
+                    context_key,
+                    input_artifacts_by_name,
+                    produced_artifact_type,
+                    step_spec,
+                    position,
+                    step_label,
+                )
+            )
     for context_key in definition.requires:
         if context_key not in produced:
             diagnostics.append(
@@ -853,6 +928,85 @@ def _check_bindings(
     return diagnostics
 
 
+def _check_artifact_type_compatibility(
+    param: str,
+    context_key: str,
+    input_artifacts_by_name: dict[str, StepArtifact],
+    produced_artifact_type: dict[str, str],
+    step_spec: StepSpec,
+    position: int,
+    step_label: str,
+) -> list[Diagnostic]:
+    """a step's declared input artifact type must match whatever
+    produced the context key it's bound to ("compilation validates
+    ... artifact compatibility"), unless either side
+    declares :data:`ANY_ARTIFACT_TYPE` (a genuine passthrough, e.g.
+    ``eit.slice``). Only checked when *both* sides declare a type - this is
+    additive metadata, backfilled module by module, so an undeclared type on
+    either side is simply skipped rather than flagged."""
+
+    consumer_artifact = input_artifacts_by_name.get(param)
+    if consumer_artifact is None:
+        return []
+    consumer_type = consumer_artifact.artifact_type
+    producer_type = produced_artifact_type.get(context_key)
+    if producer_type is None:
+        return []
+    if ANY_ARTIFACT_TYPE in (consumer_type, producer_type):
+        return []
+    if consumer_type == producer_type:
+        return []
+    return [
+        Diagnostic(
+            severity="error",
+            code="artifact_type_mismatch",
+            message=(
+                f"{step_label} parameter '{param}' expects artifact type "
+                f"'{consumer_type}', but context key '{context_key}' was "
+                f"produced with artifact type '{producer_type}'."
+            ),
+            step_id=step_spec.id,
+            step_position=position,
+            operation_id=step_spec.uses,
+        )
+    ]
+
+
+def _check_mutually_exclusive_parameters(
+    step_spec: StepSpec,
+    definition: StepDefinition,
+    position: int,
+    step_label: str,
+) -> list[Diagnostic]:
+    """reject a spec that sets more than one parameter from a
+    declared mutually-exclusive group (e.g. ``emg.ecg_gating``'s
+    ``gate_width_seconds``/``gate_width_samples``) in the same step
+    invocation - a structural, compile-time version of what would otherwise
+    only surface as a runtime ``ValueError`` once the step actually executes.
+    "Set" means present as a key in ``with:``, regardless of its resolved
+    value - an unset parameter is never passed at all."""
+
+    diagnostics: list[Diagnostic] = []
+    for group in definition.mutually_exclusive_parameters:
+        set_names = [name for name in group if name in step_spec.params]
+        if len(set_names) > 1:
+            diagnostics.append(
+                Diagnostic(
+                    severity="error",
+                    code="mutually_exclusive_parameters_conflict",
+                    message=(
+                        f"{step_label} sets more than one of mutually-exclusive "
+                        f"parameters {list(group)} in 'with:': {set_names}. Set "
+                        "at most one."
+                    ),
+                    step_id=step_spec.id,
+                    step_position=position,
+                    operation_id=step_spec.uses,
+                )
+            )
+    return diagnostics
+
+
 def _check_static_parameters(
     step_spec: StepSpec,
     definition: StepDefinition,
@@ -860,11 +1014,10 @@ def _check_static_parameters(
     position: int,
     step_label: str,
 ) -> list[Diagnostic]:
-    """Phase 3.3: validate static parameter values against declared metadata.
+    """validate static parameter values against declared metadata.
 
-    Only checked when the step declares metadata for that parameter name -
-    full function-signature coverage is Phase 8.4, not this phase. ``@name``
-    references are resolved against ``spec_inputs`` first (an unknown
+    Only checked when the step declares metadata for that parameter name.
+    ``@name`` references are resolved against ``spec_inputs`` first (an unknown
     reference is already reported by ``_check_reference``, so it is skipped
     here rather than reported twice).
     """
@@ -1000,7 +1153,7 @@ def _replay_captured_warnings(
 ) -> None:
     """Store each captured warning on the step's record, emit a
     ``step_warning`` event, and re-raise it through the normal warnings
-    machinery (Phase 4.3) so a caller's own filters/``-W error``/
+    machinery so a caller's own filters/``-W error``/
     ``pytest.warns`` still see it exactly once - it was only ever
     suppressed from display while captured, never dropped."""
 
@@ -1023,7 +1176,7 @@ def _replay_captured_warnings(
 
 
 def _record_processing_step(ctx: PipelineContext, record: StepExecutionRecord) -> None:
-    """Phase 5.1: log every executed step onto the session's universal
+    """log every executed step onto the session's universal
     ``ProcessingHistory``, using exactly what the engine already knows
     (bindings/parameters/timing/outcome) - no step function needs to call
     anything itself. Distinct from the datamodel's per-*pipeline*
@@ -1043,7 +1196,7 @@ def _record_processing_step(ctx: PipelineContext, record: StepExecutionRecord) -
 def _bind_compiled_arguments(
     compiled_step: "CompiledStep", ctx: PipelineContext
 ) -> dict[str, Any]:
-    """Build a step's call kwargs from an already-compiled step (Phase 3.1):
+    """Build a step's call kwargs from an already-compiled step:
     context reads resolve against the live context; static parameters were
     already fully resolved (``@ref``s and paths) at compile time."""
 
