@@ -9,7 +9,7 @@ import types
 import numpy as np
 import pytest
 
-from m3resp.synthetic import unified_generator as generator
+from m3resp.synthetic import generator
 
 
 def read_poly5_like_resurfemg(path):
