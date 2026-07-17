@@ -1,7 +1,6 @@
 data/*
 output/*
 plan/*
-docs/
 .venv/*
 .conda/*
 *.lock

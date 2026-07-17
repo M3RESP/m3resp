@@ -3,9 +3,8 @@
 Stage 2 turns `m3resp` from a thin wrapper around `eitprocessing`/`resurfemg`
 ([stage1.md](stage1.md)) into a shared multimodal data model and framework,
 without breaking anything Stage 1 already provided. This page is a short
-index; the full documentation lives in the directories linked below (see
-[`plan/stage2/stage2_concrete_plan.md`](../plan/stage2/stage2_concrete_plan.md)
-Sec 23 for the structure these follow).
+index; the full documentation lives in the directories linked below, split
+into `concepts/`, `tutorials/`, `migration/`, and `developer/` pages.
 
 ## Concepts - what each object is
 

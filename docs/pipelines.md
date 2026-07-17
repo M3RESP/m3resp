@@ -452,14 +452,12 @@ calling script can distinguish failure categories without parsing output:
 
 ## EMG/ventilator pipelines
 
-Stage 2 of the ReSurfEMG gap migration
-(`plan/stage2/2_resurfemg_gap_migration_implementation_plan.md`) keeps
-validated ReSurfEMG algorithms behind `ReSurfEMGAdapter` while exposing every
-EMG/ventilator operation as a workflow step with native `Signal`/`Event`/
-`ParameterResult`/`QualityFlag` outputs. This section documents that step
-surface; see the [Stage 2 EIT gap migration
-plan](../plan/stage2/1_eit_gap_migration_implementation_plan.md) for the
-equivalent EIT-side work.
+The ReSurfEMG gap migration keeps validated ReSurfEMG algorithms behind
+`ReSurfEMGAdapter` while exposing every EMG/ventilator operation as a
+workflow step with native `Signal`/`Event`/`ParameterResult`/`QualityFlag`
+outputs (see [developer/adapters.md](developer/adapters.md) for the adapter
+conversion boundary). This section documents that step surface; the
+equivalent EIT-side steps follow the same pattern via `EITProcessingAdapter`.
 
 Using any `emg.*`/ventilator step requires the optional `resurfemg`
 dependency:
