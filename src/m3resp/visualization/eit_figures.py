@@ -8,8 +8,8 @@ context carries the keys it needs, so a pipeline that ran only part of the EIT
 chain still writes whatever it can rather than failing.
 
 Wired into the declarative engine by ``outputs.figures: true`` (see
-``m3resp.workflows.engine._apply_outputs``); usable directly with a
-``PipelineResult.context.values`` mapping too.
+``m3resp.workflows.engine.spec_runner._apply_outputs``); usable directly with
+a ``PipelineResult.context.values`` mapping too.
 """
 
 from __future__ import annotations
