@@ -20,37 +20,37 @@ if TYPE_CHECKING:
     from m3resp.core.session import M3Session
 
 
-def _resolve_alignment_offsets(
+def resolve_alignment_offsets(
     offset_seconds: float | Mapping[str, float],
 ) -> dict[str, float]:
     if isinstance(offset_seconds, Mapping):
         offsets = {"eit": 0.0, "emg": 0.0, "vent": 0.0}
         for modality, offset in offset_seconds.items():
-            offsets[_normalize_modality(modality)] = float(offset)
+            offsets[normalize_modality(modality)] = float(offset)
         return offsets
     return {"eit": 0.0, "emg": float(offset_seconds), "vent": 0.0}
 
 
-def _offsets_relative_to_reference(
+def offsets_relative_to_reference(
     offsets: Mapping[str, float],
     reference_modality: str,
 ) -> dict[str, float]:
-    reference = _normalize_modality(reference_modality)
+    reference = normalize_modality(reference_modality)
     reference_offset = float(offsets.get(reference, 0.0))
     return {
-        _normalize_modality(modality): float(offset) - reference_offset
+        normalize_modality(modality): float(offset) - reference_offset
         for modality, offset in offsets.items()
     }
 
 
-def _normalize_modality(modality: str) -> str:
+def normalize_modality(modality: str) -> str:
     normalized = str(modality).lower()
     if normalized in {"ventilator", "ventilation"}:
         return "vent"
     return normalized
 
 
-def _crop_loaded_modality(session: "M3Session", modality: str, offset: float) -> int:
+def crop_loaded_modality(session: "M3Session", modality: str, offset: float) -> int:
     if offset == 0.0:
         return 0
     if modality == "emg" and session.emg is not None:
@@ -63,7 +63,7 @@ def _crop_loaded_modality(session: "M3Session", modality: str, offset: float) ->
     return 0
 
 
-def _raw_synchronization_traces(session: "M3Session", modality: str) -> dict[str, Any]:
+def raw_synchronization_traces(session: "M3Session", modality: str) -> dict[str, Any]:
     if modality == "emg" and session.emg is not None:
         trace = _emg_raw_trace(session.emg)
         return {"emg": trace} if trace is not None else {}

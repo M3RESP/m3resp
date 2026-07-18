@@ -56,7 +56,7 @@ def normalize_ventilator_breath(
     )
 
 
-def _infer_ventilator_fs(
+def infer_ventilator_fs(
     ventilator: Any | None,
     ventilator_fs: float | None,
 ) -> float | None:

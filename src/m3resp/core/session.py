@@ -25,16 +25,16 @@ from m3resp.modalities.eit import EITRecording, load as load_eit_recording
 from m3resp.modalities.emg import EMGRecording, load as load_emg_recording
 from m3resp.synchronization.alignment import align_events_by_modality_offset
 from m3resp.synchronization.cropping import (
-    _crop_loaded_modality,
-    _normalize_modality,
-    _offsets_relative_to_reference,
-    _raw_synchronization_traces,
-    _resolve_alignment_offsets,
+    crop_loaded_modality,
+    normalize_modality,
+    offsets_relative_to_reference,
+    raw_synchronization_traces,
+    resolve_alignment_offsets,
 )
 from m3resp.synchronization.linking import link_breaths_by_time
 from m3resp.synchronization.multimodal_parameters import compute_multimodal_parameters
 from m3resp.synchronization.ventilator import (
-    _infer_ventilator_fs,
+    infer_ventilator_fs,
     iter_ventilator_detections,
     normalize_ventilator_breath,
 )
@@ -189,15 +189,15 @@ class M3Session:
         if method != "manual_offset":
             raise ValueError("Stage 1 supports only method='manual_offset'")
 
-        configured_offsets = _resolve_alignment_offsets(offset_seconds)
+        configured_offsets = resolve_alignment_offsets(offset_seconds)
         resolved_reference = self._resolve_raw_alignment_reference(reference_modality)
-        offsets = _offsets_relative_to_reference(configured_offsets, resolved_reference)
+        offsets = offsets_relative_to_reference(configured_offsets, resolved_reference)
         synchronized: dict[str, Any] = {}
         traces: dict[str, Any] = {}
         for modality, offset in offsets.items():
-            before_traces = _raw_synchronization_traces(self, modality)
-            n_samples = _crop_loaded_modality(self, modality, float(offset))
-            after_traces = _raw_synchronization_traces(self, modality)
+            before_traces = raw_synchronization_traces(self, modality)
+            n_samples = crop_loaded_modality(self, modality, float(offset))
+            after_traces = raw_synchronization_traces(self, modality)
             for trace_name, before_trace in before_traces.items():
                 after_trace = after_traces.get(trace_name)
                 if after_trace is not None:
@@ -336,7 +336,7 @@ class M3Session:
         if method != "manual_offset":
             raise ValueError("Stage 1 supports only method='manual_offset'")
 
-        offsets = _resolve_alignment_offsets(offset_seconds)
+        offsets = resolve_alignment_offsets(offset_seconds)
         requested_reference = reference_modality
         resolved_reference, fallback_reference = self._resolve_alignment_reference(
             reference_modality
@@ -503,14 +503,14 @@ class M3Session:
         reference_modality: str | None,
     ) -> tuple[str, str | None]:
         if reference_modality is not None:
-            return _normalize_modality(reference_modality), None
+            return normalize_modality(reference_modality), None
         if self.events.get("ventilator_breaths"):
             return "vent", None
         return "eit", "eit"
 
     def _resolve_raw_alignment_reference(self, reference_modality: str | None) -> str:
         if reference_modality is not None:
-            return _normalize_modality(reference_modality)
+            return normalize_modality(reference_modality)
         if "vent" in self.raw:
             return "vent"
         if "eit" in self.raw:
@@ -537,7 +537,7 @@ class M3Session:
         if detections is None:
             return []
 
-        fs = _infer_ventilator_fs(ventilator, ventilator_fs)
+        fs = infer_ventilator_fs(ventilator, ventilator_fs)
         width_seconds = (
             0.0
             if ventilator_breath_width_seconds is None

@@ -73,18 +73,26 @@ src/m3resp/
 ├── adapters/        Conversion boundary to the legacy packages - see adapters.md
 │   ├── eitprocessing_adapter.py  load/preprocess + to_signals/to_parameters/
 │   │                             to_quality_flags (Milestone 2.3)
-│   └── resurfemg_adapter.py      same shape, for resurfemg
+│   └── resurfemg_adapter/        same shape, for resurfemg (split by
+│                                  responsibility: core/ecg/baseline/quality/defaults)
 │
 ├── synchronization/ Alignment, resampling, breath linking, multimodal
 │   │                parameters (Milestone 2.5, see concepts/synchronization.md)
 │   ├── alignment.py    manual-offset + timestamp-derived offsets
+│   ├── offset_estimation.py  cross-correlation-based offset estimation
+│   ├── timebase.py     Timebase - common time-axis representation
 │   ├── resampling.py   resample_signal - common time base
 │   ├── linking.py      link_breaths_by_time - nearest-neighbor breath linking
+│   ├── cropping.py     raw-modality offset resolution + in-place cropping,
+│   │                   used by M3Session.synchronize_raw_modalities
+│   ├── ventilator.py   ventilator breath-detection normalization into BreathEvents
 │   └── multimodal_parameters.py  compute_timing_delay / compute_event_agreement /
 │                        compute_breath_duration_difference / compute_multimodal_parameters
 │
 ├── workflows/       Stage 1's declarative step-registry engine (YAML/JSON specs)
 │   └── steps/          add a new @register_step here for a custom, composable step
+│       ├── eit/         eit.* steps, split by pipeline stage (filtering/pixel/roi/loading/signals)
+│       └── emg/         emg.* steps, split by pipeline stage (baseline/ecg_*/features/quality_*/...)
 │
 ├── presets/         Named, built-in Pipeline presets (Milestone 2.4) - see
 │   │                developer/pipeline-contracts.md; NOT the same thing as
