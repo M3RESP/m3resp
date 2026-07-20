@@ -9,6 +9,7 @@ fields live on :class:`~m3resp.data.signals.Signal`, which subclasses this.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -47,6 +48,21 @@ class TimeSeries:
             raise ValueError(
                 "values and time must have the same length along the time "
                 f"axis (got {self.values.shape[0]} and {self.time.shape[0]})"
+            )
+        other_axes_matching_time = [
+            axis
+            for axis, length in enumerate(self.values.shape[1:], start=1)
+            if length == self.time.shape[0]
+        ]
+        if other_axes_matching_time:
+            warnings.warn(
+                "values has another axis "
+                f"({other_axes_matching_time}) whose length also matches "
+                f"len(time) ({self.time.shape[0]}); this is allowed (axis 0 "
+                "is always taken as the time axis), but double-check that "
+                "the array wasn't transposed, since a mixup here can't be "
+                "distinguished from a coincidental shape match.",
+                stacklevel=2,
             )
 
     @property
