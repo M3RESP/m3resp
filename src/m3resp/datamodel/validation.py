@@ -65,14 +65,12 @@ def _check_references(store: DataModelStore) -> list[str]:
             problems.append(
                 f"DerivedFeature {feature.feature_id!r} has no matching ProcessingRun"
             )
-        if (
-            feature.source_signal_id is not None
-            and feature.source_signal_id not in store.signal_streams
-        ):
-            problems.append(
-                f"DerivedFeature {feature.feature_id!r} names a source signal that "
-                "is not in the store"
-            )
+        for source_signal_id in feature.source_signal_ids:
+            if source_signal_id not in store.signal_streams:
+                problems.append(
+                    f"DerivedFeature {feature.feature_id!r} names a source signal "
+                    "that is not in the store"
+                )
     return problems
 
 
@@ -164,7 +162,7 @@ def _complete_derived_features(store: DataModelStore) -> list[str]:
     # "Every derived feature defines its source signal."
     problems = []
     for feature in store.derived_features.values():
-        if feature.source_signal_id is None:
+        if not feature.source_signal_ids:
             problems.append(
                 f"DerivedFeature {feature.feature_id!r} is missing its source signal"
             )

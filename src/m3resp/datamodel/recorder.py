@@ -90,6 +90,7 @@ _FILE_FORMAT_BY_SUFFIX: dict[str, FileFormat] = {
     ".edf": "edf",
     ".csv": "csv",
     ".json": "json",
+    ".mat": "mat",
     ".parquet": "parquet",
     ".zarr": "zarr",
 }
@@ -184,9 +185,10 @@ class DataModelRecorder:
     ) -> DerivedFeature:
         """Materialize a ``ParameterResult`` as a ``DerivedFeature``."""
 
+        signal_id = self._signals.get(parameter.modality)
         return self.store.add_derived_feature(
             DerivedFeature(
-                source_signal_id=self._signals.get(parameter.modality),
+                source_signal_ids=[signal_id] if signal_id is not None else [],
                 processing_run_id=processing_run_id,
                 feature_name=parameter.name,
                 value=_scalar_value(parameter.value),
@@ -401,5 +403,5 @@ def _infer_file_format(path: Path | str) -> FileFormat | None:
     return _FILE_FORMAT_BY_SUFFIX.get(suffix)
 
 
-def _parse_timestamp(value: str) -> datetime:
-    return datetime.fromisoformat(value)
+def _parse_timestamp(value: str) -> float:
+    return datetime.fromisoformat(value).timestamp()

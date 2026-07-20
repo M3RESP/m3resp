@@ -25,8 +25,10 @@ from pydantic import BaseModel, Field
 from m3resp.datamodel.ids import new_id
 
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+def _utc_now_ts() -> float:
+    """Current time as a Unix timestamp (seconds since epoch, UTC)."""
+
+    return datetime.now(timezone.utc).timestamp()
 
 
 class Entity(BaseModel):
@@ -44,7 +46,7 @@ class Case(Entity):
     case_id: str = Field(default_factory=lambda: new_id("case"))
     external_case_ref: str | None = None
     study_ref: str | None = None
-    created_at: datetime = Field(default_factory=_utc_now)
+    created_at: float = Field(default_factory=_utc_now_ts)
 
 
 BodyPosition = Literal[
@@ -58,8 +60,8 @@ class RecordingSession(Entity):
 
     session_id: str = Field(default_factory=lambda: new_id("session"))
     case_id: str
-    session_start_time: datetime | None = None
-    session_end_time: datetime | None = None
+    session_start_time: float | None = None
+    session_end_time: float | None = None
     #: The session's body position, if fixed for its whole duration. Set to
     #: ``"dynamic"`` when position changes during the session rather than
     #: guessing a single value - record the actual changes as
@@ -148,8 +150,8 @@ class SignalStream(Entity):
     unit: str | None = None
     sampling_frequency_hz: float | None = None
     sample_count: int | None = None
-    start_time: datetime | None = None
-    device_local_start_time: datetime | None = None
+    start_time: float | None = None
+    device_local_start_time: float | None = None
     time_zone: str | None = None
     time_base: TimeBase | None = None
     sync_method: SyncMethod | None = None
@@ -210,7 +212,7 @@ class VentilatorSetting(Entity):
     pressure_support_cmh2o: float | None = None
     respiratory_rate_set: float | None = None
     tidal_volume_set_ml: float | None = None
-    measurement_time: datetime | None = None
+    measurement_time: float | None = None
     extras: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -225,8 +227,8 @@ class Breath(Entity):
     breath_id: str = Field(default_factory=lambda: new_id("breath"))
     session_id: str
     source_signal_id: str
-    breath_start_time: datetime | None = None
-    breath_end_time: datetime | None = None
+    breath_start_time: float | None = None
+    breath_end_time: float | None = None
     detection_method: Literal["algorithm", "manual"] | None = None
     asynchrony_type: AsynchronyType | None = None
 
@@ -237,6 +239,7 @@ EventType = Literal[
     "position_change",
     "suctioning",
     "recruitment_maneuver",
+    "occlusion_maneuver",
     "ventilator_adjustment",
     "disconnection",
     "extubation",
@@ -252,8 +255,8 @@ class ClinicalEvent(Entity):
     event_id: str = Field(default_factory=lambda: new_id("event"))
     session_id: str
     event_type: EventType
-    event_start_time: datetime | None = None
-    event_end_time: datetime | None = None
+    event_start_time: float | None = None
+    event_end_time: float | None = None
     event_source: EventSource | None = None
     confidence: Confidence | None = None
     description: str | None = None
@@ -273,7 +276,7 @@ class ProcessingRun(Entity):
     code_commit_hash: str | None = None
     input_file_ids: list[str] = Field(default_factory=list)
     parameter_file_id: str | None = None
-    run_time: datetime = Field(default_factory=_utc_now)
+    run_time: float = Field(default_factory=_utc_now_ts)
     operator_ref: str | None = None
     # Beyond the doc: forward-compat for the Task Runner / Error Handler
     # components in the roadmap image (see module docstring).
@@ -289,17 +292,24 @@ class DerivedFeature(Entity):
     """A quantitative result computed from one or more source streams (doc Sec 7.11)."""
 
     feature_id: str = Field(default_factory=lambda: new_id("feature"))
-    source_signal_id: str | None = None
+    source_signal_ids: list[str] = Field(default_factory=list)
     processing_run_id: str
     feature_name: str
-    time_window_start: datetime | None = None
-    time_window_end: datetime | None = None
+    time_window_start: float | None = None
+    time_window_end: float | None = None
     value: float | None = None
     unit: str | None = None
     quality_flag: QualityFlag | None = None
 
 
-FileFormat = Literal["hdf5", "edf", "csv", "json", "dicom", "parquet", "zarr", "other"]
+#: Common file formats (doc Sec 8.1). Open vocabulary, not an enum: new
+#: loaders/exporters can use any string here (e.g. a new file format) without
+#: a schema change - these are listed for documentation/IDE-completion
+#: convenience, not enforced at validation time.
+FileFormat = (
+    Literal["hdf5", "edf", "csv", "json", "dicom", "mat", "parquet", "zarr", "other"]
+    | str
+)
 FileRole = Literal["raw", "processed", "derived", "annotation", "parameter", "report"]
 
 
@@ -314,7 +324,7 @@ class DataFile(Entity):
     file_role: FileRole | None = None
     checksum_sha256: str | None = None
     file_size_bytes: int | None = None
-    created_at: datetime = Field(default_factory=_utc_now)
+    created_at: float = Field(default_factory=_utc_now_ts)
 
 
 # --- Cross-cutting quality (doc Sec 11) --------------------------------------
@@ -339,8 +349,8 @@ class QualityAnnotation(Entity):
     quality_annotation_id: str = Field(default_factory=lambda: new_id("qa"))
     target_type: TargetType
     target_id: str
-    time_window_start: datetime | None = None
-    time_window_end: datetime | None = None
+    time_window_start: float | None = None
+    time_window_end: float | None = None
     quality_label: QualityLabel
     artifact_type: ArtifactType | None = None
     annotation_source: AnnotationSource | None = None
