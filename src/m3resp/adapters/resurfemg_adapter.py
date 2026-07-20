@@ -159,6 +159,7 @@ class ReSurfEMGAdapter:
                     name=name,
                     modality="emg",
                     channel=channel_name,
+                    source="resurfemg",
                     processing_state=processing_state,
                 )
             )
