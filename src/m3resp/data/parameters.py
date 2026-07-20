@@ -12,6 +12,7 @@ from typing import Any
 
 import numpy as np
 
+from m3resp.data.metrics import normalize_metric_name
 from m3resp.data.units import normalize_unit
 
 
@@ -31,6 +32,14 @@ class ParameterResult:
       (``start_time`` and ``end_time`` both set);
     - the whole signal, when none of the above are set.
 
+    ``name`` stays a free-form, human-readable label. ``metric_type`` is the
+    standardized metric this instance represents, used to group/compare across
+    runs regardless of what a step happened to call it: it's auto-derived from
+    ``name`` via :func:`m3resp.data.metrics.normalize_metric_name` when left
+    unset, and stays ``None`` for a custom name that isn't a known standard
+    metric (so nothing is mislabelled). Pass ``metric_type`` explicitly to
+    override the derivation.
+
     ``unit`` is normalized via :func:`m3resp.data.units.normalize_unit`.
     """
 
@@ -38,6 +47,7 @@ class ParameterResult:
     value: float | np.ndarray
     modality: str
     unit: str | None = None
+    metric_type: str | None = None
     breath_id: str | None = None
     breath_ids: list[str] | None = None
     start_time: float | None = None
@@ -49,6 +59,8 @@ class ParameterResult:
 
     def __post_init__(self) -> None:
         self.unit = normalize_unit(self.unit)
+        if self.metric_type is None:
+            self.metric_type = normalize_metric_name(self.name)
 
     @property
     def is_scalar(self) -> bool:
@@ -68,6 +80,7 @@ class ParameterResult:
             "value": serialized_value,
             "modality": self.modality,
             "unit": self.unit,
+            "metric_type": self.metric_type,
             "breath_id": self.breath_id,
             "breath_ids": self.breath_ids,
             "start_time": self.start_time,
