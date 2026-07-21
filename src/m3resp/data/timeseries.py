@@ -44,6 +44,11 @@ class TimeSeries:
         self.values = np.asarray(self.values)
         self.time = np.asarray(self.time)
         self.unit = normalize_unit(self.unit)
+        if self.time.ndim != 1:
+            raise ValueError(
+                f"time must be 1-dimensional (one timestamp per sample), got "
+                f"shape {self.time.shape}"
+            )
         if self.values.shape[0] != self.time.shape[0]:
             raise ValueError(
                 "values and time must have the same length along the time "

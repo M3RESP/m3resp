@@ -58,6 +58,10 @@ class TestTimeSeries:
         with pytest.raises(ValueError, match="same length"):
             TimeSeries(values=[1.0, 2.0], time=[0.0])
 
+    def test_rejects_multidimensional_time(self):
+        with pytest.raises(ValueError, match="1-dimensional"):
+            TimeSeries(values=np.zeros((2, 3)), time=np.zeros((2, 3)))
+
     def test_to_manifest_row_excludes_raw_arrays(self):
         series = TimeSeries(values=[1.0, 2.0], time=[0.0, 1.0], unit="mV")
 
