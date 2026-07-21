@@ -142,7 +142,26 @@ SignalType = (
 TimeBase = Literal[
     "absolute", "approximate", "relative", "device_local", "synchronized"
 ]
-SyncMethod = Literal["common_clock", "ntp", "trigger", "manual", "none"]
+#: How signals were brought onto a common time axis. Open vocabulary, not an
+#: enum: new synchronization mechanisms shouldn't require a schema change -
+#: these are listed for documentation/IDE-completion convenience, not
+#: enforced at validation time.
+#:
+#: - ``common_clock``/``ntp``/``trigger``: clock-based methods where
+#:   `SignalStream.sync_uncertainty_ms` is a real, measurable quantity.
+#: - ``manual``: a human-entered offset.
+#: - ``breath_matching``: streams aligned by matching detected breaths
+#:   across modalities rather than by a shared clock (see
+#:   `m3resp.synchronization.linking.link_breaths_by_time`). Unlike the
+#:   clock-based methods above, there's no real clock-precision figure here -
+#:   set `sync_uncertainty_ms` from the matching algorithm's own tolerance
+#:   parameter (e.g. `link_breaths_by_time`'s `time_tolerance`, in ms) rather
+#:   than an independent estimate, so streams synced this way by different
+#:   workflows stay comparable instead of each guessing its own number.
+#: - ``none``: not synchronized.
+SyncMethod = (
+    Literal["common_clock", "ntp", "trigger", "manual", "breath_matching", "none"] | str
+)
 #: A coarse, human-readable summary of sync quality - not a substitute for
 #: `SignalStream.sync_uncertainty_ms`. What counts as "good" vs "acceptable"
 #: synchronization is application-dependent (e.g. millisecond precision
