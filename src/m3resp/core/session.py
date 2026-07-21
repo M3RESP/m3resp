@@ -12,7 +12,7 @@ import numpy as np
 from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
 from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
 from m3resp.core.events import BreathEvent, Event, coerce_breath_event
-from m3resp.core.exceptions import MissingModalityDataError
+from m3resp.core.exceptions import MissingModalityDataError, VariantAlreadyExistsError
 from m3resp.core.metadata import SessionMetadata
 from m3resp.core.provenance import ProvenanceRecord, record
 from m3resp.data.collections import (
@@ -102,60 +102,90 @@ class M3Session:
         self._record("load_emg", "emg", path=str(path))
         return recording.data
 
-    def preprocess_eit(self, *, variant: str | None = None, **kwargs: Any) -> Any:
+    def preprocess_eit(
+        self,
+        *,
+        variant: str | None = None,
+        overwrite: bool = False,
+        **kwargs: Any,
+    ) -> Any:
         """Run a provided or upstream EIT preprocessing function.
 
-        By default this overwrites `session.processed["eit"]`, so a session
-        only ever keeps one preprocessed EIT result at a time. Pass
-        `variant=<name>` to also persist this result under
-        `session.processed_variants["eit"][name]`, so different downstream
-        algorithms can each get their own differently preprocessed copy of
-        the same raw recording (e.g. `preprocess_eit(filter_mode="mdn",
-        variant="mdn")` and `preprocess_eit(filter_mode="lowpass",
-        variant="lowpass")` can both coexist). See
-        `detect_eit_breaths(variant=...)` to detect breaths against a
-        specific variant.
+        Every result is stored under `session.processed_variants["eit"][name]`,
+        `name` being `variant` if given, otherwise `"default"` - there is no
+        implicit, ambiguously-overwritten "current" result. Writing to a name
+        that's already populated raises `VariantAlreadyExistsError` unless
+        `overwrite=True` is passed, so a reference like
+        `processed_variants["eit"]["mdn"]` can't silently change meaning
+        underneath a caller that stashed it earlier. `session.processed["eit"]`
+        mirrors the `"default"` variant only, for convenience/backwards
+        compatibility with code that just wants "the" EIT result.
+
+        `preprocess_eit(filter_mode="mdn", variant="mdn")` and
+        `preprocess_eit(filter_mode="lowpass", variant="lowpass")` can both
+        coexist. See `detect_eit_breaths(variant=...)` to detect breaths
+        against a specific variant.
         """
 
         recording = self._require_raw("eit")
+        name = variant if variant is not None else "default"
+        if not overwrite and name in self.processed_variants["eit"]:
+            raise VariantAlreadyExistsError(
+                f"EIT preprocessing variant {name!r} already exists; pass "
+                "a different `variant=`, or `overwrite=True` to replace it."
+            )
         preprocess = kwargs.pop("preprocess", None)
         if preprocess is None:
-            self.processed["eit"] = self.eit_adapter.preprocess(
-                recording.data, **kwargs
-            )
-            self._extend_typed_collections_from_eit(self.processed["eit"])
+            result = self.eit_adapter.preprocess(recording.data, **kwargs)
+            self._extend_typed_collections_from_eit(result)
         else:
             # A custom `preprocess` callable's output shape is not guaranteed
             # to match what `EITProcessingAdapter.to_signals/to_parameters/
             # to_quality_flags` expect, so the typed collections are only
             # populated on the default adapter path.
-            self.processed["eit"] = preprocess(recording.data, **kwargs)
-        if variant is not None:
-            self.processed_variants["eit"][variant] = self.processed["eit"]
+            result = preprocess(recording.data, **kwargs)
+        self.processed_variants["eit"][name] = result
+        if name == "default":
+            self.processed["eit"] = result
         self._record("preprocess_eit", "eit", variant=variant, **kwargs)
-        return self.processed["eit"]
+        return result
 
-    def preprocess_emg(self, *, variant: str | None = None, **kwargs: Any) -> Any:
+    def preprocess_emg(
+        self,
+        *,
+        variant: str | None = None,
+        overwrite: bool = False,
+        **kwargs: Any,
+    ) -> Any:
         """Run EMG preprocessing through the adapter.
 
-        See `preprocess_eit` for what `variant` does - it persists this
-        result under `session.processed_variants["emg"][variant]` in
-        addition to the default `session.processed["emg"]` slot.
+        See `preprocess_eit` for what `variant`/`overwrite` do - it persists
+        this result under `session.processed_variants["emg"][name]`, raising
+        `VariantAlreadyExistsError` if `name` is already populated, and
+        mirrors it onto `session.processed["emg"]` only when `name` is
+        `"default"`.
         """
 
         recording = self._require_raw("emg")
-        self.processed["emg"] = self.emg_adapter.preprocess(recording.data, **kwargs)
-        if self.emg is not None and isinstance(self.processed["emg"], dict):
-            self.emg.filtered = self.processed["emg"].get("filtered")
-            self.emg.envelope = self.processed["emg"].get("envelope")
-            self.emg.channel = self.processed["emg"].get("channel")
-            self.emg.fs = self.processed["emg"].get("fs")
-        for signal in self.emg_adapter.to_signals(self.processed["emg"]):
+        name = variant if variant is not None else "default"
+        if not overwrite and name in self.processed_variants["emg"]:
+            raise VariantAlreadyExistsError(
+                f"EMG preprocessing variant {name!r} already exists; pass "
+                "a different `variant=`, or `overwrite=True` to replace it."
+            )
+        result = self.emg_adapter.preprocess(recording.data, **kwargs)
+        if self.emg is not None and isinstance(result, dict):
+            self.emg.filtered = result.get("filtered")
+            self.emg.envelope = result.get("envelope")
+            self.emg.channel = result.get("channel")
+            self.emg.fs = result.get("fs")
+        for signal in self.emg_adapter.to_signals(result):
             self.signals.add(signal)
-        if variant is not None:
-            self.processed_variants["emg"][variant] = self.processed["emg"]
+        self.processed_variants["emg"][name] = result
+        if name == "default":
+            self.processed["emg"] = result
         self._record("preprocess_emg", "emg", variant=variant, **kwargs)
-        return self.processed["emg"]
+        return result
 
     def synchronize_raw_modalities(
         self,
