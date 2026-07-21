@@ -45,6 +45,7 @@ class M3Session:
         eit_adapter: EITProcessingAdapter | None = None,
         emg_adapter: ReSurfEMGAdapter | None = None,
         metadata: SessionMetadata | dict[str, Any] | None = None,
+        allow_overwrite: bool = False,
     ):
         self.eit_adapter = eit_adapter or EITProcessingAdapter()
         self.emg_adapter = emg_adapter or ReSurfEMGAdapter()
@@ -57,6 +58,12 @@ class M3Session:
         # need the same raw recording preprocessed differently (see
         # preprocess_eit`/`preprocess_emg`'s `variant` parameter).
         self.processed_variants: dict[str, dict[str, Any]] = {"eit": {}, "emg": {}}
+        # Session-wide default for preprocess_eit/preprocess_emg's `overwrite`
+        # kwarg, so notebook/exploratory code can set this once instead of
+        # passing `overwrite=True` on every call. Left off by default so code
+        # copied into reusable/production paths is safe unless it opts in
+        # explicitly, per-call, or here.
+        self.allow_overwrite = allow_overwrite
         self.events: dict[str, Any] = {}
         self.parameters: dict[str, Any] = {}
         # Milestone 2.2 (plan/plan_stage2.md Sec 14): typed collections that
@@ -115,7 +122,9 @@ class M3Session:
         `name` being `variant` if given, otherwise `"default"` - there is no
         implicit, ambiguously-overwritten "current" result. Writing to a name
         that's already populated raises `VariantAlreadyExistsError` unless
-        `overwrite=True` is passed, so a reference like
+        `overwrite=True` is passed (or `session.allow_overwrite = True` is
+        set, so notebook/exploratory code can opt in once instead of passing
+        `overwrite=True` on every call), so a reference like
         `processed_variants["eit"]["mdn"]` can't silently change meaning
         underneath a caller that stashed it earlier. `session.processed["eit"]`
         mirrors the `"default"` variant only, for convenience/backwards
@@ -129,7 +138,10 @@ class M3Session:
 
         recording = self._require_raw("eit")
         name = variant if variant is not None else "default"
-        if not overwrite and name in self.processed_variants["eit"]:
+        if (
+            not (overwrite or self.allow_overwrite)
+            and name in self.processed_variants["eit"]
+        ):
             raise VariantAlreadyExistsError(
                 f"EIT preprocessing variant {name!r} already exists; pass "
                 "a different `variant=`, or `overwrite=True` to replace it."
@@ -159,8 +171,9 @@ class M3Session:
     ) -> Any:
         """Run EMG preprocessing through the adapter.
 
-        See `preprocess_eit` for what `variant`/`overwrite` do - it persists
-        this result under `session.processed_variants["emg"][name]`, raising
+        See `preprocess_eit` for what `variant`/`overwrite`/`allow_overwrite`
+        do - it persists this result under
+        `session.processed_variants["emg"][name]`, raising
         `VariantAlreadyExistsError` if `name` is already populated, and
         mirrors it onto `session.processed["emg"]` only when `name` is
         `"default"`.
@@ -168,7 +181,10 @@ class M3Session:
 
         recording = self._require_raw("emg")
         name = variant if variant is not None else "default"
-        if not overwrite and name in self.processed_variants["emg"]:
+        if (
+            not (overwrite or self.allow_overwrite)
+            and name in self.processed_variants["emg"]
+        ):
             raise VariantAlreadyExistsError(
                 f"EMG preprocessing variant {name!r} already exists; pass "
                 "a different `variant=`, or `overwrite=True` to replace it."
