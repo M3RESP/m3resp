@@ -117,14 +117,26 @@ SignalType = (
     ]
     | str
 )
+#: How much to trust `SignalStream.start_time`/`device_local_start_time` as
+#: real-world time. This does *not* change their type or units - both are
+#: always Unix epoch seconds (UTC), regardless of `time_base`; a source with
+#: no reliable clock still has to report its *best available* epoch estimate
+#: (e.g. the wall-clock time an operator started the recording) rather than
+#: leaving `start_time` unset - `time_base` is what tells a consumer how much
+#: precision that estimate actually has:
+#:
 #: - ``absolute``: a calibrated real-world clock time (e.g. NTP/atomic).
 #: - ``approximate``: a human-recorded or estimated real-world time (e.g.
 #:   noted on paper during the session) - a real timestamp, but not
 #:   calibrated, so it shouldn't be trusted to the same precision as
-#:   ``absolute``.
+#:   ``absolute``. Converting a hand-noted local wall-clock reading into an
+#:   epoch value is exactly what `SignalStream.time_zone` is for.
 #: - ``relative``: elapsed time from some reference point, not tied to a
-#:   real-world clock.
-#: - ``device_local``: the recording device's own internal clock.
+#:   real-world clock - `start_time` is still an epoch anchor (e.g. when
+#:   acquisition was triggered), but offsets from it don't carry real-world
+#:   meaning beyond that anchor.
+#: - ``device_local``: the recording device's own internal clock, not
+#:   independently calibrated against a real-world reference.
 #: - ``synchronized``: has been aligned onto a common time axis with other
 #:   signals (see `m3resp.synchronization`).
 TimeBase = Literal[
@@ -141,7 +153,27 @@ SyncQualityLabel = Literal["good", "acceptable", "uncertain", "failed"]
 
 
 class SignalStream(Entity):
-    """Base type for every continuous signal (doc Sec 7.4)."""
+    """Base type for every continuous signal (doc Sec 7.4).
+
+    Time fields (all timestamps are Unix epoch seconds, UTC - see
+    :data:`TimeBase` for what varies is how much to trust them, not their
+    units):
+
+    - ``start_time``: the best available real-world start time for this
+      stream. Always required (see the store's completeness check) even for
+      sources with no reliable clock - in that case it holds a best-effort
+      estimate (e.g. when acquisition was triggered), and :attr:`time_base`
+      tells a consumer how much precision to expect from it.
+    - ``device_local_start_time``: the device's own raw, uncorrected start
+      time as reported by the device itself, kept separately from
+      ``start_time`` for provenance/debugging even after any correction or
+      calibration has been applied to produce ``start_time``.
+    - ``time_zone``: the zone assumed when converting a naive local
+      wall-clock reading (e.g. a hand-noted ``approximate`` timestamp) into
+      an epoch value. Not needed for sources that already report an
+      unambiguous absolute or epoch time.
+    - ``time_base``: see :data:`TimeBase`.
+    """
 
     signal_id: str = Field(default_factory=lambda: new_id("signal"))
     session_id: str
@@ -235,16 +267,25 @@ class Breath(Entity):
 
 # --- Recording context (doc Sec 7.9) -----------------------------------------
 
-EventType = Literal[
-    "position_change",
-    "suctioning",
-    "recruitment_maneuver",
-    "occlusion_maneuver",
-    "ventilator_adjustment",
-    "disconnection",
-    "extubation",
-    "other",
-]
+#: Common clinical event types (doc Sec 7.9). Open vocabulary, not an enum:
+#: real recordings involve event variants that don't fit a fixed set (e.g.
+#: inspiratory vs. expiratory occlusion, the Baydur maneuver, anything
+#: extubation-adjacent) - these are listed for documentation/IDE-completion
+#: convenience, not enforced at validation time. Use `ClinicalEvent.description`
+#: for free-text detail on a specific variant.
+EventType = (
+    Literal[
+        "position_change",
+        "suctioning",
+        "recruitment_maneuver",
+        "occlusion_maneuver",
+        "ventilator_adjustment",
+        "disconnection",
+        "extubation",
+        "other",
+    ]
+    | str
+)
 EventSource = Literal["manual_annotation", "device_log", "algorithm"]
 Confidence = Literal["high", "medium", "low"]
 
