@@ -5,20 +5,30 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
 from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
 from m3resp.core.events import BreathEvent, Event, coerce_breath_event
-from m3resp.core.exceptions import MissingModalityDataError
+from m3resp.core.exceptions import MissingModalityDataError, VariantAlreadyExistsError
 from m3resp.core.metadata import SessionMetadata
 from m3resp.core.provenance import ProvenanceRecord, record
+from m3resp.data.collections import (
+    ParameterResultCollection,
+    QualityReport,
+    SignalCollection,
+)
+from m3resp.data.linked_breath import LinkedBreath
 from m3resp.export.session_export import export_session_summary
 from m3resp.modalities.eit import EITRecording, load as load_eit_recording
 from m3resp.modalities.emg import EMGRecording, load as load_emg_recording
 from m3resp.synchronization.alignment import align_events_by_modality_offset
+from m3resp.synchronization.linking import link_breaths_by_time
+
+if TYPE_CHECKING:
+    from m3resp.datamodel.recorder import DataModelRecorder
 
 ALIGNMENT_EVENT_LISTS = {
     "eit": "eit_breaths",
@@ -35,6 +45,7 @@ class M3Session:
         eit_adapter: EITProcessingAdapter | None = None,
         emg_adapter: ReSurfEMGAdapter | None = None,
         metadata: SessionMetadata | dict[str, Any] | None = None,
+        allow_overwrite: bool = False,
     ):
         self.eit_adapter = eit_adapter or EITProcessingAdapter()
         self.emg_adapter = emg_adapter or ReSurfEMGAdapter()
@@ -43,11 +54,35 @@ class M3Session:
         self.emg: EMGRecording | None = None
         self.raw: dict[str, Any] = {}
         self.processed: dict[str, Any] = {}
+        # Named alternate preprocessing results, e.g. for algorithms that
+        # need the same raw recording preprocessed differently (see
+        # preprocess_eit`/`preprocess_emg`'s `variant` parameter).
+        self.processed_variants: dict[str, dict[str, Any]] = {"eit": {}, "emg": {}}
+        # Session-wide default for preprocess_eit/preprocess_emg's `overwrite`
+        # kwarg, so notebook/exploratory code can set this once instead of
+        # passing `overwrite=True` on every call. Left off by default so code
+        # copied into reusable/production paths is safe unless it opts in
+        # explicitly, per-call, or here.
+        self.allow_overwrite = allow_overwrite
         self.events: dict[str, Any] = {}
         self.parameters: dict[str, Any] = {}
-        self.quality: dict[str, Any] = {}
+        # Milestone 2.2 (plan/plan_stage2.md Sec 14): typed collections that
+        # let EIT and EMG data live in the same structure, populated from the
+        # default preprocess/postprocess paths via each adapter's
+        # to_signals/to_parameters/to_quality_flags. These are additive: the
+        # `raw`/`processed`/`parameters` dicts above keep their Stage 1 shape
+        # and behavior unchanged.
+        self.signals = SignalCollection()
+        self.parameter_results = ParameterResultCollection()
+        self.quality = QualityReport()
+        # Milestone 2.5 (plan/plan_stage2.md Sec 20): breaths matched across
+        # modalities by `link_breaths`, once per-modality breath events exist.
+        self.linked_breaths: list[LinkedBreath] = []
         self.metadata = _coerce_metadata(metadata)
         self.provenance: list[ProvenanceRecord] = []
+        # Stage 2 data model wrapper (opt-in, see m3resp.datamodel). ``None``
+        # leaves Stage 1 behavior completely unchanged.
+        self.datamodel: DataModelRecorder | None = None
 
     def load_eit(
         self, path: str | Path, vendor: str | None = None, **kwargs: Any
@@ -74,32 +109,99 @@ class M3Session:
         self._record("load_emg", "emg", path=str(path))
         return recording.data
 
-    def preprocess_eit(self, **kwargs: Any) -> Any:
-        """Run a provided or upstream EIT preprocessing function."""
+    def preprocess_eit(
+        self,
+        *,
+        variant: str | None = None,
+        overwrite: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """Run a provided or upstream EIT preprocessing function.
+
+        Every result is stored under `session.processed_variants["eit"][name]`,
+        `name` being `variant` if given, otherwise `"default"` - there is no
+        implicit, ambiguously-overwritten "current" result. Writing to a name
+        that's already populated raises `VariantAlreadyExistsError` unless
+        `overwrite=True` is passed (or `session.allow_overwrite = True` is
+        set, so notebook/exploratory code can opt in once instead of passing
+        `overwrite=True` on every call), so a reference like
+        `processed_variants["eit"]["mdn"]` can't silently change meaning
+        underneath a caller that stashed it earlier. `session.processed["eit"]`
+        mirrors the `"default"` variant only, for convenience/backwards
+        compatibility with code that just wants "the" EIT result.
+
+        `preprocess_eit(filter_mode="mdn", variant="mdn")` and
+        `preprocess_eit(filter_mode="lowpass", variant="lowpass")` can both
+        coexist. See `detect_eit_breaths(variant=...)` to detect breaths
+        against a specific variant.
+        """
 
         recording = self._require_raw("eit")
+        name = variant if variant is not None else "default"
+        if (
+            not (overwrite or self.allow_overwrite)
+            and name in self.processed_variants["eit"]
+        ):
+            raise VariantAlreadyExistsError(
+                f"EIT preprocessing variant {name!r} already exists; pass "
+                "a different `variant=`, or `overwrite=True` to replace it."
+            )
         preprocess = kwargs.pop("preprocess", None)
         if preprocess is None:
-            self.processed["eit"] = self.eit_adapter.preprocess(
-                recording.data, **kwargs
-            )
+            result = self.eit_adapter.preprocess(recording.data, **kwargs)
+            self._extend_typed_collections_from_eit(result)
         else:
-            self.processed["eit"] = preprocess(recording.data, **kwargs)
-        self._record("preprocess_eit", "eit", **kwargs)
-        return self.processed["eit"]
+            # A custom `preprocess` callable's output shape is not guaranteed
+            # to match what `EITProcessingAdapter.to_signals/to_parameters/
+            # to_quality_flags` expect, so the typed collections are only
+            # populated on the default adapter path.
+            result = preprocess(recording.data, **kwargs)
+        self.processed_variants["eit"][name] = result
+        if name == "default":
+            self.processed["eit"] = result
+        self._record("preprocess_eit", "eit", variant=variant, **kwargs)
+        return result
 
-    def preprocess_emg(self, **kwargs: Any) -> Any:
-        """Run EMG preprocessing through the adapter."""
+    def preprocess_emg(
+        self,
+        *,
+        variant: str | None = None,
+        overwrite: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """Run EMG preprocessing through the adapter.
+
+        See `preprocess_eit` for what `variant`/`overwrite`/`allow_overwrite`
+        do - it persists this result under
+        `session.processed_variants["emg"][name]`, raising
+        `VariantAlreadyExistsError` if `name` is already populated, and
+        mirrors it onto `session.processed["emg"]` only when `name` is
+        `"default"`.
+        """
 
         recording = self._require_raw("emg")
-        self.processed["emg"] = self.emg_adapter.preprocess(recording.data, **kwargs)
-        if self.emg is not None and isinstance(self.processed["emg"], dict):
-            self.emg.filtered = self.processed["emg"].get("filtered")
-            self.emg.envelope = self.processed["emg"].get("envelope")
-            self.emg.channel = self.processed["emg"].get("channel")
-            self.emg.fs = self.processed["emg"].get("fs")
-        self._record("preprocess_emg", "emg", **kwargs)
-        return self.processed["emg"]
+        name = variant if variant is not None else "default"
+        if (
+            not (overwrite or self.allow_overwrite)
+            and name in self.processed_variants["emg"]
+        ):
+            raise VariantAlreadyExistsError(
+                f"EMG preprocessing variant {name!r} already exists; pass "
+                "a different `variant=`, or `overwrite=True` to replace it."
+            )
+        result = self.emg_adapter.preprocess(recording.data, **kwargs)
+        if self.emg is not None and isinstance(result, dict):
+            self.emg.filtered = result.get("filtered")
+            self.emg.envelope = result.get("envelope")
+            self.emg.channel = result.get("channel")
+            self.emg.fs = result.get("fs")
+        for signal in self.emg_adapter.to_signals(result):
+            self.signals.add(signal)
+        self.processed_variants["emg"][name] = result
+        if name == "default":
+            self.processed["emg"] = result
+        self._record("preprocess_emg", "emg", variant=variant, **kwargs)
+        return result
 
     def synchronize_raw_modalities(
         self,
@@ -157,23 +259,54 @@ class M3Session:
         )
         return synchronized
 
-    def detect_eit_breaths(self, **kwargs: Any) -> Any:
-        """Detect EIT breaths and store normalized events."""
+    def detect_eit_breaths(self, *, variant: str | None = None, **kwargs: Any) -> Any:
+        """Detect EIT breaths and store normalized events.
 
-        data = self.processed.get("eit") or self._require_raw("eit").data
+        Pass `variant=<name>` to detect breaths against a
+        `preprocess_eit(..., variant=<name>)` result instead of the default
+        `processed["eit"]`; the events are then stored under
+        `session.events["eit_breaths:<name>"]` instead of
+        `session.events["eit_breaths"]`, so multiple variants' detections
+        can coexist.
+        """
+
+        if variant is not None:
+            data = self.processed_variants["eit"].get(variant)
+            if data is None:
+                raise MissingModalityDataError(
+                    f"No EIT preprocessing variant {variant!r}; call "
+                    f"preprocess_eit(variant={variant!r}, ...) first."
+                )
+            event_key = f"eit_breaths:{variant}"
+        else:
+            data = self.processed.get("eit") or self._require_raw("eit").data
+            event_key = "eit_breaths"
         events = self.eit_adapter.detect_breaths(data, **kwargs)
-        self.add_events("eit_breaths", events)
-        self._record("detect_eit_breaths", "eit", **kwargs)
-        return self.events["eit_breaths"]
+        self.add_events(event_key, events)
+        self._record("detect_eit_breaths", "eit", variant=variant, **kwargs)
+        return self.events[event_key]
 
-    def detect_emg_breaths(self, **kwargs: Any) -> Any:
-        """Detect EMG breaths and store normalized events."""
+    def detect_emg_breaths(self, *, variant: str | None = None, **kwargs: Any) -> Any:
+        """Detect EMG breaths and store normalized events.
 
-        data = self.processed.get("emg") or self._require_raw("emg").data
+        See `detect_eit_breaths` for what `variant` does.
+        """
+
+        if variant is not None:
+            data = self.processed_variants["emg"].get(variant)
+            if data is None:
+                raise MissingModalityDataError(
+                    f"No EMG preprocessing variant {variant!r}; call "
+                    f"preprocess_emg(variant={variant!r}, ...) first."
+                )
+            event_key = f"emg_breaths:{variant}"
+        else:
+            data = self.processed.get("emg") or self._require_raw("emg").data
+            event_key = "emg_breaths"
         events = self.emg_adapter.detect_breaths(data, **kwargs)
-        self.add_events("emg_breaths", events)
-        self._record("detect_emg_breaths", "emg", **kwargs)
-        return self.events["emg_breaths"]
+        self.add_events(event_key, events)
+        self._record("detect_emg_breaths", "emg", variant=variant, **kwargs)
+        return self.events[event_key]
 
     def add_events(self, name: str, events: Any) -> list[Any]:
         """Store a named event list while keeping `session.events` as backing data."""
@@ -196,6 +329,14 @@ class M3Session:
             events=events,
             **kwargs,
         )
+        for parameter in self.emg_adapter.to_parameters(
+            self.parameters["emg_postprocessing"]
+        ):
+            self.parameter_results.add(parameter)
+        for flag in self.emg_adapter.to_quality_flags(
+            self.parameters["emg_postprocessing"]
+        ):
+            self.quality.add(flag)
         ventilator_breaths = self._normalize_ventilator_breaths(
             self.parameters["emg_postprocessing"],
             ventilator=kwargs.get("ventilator"),
@@ -258,6 +399,56 @@ class M3Session:
         )
         return synchronized
 
+    def link_breaths(self, *, time_tolerance: float = 0.5) -> list[LinkedBreath]:
+        """Link breaths across modalities into `LinkedBreath` objects (Milestone 2.5).
+
+        Prefers the aligned breath lists produced by `align_modalities`
+        (``self.processed["synchronized"]``) over the raw per-modality event
+        lists in ``self.events``, so breaths are matched on a common time
+        axis whenever alignment has already been run.
+        """
+
+        synchronized = self.processed.get("synchronized")
+        if not isinstance(synchronized, dict):
+            synchronized = {}
+
+        def _breaths(name: str) -> list[BreathEvent] | None:
+            events = synchronized.get(name)
+            if events is None:
+                events = self.events.get(name)
+            return events
+
+        self.linked_breaths = link_breaths_by_time(
+            {
+                "eit": _breaths("eit_breaths"),
+                "emg": _breaths("emg_breaths"),
+                "ventilator": _breaths("ventilator_breaths"),
+            },
+            time_tolerance=time_tolerance,
+        )
+        self._record("link_breaths", parameters={"time_tolerance": time_tolerance})
+        return self.linked_breaths
+
+    def run_pipeline(
+        self, name: str, *, config: Mapping[str, Mapping[str, Any]] | None = None
+    ) -> M3Session:
+        """Run a named, built-in `Pipeline` preset against this session.
+
+        This is a different mechanism from the module-level
+        ``m3resp.run_pipeline(spec, session=...)``, which executes a fully
+        custom declarative step-list spec (the Stage 1 pipeline engine in
+        ``m3resp.workflows``). ``session.run_pipeline(name)`` instead runs one
+        of the small, built-in presets registered in ``m3resp.presets``
+        (``"eit"``, ``"emg"``, ``"multimodal"``), which simply call this
+        session's own already-instrumented methods in sequence - see
+        ``m3resp.presets.base`` for the rationale.
+        """
+
+        from m3resp.presets import get_pipeline
+
+        pipeline_cls = get_pipeline(name)
+        return pipeline_cls().run(self, config=config)
+
     def export_summary(self, output_dir: str | Path) -> Path:
         """Export the session summary to disk."""
 
@@ -272,6 +463,14 @@ class M3Session:
             )
         return self.raw[modality]
 
+    def _extend_typed_collections_from_eit(self, preprocessed: dict[str, Any]) -> None:
+        for signal in self.eit_adapter.to_signals(preprocessed):
+            self.signals.add(signal)
+        for parameter in self.eit_adapter.to_parameters(preprocessed):
+            self.parameter_results.add(parameter)
+        for flag in self.eit_adapter.to_quality_flags(preprocessed):
+            self.quality.add(flag)
+
     def _record(
         self,
         action: str,
@@ -280,7 +479,10 @@ class M3Session:
         **kwargs: Any,
     ) -> None:
         record_parameters = parameters or kwargs
-        self.provenance.append(record(action, modality, **record_parameters))
+        provenance_record = record(action, modality, **record_parameters)
+        self.provenance.append(provenance_record)
+        if self.datamodel is not None:
+            self.datamodel.record_provenance(provenance_record)
 
     def _resolve_alignment_reference(
         self,

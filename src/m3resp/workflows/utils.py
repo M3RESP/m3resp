@@ -4,10 +4,43 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
+
+
+def resolve_output_dir(
+    base_dir: str | Path, *, timestamped: bool, timestamp: str | None = None
+) -> Path:
+    """Resolve ``outputs.dir`` into a concrete directory, honoring ``timestamped``.
+
+    This is the one place a "run's output directory" should be computed.
+    ``run_spec`` calls it once per run and seeds the result into the pipeline
+    context under the ``_resolved_output_dir`` key (with the raw stamp under
+    ``_run_timestamp``), so every export step in that run - built-in or
+    custom - lands in the same folder instead of each one minting its own
+    ``datetime.now()`` a few steps apart. A custom export step can opt into
+    this by reading ``_resolved_output_dir`` from context, e.g.::
+
+        @register_step(
+            "export.my_thing",
+            reads={"output_dir": "_resolved_output_dir", ...},
+            ...,
+        )
+    """
+
+    output_dir = Path(base_dir)
+    if timestamped:
+        output_dir = output_dir / (timestamp or default_run_timestamp())
+    return output_dir
+
+
+def default_run_timestamp() -> str:
+    """The default timestamp format used for timestamped output directories."""
+
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 def slice_by_index(data: Any, *, start: int, end: int) -> Any:

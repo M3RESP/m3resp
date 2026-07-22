@@ -6,9 +6,13 @@ from collections.abc import Callable, Sequence
 from importlib import import_module
 from typing import Any
 
+import numpy as np
+
 from m3resp.core.events import BreathEvent
 from m3resp.core.events import coerce_breath_events
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
+from m3resp.data import ParameterResult, QualityFlag, Signal
+from m3resp.data.signals import ProcessingState
 
 POSTPROCESSING_FUNCTIONS: dict[str, tuple[str, ...]] = {
     "baseline": ("moving_baseline", "slopesum_baseline"),
@@ -116,6 +120,103 @@ class ReSurfEMGAdapter:
                 "Pass `compute=callable`."
             )
         return compute(signal, events, **kwargs)
+
+    # -- Milestone 2.3: conversion to m3resp-native Layer 1 objects -----------
+    #
+    # These convert `preprocess_emg()`/`postprocess()`'s raw dict outputs into
+    # `m3resp.data` objects, so downstream code (and the data model recorder)
+    # stops depending on ReSurfEMG's dict layout.
+
+    def to_signals(self, processed_emg: dict[str, Any]) -> list[Signal]:
+        """Convert preprocessed EMG channel arrays into `Signal` objects."""
+
+        if not isinstance(processed_emg, dict) or "fs" not in processed_emg:
+            raise UnsupportedWorkflowError(
+                "to_signals expects processed EMG data from preprocess_emg()."
+            )
+
+        fs = float(processed_emg["fs"])
+        channel = processed_emg.get("channel")
+        channel_name = str(channel) if channel is not None else None
+
+        signals: list[Signal] = []
+        channel_sources: list[tuple[str, str, ProcessingState]] = [
+            ("raw_channel", "raw_channel", "raw"),
+            ("filtered", "filtered", "filtered"),
+            ("envelope", "envelope", "processed"),
+        ]
+        for key, name, processing_state in channel_sources:
+            array = processed_emg.get(key)
+            if array is None:
+                continue
+            array = np.asarray(array, dtype=float)
+            time = np.arange(array.shape[0], dtype=float) / fs
+            signals.append(
+                Signal(
+                    values=array,
+                    time=time,
+                    sample_frequency=fs,
+                    name=name,
+                    modality="emg",
+                    channel=channel_name,
+                    source="resurfemg",
+                    processing_state=processing_state,
+                )
+            )
+        return signals
+
+    def to_parameters(self, postprocessed: dict[str, Any]) -> list[ParameterResult]:
+        """Convert computed EMG features into `ParameterResult` objects."""
+
+        features = _computed_category(postprocessed, "features")
+        return [
+            ParameterResult(
+                name=name,
+                value=_as_parameter_value(value),
+                modality="emg",
+                method=f"resurfemg.{name}",
+            )
+            for name, value in features.items()
+        ]
+
+    def to_quality_flags(self, postprocessed: dict[str, Any]) -> list[QualityFlag]:
+        """Convert computed EMG quality-assessment results into `QualityFlag`
+        objects.
+
+        ReSurfEMG's ``quality_assessment`` functions return heterogeneous
+        shapes (booleans, SNR floats, per-breath arrays), so this performs a
+        best-effort structural conversion rather than clinical judgment:
+        boolean-like results become pass/fail, everything else is recorded as
+        an informational flag with its scalar value attached where possible.
+        Functions skipped for missing inputs (`postprocessed["skipped"]`)
+        become failed, ``warning``-severity flags.
+        """
+
+        if not isinstance(postprocessed, dict):
+            return []
+
+        quality_results = _computed_category(postprocessed, "quality_assessment")
+        flags = [
+            QualityFlag(
+                name=name,
+                passed=_quality_result_passed(value),
+                severity="info",
+                modality="emg",
+                value=_scalar_or_none(value),
+            )
+            for name, value in quality_results.items()
+        ]
+        for name, reason in postprocessed.get("skipped", {}).items():
+            flags.append(
+                QualityFlag(
+                    name=name,
+                    passed=False,
+                    severity="warning",
+                    modality="emg",
+                    message=str(reason),
+                )
+            )
+        return flags
 
     def available_postprocessing(self) -> dict[str, list[str]]:
         """Return ReSurfEMG postprocessing functions exposed by M3Resp."""
@@ -258,13 +359,12 @@ class ReSurfEMGAdapter:
                     "start_time": start_index / fs,
                     "end_time": end_index / fs,
                     "peak_time": int(peak_index) / fs,
+                    "start_index": start_index,
+                    "peak_index": int(peak_index),
+                    "end_index": end_index,
+                    "sample_frequency": fs,
+                    "signal_name": processed_emg["channel"],
                     "source": "resurfemg.detect_emg_breaths",
-                    "metadata": {
-                        "start_index": start_index,
-                        "peak_index": int(peak_index),
-                        "end_index": end_index,
-                        "channel": processed_emg["channel"],
-                    },
                 }
             )
 
@@ -764,6 +864,37 @@ def _require_emg_recording(recording: Any) -> None:
         raise TypeError("EMG preprocessing expects a ReSurfEMG recording dict.")
     if "metadata" not in recording:
         raise TypeError("EMG preprocessing expects recording metadata.")
+
+
+def _computed_category(postprocessed: dict[str, Any], category: str) -> dict[str, Any]:
+    if not isinstance(postprocessed, dict):
+        return {}
+    return dict(postprocessed.get("computed", {}).get(category, {}))
+
+
+def _as_parameter_value(value: Any) -> float | np.ndarray:
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, (int, float)):
+        return float(value)
+    return np.asarray(value)
+
+
+def _quality_result_passed(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    array = np.asarray(value)
+    if array.dtype == bool:
+        return bool(array.all())
+    return True
+
+
+def _scalar_or_none(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
 
 
 def _peak_indices_from_events(

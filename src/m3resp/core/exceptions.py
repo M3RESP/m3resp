@@ -13,6 +13,10 @@ class MissingModalityDataError(M3RespError):
     """Raised when a workflow step needs missing modality data."""
 
 
+class VariantAlreadyExistsError(M3RespError):
+    """Raised when a preprocessing variant would silently overwrite an existing one."""
+
+
 class UnsupportedWorkflowError(M3RespError):
     """Raised when an adapter cannot infer the requested workflow operation."""
 
@@ -27,3 +31,7 @@ class UnknownStepError(PipelineError):
 
 class PipelineSpecError(PipelineError):
     """Raised when a pipeline spec is malformed or fails static validation."""
+
+
+class UnknownPipelineError(PipelineError):
+    """Raised when ``M3Session.run_pipeline`` references an unregistered name."""

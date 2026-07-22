@@ -9,8 +9,34 @@ from m3resp.core.events import (
     event_to_dict,
 )
 from m3resp.core.session import M3Session
-from m3resp.modalities.eit import load as load_eit
-from m3resp.modalities.emg import load as load_emg
+from m3resp.data import (
+    LinkedBreath,
+    ParameterResult,
+    ParameterResultCollection,
+    ProcessingHistory,
+    ProcessingStep,
+    QualityFlag,
+    QualityReport,
+    Signal,
+    SignalCollection,
+    TimeSeries,
+)
+from m3resp.datamodel import (
+    Case,
+    ClinicalEvent,
+    DataFile,
+    DataModelRecorder,
+    DataModelStore,
+    DerivedFeature,
+    Device,
+    ProcessingRun,
+    QualityAnnotation,
+    RecordingSession,
+    SignalStream,
+    export_store,
+    validate_store,
+)
+from m3resp import io
 from m3resp.workflows import (
     PipelineResult,
     available_steps,
@@ -19,23 +45,69 @@ from m3resp.workflows import (
     run_pipeline,
     run_spec,
 )
+from m3resp.presets import (
+    EITPipeline,
+    EMGPipeline,
+    MultimodalPipeline,
+    Pipeline,
+    available_pipelines,
+    get_pipeline,
+    register_pipeline,
+)
+from m3resp.synchronization import (
+    compute_offsets_from_timestamps,
+    link_breaths_by_time,
+    resample_signal,
+)
 
 __version__ = "0.1.0"
 
 __all__ = [
     "BreathEvent",
+    "Case",
+    "ClinicalEvent",
+    "DataFile",
+    "DataModelRecorder",
+    "DataModelStore",
+    "DerivedFeature",
+    "Device",
+    "EITPipeline",
+    "EMGPipeline",
     "Event",
+    "LinkedBreath",
     "M3Session",
+    "MultimodalPipeline",
+    "ParameterResult",
+    "ParameterResultCollection",
+    "Pipeline",
     "PipelineResult",
+    "ProcessingHistory",
+    "ProcessingRun",
+    "ProcessingStep",
+    "QualityAnnotation",
+    "QualityFlag",
+    "QualityReport",
+    "RecordingSession",
+    "Signal",
+    "SignalCollection",
+    "SignalStream",
+    "TimeSeries",
+    "available_pipelines",
     "available_steps",
     "coerce_breath_event",
     "coerce_breath_events",
     "coerce_event",
+    "compute_offsets_from_timestamps",
     "event_to_dict",
-    "load_eit",
-    "load_emg",
+    "export_store",
+    "get_pipeline",
+    "io",
+    "link_breaths_by_time",
     "load_spec",
+    "register_pipeline",
     "register_step",
+    "resample_signal",
     "run_pipeline",
     "run_spec",
+    "validate_store",
 ]

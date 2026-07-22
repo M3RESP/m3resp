@@ -7,8 +7,9 @@ from typing import Any
 
 import pytest
 
-from m3resp import BreathEvent, M3Session, load_emg
+from m3resp import BreathEvent, M3Session
 from m3resp.adapters import ReSurfEMGAdapter
+from m3resp.io import load_emg
 from m3resp.modalities.emg import load as load_emg_recording
 from m3resp.visualization import (
     plot_session_overview,

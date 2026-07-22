@@ -1,6 +1,7 @@
 data/*
 output/*
 plan/*
+docs/*
 .venv/*
 .conda/*
 *.lock
@@ -10,7 +11,7 @@ plan/*
 # !.github/
 # !.github/**
 graphify-out/
+tools/visualization_tools/
 
 # agentics
 AGENTS.md
-graphify-out/
