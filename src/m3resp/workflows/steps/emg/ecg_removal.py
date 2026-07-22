@@ -10,6 +10,7 @@ from m3resp.core.session import M3Session
 from m3resp.core.events import Event
 from m3resp.data import ParameterResult, Signal
 from m3resp.processing.ecg import (
+    OutputBandpassStage,
     estimated_ecg_subtraction as _estimated_ecg_subtraction,
 )
 from m3resp.processing.windows import rolling_arv
@@ -305,7 +306,7 @@ def ecg_estimated_subtraction(
     envelope_window_seconds: float | None = None,
     output_bandpass_low_hz: float | None = None,
     output_bandpass_high_hz: float | None = None,
-    output_bandpass_stage: str = "after_subtraction",
+    output_bandpass_stage: OutputBandpassStage = "after_subtraction",
     output_bandpass_order: int = 4,
 ) -> dict[str, Any]:
     """Run the paper-based Estimated ECG Subtraction method.
