@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 
 from m3resp.processing.filters import bandpass_filter
 from m3resp.processing.windows import moving_average
+
+OutputBandpassStage = Literal["before_subtraction", "after_subtraction"]
 
 
 @dataclass(frozen=True)
@@ -47,6 +50,9 @@ def estimated_ecg_subtraction(
     minimum_template_beats: int = 3,
     minimum_qrs_interval_seconds: float | None = 0.25,
     maximum_qrs_interval_seconds: float | None = 2.0,
+    output_bandpass_hz: tuple[float, float] | None = None,
+    output_bandpass_stage: OutputBandpassStage = "after_subtraction",
+    output_bandpass_order: int = 4,
 ) -> EstimatedECGSubtractionResult:
     """Estimate and subtract repeating ECG artifacts from contaminated EMG.
 
@@ -66,6 +72,18 @@ def estimated_ecg_subtraction(
     intervals below ``(1 - inter_qrs_tolerance) * median_interval`` are treated
     as duplicate/false detections. Missing beats are restored at the strongest
     above-threshold detection peak in the expected interval.
+
+    ``output_bandpass_hz`` is an optional extra bandpass applied exactly once,
+    outside the QRS-detection stage; it is disabled by default and does not
+    change any existing caller's output. QRS detection and the template are
+    always built from the raw signal, regardless of ``output_bandpass_stage``.
+    When set, ``output_bandpass_stage`` chooses which operand of the final
+    subtraction is filtered: "before_subtraction" filters the raw signal
+    immediately before subtracting the (unfiltered) estimated ECG, i.e.
+    ``cleaned = bandpass(signal) - estimated_ecg``; "after_subtraction"
+    subtracts first and filters the result, i.e.
+    ``cleaned = bandpass(signal - estimated_ecg)``. These differ because
+    bandpass filtering and subtracting the QRS template do not commute.
     """
 
     signal = _validate_input(
@@ -81,6 +99,9 @@ def estimated_ecg_subtraction(
         minimum_template_beats=minimum_template_beats,
         minimum_qrs_interval_seconds=minimum_qrs_interval_seconds,
         maximum_qrs_interval_seconds=maximum_qrs_interval_seconds,
+        output_bandpass_hz=output_bandpass_hz,
+        output_bandpass_stage=output_bandpass_stage,
+        output_bandpass_order=output_bandpass_order,
     )
     fs = float(sample_frequency)
 
@@ -158,8 +179,31 @@ def estimated_ecg_subtraction(
         dtype=int,
     )
 
+    if output_bandpass_hz is not None and output_bandpass_stage == "before_subtraction":
+        cleaned = (
+            bandpass_filter(
+                signal,
+                cutoff_frequency=output_bandpass_hz,
+                sample_frequency=fs,
+                order=output_bandpass_order,
+            )
+            - estimated_ecg
+        )
+    else:
+        cleaned = signal - estimated_ecg
+        if (
+            output_bandpass_hz is not None
+            and output_bandpass_stage == "after_subtraction"
+        ):
+            cleaned = bandpass_filter(
+                cleaned,
+                cutoff_frequency=output_bandpass_hz,
+                sample_frequency=fs,
+                order=output_bandpass_order,
+            )
+
     return EstimatedECGSubtractionResult(
-        cleaned=signal - estimated_ecg,
+        cleaned=cleaned,
         estimated_ecg=estimated_ecg,
         detection_signal=detection_signal,
         dynamic_threshold=dynamic_threshold,
@@ -189,6 +233,9 @@ def _validate_input(
     minimum_template_beats: int,
     minimum_qrs_interval_seconds: float | None,
     maximum_qrs_interval_seconds: float | None,
+    output_bandpass_hz: tuple[float, float] | None = None,
+    output_bandpass_stage: OutputBandpassStage = "after_subtraction",
+    output_bandpass_order: int = 4,
 ) -> np.ndarray:
     signal = np.asarray(values, dtype=float)
     if signal.ndim != 1:
@@ -235,6 +282,19 @@ def _validate_input(
         )
     if np.ptp(signal) <= np.finfo(float).eps:
         raise ValueError("values must have non-zero amplitude")
+    if output_bandpass_hz is not None:
+        output_low, output_high = output_bandpass_hz
+        if not (0 < output_low < output_high < sample_frequency / 2):
+            raise ValueError(
+                "output_bandpass_hz must be positive, increasing, and below Nyquist"
+            )
+        if output_bandpass_order < 1:
+            raise ValueError("output_bandpass_order must be positive")
+        if output_bandpass_stage not in ("before_subtraction", "after_subtraction"):
+            raise ValueError(
+                "output_bandpass_stage must be 'before_subtraction' or "
+                "'after_subtraction'"
+            )
     return signal
 
 

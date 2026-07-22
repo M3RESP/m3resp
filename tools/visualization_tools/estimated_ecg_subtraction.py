@@ -88,7 +88,7 @@ def _(mo, source_mode):
     uploaded_sample_frequency = mo.ui.number(
         start=1.0,
         step=1.0,
-        value=1000.0,
+        value=2000.0,
         label="Uploaded-recording sampling frequency (Hz)",
     )
     synthetic_duration_seconds = mo.ui.slider(
@@ -199,14 +199,74 @@ def _(
         uploaded_contents = io.BytesIO(uploaded_file.contents)
         if uploaded_name.endswith(".npy"):
             contaminated_emg = np.load(uploaded_contents, allow_pickle=False)
+            contaminated_emg = np.asarray(contaminated_emg, dtype=float)
+            sample_frequency = float(uploaded_sample_frequency.value)
+        elif uploaded_name.endswith(".csv"):
+            contaminated_emg = np.loadtxt(uploaded_contents, delimiter=",", dtype=float)
+            sample_frequency = float(uploaded_sample_frequency.value)
         else:
-            uploaded_delimiter = "," if uploaded_name.endswith(".csv") else None
-            contaminated_emg = np.loadtxt(
-                uploaded_contents,
-                delimiter=uploaded_delimiter,
-                dtype=float,
+            # A .txt upload may be a plain one-column signal or a BIOPAC
+            # AcqKnowledge export (metadata header + tab-separated multi-channel
+            # data, e.g. the slices produced by tools/signal_slicer). Reuse that
+            # tool's tested auto-detecting parser instead of duplicating its
+            # header rules here.
+            import importlib.util
+            import sys
+            import tempfile
+            from pathlib import Path as _Path
+
+            _slicer_path = (
+                _Path(__file__).resolve().parents[1]
+                / "signal_slicer"
+                / "slice_signal.py"
             )
-        contaminated_emg = np.asarray(contaminated_emg, dtype=float)
+            _slicer_spec = importlib.util.spec_from_file_location(
+                "slice_signal", _slicer_path
+            )
+            _slicer_module = importlib.util.module_from_spec(_slicer_spec)
+            # dataclass (with `from __future__ import annotations`) looks itself
+            # up via sys.modules[cls.__module__] during class creation, so the
+            # module must be registered before exec_module runs.
+            sys.modules[_slicer_spec.name] = _slicer_module
+            _slicer_spec.loader.exec_module(_slicer_module)
+
+            with tempfile.NamedTemporaryFile(suffix=".txt") as _tmp:
+                _tmp.write(uploaded_file.contents)
+                _tmp.flush()
+                uploaded_signal_file = _slicer_module.read_file(_tmp.name)
+
+            if uploaded_signal_file.fmt == "plain":
+                contaminated_emg = np.asarray(uploaded_signal_file.data, dtype=float)
+                sample_frequency = float(uploaded_sample_frequency.value)
+            else:
+                _emg_channel_index = next(
+                    (
+                        _i
+                        for _i, _label in enumerate(uploaded_signal_file.channels)
+                        if _label.split(" - ")[0].strip().lower() == "emgdi"
+                    ),
+                    next(
+                        (
+                            _i
+                            for _i, _label in enumerate(uploaded_signal_file.channels)
+                            if "emg" in _label.lower()
+                        ),
+                        None,
+                    ),
+                )
+                if _emg_channel_index is None:
+                    raise ValueError(
+                        "Could not find an EMG channel in this BIOPAC export. "
+                        f"Channels found: {uploaded_signal_file.channels}."
+                    )
+                contaminated_emg = np.asarray(
+                    uploaded_signal_file.channel(_emg_channel_index), dtype=float
+                )
+                sample_frequency = (
+                    float(uploaded_signal_file.fs)
+                    if uploaded_signal_file.fs
+                    else float(uploaded_sample_frequency.value)
+                )
         if contaminated_emg.ndim != 1:
             raise ValueError(
                 "The uploaded recording must be one-dimensional: one numeric column."
@@ -215,7 +275,6 @@ def _(
             raise ValueError(
                 "The uploaded recording must contain at least three finite values."
             )
-        sample_frequency = float(uploaded_sample_frequency.value)
         if not np.isfinite(sample_frequency) or sample_frequency <= 0:
             raise ValueError("Uploaded-recording sampling frequency must be positive.")
         time = np.arange(contaminated_emg.size) / sample_frequency
@@ -402,6 +461,42 @@ def _(mo, time):
         label="Time shown in steps 1–7 and 10–11 (s)",
         full_width=True,
     )
+    use_output_bandpass = mo.ui.checkbox(
+        value=False,
+        label="Apply an extra output bandpass filter",
+    )
+    output_bandpass_low = mo.ui.slider(
+        start=1.0,
+        stop=45.0,
+        step=1.0,
+        value=4.0,
+        label="Output bandpass low cutoff (Hz)",
+        show_value=True,
+    )
+    output_bandpass_high = mo.ui.slider(
+        start=50.0,
+        stop=200.0,
+        step=1.0,
+        value=50.0,
+        label="Output bandpass high cutoff (Hz)",
+        show_value=True,
+    )
+    output_bandpass_order = mo.ui.slider(
+        start=1,
+        stop=8,
+        step=1,
+        value=4,
+        label="Output bandpass filter order",
+        show_value=True,
+    )
+    output_bandpass_stage = mo.ui.radio(
+        options={
+            "Before subtraction (filter the raw signal, then subtract the unfiltered estimated ECG)": "before_subtraction",
+            "After subtraction (subtract first, then filter the cleaned result)": "after_subtraction",
+        },
+        value="After subtraction (subtract first, then filter the cleaned result)",
+        label="Output bandpass stage",
+    )
 
     mo.vstack(
         [
@@ -440,6 +535,25 @@ def _(mo, time):
                 wrap=True,
                 widths="equal",
             ),
+            mo.md(
+                "### Optional output bandpass\n"
+                "A separate bandpass filter, independent of the detection band "
+                "above. QRS detection and the template always use the raw "
+                "signal; this filter only changes how the final `cleaned` "
+                "output is computed from the raw signal and the (always "
+                "unfiltered) estimated ECG template."
+            ),
+            mo.hstack(
+                [
+                    use_output_bandpass,
+                    output_bandpass_low,
+                    output_bandpass_high,
+                    output_bandpass_order,
+                ],
+                wrap=True,
+                widths="equal",
+            ),
+            output_bandpass_stage,
             mo.md("### Display"),
             displayed_time,
             mo.md(
@@ -459,11 +573,16 @@ def _(mo, time):
         maximum_qrs_interval_seconds,
         minimum_qrs_interval_seconds,
         minimum_template_beats,
+        output_bandpass_high,
+        output_bandpass_low,
+        output_bandpass_order,
+        output_bandpass_stage,
         qrs_window_seconds,
         threshold_interval_seconds,
         threshold_smoothing_seconds,
         use_maximum_qrs_interval,
         use_minimum_qrs_interval,
+        use_output_bandpass,
     )
 
 
@@ -482,12 +601,17 @@ def _(
     minimum_template_beats,
     moving_average,
     np,
+    output_bandpass_high,
+    output_bandpass_low,
+    output_bandpass_order,
+    output_bandpass_stage,
     qrs_window_seconds,
     sample_frequency,
     threshold_interval_seconds,
     threshold_smoothing_seconds,
     use_maximum_qrs_interval,
     use_minimum_qrs_interval,
+    use_output_bandpass,
 ):
     detection_band = (
         float(detection_band_low.value),
@@ -503,6 +627,11 @@ def _(
         if use_maximum_qrs_interval.value
         else None
     )
+    output_bandpass_hz = (
+        (float(output_bandpass_low.value), float(output_bandpass_high.value))
+        if use_output_bandpass.value
+        else None
+    )
     ees_result = estimated_ecg_subtraction(
         contaminated_emg,
         sample_frequency=sample_frequency,
@@ -516,6 +645,9 @@ def _(
         minimum_template_beats=int(minimum_template_beats.value),
         minimum_qrs_interval_seconds=minimum_qrs_interval,
         maximum_qrs_interval_seconds=maximum_qrs_interval,
+        output_bandpass_hz=output_bandpass_hz,
+        output_bandpass_stage=output_bandpass_stage.value,
+        output_bandpass_order=int(output_bandpass_order.value),
     )
 
     # Steps 1–3, reproduced with the same configurable public primitives.
@@ -635,11 +767,171 @@ def _(
 
 
 @app.cell
+def _(contaminated_emg, displayed_time, np, sample_frequency, source_mode):
+    """Locate the recording on the Annemijn Biopac clock and slice matching
+    Paw / EIT context for the currently displayed time window. Only exact
+    tail-slice files of Paw_EMG_ajM3Resp_test.txt can be located this way;
+    anything else (including synthetic sources) reports why not."""
+
+    from functools import lru_cache
+    from importlib.util import find_spec
+    from pathlib import Path
+
+    import pandas as pd
+
+    _eit_sync_available = (
+        find_spec("eitprocessing") is not None
+        and find_spec("m3resp.adapters") is not None
+        and find_spec("m3resp.synchronization") is not None
+    )
+
+    _annemijn_dir_candidates = (
+        Path(__file__).resolve().parents[2] / "data" / "source" / "eit_emg_annemijn",
+    )
+    _annemijn_dir = next(
+        (_path for _path in _annemijn_dir_candidates if _path.exists()),
+        _annemijn_dir_candidates[0],
+    )
+    _biopac_file = _annemijn_dir / "Paw_EMG_ajM3Resp_test.txt"
+    _eit_file = _annemijn_dir / "ajM3resp_03_001_01.bin"
+    _annemijn_sample_frequency = 2000.0
+
+    @lru_cache(maxsize=1)
+    def _load_annemijn_biopac(path):
+        _data = pd.read_csv(
+            path,
+            sep="\t",
+            skiprows=11,
+            names=["paw", "emg_di", "aux_ignore"],
+            usecols=[0, 1, 2],
+            engine="c",
+        )
+        return (
+            _data["paw"].to_numpy(dtype=float),
+            _data["emg_di"].to_numpy(dtype=float),
+        )
+
+    @lru_cache(maxsize=1)
+    def _load_annemijn_eit(path):
+        from m3resp.adapters import EITProcessingAdapter
+
+        _sequence = EITProcessingAdapter().load(str(path), vendor="draeger")
+        _raw = _sequence.eit_data["raw"]
+        _eit_time = np.asarray(_raw.time, dtype=float)
+        _eit_time = _eit_time - _eit_time[0]
+        _pixel_impedance = np.asarray(_raw.pixel_impedance, dtype=float)
+        _global_impedance = np.nansum(_pixel_impedance, axis=(1, 2))
+        return _eit_time, _global_impedance
+
+    eit_paw_paw_time = eit_paw_paw_values = None
+    eit_paw_eit_time = eit_paw_eit_values = None
+    eit_paw_paw_unavailable_reason = None
+    eit_paw_eit_unavailable_reason = None
+
+    if source_mode.value != "uploaded_recording":
+        eit_paw_paw_unavailable_reason = (
+            "Only available for **Upload a recording** with an Annemijn "
+            "Biopac slice file."
+        )
+    elif not _eit_sync_available:
+        eit_paw_paw_unavailable_reason = (
+            "Requires the optional `eitprocessing` dependency, which is not "
+            "installed in this environment."
+        )
+    elif not _biopac_file.exists() or not _eit_file.exists():
+        eit_paw_paw_unavailable_reason = (
+            f"Annemijn dataset files not found under {_biopac_file.parent}."
+        )
+    elif abs(sample_frequency - _annemijn_sample_frequency) > 1e-6:
+        eit_paw_paw_unavailable_reason = (
+            "Assumes the Annemijn 2000 Hz Biopac clock; the loaded recording "
+            f"is {sample_frequency:g} Hz."
+        )
+    else:
+        _biopac_paw, _biopac_emg = _load_annemijn_biopac(str(_biopac_file))
+        _n = contaminated_emg.size
+        _located = _n <= _biopac_emg.size and np.allclose(
+            _biopac_emg[-_n:], contaminated_emg, rtol=0, atol=1e-6
+        )
+        if not _located:
+            eit_paw_paw_unavailable_reason = (
+                "This recording isn't byte-for-byte the tail of the Annemijn "
+                "Biopac sEMG channel, so it can't be located on the shared "
+                "clock. Upload the exact `_last_30secs_emg_slice.txt` or "
+                "`_last_2min_emg.txt` file."
+            )
+        else:
+            _absolute_start = (_biopac_emg.size - _n) / _annemijn_sample_frequency
+            _window_start, _window_end = displayed_time.value
+            _abs_start = _absolute_start + _window_start
+            _abs_end = _absolute_start + _window_end
+
+            _paw_lo = int(round(_abs_start * _annemijn_sample_frequency))
+            _paw_hi = int(round(_abs_end * _annemijn_sample_frequency))
+            eit_paw_paw_time = (
+                np.arange(_paw_lo, _paw_hi) / _annemijn_sample_frequency
+                - _absolute_start
+            )
+            eit_paw_paw_values = _biopac_paw[_paw_lo:_paw_hi]
+
+            from m3resp.synchronization import estimate_offset_from_interference
+
+            _eit_time, _eit_values = _load_annemijn_eit(str(_eit_file))
+            _eit_duration = float(_eit_time[-1])
+            _sync = estimate_offset_from_interference(
+                _biopac_emg, _annemijn_sample_frequency, _eit_duration
+            )
+            if not _sync.detected or _sync.offset_seconds is None:
+                eit_paw_eit_unavailable_reason = (
+                    "Could not detect the EIT-on/EIT-off interference edge "
+                    "needed to synchronize the EIT recording to this Biopac "
+                    "clock."
+                )
+            else:
+                _eit_active_start = _sync.offset_seconds
+                _eit_active_end = _sync.offset_seconds + _eit_duration
+                _overlap_start = max(_eit_active_start, _abs_start)
+                _overlap_end = min(_eit_active_end, _abs_end)
+                if _overlap_end <= _overlap_start:
+                    eit_paw_eit_unavailable_reason = (
+                        f"EIT was only active {_eit_active_start:.1f}–"
+                        f"{_eit_active_end:.1f}s into this recording; the "
+                        f"displayed window ({_abs_start:.1f}–{_abs_end:.1f}s) "
+                        "doesn't overlap it (per the dataset notes, EIT was "
+                        "off for the final ~2 minutes of this Biopac "
+                        "recording)."
+                    )
+                else:
+                    _eit_mask = (_eit_time >= _abs_start - _sync.offset_seconds) & (
+                        _eit_time <= _abs_end - _sync.offset_seconds
+                    )
+                    eit_paw_eit_time = (
+                        _eit_time[_eit_mask] + _sync.offset_seconds - _absolute_start
+                    )
+                    eit_paw_eit_values = _eit_values[_eit_mask]
+
+    return (
+        eit_paw_eit_time,
+        eit_paw_eit_unavailable_reason,
+        eit_paw_eit_values,
+        eit_paw_paw_time,
+        eit_paw_paw_unavailable_reason,
+        eit_paw_paw_values,
+    )
+
+
+@app.cell
 def _(
     contaminated_emg,
     denormalized_qrs_segments,
     displayed_time,
     ees_result,
+    eit_paw_eit_time,
+    eit_paw_eit_unavailable_reason,
+    eit_paw_eit_values,
+    eit_paw_paw_time,
+    eit_paw_paw_unavailable_reason,
+    eit_paw_paw_values,
     np,
     original_qrs_segments,
     plt,
@@ -664,46 +956,64 @@ def _(
     charcoal = "#3F3F3F"
     red = "#E64B35"
 
+    # Guards against NaN/Inf axis limits (matplotlib raises "Axis limits
+    # cannot be NaN or Inf" otherwise) and against empty arrays. A filtered
+    # signal can legitimately contain non-finite samples at extreme
+    # low-cutoff/high-order combinations, and EIT/Paw windows can be short or
+    # empty near a recording boundary.
+    def _safe_abs_max(*arrays, fallback=1.0):
+        _values = []
+        for _array in arrays:
+            _finite = np.asarray(_array)
+            _finite = _finite[np.isfinite(_finite)]
+            if _finite.size:
+                _values.append(float(np.max(np.abs(_finite))))
+        return max(_values) if _values else fallback
+
+    def _safe_min_max(*arrays, fallback=(0.0, 1.0)):
+        _mins, _maxs = [], []
+        for _array in arrays:
+            _finite = np.asarray(_array)
+            _finite = _finite[np.isfinite(_finite)]
+            if _finite.size:
+                _mins.append(float(np.min(_finite)))
+                _maxs.append(float(np.max(_finite)))
+        return (min(_mins), max(_maxs)) if _mins else fallback
+
     # Derive limits from the complete recording, not the selected slider range.
     # This keeps the visual scale stable while comparing different time windows.
+    # Deliberately excludes ees_result.cleaned: the output bandpass (either
+    # stage) only changes cleaned's amplitude, and folding it in here would
+    # rescale (and visually distort) every other panel, including the
+    # steps 8-9 template-construction subplots whose underlying data the
+    # output bandpass never touches (detection and the template are always
+    # built from the raw signal).
     paper_amplitude_limit = float(
-        1.05
-        * max(
-            np.max(np.abs(contaminated_emg)),
-            np.max(np.abs(promoted_ecg)),
-            np.max(np.abs(ees_result.estimated_ecg)),
-            np.max(np.abs(ees_result.cleaned)),
+        1.05 * _safe_abs_max(contaminated_emg, promoted_ecg, ees_result.estimated_ecg)
+    )
+    paper_cleaned_amplitude_limit = float(
+        max(
+            paper_amplitude_limit,
+            1.05 * _safe_abs_max(ees_result.cleaned, fallback=paper_amplitude_limit),
         )
     )
     paper_detection_limit = float(
         1.05
-        * max(
-            np.max(smoothed_detection),
-            np.max(ees_result.dynamic_threshold),
-        )
+        * _safe_abs_max(smoothed_detection, ees_result.dynamic_threshold, fallback=1.0)
     )
-    paper_normalized_min = float(
-        min(
-            np.min(ees_result.normalized_segments),
-            np.min(ees_result.normalized_template),
-        )
-    )
-    paper_normalized_max = float(
-        max(
-            np.max(ees_result.normalized_segments),
-            np.max(ees_result.normalized_template),
-        )
+    paper_normalized_min, paper_normalized_max = _safe_min_max(
+        ees_result.normalized_segments, ees_result.normalized_template
     )
     paper_normalized_padding = max(
         0.05 * (paper_normalized_max - paper_normalized_min),
         np.finfo(float).eps,
     )
 
-    paper_figure = plt.figure(figsize=(18, 22), constrained_layout=True)
+    paper_figure = plt.figure(figsize=(18, 29), constrained_layout=True)
     outer = paper_figure.add_gridspec(
-        6,
+        9,
         12,
-        height_ratios=(1.0, 1.0, 1.55, 1.1, 0.95, 1.15),
+        height_ratios=(1.0, 1.0, 1.55, 1.1, 0.95, 0.9, 0.9, 0.85, 0.85),
     )
 
     ax_input = paper_figure.add_subplot(outer[0, 0:6])
@@ -728,8 +1038,10 @@ def _(
     ax_average = paper_figure.add_subplot(template_grid[0, 2])
     ax_denormalized = paper_figure.add_subplot(template_grid[0, 3])
 
-    ax_inserted = paper_figure.add_subplot(outer[5, 0:6], sharex=ax_input)
-    ax_cleaned = paper_figure.add_subplot(outer[5, 6:12], sharex=ax_input)
+    ax_inserted = paper_figure.add_subplot(outer[5, 0:12], sharex=ax_input)
+    ax_cleaned = paper_figure.add_subplot(outer[6, 0:12], sharex=ax_input)
+    ax_paw = paper_figure.add_subplot(outer[7, 0:12], sharex=ax_input)
+    ax_eit = paper_figure.add_subplot(outer[8, 0:12], sharex=ax_input)
 
     def _paper_axis(axis):
         axis.spines["top"].set_visible(False)
@@ -1014,11 +1326,96 @@ def _(
         ax_cleaned,
         "11. Subtract estimated ECG template from EMGdi-DS",
     )
+
+    # Reference panels: EIT global impedance and airway pressure (Paw), for
+    # the same real-world time window as everything above. Both come from a
+    # different acquisition device than the EMG/EES processing (Annemijn
+    # dataset only) and are sliced by eit_paw_context; a panel shows an
+    # explanatory message instead of a curve when that context isn't
+    # available (wrong source, missing files, or -- for EIT specifically --
+    # no synchronized frames overlap this window).
+    def _context_panel(
+        axis,
+        plot_time,
+        plot_values,
+        unavailable_reason,
+        *,
+        title,
+        ylabel,
+        color,
+        reference,
+    ):
+        _time_title(axis, title)
+        _has_data = (
+            plot_time is not None
+            and plot_values is not None
+            and plot_time.size > 0
+            and plot_values.size > 0
+            and np.any(np.isfinite(plot_values))
+        )
+        if _has_data:
+            _n = min(plot_time.size, plot_values.size)
+            _plot_time, _plot_values = plot_time[:_n], plot_values[:_n]
+            axis.plot(_plot_time, _plot_values, color=color, lw=0.7)
+            axis.set_ylabel(ylabel, fontsize=8)
+            _lo, _hi = _safe_min_max(_plot_values)
+            _pad = 0.05 * max(_hi - _lo, np.finfo(float).eps)
+            axis.set_ylim(_lo - _pad, _hi + _pad)
+            if np.isfinite(reference):
+                axis.axhline(reference, color="#777777", lw=0.35, alpha=0.5)
+        else:
+            axis.set_ylabel("")
+            axis.set_yticks([])
+            axis.text(
+                0.5,
+                0.5,
+                unavailable_reason or "Not available for this recording.",
+                ha="center",
+                va="center",
+                fontsize=9,
+                color="#777777",
+                wrap=True,
+                transform=axis.transAxes,
+            )
+
+    _eit_reference = (
+        float(np.nanmean(eit_paw_eit_values))
+        if eit_paw_eit_values is not None
+        and eit_paw_eit_values.size
+        and np.any(np.isfinite(eit_paw_eit_values))
+        else 0.0
+    )
+    _context_panel(
+        ax_eit,
+        eit_paw_eit_time,
+        eit_paw_eit_values,
+        eit_paw_eit_unavailable_reason or eit_paw_paw_unavailable_reason,
+        title="EIT global impedance (synchronized to Biopac clock)",
+        ylabel="Impedance (a.u.)",
+        color="#3F7F5F",
+        reference=_eit_reference,
+    )
+    _context_panel(
+        ax_paw,
+        eit_paw_paw_time,
+        eit_paw_paw_values,
+        eit_paw_paw_unavailable_reason,
+        title="Airway pressure (Paw)",
+        ylabel="Paw (cmH2O)",
+        color="#8B5FA8",
+        reference=0.0,
+    )
+
     ax_inserted.set_xlabel("Time (s)", fontsize=8)
-    ax_cleaned.set_xlabel("Time (s)", fontsize=8)
+    ax_eit.set_xlabel("Time (s)", fontsize=8)
 
     # Keep comparable panels on one recording-wide amplitude scale.  The
     # rectified and detection signals have their own fixed non-negative scales.
+    # ax_cleaned gets its own limit: the output bandpass (either stage) only
+    # changes ees_result.cleaned, and should not rescale panels whose data it
+    # cannot affect (see paper_cleaned_amplitude_limit above). EIT and Paw are
+    # on unrelated physical scales and are limited inside _context_panel
+    # instead.
     for _axis in (
         ax_input,
         ax_filter,
@@ -1027,9 +1424,9 @@ def _(
         ax_original,
         ax_denormalized,
         ax_inserted,
-        ax_cleaned,
     ):
         _axis.set_ylim(-paper_amplitude_limit, paper_amplitude_limit)
+    ax_cleaned.set_ylim(-paper_cleaned_amplitude_limit, paper_cleaned_amplitude_limit)
     ax_rectified.set_ylim(0, paper_amplitude_limit)
     for _axis in (ax_threshold, ax_crossings, ax_correction):
         _axis.set_ylim(0, paper_detection_limit)
@@ -1182,6 +1579,17 @@ def _(mo):
     For a clinical recording, retain ECG frequency content before EES and
     review the QRS detections and estimated ECG before accepting the cleaned
     signal.
+
+    The optional output bandpass (below the main EES parameters) is a second,
+    independent filter from the detection band. QRS detection and the
+    template always run on the raw signal for both stages, so panels 1-9
+    (including `ees_result.estimated_ecg` and the steps 8/9
+    template-construction subpanels) never change when this filter is
+    toggled. Only `ees_result.cleaned` (panel 11 and the validation plot)
+    differs by stage: "before_subtraction" filters the raw signal and then
+    subtracts the unfiltered estimated ECG; "after_subtraction" subtracts
+    first and filters the result. The two give different `cleaned` signals
+    because filtering and subtracting the QRS template don't commute.
     """)
     return
 

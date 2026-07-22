@@ -15,6 +15,7 @@ from m3resp.processing.ecg import (
     _template_segments,
     estimated_ecg_subtraction,
 )
+from m3resp.processing.filters import bandpass_filter
 from m3resp.workflows.steps.emg import ecg_estimated_subtraction
 
 
@@ -133,6 +134,79 @@ def test_estimated_ecg_subtraction_rejects_invalid_inputs(
 ):
     with pytest.raises(ValueError, match=message):
         estimated_ecg_subtraction(values, sample_frequency=sample_frequency)
+
+
+def test_output_bandpass_after_subtraction_only_filters_cleaned():
+    contaminated, _, _, beat_times, fs = _synthetic_contaminated_emg()
+
+    baseline = estimated_ecg_subtraction(contaminated, sample_frequency=fs)
+    result = estimated_ecg_subtraction(
+        contaminated,
+        sample_frequency=fs,
+        output_bandpass_hz=(20.0, 200.0),
+        output_bandpass_stage="after_subtraction",
+    )
+
+    # Detection and template stages are untouched by an "after_subtraction" filter.
+    np.testing.assert_array_equal(result.qrs_indices, baseline.qrs_indices)
+    np.testing.assert_allclose(result.estimated_ecg, baseline.estimated_ecg)
+    assert not np.allclose(result.cleaned, baseline.cleaned)
+
+    expected_cleaned = bandpass_filter(
+        baseline.cleaned,
+        cutoff_frequency=(20.0, 200.0),
+        sample_frequency=fs,
+        order=4,
+    )
+    np.testing.assert_allclose(result.cleaned, expected_cleaned)
+
+
+def test_output_bandpass_before_subtraction_only_filters_the_subtracted_operand():
+    contaminated, _, _, beat_times, fs = _synthetic_contaminated_emg()
+
+    baseline = estimated_ecg_subtraction(contaminated, sample_frequency=fs)
+    result = estimated_ecg_subtraction(
+        contaminated,
+        sample_frequency=fs,
+        output_bandpass_hz=(20.0, 200.0),
+        output_bandpass_stage="before_subtraction",
+    )
+
+    # Detection and template stages are untouched by a "before_subtraction"
+    # filter too: it only filters the raw signal right before subtracting
+    # the (unfiltered) estimated ECG, never the detection/template pipeline.
+    np.testing.assert_array_equal(result.qrs_indices, baseline.qrs_indices)
+    np.testing.assert_allclose(result.estimated_ecg, baseline.estimated_ecg)
+    assert not np.allclose(result.cleaned, baseline.cleaned)
+
+    expected_cleaned = (
+        bandpass_filter(
+            contaminated,
+            cutoff_frequency=(20.0, 200.0),
+            sample_frequency=fs,
+            order=4,
+        )
+        - baseline.estimated_ecg
+    )
+    np.testing.assert_allclose(result.cleaned, expected_cleaned)
+
+
+def test_output_bandpass_rejects_invalid_band_and_stage():
+    contaminated, _, _, _, fs = _synthetic_contaminated_emg()
+
+    with pytest.raises(ValueError, match="below Nyquist"):
+        estimated_ecg_subtraction(
+            contaminated,
+            sample_frequency=fs,
+            output_bandpass_hz=(20.0, fs),
+        )
+    with pytest.raises(ValueError, match="output_bandpass_stage"):
+        estimated_ecg_subtraction(
+            contaminated,
+            sample_frequency=fs,
+            output_bandpass_hz=(20.0, 200.0),
+            output_bandpass_stage="mid_subtraction",
+        )
 
 
 def test_implausible_detected_qrs_rate_is_rejected_before_subtraction():

@@ -12,6 +12,7 @@ def _imports():
     import sys
 
     import marimo as mo
+    import matplotlib.pyplot as plt
     import numpy as np
     import pandas as pd
     import plotly.graph_objects as go
@@ -37,9 +38,10 @@ def _imports():
     _ensure_importable("resurfemg", ROOT.parent / "ReSurfEMG")
 
     from m3resp.adapters import EITProcessingAdapter
-    from m3resp.processing.filters import harmonic_notch_filter
+    from m3resp.processing.ecg import estimated_ecg_subtraction
+    from m3resp.processing.filters import bandpass_filter, harmonic_notch_filter
     from m3resp.processing.peaks import detect_emg_breath_peaks
-    from m3resp.processing.windows import rolling_arv, rolling_rms
+    from m3resp.processing.windows import moving_average, rolling_arv, rolling_rms
     from m3resp.synchronization import (
         estimate_offset_from_interference,
         refine_offset_by_crosscorrelation,
@@ -69,18 +71,22 @@ def _imports():
         EITProcessingAdapter,
         EIT_FILE,
         Path,
+        bandpass_filter,
         detect_ecg_peaks,
         detect_emg_breath_peaks,
         emg_bandpass_butter,
         estimate_offset_from_interference,
+        estimated_ecg_subtraction,
         gating,
         go,
         harmonic_notch_filter,
         lru_cache,
         make_subplots,
         mo,
+        moving_average,
         np,
         pd,
+        plt,
         refine_offset_by_crosscorrelation,
         rolling_arv,
         rolling_rms,
@@ -273,7 +279,12 @@ def _controls(biopac_duration, default_biopac_offset, mo):
     )
     # Canonical step-by-step pipeline following Jonkman et al. 2024 best practices.
     canonical_ecg_method = mo.ui.dropdown(
-        options=["Wavelet denoising", "Gating", "High-pass 200 Hz"],
+        options=[
+            "Wavelet denoising",
+            "Gating",
+            "High-pass 200 Hz",
+            "EES (Estimated ECG Subtraction)",
+        ],
         value="Wavelet denoising",
         label="Canonical ECG removal",
     )
@@ -309,6 +320,105 @@ def _controls(biopac_duration, default_biopac_offset, mo):
     canonical_baseline_correction = mo.ui.checkbox(
         value=True, label="Baseline offset correction"
     )
+
+    # EES (Estimated ECG Subtraction, Jonkman et al. 2021) parameters. This is
+    # a distinct QRS-template-and-subtract method: it detects an ECG-promoting
+    # band, builds an averaged QRS template per beat, and subtracts it -- quite
+    # different from the wavelet-shrinkage / gating / high-pass approaches
+    # above. It's computed unconditionally in the canonical pipeline (not only
+    # when selected as the active method below), so the detailed EES
+    # diagnostic section at the end of the notebook always has a result to
+    # show, sharing this single set of controls instead of a second,
+    # easily-desynced copy.
+    ees_detection_band_low = mo.ui.slider(
+        1.0, 45.0, 1.0, 4.0, label="EES low cutoff (Hz)", show_value=True
+    )
+    ees_detection_band_high = mo.ui.slider(
+        50.0, 200.0, 1.0, 50.0, label="EES high cutoff (Hz)", show_value=True
+    )
+    ees_filter_order = mo.ui.slider(
+        1, 8, 1, 4, label="EES filter order", show_value=True
+    )
+    ees_detection_smoothing_s = mo.ui.slider(
+        0.001,
+        0.100,
+        0.001,
+        0.06,
+        label="EES rectified-signal smoothing (s)",
+        show_value=True,
+    )
+    ees_threshold_interval_s = mo.ui.slider(
+        0.05, 2.0, 0.05, 1.5, label="EES threshold interval (s)", show_value=True
+    )
+    ees_threshold_smoothing_s = mo.ui.slider(
+        0.001,
+        0.100,
+        0.001,
+        0.0125,
+        label="EES threshold smoothing (s)",
+        show_value=True,
+    )
+    ees_qrs_window_s = mo.ui.slider(
+        0.05,
+        0.60,
+        0.01,
+        0.30,
+        label="EES template window around R (s)",
+        show_value=True,
+    )
+    ees_inter_qrs_tolerance = mo.ui.slider(
+        0.0, 0.95, 0.01, 0.66, label="EES inter-QRS tolerance", show_value=True
+    )
+    ees_min_template_beats = mo.ui.slider(
+        1, 12, 1, 3, label="EES minimum template beats", show_value=True
+    )
+    ees_use_min_qrs_interval = mo.ui.checkbox(
+        value=True, label="Enforce minimum QRS interval"
+    )
+    ees_min_qrs_interval_s = mo.ui.slider(
+        0.05,
+        1.0,
+        0.05,
+        0.25,
+        label="EES minimum QRS interval (s)",
+        show_value=True,
+    )
+    ees_use_max_qrs_interval = mo.ui.checkbox(
+        value=True, label="Enforce maximum QRS interval"
+    )
+    ees_max_qrs_interval_s = mo.ui.slider(
+        1.1,
+        4.0,
+        0.1,
+        2.0,
+        label="EES maximum QRS interval (s)",
+        show_value=True,
+    )
+    ees_use_output_bandpass = mo.ui.checkbox(
+        value=False, label="Apply EES output bandpass"
+    )
+    ees_output_bandpass_low = mo.ui.slider(
+        1.0, 45.0, 1.0, 4.0, label="EES output bandpass low (Hz)", show_value=True
+    )
+    ees_output_bandpass_high = mo.ui.slider(
+        50.0,
+        200.0,
+        1.0,
+        50.0,
+        label="EES output bandpass high (Hz)",
+        show_value=True,
+    )
+    ees_output_bandpass_order = mo.ui.slider(
+        1, 8, 1, 4, label="EES output bandpass order", show_value=True
+    )
+    ees_output_bandpass_stage = mo.ui.radio(
+        options={
+            "Before subtraction": "before_subtraction",
+            "After subtraction": "after_subtraction",
+        },
+        value="After subtraction",
+        label="EES output bandpass stage",
+    )
     return (
         breath_min_width_s,
         breath_prominence_factor,
@@ -324,6 +434,24 @@ def _controls(biopac_duration, default_biopac_offset, mo):
         canonical_wavelet_level,
         canonical_wavelet_threshold,
         downsample,
+        ees_detection_band_high,
+        ees_detection_band_low,
+        ees_detection_smoothing_s,
+        ees_filter_order,
+        ees_inter_qrs_tolerance,
+        ees_max_qrs_interval_s,
+        ees_min_qrs_interval_s,
+        ees_min_template_beats,
+        ees_output_bandpass_high,
+        ees_output_bandpass_low,
+        ees_output_bandpass_order,
+        ees_output_bandpass_stage,
+        ees_qrs_window_s,
+        ees_threshold_interval_s,
+        ees_threshold_smoothing_s,
+        ees_use_max_qrs_interval,
+        ees_use_min_qrs_interval,
+        ees_use_output_bandpass,
         eit_manual_offset,
         emg_manual_offset,
         normalize,
@@ -671,6 +799,24 @@ def _pipeline_controls_layout(
     canonical_notch_max_hz,
     canonical_wavelet_level,
     canonical_wavelet_threshold,
+    ees_detection_band_high,
+    ees_detection_band_low,
+    ees_detection_smoothing_s,
+    ees_filter_order,
+    ees_inter_qrs_tolerance,
+    ees_max_qrs_interval_s,
+    ees_min_qrs_interval_s,
+    ees_min_template_beats,
+    ees_output_bandpass_high,
+    ees_output_bandpass_low,
+    ees_output_bandpass_order,
+    ees_output_bandpass_stage,
+    ees_qrs_window_s,
+    ees_threshold_interval_s,
+    ees_threshold_smoothing_s,
+    ees_use_max_qrs_interval,
+    ees_use_min_qrs_interval,
+    ees_use_output_bandpass,
     mo,
     notch_base_frequency,
     notch_quality_factor,
@@ -754,6 +900,64 @@ def _pipeline_controls_layout(
             )
         )
 
+    _ees_controls = [
+        _lab(
+            ees_detection_band_low,
+            "Low cutoff of the band-pass used to promote ECG relative to EMG "
+            "before QRS detection (EES's own detection stage, separate from "
+            "the shared notch/HPF/low-pass above). Paper default: 4 Hz.",
+        ),
+        _lab(
+            ees_detection_band_high,
+            "High cutoff of the ECG-promoting detection band. Paper default: 50 Hz.",
+        ),
+        _lab(ees_filter_order, "Order of the detection band-pass filter."),
+        _lab(
+            ees_detection_smoothing_s,
+            "Moving-average window used to smooth the rectified "
+            "ECG-promoted signal before threshold detection.",
+        ),
+        _lab(
+            ees_threshold_interval_s,
+            "Window length for the dynamic (locally adaptive) threshold.",
+        ),
+        _lab(
+            ees_threshold_smoothing_s,
+            "Smoothing applied to the dynamic threshold itself.",
+        ),
+        _lab(
+            ees_qrs_window_s,
+            "Width of the window around each detected R-peak used to build "
+            "the QRS template. Paper default: 0.3 s.",
+        ),
+        _lab(
+            ees_inter_qrs_tolerance,
+            "Periodicity-correction tolerance used to reject/restore "
+            "candidate QRS detections based on inter-beat interval "
+            "consistency.",
+        ),
+        _lab(
+            ees_min_template_beats,
+            "Minimum number of complete beats required to build the "
+            "averaged QRS template.",
+        ),
+        _lab(ees_use_min_qrs_interval, "Enforce a minimum physiological RR interval."),
+        _lab(ees_min_qrs_interval_s, "Minimum RR interval, if enforced."),
+        _lab(ees_use_max_qrs_interval, "Enforce a maximum physiological RR interval."),
+        _lab(ees_max_qrs_interval_s, "Maximum RR interval, if enforced."),
+        _lab(
+            ees_use_output_bandpass,
+            "Apply an extra band-pass filter, independent of the detection "
+            "band, to the final EES output only. QRS detection and the "
+            "template always run on the (already notch/HPF/low-pass "
+            "filtered) input signal.",
+        ),
+        _lab(ees_output_bandpass_low, "Output bandpass low cutoff, if enabled."),
+        _lab(ees_output_bandpass_high, "Output bandpass high cutoff, if enabled."),
+        _lab(ees_output_bandpass_order, "Output bandpass filter order, if enabled."),
+        ees_output_bandpass_stage,
+    ]
+
     mo.vstack(
         [
             mo.md("### Canonical step-by-step pipeline (Jonkman et al. 2024)"),
@@ -803,6 +1007,12 @@ def _pipeline_controls_layout(
             ),
             mo.md("**3. ECG (QRS) removal**"),
             mo.hstack(_ecg_controls, justify="start", gap=2),
+            mo.md(
+                "**3b. EES (Estimated ECG Subtraction) parameters** — used "
+                "when 'EES' is selected above, and always used by the "
+                "detailed EES diagnostic section at the end of this notebook."
+            ),
+            mo.hstack(_ees_controls, wrap=True, justify="start", gap=2),
             mo.md("**4-6. Envelope & breath detection**"),
             mo.hstack(
                 [
@@ -874,8 +1084,27 @@ def _canonical_pipeline(
     detect_ecg_peaks,
     detect_emg_breath_peaks,
     downsample,
+    ees_detection_band_high,
+    ees_detection_band_low,
+    ees_detection_smoothing_s,
+    ees_filter_order,
+    ees_inter_qrs_tolerance,
+    ees_max_qrs_interval_s,
+    ees_min_qrs_interval_s,
+    ees_min_template_beats,
+    ees_output_bandpass_high,
+    ees_output_bandpass_low,
+    ees_output_bandpass_order,
+    ees_output_bandpass_stage,
+    ees_qrs_window_s,
+    ees_threshold_interval_s,
+    ees_threshold_smoothing_s,
+    ees_use_max_qrs_interval,
+    ees_use_min_qrs_interval,
+    ees_use_output_bandpass,
     emg_bandpass_butter,
     emg_plot,
+    estimated_ecg_subtraction,
     gating,
     harmonic_notch_filter,
     normalize,
@@ -923,6 +1152,44 @@ def _canonical_pipeline(
         fs_emg=_fs,
     )
 
+    # -- EES (Estimated ECG Subtraction, Jonkman et al. 2021) -----------------
+    # Computed unconditionally (not just when selected as the active method
+    # below) on the same stage-1 (notch + band-pass) signal every other
+    # method uses, so the detailed EES diagnostic section at the end of the
+    # notebook always has a result without duplicating its parameter
+    # controls.
+    _ees_min_qrs_interval = (
+        float(ees_min_qrs_interval_s.value) if ees_use_min_qrs_interval.value else None
+    )
+    _ees_max_qrs_interval = (
+        float(ees_max_qrs_interval_s.value) if ees_use_max_qrs_interval.value else None
+    )
+    _ees_output_bandpass_hz = (
+        (float(ees_output_bandpass_low.value), float(ees_output_bandpass_high.value))
+        if ees_use_output_bandpass.value
+        else None
+    )
+    ees_result = estimated_ecg_subtraction(
+        _hpf,
+        sample_frequency=_fs,
+        detection_band_hz=(
+            float(ees_detection_band_low.value),
+            float(ees_detection_band_high.value),
+        ),
+        filter_order=int(ees_filter_order.value),
+        detection_smoothing_seconds=float(ees_detection_smoothing_s.value),
+        threshold_interval_seconds=float(ees_threshold_interval_s.value),
+        threshold_smoothing_seconds=float(ees_threshold_smoothing_s.value),
+        qrs_window_seconds=float(ees_qrs_window_s.value),
+        inter_qrs_tolerance=float(ees_inter_qrs_tolerance.value),
+        minimum_template_beats=int(ees_min_template_beats.value),
+        minimum_qrs_interval_seconds=_ees_min_qrs_interval,
+        maximum_qrs_interval_seconds=_ees_max_qrs_interval,
+        output_bandpass_hz=_ees_output_bandpass_hz,
+        output_bandpass_stage=ees_output_bandpass_stage.value,
+        output_bandpass_order=int(ees_output_bandpass_order.value),
+    )
+
     # -- Stage 2: ECG (cardiac crosstalk) removal -----------------------------
     # A missed R-peak gets no wavelet suppression / no gate at all for that
     # beat, which shows up as leftover QRS spikes riding through stage 2/3 even
@@ -946,6 +1213,13 @@ def _canonical_pipeline(
             emg_raw=_notched, high_pass=200.0, low_pass=_low_pass, fs_emg=_fs
         )
         _stage2_label = "ECG removed — high-pass 200 Hz (rudimentary)"
+    elif _method == "EES (Estimated ECG Subtraction)":
+        _ecg_removed = ees_result.cleaned
+        _stage2_label = (
+            f"ECG removed — EES ({len(ees_result.qrs_indices)} QRS templates, "
+            f"{len(ees_result.rejected_peak_indices)} rejected, "
+            f"{len(ees_result.restored_peak_indices)} restored)"
+        )
     else:  # Wavelet denoising (paper's go-to method)
         _peaks = detect_ecg_peaks(
             ecg_raw=_hpf, fs=int(_fs), peak_fraction=_peak_fraction
@@ -1036,6 +1310,7 @@ def _canonical_pipeline(
         "time": _time[::_step],
         "raw": _prep(_raw),
         "stage1": _prep(_hpf),
+        "stage1_full": _hpf,
         "stage2": _prep(_ecg_removed),
         "envelope_time": _time[::_step],
         "envelope": _envelope[::_step],
@@ -1046,7 +1321,7 @@ def _canonical_pipeline(
         "breath_count": int(_peak_idx.size),
         "breath_rate": _rate,
     }
-    return (canonical_plot,)
+    return canonical_plot, ees_result
 
 
 @app.cell
@@ -1320,6 +1595,573 @@ def _eit_image(eit, go):
 @app.cell
 def _metadata(metadata, mo):
     mo.ui.table([{"Field": key, "Value": value} for key, value in metadata.items()])
+    return
+
+
+@app.cell
+def _ees_section_header(mo):
+    mo.md(r"""
+    ---
+    # Estimated ECG Subtraction (EES) — diagnostic detail
+
+    [Jonkman et al. (2021)](https://doi.org/10.1152/japplphysiol.00298.2021)'s
+    EES method builds an averaged QRS template per detected heartbeat and
+    subtracts it, rather than shrinking wavelet coefficients or blanking a
+    fixed gate around each beat. It's available as **"EES (Estimated ECG
+    Subtraction)"** in the canonical pipeline's ECG removal dropdown above
+    (feeding the same envelope/breath-detection stages as the other
+    methods); this section always shows its full step-by-step diagnostics —
+    reproducing Figure 1 of the paper — using the shared EES parameters set
+    above, regardless of which method is currently selected there.
+
+    EES runs on the same stage-1 signal (notch + band-pass filtered) as
+    every other method, over the currently selected Biopac time window.
+    """)
+    return
+
+
+@app.cell
+def _ees_display_controls(mo, window_range):
+    # Defaults to (and stays bounded by) the main "Biopac time window"
+    # selector above -- moving that slider resets this one to match, since a
+    # window outside it has no EES data anyway. Still independently
+    # adjustable to zoom into a narrower slice of that window for the dense
+    # step-by-step figure below.
+    _t0, _t1 = [float(v) for v in window_range]
+    ees_display_time = mo.ui.range_slider(
+        start=_t0,
+        stop=_t1,
+        step=0.1,
+        value=[_t0, _t1],
+        label="EES display window (s, Biopac time) — synced to the main time window",
+        full_width=True,
+    )
+    ees_display_time
+    return (ees_display_time,)
+
+
+@app.cell
+def _ees_metrics(ees_result, mo):
+    mo.md(
+        f"""
+        **Detected template beats:** {len(ees_result.qrs_indices)} &nbsp; · &nbsp;
+        **Candidate peaks:** {len(ees_result.candidate_peak_indices)} &nbsp; · &nbsp;
+        **Rejected candidates:** {len(ees_result.rejected_peak_indices)} &nbsp; · &nbsp;
+        **Restored candidates:** {len(ees_result.restored_peak_indices)}
+        """
+    )
+    return
+
+
+@app.cell
+def _ees_intermediate(
+    bandpass_filter,
+    canonical_plot,
+    ees_detection_band_high,
+    ees_detection_band_low,
+    ees_detection_smoothing_s,
+    ees_filter_order,
+    ees_result,
+    emg_plot,
+    moving_average,
+    np,
+    BIOPAC_SAMPLE_FREQUENCY,
+):
+    """Reproduce EES's internal steps 1-3 and 5/8/9 for display; the public
+    `estimated_ecg_subtraction` API only returns the final result, not these
+    intermediate arrays."""
+
+    _input_signal = canonical_plot["stage1_full"]
+    _fs = BIOPAC_SAMPLE_FREQUENCY
+
+    ees_promoted = bandpass_filter(
+        _input_signal,
+        cutoff_frequency=(
+            float(ees_detection_band_low.value),
+            float(ees_detection_band_high.value),
+        ),
+        sample_frequency=_fs,
+        order=int(ees_filter_order.value),
+    )
+    ees_rectified = np.abs(ees_promoted)
+    _detection_window_samples = max(
+        1, int(round(float(ees_detection_smoothing_s.value) * _fs))
+    )
+    ees_smoothed_detection = moving_average(
+        ees_rectified, window_size=_detection_window_samples
+    ) / np.ptp(_input_signal)
+
+    _above_threshold = ees_smoothed_detection > ees_result.dynamic_threshold
+    _padded = np.pad(_above_threshold.astype(np.int8), (1, 1))
+    _changes = np.diff(_padded)
+    ees_segment_starts = np.flatnonzero(_changes == 1)
+    ees_segment_ends = np.flatnonzero(_changes == -1) - 1
+
+    _template_offsets = ees_result.template_sample_offsets
+    _template_length = len(_template_offsets)
+    _half_template = _template_length // 2
+    ees_original_segments = np.stack(
+        [
+            _input_signal[
+                int(_r) - _half_template : int(_r) - _half_template + _template_length
+            ]
+            for _r in ees_result.qrs_indices[:, 1]
+        ]
+    )
+    _denormalized_segments = []
+    for _q, _r, _s in ees_result.qrs_indices:
+        _q_value = _input_signal[_q]
+        _r_value = _input_signal[_r]
+        _s_value = _input_signal[_s]
+        _denormalized = np.empty_like(ees_result.normalized_template)
+        _denormalized[: _half_template + 1] = (
+            ees_result.normalized_template[: _half_template + 1] * (_r_value - _q_value)
+            + _q_value
+        )
+        _denormalized[_half_template:] = (
+            ees_result.normalized_template[_half_template:] * (_r_value - _s_value)
+            + _s_value
+        )
+        _denormalized_segments.append(_denormalized)
+    ees_denormalized_segments = np.asarray(_denormalized_segments)
+
+    return (
+        ees_denormalized_segments,
+        ees_original_segments,
+        ees_promoted,
+        ees_rectified,
+        ees_segment_ends,
+        ees_segment_starts,
+        ees_smoothed_detection,
+    )
+
+
+@app.cell
+def _ees_figure(
+    BIOPAC_SAMPLE_FREQUENCY,
+    canonical_plot,
+    ees_denormalized_segments,
+    ees_display_time,
+    ees_original_segments,
+    ees_promoted,
+    ees_qrs_window_s,
+    ees_rectified,
+    ees_result,
+    ees_segment_ends,
+    ees_segment_starts,
+    ees_smoothed_detection,
+    eit_plot,
+    emg_plot,
+    np,
+    paw_plot,
+    plt,
+):
+    _input_signal = canonical_plot["stage1_full"]
+    _time = emg_plot["full_time"]
+    _fs = BIOPAC_SAMPLE_FREQUENCY
+    _window_start, _window_end = [float(v) for v in ees_display_time.value]
+    _visible = (_time >= _window_start) & (_time <= _window_end)
+    _template_time = ees_result.template_sample_offsets / _fs
+    _template_window_seconds = float(ees_qrs_window_s.value)
+    _template_half_window_seconds = _template_window_seconds / 2
+    _blue = "#3B7CCC"
+    _orange = "#F28E2B"
+    _gold = "#E5A823"
+    _charcoal = "#3F3F3F"
+    _red = "#E64B35"
+
+    def _safe_abs_max(*arrays, fallback=1.0):
+        _values = []
+        for _array in arrays:
+            _finite = np.asarray(_array)
+            _finite = _finite[np.isfinite(_finite)]
+            if _finite.size:
+                _values.append(float(np.max(np.abs(_finite))))
+        return max(_values) if _values else fallback
+
+    def _safe_min_max(*arrays, fallback=(0.0, 1.0)):
+        _mins, _maxs = [], []
+        for _array in arrays:
+            _finite = np.asarray(_array)
+            _finite = _finite[np.isfinite(_finite)]
+            if _finite.size:
+                _mins.append(float(np.min(_finite)))
+                _maxs.append(float(np.max(_finite)))
+        return (min(_mins), max(_maxs)) if _mins else fallback
+
+    _amplitude_limit = float(
+        1.05 * _safe_abs_max(_input_signal, ees_promoted, ees_result.estimated_ecg)
+    )
+    _cleaned_amplitude_limit = float(
+        max(
+            _amplitude_limit,
+            1.05 * _safe_abs_max(ees_result.cleaned, fallback=_amplitude_limit),
+        )
+    )
+    _detection_limit = float(
+        1.05
+        * _safe_abs_max(
+            ees_smoothed_detection, ees_result.dynamic_threshold, fallback=1.0
+        )
+    )
+    _normalized_min, _normalized_max = _safe_min_max(
+        ees_result.normalized_segments, ees_result.normalized_template
+    )
+    _normalized_padding = max(
+        0.05 * (_normalized_max - _normalized_min), np.finfo(float).eps
+    )
+
+    _figure = plt.figure(figsize=(18, 27), constrained_layout=True)
+    _outer = _figure.add_gridspec(
+        8, 12, height_ratios=(1.0, 1.0, 1.55, 1.1, 0.95, 0.9, 0.9, 0.85)
+    )
+
+    _ax_input = _figure.add_subplot(_outer[0, 0:6])
+    _ax_filter = _figure.add_subplot(_outer[0, 6:12], sharex=_ax_input)
+    _ax_rectified = _figure.add_subplot(_outer[1, 0:6], sharex=_ax_input)
+    _ax_threshold = _figure.add_subplot(_outer[1, 6:12], sharex=_ax_input)
+
+    _crossing_grid = _outer[2, 0:6].subgridspec(
+        2, 2, height_ratios=(2.0, 1.1), width_ratios=(1.15, 0.85)
+    )
+    _ax_crossings = _figure.add_subplot(_crossing_grid[0, :], sharex=_ax_input)
+    _ax_correction = _figure.add_subplot(_crossing_grid[1, 0])
+    _ax_correction_text = _figure.add_subplot(_crossing_grid[1, 1])
+    _ax_qrs = _figure.add_subplot(_outer[2, 6:12], sharex=_ax_input)
+
+    _ax_window = _figure.add_subplot(_outer[3, 0:12])
+    _template_grid = _outer[4, 0:12].subgridspec(1, 4, wspace=0.16)
+    _ax_original = _figure.add_subplot(_template_grid[0, 0])
+    _ax_normalized = _figure.add_subplot(_template_grid[0, 1])
+    _ax_average = _figure.add_subplot(_template_grid[0, 2])
+    _ax_denormalized = _figure.add_subplot(_template_grid[0, 3])
+
+    _ax_inserted = _figure.add_subplot(_outer[5, 0:12], sharex=_ax_input)
+    _ax_cleaned = _figure.add_subplot(_outer[6, 0:12], sharex=_ax_input)
+    _ax_paw = _figure.add_subplot(_outer[7, 0:6], sharex=_ax_input)
+    _ax_eit = _figure.add_subplot(_outer[7, 6:12], sharex=_ax_input)
+
+    def _paper_axis(axis):
+        axis.spines["top"].set_visible(False)
+        axis.spines["right"].set_visible(False)
+        axis.tick_params(labelsize=8)
+        axis.margins(x=0)
+
+    def _time_title(axis, title):
+        axis.set_title(title, loc="left", fontsize=10, pad=7)
+        axis.set_ylabel("Amplitude", fontsize=8)
+        axis.set_xlim(_window_start, _window_end)
+        _paper_axis(axis)
+
+    _ax_input.plot(_time[_visible], _input_signal[_visible], color=_blue, lw=0.6)
+    _time_title(_ax_input, "Input: EMGdi (post notch + band-pass)")
+
+    _ax_filter.plot(_time[_visible], ees_promoted[_visible], color=_blue, lw=0.6)
+    _time_title(_ax_filter, "1. Bandpass filter to promote relative ECG amplitude")
+
+    _ax_rectified.plot(_time[_visible], ees_rectified[_visible], color=_blue, lw=0.65)
+    _time_title(_ax_rectified, "2. Rectification")
+
+    _ax_threshold.plot(
+        _time[_visible], ees_smoothed_detection[_visible], color=_blue, lw=0.75
+    )
+    _ax_threshold.plot(
+        _time[_visible], ees_result.dynamic_threshold[_visible], color="black", lw=1.2
+    )
+    _time_title(
+        _ax_threshold,
+        "3. Moving-average detection signal\n4. Apply dynamic threshold",
+    )
+
+    _ax_crossings.plot(
+        _time[_visible], ees_smoothed_detection[_visible], color=_blue, lw=0.7
+    )
+    _ax_crossings.plot(
+        _time[_visible], ees_result.dynamic_threshold[_visible], color="black", lw=1.0
+    )
+    _start_visible = ees_segment_starts[
+        (_time[ees_segment_starts] >= _window_start)
+        & (_time[ees_segment_starts] <= _window_end)
+    ]
+    _end_visible = ees_segment_ends[
+        (_time[ees_segment_ends] >= _window_start)
+        & (_time[ees_segment_ends] <= _window_end)
+    ]
+    _ax_crossings.scatter(
+        _time[_start_visible],
+        ees_smoothed_detection[_start_visible],
+        marker="x",
+        color=_red,
+        s=28,
+        label="start QRS segment",
+        zorder=4,
+    )
+    _ax_crossings.scatter(
+        _time[_end_visible],
+        ees_smoothed_detection[_end_visible],
+        marker="x",
+        color=_orange,
+        s=28,
+        label="end QRS segment",
+        zorder=4,
+    )
+    _time_title(_ax_crossings, "5. Detect crossings with threshold level")
+    _ax_crossings.legend(loc="upper left", fontsize=7, ncols=2, frameon=False)
+
+    if len(ees_result.rejected_peak_indices):
+        _correction_center = int(ees_result.rejected_peak_indices[0])
+    elif len(ees_result.candidate_peak_indices):
+        _correction_center = int(
+            ees_result.candidate_peak_indices[
+                len(ees_result.candidate_peak_indices) // 2
+            ]
+        )
+    else:
+        _correction_center = int(_time.size // 2)
+    _correction_radius = int(round(0.45 * _fs))
+    _correction_start = max(0, _correction_center - _correction_radius)
+    _correction_end = min(len(_time), _correction_center + _correction_radius)
+    _correction_slice = slice(_correction_start, _correction_end)
+    _ax_correction.plot(
+        _time[_correction_slice],
+        ees_smoothed_detection[_correction_slice],
+        color=_blue,
+        lw=0.75,
+    )
+    _ax_correction.plot(
+        _time[_correction_slice],
+        ees_result.dynamic_threshold[_correction_slice],
+        color="black",
+        lw=0.9,
+    )
+    for _indices, _marker, _color, _label in (
+        (ees_result.rejected_peak_indices, "x", _red, "deleted"),
+        (ees_result.restored_peak_indices, "D", _blue, "restored"),
+    ):
+        _nearby = _indices[
+            (_indices >= _correction_start) & (_indices < _correction_end)
+        ]
+        if len(_nearby):
+            _ax_correction.scatter(
+                _time[_nearby],
+                ees_smoothed_detection[_nearby],
+                marker=_marker,
+                color=_color,
+                s=34,
+                label=_label,
+                zorder=5,
+            )
+    _ax_correction.set_title(
+        "6. Periodicity correction (detail)", loc="left", fontsize=9
+    )
+    _ax_correction.set_xlabel("Time (s)", fontsize=8)
+    _ax_correction.set_ylabel("Normalized", fontsize=8)
+    _ax_correction.legend(loc="upper right", fontsize=7, frameon=False)
+    _paper_axis(_ax_correction)
+    _ax_correction_text.axis("off")
+    _ax_correction_text.text(
+        0.03,
+        0.68,
+        "6. Remove (and restore) wrongfully\n"
+        "detected (or deleted) QRS segments\n\n"
+        f"Rejected: {len(ees_result.rejected_peak_indices)}\n"
+        f"Restored: {len(ees_result.restored_peak_indices)}",
+        fontsize=10,
+        va="top",
+    )
+
+    _ax_qrs.plot(_time[_visible], _input_signal[_visible], color=_blue, lw=0.6)
+    _qrs = ees_result.qrs_indices
+    for _column, _color, _label, _size in (
+        (0, _charcoal, "Q", 28),
+        (1, _gold, "R", 32),
+        (2, _red, "S", 28),
+    ):
+        _indices = _qrs[:, _column]
+        _inside = (_time[_indices] >= _window_start) & (_time[_indices] <= _window_end)
+        _ax_qrs.scatter(
+            _time[_indices[_inside]],
+            _input_signal[_indices[_inside]],
+            color=_color,
+            s=_size,
+            label=_label,
+            zorder=4,
+        )
+    _time_title(_ax_qrs, "7. Detect QRS peaks")
+    _ax_qrs.legend(loc="upper right", fontsize=8, ncols=3, frameon=False)
+
+    _middle_beat = len(_qrs) // 2
+    _shown_beats = _qrs[max(0, _middle_beat - 1) : _middle_beat + 2]
+    if len(_shown_beats):
+        _window_left = max(0, int(_shown_beats[0, 1]) - int(0.35 * _fs))
+        _window_right = min(len(_time), int(_shown_beats[-1, 1]) + int(0.35 * _fs))
+        _ax_window.plot(
+            _time[_window_left:_window_right],
+            _input_signal[_window_left:_window_right],
+            color=_blue,
+            lw=0.65,
+        )
+        for _column, _color, _label in (
+            (0, _charcoal, "Q"),
+            (1, _gold, "R"),
+            (2, _red, "S"),
+        ):
+            _ax_window.scatter(
+                _time[_shown_beats[:, _column]],
+                _input_signal[_shown_beats[:, _column]],
+                color=_color,
+                s=30,
+                label=_label,
+                zorder=4,
+            )
+        _selected_r_time = _time[_shown_beats[-1, 1]]
+        _bracket_y = 0.82 * _amplitude_limit
+        _ax_window.annotate(
+            "",
+            xy=(_selected_r_time - _template_half_window_seconds, _bracket_y),
+            xytext=(_selected_r_time + _template_half_window_seconds, _bracket_y),
+            arrowprops={"arrowstyle": "|-|", "lw": 1.2, "color": _charcoal},
+        )
+        _ax_window.text(
+            _selected_r_time,
+            _bracket_y,
+            f" {_template_window_seconds:.2f} s ",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+        )
+    _ax_window.set_title(
+        f"8. Select window length around R wave ({_template_window_seconds:.2f} s)",
+        loc="left",
+        fontsize=9,
+    )
+    _ax_window.set_xlabel("Time (s)", fontsize=8)
+    _ax_window.set_ylabel("Amplitude", fontsize=8)
+    _ax_window.legend(loc="upper left", fontsize=7, ncols=3, frameon=False)
+    _paper_axis(_ax_window)
+
+    _segment_colors = plt.cm.tab20(
+        np.linspace(0, 1, max(len(ees_original_segments), 1))
+    )
+    for _segment, _color in zip(ees_original_segments, _segment_colors):
+        _ax_original.plot(_template_time, _segment, color=_color, lw=0.55, alpha=0.85)
+    for _segment, _color in zip(ees_result.normalized_segments, _segment_colors):
+        _ax_normalized.plot(_template_time, _segment, color=_color, lw=0.55, alpha=0.85)
+    _ax_average.plot(
+        _template_time, ees_result.normalized_template, color=_orange, lw=1.2
+    )
+    for _segment, _color in zip(ees_denormalized_segments, _segment_colors):
+        _ax_denormalized.plot(
+            _template_time, _segment, color=_color, lw=0.55, alpha=0.9
+        )
+    for _axis, _subtitle in (
+        (_ax_original, "a. original QRS segments"),
+        (_ax_normalized, "b. normalized QRS segments"),
+        (_ax_average, "c. average QRS segment"),
+        (_ax_denormalized, "d. denormalized QRS segments"),
+    ):
+        _axis.set_xlabel(_subtitle, fontsize=8, fontstyle="italic")
+        _axis.set_xticks([])
+        _axis.set_yticks([])
+        _paper_axis(_axis)
+    _ax_original.set_title("9. Create QRS template", loc="left", fontsize=9)
+
+    _ax_inserted.plot(
+        _time[_visible], ees_result.estimated_ecg[_visible], color=_orange, lw=0.75
+    )
+    _time_title(
+        _ax_inserted, "10. Insert denormalized QRS segments at original location"
+    )
+
+    _ax_cleaned.plot(_time[_visible], ees_result.cleaned[_visible], color=_blue, lw=0.6)
+    _time_title(_ax_cleaned, "11. Subtract estimated ECG template from EMGdi")
+
+    def _context_panel(axis, plot_time, plot_values, *, title, ylabel, color):
+        _time_title(axis, title)
+        _has_data = (
+            plot_time is not None
+            and plot_values is not None
+            and np.asarray(plot_time).size > 0
+            and np.asarray(plot_values).size > 0
+            and np.any(np.isfinite(plot_values))
+        )
+        if _has_data:
+            _n = min(len(plot_time), len(plot_values))
+            axis.plot(plot_time[:_n], plot_values[:_n], color=color, lw=0.7)
+            axis.set_ylabel(ylabel, fontsize=8)
+            _lo, _hi = _safe_min_max(plot_values)
+            _pad = 0.05 * max(_hi - _lo, np.finfo(float).eps)
+            axis.set_ylim(_lo - _pad, _hi + _pad)
+        else:
+            axis.set_ylabel("")
+            axis.set_yticks([])
+            axis.text(
+                0.5,
+                0.5,
+                "No data in this window.",
+                ha="center",
+                va="center",
+                fontsize=9,
+                color="#777777",
+                transform=axis.transAxes,
+            )
+
+    _context_panel(
+        _ax_paw,
+        paw_plot["time"],
+        paw_plot["values"],
+        title="Airway pressure (Paw)",
+        ylabel="Paw (cmH2O)",
+        color="#8B5FA8",
+    )
+    _context_panel(
+        _ax_eit,
+        eit_plot["time"],
+        eit_plot["values"],
+        title="EIT global impedance",
+        ylabel="Impedance (a.u.)",
+        color="#3F7F5F",
+    )
+
+    _ax_inserted.set_xlabel("Time (s)", fontsize=8)
+    _ax_paw.set_xlabel("Time (s)", fontsize=8)
+    _ax_eit.set_xlabel("Time (s)", fontsize=8)
+
+    for _axis in (
+        _ax_input,
+        _ax_filter,
+        _ax_qrs,
+        _ax_window,
+        _ax_original,
+        _ax_denormalized,
+        _ax_inserted,
+    ):
+        _axis.set_ylim(-_amplitude_limit, _amplitude_limit)
+    _ax_cleaned.set_ylim(-_cleaned_amplitude_limit, _cleaned_amplitude_limit)
+    _ax_rectified.set_ylim(0, _amplitude_limit)
+    for _axis in (_ax_threshold, _ax_crossings, _ax_correction):
+        _axis.set_ylim(0, _detection_limit)
+    for _axis in (_ax_normalized, _ax_average):
+        _axis.set_ylim(
+            _normalized_min - _normalized_padding, _normalized_max + _normalized_padding
+        )
+
+    for _axis in (
+        _ax_input,
+        _ax_filter,
+        _ax_rectified,
+        _ax_threshold,
+        _ax_crossings,
+        _ax_qrs,
+        _ax_inserted,
+        _ax_cleaned,
+    ):
+        _axis.axhline(0, color="#777777", lw=0.35, alpha=0.5)
+
+    _figure.suptitle(
+        "Estimated ECG Subtraction (EES) — complete processing sequence", fontsize=15
+    )
+    _figure
     return
 
 

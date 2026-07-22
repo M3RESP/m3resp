@@ -160,6 +160,40 @@ from ._shared import (
             description="Envelope recomputation window on the cleaned signal. Defaults to the original preprocessing window.",
             advanced=True,
         ),
+        StepParameter(
+            name="output_bandpass_low_hz",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="Hz",
+            description="Lower edge of an optional extra bandpass filter applied outside QRS detection. Disabled unless both low and high are set.",
+            advanced=True,
+        ),
+        StepParameter(
+            name="output_bandpass_high_hz",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="Hz",
+            description="Upper edge of an optional extra bandpass filter applied outside QRS detection. Disabled unless both low and high are set.",
+            advanced=True,
+        ),
+        StepParameter(
+            name="output_bandpass_stage",
+            value_type="string",
+            default="after_subtraction",
+            choices=("before_subtraction", "after_subtraction"),
+            description="Which operand of the final subtraction gets filtered; detection and the template always use the raw signal either way. 'before_subtraction' filters the raw signal right before subtracting the (unfiltered) estimated ECG; 'after_subtraction' subtracts first and filters the result.",
+            advanced=True,
+        ),
+        StepParameter(
+            name="output_bandpass_order",
+            value_type="integer",
+            default=4,
+            minimum=1,
+            description="Filter order for the optional extra bandpass.",
+            advanced=True,
+        ),
     ),
     output_artifacts=(
         StepArtifact(
@@ -269,6 +303,10 @@ def ecg_estimated_subtraction(
     minimum_qrs_interval_seconds: float | None = 0.25,
     maximum_qrs_interval_seconds: float | None = 2.0,
     envelope_window_seconds: float | None = None,
+    output_bandpass_low_hz: float | None = None,
+    output_bandpass_high_hz: float | None = None,
+    output_bandpass_stage: str = "after_subtraction",
+    output_bandpass_order: int = 4,
 ) -> dict[str, Any]:
     """Run the paper-based Estimated ECG Subtraction method.
 
@@ -284,6 +322,11 @@ def ecg_estimated_subtraction(
         )
     array = np.asarray(processed_emg[source], dtype=float)
     fs = float(processed_emg["fs"])
+    output_bandpass_hz = (
+        (output_bandpass_low_hz, output_bandpass_high_hz)
+        if output_bandpass_low_hz is not None and output_bandpass_high_hz is not None
+        else None
+    )
     result = _estimated_ecg_subtraction(
         array,
         sample_frequency=fs,
@@ -297,6 +340,9 @@ def ecg_estimated_subtraction(
         minimum_template_beats=minimum_template_beats,
         minimum_qrs_interval_seconds=minimum_qrs_interval_seconds,
         maximum_qrs_interval_seconds=maximum_qrs_interval_seconds,
+        output_bandpass_hz=output_bandpass_hz,
+        output_bandpass_stage=output_bandpass_stage,
+        output_bandpass_order=output_bandpass_order,
     )
 
     original_window_seconds = (processed_emg.get("filter") or {}).get(
@@ -337,6 +383,10 @@ def ecg_estimated_subtraction(
         "minimum_qrs_interval_seconds": minimum_qrs_interval_seconds,
         "maximum_qrs_interval_seconds": maximum_qrs_interval_seconds,
         "effective_envelope_window_seconds": effective_envelope_window_seconds,
+        "output_bandpass_low_hz": output_bandpass_low_hz,
+        "output_bandpass_high_hz": output_bandpass_high_hz,
+        "output_bandpass_stage": output_bandpass_stage,
+        "output_bandpass_order": output_bandpass_order,
     }
     signal_metadata = dict(parameters)
     ees_cleaned_signal = Signal(
