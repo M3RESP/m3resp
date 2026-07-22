@@ -148,6 +148,7 @@ def test_scalar_only_run_produces_the_same_csv_content_as_before(tmp_path):
             "value": "1.5",
             "modality": "eit",
             "unit": "a.u.",
+            "metric_type": "tidal_impedance_variation",
             "breath_id": "",
             "breath_ids": "",
             "start_time": "",

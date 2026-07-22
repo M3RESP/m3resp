@@ -119,8 +119,8 @@ class DataModelStore:
 
     def add_derived_feature(self, feature: DerivedFeature) -> DerivedFeature:
         self._require(self.processing_runs, feature.processing_run_id, "ProcessingRun")
-        if feature.source_signal_id is not None:
-            self._require(self.signal_streams, feature.source_signal_id, "SignalStream")
+        for source_signal_id in feature.source_signal_ids:
+            self._require(self.signal_streams, source_signal_id, "SignalStream")
         self.derived_features[feature.feature_id] = feature
         return feature
 

@@ -14,8 +14,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from m3resp import M3Session
 from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
+from m3resp.core.exceptions import VariantAlreadyExistsError
 from m3resp.data import ParameterResult, QualityFlag, Signal
 
 
@@ -150,3 +153,98 @@ def test_session_stores_eit_and_emg_signals_in_the_same_collection():
 
     modalities = {s.modality for s in session.signals}
     assert modalities == {"eit", "emg"}
+
+
+def test_preprocess_eit_raises_on_duplicate_variant():
+    """Second write to an already-populated variant must not silently overwrite it.
+
+    Reproduces the ambiguity flagged in PR #23 review: a reference stashed
+    from an earlier `preprocess_eit()` call must not change meaning
+    underneath the caller just because something else preprocessed again.
+    """
+
+    eit_adapter = EITProcessingAdapter()
+    eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
+    session = M3Session(eit_adapter=eit_adapter)
+    session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
+
+    session.preprocess_eit()
+
+    with pytest.raises(VariantAlreadyExistsError):
+        session.preprocess_eit()
+
+    with pytest.raises(VariantAlreadyExistsError):
+        session.preprocess_eit(variant="default")
+
+
+def test_preprocess_eit_overwrite_true_replaces_existing_variant():
+    eit_adapter = EITProcessingAdapter()
+    eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
+    session = M3Session(eit_adapter=eit_adapter)
+    session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
+
+    first = session.preprocess_eit()
+    second = session.preprocess_eit(overwrite=True)
+
+    assert first is not second
+    assert session.processed["eit"] is second
+    assert session.processed_variants["eit"]["default"] is second
+
+
+def test_session_allow_overwrite_lets_repeated_preprocess_calls_through():
+    """`allow_overwrite` lets notebook code opt in once instead of passing
+    `overwrite=True` on every call, without weakening the default guard for
+    code that doesn't set it (e.g. once copied into a reusable pipeline)."""
+
+    eit_adapter = EITProcessingAdapter()
+    eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
+    session = M3Session(eit_adapter=eit_adapter, allow_overwrite=True)
+    session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
+
+    first = session.preprocess_eit()
+    second = session.preprocess_eit()
+
+    assert first is not second
+    assert session.processed["eit"] is second
+
+
+def test_session_allow_overwrite_defaults_to_false():
+    eit_adapter = EITProcessingAdapter()
+    eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
+    session = M3Session(eit_adapter=eit_adapter)
+    session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
+
+    session.preprocess_eit()
+
+    with pytest.raises(VariantAlreadyExistsError):
+        session.preprocess_eit()
+
+
+def test_preprocess_eit_distinct_variants_coexist_without_touching_default():
+    eit_adapter = EITProcessingAdapter()
+    eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
+    session = M3Session(eit_adapter=eit_adapter)
+    session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
+
+    session.preprocess_eit(variant="mdn")
+    session.preprocess_eit(variant="lowpass")
+
+    assert set(session.processed_variants["eit"]) == {"mdn", "lowpass"}
+    assert "eit" not in session.processed
+
+    # A later unnamed call still targets "default" and doesn't collide with
+    # either named variant.
+    session.preprocess_eit()
+    assert set(session.processed_variants["eit"]) == {"mdn", "lowpass", "default"}
+
+
+def test_preprocess_emg_raises_on_duplicate_variant():
+    emg_adapter = ReSurfEMGAdapter()
+    emg_adapter.preprocess = lambda *args, **kwargs: _fake_emg_preprocessed()  # type: ignore[method-assign]
+    session = M3Session(emg_adapter=emg_adapter)
+    session.raw["emg"] = SimpleNamespace(data=object())
+
+    session.preprocess_emg(variant="mdn")
+
+    with pytest.raises(VariantAlreadyExistsError):
+        session.preprocess_emg(variant="mdn")

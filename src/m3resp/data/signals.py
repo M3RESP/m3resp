@@ -47,7 +47,28 @@ _VALID_PROCESSING_STATES = frozenset(get_args(ProcessingState))
 
 @dataclass
 class Signal(TimeSeries):
-    """A :class:`TimeSeries` tagged with modality and provenance context."""
+    """A :class:`TimeSeries` tagged with modality and provenance context.
+
+    Provenance fields (``source`` vs ``method`` are distinct and often
+    confused):
+
+    - ``channel``: which physical/logical channel this is (e.g. an EMG
+      lead name, ``"global_impedance"`` for EIT).
+    - ``source``: *where the data came from* - the upstream producer/origin,
+      typically the loader or library that emitted it (e.g. ``"resurfemg"``,
+      ``"eitprocessing"``). Provenance of origin, not of transformation.
+    - ``method``: *what was done to it* - the specific algorithm/function that
+      produced this particular signal (e.g.
+      ``"resurfemg.postprocessing.moving_baseline"``). This is what
+      distinguishes two signals sharing the same ``channel`` and
+      ``processing_state`` (e.g. two differently-filtered variants).
+    - ``processing_state``: how far along the raw -> filtered -> processed
+      pipeline this signal is, or ``"derived"`` if computed from another
+      signal. See :data:`ProcessingState`.
+    - ``derived_from``: for a ``"derived"`` signal, the ``processing_state``
+      it was computed from (e.g. a baseline derived from the ``"processed"``
+      envelope has ``derived_from="processed"``). ``None`` otherwise.
+    """
 
     modality: Modality = "unknown"
     channel: str | None = None

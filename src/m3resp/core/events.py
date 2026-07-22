@@ -55,6 +55,13 @@ class BreathEvent:
     confidence: float | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if self.end_time < self.start_time:
+            raise ValueError(
+                f"BreathEvent.end_time ({self.end_time}) must not be before "
+                f"start_time ({self.start_time})"
+            )
+
     @property
     def duration(self) -> float:
         """Breath duration in the same time units as ``start_time``/``end_time``."""

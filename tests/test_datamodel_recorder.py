@@ -122,7 +122,7 @@ def test_record_parameter_and_quality_flag_link_to_recorded_signal():
         QualityFlag(name="snr_check", passed=True, severity="info", modality="eit")
     )
 
-    assert feature.source_signal_id == stream.signal_id
+    assert feature.source_signal_ids == [stream.signal_id]
     assert feature.value == 1.5
     assert annotation.target_type == "signal"
     assert annotation.target_id == stream.signal_id

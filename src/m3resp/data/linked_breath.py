@@ -1,5 +1,4 @@
-"""``LinkedBreath``: one respiratory cycle observed across modalities
-(plan_stage2.md Sec 20, Milestone 2.5).
+"""``LinkedBreath``: one respiratory cycle observed across modalities.
 
 Produced by ``m3resp.synchronization.linking.link_breaths_by_time``, which
 matches ``Breath``/``BreathEvent`` objects across any number of modalities'

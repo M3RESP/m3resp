@@ -11,20 +11,29 @@ if TYPE_CHECKING:
 
 
 class EITPipeline(Pipeline):
-    """The built-in "eit" preset: name for "preprocess then detect breaths".
+    """A starting point for an EIT pipeline, registered as the "eit" preset -
+    not "the" canonical EIT algorithm.
 
     What it actually does, concretely: ``run()`` calls
     ``session.preprocess_eit(**config["preprocess"])`` then
     ``session.detect_eit_breaths(**config["detect_breaths"])`` - two lines,
     nothing else. It expects ``session.load_eit(...)`` to have already been
-    called.
+    called. It is deliberately thin, and that's expected to mean most
+    projects amend it via ``config`` (or subclass/replace it) rather than use
+    it unmodified - see ``m3resp.presets.base`` for why: ``preprocess_eit``
+    currently also runs breath detection and computes rates/TIV/EELI/pixel
+    TIV internally (an artifact of wrapping ``eitprocessing``'s own API
+    shape, not an m3resp design choice - see PR #23 discussion), so what
+    reads as "preprocess then detect" is really "run the adapter's default
+    bundle, then normalize its breath output." Revisit this pipeline's shape
+    once EIT is natively reimplemented (Stage 3) and that bundling can be
+    restructured.
 
-    What it is not: a fixed "the EIT algorithm." Every option
-    ``preprocess_eit``/``detect_eit_breaths`` accept - filter mode (mdn,
-    lowpass, bandpass, none), which optional outputs to compute (rates, TIV,
-    EELI, pixel TIV), breath-detection parameters - is still reachable
-    through ``config``. ``EITPipeline()`` with no config runs those methods'
-    own defaults; it doesn't hide or replace any choice.
+    Every option ``preprocess_eit``/``detect_eit_breaths`` accept - filter
+    mode (mdn, lowpass, bandpass, none), which optional outputs to compute
+    (rates, TIV, EELI, pixel TIV), breath-detection parameters - is still
+    reachable through ``config``. ``EITPipeline()`` with no config runs those
+    methods' own defaults; it doesn't hide or replace any choice.
 
     Why it exists rather than just calling those two methods directly: it
     gives the common "run default EIT processing" case a name

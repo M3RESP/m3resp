@@ -53,7 +53,7 @@ def test_store_builds_case_session_stream_file_run_feature_chain():
             signal_type="eit_waveform",
             unit="a.u.",
             sampling_frequency_hz=50.0,
-            start_time=datetime.now(timezone.utc),
+            start_time=datetime.now(timezone.utc).timestamp(),
         )
     )
     data_file = store.add_data_file(
@@ -71,7 +71,7 @@ def test_store_builds_case_session_stream_file_run_feature_chain():
     )
     feature = store.add_derived_feature(
         DerivedFeature(
-            source_signal_id=stream.signal_id,
+            source_signal_ids=[stream.signal_id],
             processing_run_id=run.processing_run_id,
             feature_name="tidal_impedance_variation",
             value=1.23,

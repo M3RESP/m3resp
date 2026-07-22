@@ -25,8 +25,10 @@ from pydantic import BaseModel, Field
 from m3resp.datamodel.ids import new_id
 
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+def _utc_now_ts() -> float:
+    """Current time as a Unix timestamp (seconds since epoch, UTC)."""
+
+    return datetime.now(timezone.utc).timestamp()
 
 
 class Entity(BaseModel):
@@ -44,7 +46,7 @@ class Case(Entity):
     case_id: str = Field(default_factory=lambda: new_id("case"))
     external_case_ref: str | None = None
     study_ref: str | None = None
-    created_at: datetime = Field(default_factory=_utc_now)
+    created_at: float = Field(default_factory=_utc_now_ts)
 
 
 BodyPosition = Literal[
@@ -58,8 +60,8 @@ class RecordingSession(Entity):
 
     session_id: str = Field(default_factory=lambda: new_id("session"))
     case_id: str
-    session_start_time: datetime | None = None
-    session_end_time: datetime | None = None
+    session_start_time: float | None = None
+    session_end_time: float | None = None
     #: The session's body position, if fixed for its whole duration. Set to
     #: ``"dynamic"`` when position changes during the session rather than
     #: guessing a single value - record the actual changes as
@@ -115,20 +117,51 @@ SignalType = (
     ]
     | str
 )
+#: How much to trust `SignalStream.start_time`/`device_local_start_time` as
+#: real-world time. This does *not* change their type or units - both are
+#: always Unix epoch seconds (UTC), regardless of `time_base`; a source with
+#: no reliable clock still has to report its *best available* epoch estimate
+#: (e.g. the wall-clock time an operator started the recording) rather than
+#: leaving `start_time` unset - `time_base` is what tells a consumer how much
+#: precision that estimate actually has:
+#:
 #: - ``absolute``: a calibrated real-world clock time (e.g. NTP/atomic).
 #: - ``approximate``: a human-recorded or estimated real-world time (e.g.
 #:   noted on paper during the session) - a real timestamp, but not
 #:   calibrated, so it shouldn't be trusted to the same precision as
-#:   ``absolute``.
+#:   ``absolute``. Converting a hand-noted local wall-clock reading into an
+#:   epoch value is exactly what `SignalStream.time_zone` is for.
 #: - ``relative``: elapsed time from some reference point, not tied to a
-#:   real-world clock.
-#: - ``device_local``: the recording device's own internal clock.
+#:   real-world clock - `start_time` is still an epoch anchor (e.g. when
+#:   acquisition was triggered), but offsets from it don't carry real-world
+#:   meaning beyond that anchor.
+#: - ``device_local``: the recording device's own internal clock, not
+#:   independently calibrated against a real-world reference.
 #: - ``synchronized``: has been aligned onto a common time axis with other
 #:   signals (see `m3resp.synchronization`).
 TimeBase = Literal[
     "absolute", "approximate", "relative", "device_local", "synchronized"
 ]
-SyncMethod = Literal["common_clock", "ntp", "trigger", "manual", "none"]
+#: How signals were brought onto a common time axis. Open vocabulary, not an
+#: enum: new synchronization mechanisms shouldn't require a schema change -
+#: these are listed for documentation/IDE-completion convenience, not
+#: enforced at validation time.
+#:
+#: - ``common_clock``/``ntp``/``trigger``: clock-based methods where
+#:   `SignalStream.sync_uncertainty_ms` is a real, measurable quantity.
+#: - ``manual``: a human-entered offset.
+#: - ``breath_matching``: streams aligned by matching detected breaths
+#:   across modalities rather than by a shared clock (see
+#:   `m3resp.synchronization.linking.link_breaths_by_time`). Unlike the
+#:   clock-based methods above, there's no real clock-precision figure here -
+#:   set `sync_uncertainty_ms` from the matching algorithm's own tolerance
+#:   parameter (e.g. `link_breaths_by_time`'s `time_tolerance`, in ms) rather
+#:   than an independent estimate, so streams synced this way by different
+#:   workflows stay comparable instead of each guessing its own number.
+#: - ``none``: not synchronized.
+SyncMethod = (
+    Literal["common_clock", "ntp", "trigger", "manual", "breath_matching", "none"] | str
+)
 #: A coarse, human-readable summary of sync quality - not a substitute for
 #: `SignalStream.sync_uncertainty_ms`. What counts as "good" vs "acceptable"
 #: synchronization is application-dependent (e.g. millisecond precision
@@ -139,7 +172,27 @@ SyncQualityLabel = Literal["good", "acceptable", "uncertain", "failed"]
 
 
 class SignalStream(Entity):
-    """Base type for every continuous signal (doc Sec 7.4)."""
+    """Base type for every continuous signal (doc Sec 7.4).
+
+    Time fields (all timestamps are Unix epoch seconds, UTC - see
+    :data:`TimeBase` for what varies is how much to trust them, not their
+    units):
+
+    - ``start_time``: the best available real-world start time for this
+      stream. Always required (see the store's completeness check) even for
+      sources with no reliable clock - in that case it holds a best-effort
+      estimate (e.g. when acquisition was triggered), and :attr:`time_base`
+      tells a consumer how much precision to expect from it.
+    - ``device_local_start_time``: the device's own raw, uncorrected start
+      time as reported by the device itself, kept separately from
+      ``start_time`` for provenance/debugging even after any correction or
+      calibration has been applied to produce ``start_time``.
+    - ``time_zone``: the zone assumed when converting a naive local
+      wall-clock reading (e.g. a hand-noted ``approximate`` timestamp) into
+      an epoch value. Not needed for sources that already report an
+      unambiguous absolute or epoch time.
+    - ``time_base``: see :data:`TimeBase`.
+    """
 
     signal_id: str = Field(default_factory=lambda: new_id("signal"))
     session_id: str
@@ -148,8 +201,8 @@ class SignalStream(Entity):
     unit: str | None = None
     sampling_frequency_hz: float | None = None
     sample_count: int | None = None
-    start_time: datetime | None = None
-    device_local_start_time: datetime | None = None
+    start_time: float | None = None
+    device_local_start_time: float | None = None
     time_zone: str | None = None
     time_base: TimeBase | None = None
     sync_method: SyncMethod | None = None
@@ -210,7 +263,7 @@ class VentilatorSetting(Entity):
     pressure_support_cmh2o: float | None = None
     respiratory_rate_set: float | None = None
     tidal_volume_set_ml: float | None = None
-    measurement_time: datetime | None = None
+    measurement_time: float | None = None
     extras: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -225,23 +278,33 @@ class Breath(Entity):
     breath_id: str = Field(default_factory=lambda: new_id("breath"))
     session_id: str
     source_signal_id: str
-    breath_start_time: datetime | None = None
-    breath_end_time: datetime | None = None
+    breath_start_time: float | None = None
+    breath_end_time: float | None = None
     detection_method: Literal["algorithm", "manual"] | None = None
     asynchrony_type: AsynchronyType | None = None
 
 
 # --- Recording context (doc Sec 7.9) -----------------------------------------
 
-EventType = Literal[
-    "position_change",
-    "suctioning",
-    "recruitment_maneuver",
-    "ventilator_adjustment",
-    "disconnection",
-    "extubation",
-    "other",
-]
+#: Common clinical event types (doc Sec 7.9). Open vocabulary, not an enum:
+#: real recordings involve event variants that don't fit a fixed set (e.g.
+#: inspiratory vs. expiratory occlusion, the Baydur maneuver, anything
+#: extubation-adjacent) - these are listed for documentation/IDE-completion
+#: convenience, not enforced at validation time. Use `ClinicalEvent.description`
+#: for free-text detail on a specific variant.
+EventType = (
+    Literal[
+        "position_change",
+        "suctioning",
+        "recruitment_maneuver",
+        "occlusion_maneuver",
+        "ventilator_adjustment",
+        "disconnection",
+        "extubation",
+        "other",
+    ]
+    | str
+)
 EventSource = Literal["manual_annotation", "device_log", "algorithm"]
 Confidence = Literal["high", "medium", "low"]
 
@@ -252,8 +315,8 @@ class ClinicalEvent(Entity):
     event_id: str = Field(default_factory=lambda: new_id("event"))
     session_id: str
     event_type: EventType
-    event_start_time: datetime | None = None
-    event_end_time: datetime | None = None
+    event_start_time: float | None = None
+    event_end_time: float | None = None
     event_source: EventSource | None = None
     confidence: Confidence | None = None
     description: str | None = None
@@ -273,7 +336,7 @@ class ProcessingRun(Entity):
     code_commit_hash: str | None = None
     input_file_ids: list[str] = Field(default_factory=list)
     parameter_file_id: str | None = None
-    run_time: datetime = Field(default_factory=_utc_now)
+    run_time: float = Field(default_factory=_utc_now_ts)
     operator_ref: str | None = None
     # Beyond the doc: forward-compat for the Task Runner / Error Handler
     # components in the roadmap image (see module docstring).
@@ -289,17 +352,24 @@ class DerivedFeature(Entity):
     """A quantitative result computed from one or more source streams (doc Sec 7.11)."""
 
     feature_id: str = Field(default_factory=lambda: new_id("feature"))
-    source_signal_id: str | None = None
+    source_signal_ids: list[str] = Field(default_factory=list)
     processing_run_id: str
     feature_name: str
-    time_window_start: datetime | None = None
-    time_window_end: datetime | None = None
+    time_window_start: float | None = None
+    time_window_end: float | None = None
     value: float | None = None
     unit: str | None = None
     quality_flag: QualityFlag | None = None
 
 
-FileFormat = Literal["hdf5", "edf", "csv", "json", "dicom", "parquet", "zarr", "other"]
+#: Common file formats (doc Sec 8.1). Open vocabulary, not an enum: new
+#: loaders/exporters can use any string here (e.g. a new file format) without
+#: a schema change - these are listed for documentation/IDE-completion
+#: convenience, not enforced at validation time.
+FileFormat = (
+    Literal["hdf5", "edf", "csv", "json", "dicom", "mat", "parquet", "zarr", "other"]
+    | str
+)
 FileRole = Literal["raw", "processed", "derived", "annotation", "parameter", "report"]
 
 
@@ -314,7 +384,7 @@ class DataFile(Entity):
     file_role: FileRole | None = None
     checksum_sha256: str | None = None
     file_size_bytes: int | None = None
-    created_at: datetime = Field(default_factory=_utc_now)
+    created_at: float = Field(default_factory=_utc_now_ts)
 
 
 # --- Cross-cutting quality (doc Sec 11) --------------------------------------
@@ -339,8 +409,8 @@ class QualityAnnotation(Entity):
     quality_annotation_id: str = Field(default_factory=lambda: new_id("qa"))
     target_type: TargetType
     target_id: str
-    time_window_start: datetime | None = None
-    time_window_end: datetime | None = None
+    time_window_start: float | None = None
+    time_window_end: float | None = None
     quality_label: QualityLabel
     artifact_type: ArtifactType | None = None
     annotation_source: AnnotationSource | None = None
