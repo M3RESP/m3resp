@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -16,6 +17,34 @@ def _optional_dependency_error() -> OptionalDependencyError:
         "EIT support requires the optional dependency `eitprocessing`. "
         'Install with `pip install "m3resp[eit]"`.'
     )
+
+
+def _import_attr(dotted_path: str) -> Any:
+    module_path, _, attr_name = dotted_path.rpartition(".")
+    # Use the `__import__` builtin (as `from module import name` does), not
+    # `importlib.import_module` - the latter bypasses `builtins.__import__`
+    # via internal bootstrap machinery, which breaks tests that monkeypatch
+    # `builtins.__import__` to simulate `eitprocessing` being uninstalled.
+    module = __import__(module_path, fromlist=[attr_name])
+    return getattr(module, attr_name)
+
+
+def _lazy_import(
+    *dotted_paths: str,
+    error: Callable[[], OptionalDependencyError] | None = None,
+) -> tuple[Any, ...]:
+    """Import one or more `eitprocessing` attributes on demand.
+
+    Centralizes the try/import/except-ImportError dance every adapter method
+    needs to keep `eitprocessing` optional, so each method states only which
+    attributes it needs. Raises a consistent `OptionalDependencyError`
+    (or `error()` if given, for callers with a more specific message).
+    """
+
+    try:
+        return tuple(_import_attr(path) for path in dotted_paths)
+    except ImportError as exc:
+        raise (error() if error is not None else _optional_dependency_error()) from exc
 
 
 def _require_eit_sequence(sequence: Any) -> None:

@@ -25,7 +25,7 @@ from m3resp.processing.filters import butterworth_filter
 
 from ._shared import (
     _breath_intervals_to_dicts,
-    _optional_dependency_error,
+    _lazy_import,
     _require_eit_sequence,
     _sparse_data_to_parameters,
     add_to_collection,
@@ -62,13 +62,13 @@ class EITProcessingAdapter:
                 "'sentec', or 'timpel') when no loader is injected."
             )
 
-        try:
-            from eitprocessing.datahandling.loading import load_eit_data
-        except ImportError as exc:
-            raise OptionalDependencyError(
+        (load_eit_data,) = _lazy_import(
+            "eitprocessing.datahandling.loading.load_eit_data",
+            error=lambda: OptionalDependencyError(
                 "EIT support requires the optional dependency `eitprocessing`. "
                 'Install with `pip install "m3resp[eit]"` or inject a loader.'
-            ) from exc
+            ),
+        )
 
         return load_eit_data(path, vendor=vendor, **kwargs)
 
@@ -111,10 +111,9 @@ class EITProcessingAdapter:
     ) -> dict[str, Any]:
         """Estimate respiratory and heart rate from an EIT (or continuous) signal."""
 
-        try:
-            from eitprocessing.features.rate_detection import RateDetection
-        except ImportError as exc:
-            raise _optional_dependency_error() from exc
+        (RateDetection,) = _lazy_import(
+            "eitprocessing.features.rate_detection.RateDetection"
+        )
 
         detector = (
             RateDetection(subject_type)
@@ -150,10 +149,7 @@ class EITProcessingAdapter:
     ) -> dict[str, Any]:
         """Apply an MDN heart-rate-removal filter to EIT pixel data."""
 
-        try:
-            from eitprocessing.filters.mdn import MDNFilter
-        except ImportError as exc:
-            raise _optional_dependency_error() from exc
+        (MDNFilter,) = _lazy_import("eitprocessing.filters.mdn.MDNFilter")
 
         for rate_name, rate in (
             ("respiratory_rate_hz", respiratory_rate_hz),
@@ -190,11 +186,10 @@ class EITProcessingAdapter:
     ) -> Any:
         """Detect per-pixel breath timing (start/middle/end of in-/deflation)."""
 
-        try:
-            from eitprocessing.features.breath_detection import BreathDetection
-            from eitprocessing.features.pixel_breath import PixelBreath
-        except ImportError as exc:
-            raise _optional_dependency_error() from exc
+        BreathDetection, PixelBreath = _lazy_import(
+            "eitprocessing.features.breath_detection.BreathDetection",
+            "eitprocessing.features.pixel_breath.PixelBreath",
+        )
 
         breath_detector = BreathDetection(minimum_duration=minimum_duration_seconds)
         result = PixelBreath(
@@ -221,10 +216,7 @@ class EITProcessingAdapter:
     ) -> Any:
         """Compute end-expiratory lung impedance (EELI) per breath."""
 
-        try:
-            from eitprocessing.parameters.eeli import EELI
-        except ImportError as exc:
-            raise _optional_dependency_error() from exc
+        (EELI,) = _lazy_import("eitprocessing.parameters.eeli.EELI")
 
         result = EELI(breath_detection=breath_detector).compute_parameter(
             timing_data,
@@ -247,10 +239,7 @@ class EITProcessingAdapter:
     ) -> Any:
         """Compute per-pixel tidal impedance variation (TIV)."""
 
-        try:
-            from eitprocessing.parameters.tidal_impedance_variation import TIV
-        except ImportError as exc:
-            raise _optional_dependency_error() from exc
+        (TIV,) = _lazy_import("eitprocessing.parameters.tidal_impedance_variation.TIV")
 
         result: Any = TIV(breath_detection=breath_detector).compute_parameter(
             eit_data,
@@ -272,10 +261,7 @@ class EITProcessingAdapter:
     ) -> dict[str, Any]:
         """Threshold mean pixel TIV into a functional lung-space mask."""
 
-        try:
-            from eitprocessing.roi.tiv import TIVLungspace
-        except ImportError as exc:
-            raise _optional_dependency_error() from exc
+        (TIVLungspace,) = _lazy_import("eitprocessing.roi.tiv.TIVLungspace")
 
         captures: dict[str, Any] = {}
         mask = TIVLungspace(threshold=threshold).apply(
@@ -297,10 +283,9 @@ class EITProcessingAdapter:
         `compute_watershed_lungspace()`.
         """
 
-        try:
-            from eitprocessing.roi.amplitude import AmplitudeLungspace
-        except ImportError as exc:
-            raise _optional_dependency_error() from exc
+        (AmplitudeLungspace,) = _lazy_import(
+            "eitprocessing.roi.amplitude.AmplitudeLungspace"
+        )
 
         captures: dict[str, Any] = {}
         mask = AmplitudeLungspace(threshold=threshold).apply(
@@ -317,10 +302,9 @@ class EITProcessingAdapter:
     ) -> dict[str, Any]:
         """Derive a lung-space mask with the watershed method (pendelluft-aware)."""
 
-        try:
-            from eitprocessing.roi.watershed import WatershedLungspace
-        except ImportError as exc:
-            raise _optional_dependency_error() from exc
+        (WatershedLungspace,) = _lazy_import(
+            "eitprocessing.roi.watershed.WatershedLungspace"
+        )
 
         captures: dict[str, Any] = {}
         mask = WatershedLungspace(threshold_fraction=threshold_fraction).apply(
@@ -337,10 +321,9 @@ class EITProcessingAdapter:
     ) -> Any:
         """Keep only connected mask regions at or above `min_region_size`."""
 
-        try:
-            from eitprocessing.roi.filter_by_size import FilterROIBySize
-        except ImportError as exc:
-            raise _optional_dependency_error() from exc
+        (FilterROIBySize,) = _lazy_import(
+            "eitprocessing.roi.filter_by_size.FilterROIBySize"
+        )
 
         return FilterROIBySize(
             min_region_size=min_region_size, connectivity=connectivity
@@ -368,14 +351,14 @@ class EITProcessingAdapter:
     ) -> dict[str, Any]:
         """Run the Stage 1 EIT preprocessing pipeline through `eitprocessing`."""
 
-        try:
-            from eitprocessing.features.breath_detection import BreathDetection
-            from eitprocessing.parameters.tidal_impedance_variation import TIV
-        except ImportError as exc:
-            raise OptionalDependencyError(
+        BreathDetection, TIV = _lazy_import(
+            "eitprocessing.features.breath_detection.BreathDetection",
+            "eitprocessing.parameters.tidal_impedance_variation.TIV",
+            error=lambda: OptionalDependencyError(
                 "EIT preprocessing requires the optional dependency "
                 '`eitprocessing`. Install with `pip install "m3resp[eit]"`.'
-            ) from exc
+            ),
+        )
 
         _require_eit_sequence(sequence)
 
