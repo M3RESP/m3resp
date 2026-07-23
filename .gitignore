@@ -11,6 +11,8 @@ plan/*
 # !.github/**
 graphify-out/
 tools/visualization_tools/__marimo__
+scripts/
+tools/
 
 # agentics
 AGENTS.md
