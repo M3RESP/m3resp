@@ -206,6 +206,10 @@ Rule of thumb for "where does my new EIT/EMG/multimodal functionality go":
 6. **A new persisted/audit entity** (something that needs to be queryable,
    validated, and exported later, per the `main_v0.3.tex` data model) ->
    `datamodel/entities.py`, wired into `datamodel/recorder.py`.
+7. **A completely new algorithm with no upstream equivalent** (not wrapping
+   `eitprocessing`/`resurfemg`, genuinely new science) -> out of scope for
+   Stage 2, which only wraps existing upstream behavior; see "Stage 3
+   outlook" below for where this goes once Stage 3's native packages exist.
 
 ## Stage 3 outlook: what evolves, what stays, what goes
 
@@ -288,6 +292,21 @@ package map, but what runs inside them changes:
   regression comparison. In Stage 3, once an operation is fully native, the
   upstream object is dropped from that slot; only the native `m3resp` type
   remains under the same context key.
+
+### New algorithms with no upstream equivalent
+
+This is a different case from everything above: it is not a Stage 2 piece
+that Stage 3 changes, it is something Stage 2 cannot support at all. A
+completely new algorithm (not a wrapper around existing `eitprocessing`/
+`resurfemg` behavior) has nowhere to go in Stage 2, since Stage 2's adapters
+only exist to wrap upstream calls (item 7 in the "Rule of thumb" list
+above). Once Stage 3's native `eit/processing/`/`emg/processing/` packages
+exist, a new algorithm is added directly there as ordinary native code, with
+no adapter step, since there is no upstream call left to wrap. It only
+belongs in the shared `m3resp.processing` package instead of a
+modality-owned one if it is genuinely modality-neutral, by the same test
+already applied to the existing shared primitives (`filters`, `peaks`,
+`windows`, `intervals`, `metrics`).
 
 ### Removed fully
 
