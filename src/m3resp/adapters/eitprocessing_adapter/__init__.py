@@ -17,8 +17,7 @@ from typing import Any, Literal, cast
 
 import numpy as np
 
-from m3resp.core.events import BreathEvent
-from m3resp.core.events import coerce_breath_events
+from m3resp.core.events import BreathEvent, coerce_breath_events
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
 from m3resp.data import ParameterResult, QualityFlag, Signal
 from m3resp.processing.filters import butterworth_filter

@@ -207,7 +207,7 @@ class _OutputsDocument(BaseModel):
     checksums: StrictBool = False
 
     @model_validator(mode="after")
-    def _check_mode_and_dir_agree(self) -> "_OutputsDocument":
+    def _check_mode_and_dir_agree(self) -> _OutputsDocument:
         # Phase 6.2: "reject contradictory combinations rather than guessing."
         if self.mode in ("automatic", "explicit") and self.dir is None:
             raise ValueError(

@@ -137,7 +137,7 @@ def test_estimated_ecg_subtraction_rejects_invalid_inputs(
 
 
 def test_output_bandpass_after_subtraction_only_filters_cleaned():
-    contaminated, _, _, beat_times, fs = _synthetic_contaminated_emg()
+    contaminated, _, _, _beat_times, fs = _synthetic_contaminated_emg()
 
     baseline = estimated_ecg_subtraction(contaminated, sample_frequency=fs)
     result = estimated_ecg_subtraction(
@@ -162,7 +162,7 @@ def test_output_bandpass_after_subtraction_only_filters_cleaned():
 
 
 def test_output_bandpass_before_subtraction_only_filters_the_subtracted_operand():
-    contaminated, _, _, beat_times, fs = _synthetic_contaminated_emg()
+    contaminated, _, _, _beat_times, fs = _synthetic_contaminated_emg()
 
     baseline = estimated_ecg_subtraction(contaminated, sample_frequency=fs)
     result = estimated_ecg_subtraction(

@@ -113,7 +113,7 @@ def test_resurfemg_detector_finds_every_reference_peak_within_tolerance():
     ecg, reference_peaks = _boundary_hugging_fixture(sample_frequency=fs)
 
     detected_peaks = np.asarray(detect_ecg_peaks(ecg, int(fs)), dtype=int)
-    tolerance_samples = int(round(_MATCH_TOLERANCE_SECONDS * fs))
+    tolerance_samples = round(_MATCH_TOLERANCE_SECONDS * fs)
 
     unmatched = [
         int(reference)

@@ -8,11 +8,17 @@ import numpy as np
 
 from m3resp.processing.metrics import (
     amplitude_at_peaks,
-    area_under_baseline as _area_under_baseline,
-    pseudo_slope as _pseudo_slope,
     respiratory_rate_from_indices,
-    time_to_peak as _time_to_peak,
     window_integral,
+)
+from m3resp.processing.metrics import (
+    area_under_baseline as _area_under_baseline,
+)
+from m3resp.processing.metrics import (
+    pseudo_slope as _pseudo_slope,
+)
+from m3resp.processing.metrics import (
+    time_to_peak as _time_to_peak,
 )
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 

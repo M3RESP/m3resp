@@ -21,7 +21,8 @@ from typing import Any
 
 from m3resp.workflows.compiler import compile_pipeline as _compile_pipeline
 from m3resp.workflows.compiler import validate_pipeline as _validate_pipeline
-from m3resp.workflows.engine import PipelineResult, run_pipeline as _run_pipeline
+from m3resp.workflows.engine import PipelineResult
+from m3resp.workflows.engine import run_pipeline as _run_pipeline
 from m3resp.workflows.lifecycle import (
     CancellationToken,
     EventSink,

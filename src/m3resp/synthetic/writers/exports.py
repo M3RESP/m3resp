@@ -29,7 +29,7 @@ def _resolve_run_output_dir(
     if not timestamp_output_dir:
         return output_root
 
-    timestamp = datetime.now().strftime(export_config.timestamp_format)
+    timestamp = datetime.now().astimezone().strftime(export_config.timestamp_format)
     candidate = os.path.join(output_root, timestamp)
     suffix = int(DEFAULT_ONE)
     while os.path.exists(candidate):

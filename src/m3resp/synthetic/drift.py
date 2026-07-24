@@ -135,7 +135,7 @@ def _time_shift_sample_count(
     sample_period = float(np.median(np.diff(time_seconds)))
     if sample_period <= DEFAULT_ZERO:
         raise ValueError("time_seconds must be strictly increasing")
-    return int(round(float(config.time_shift_seconds) / sample_period))
+    return round(float(config.time_shift_seconds) / sample_period)
 
 
 def _shift_eit_signal_components(

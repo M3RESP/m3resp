@@ -155,9 +155,11 @@ def test_warnings_are_captured_on_the_step_record_and_still_reach_the_caller(
 
 def test_a_warning_issued_right_before_a_failure_is_not_dropped(_lifecycle_steps):
     spec = {"name": "p", "steps": [{"uses": "lifecycle_test.warn_then_fail"}]}
-    with pytest.warns(UserWarning, match="right before failure"):
-        with pytest.raises(PipelineExecutionError):
-            run_pipeline(spec)
+    with (
+        pytest.warns(UserWarning, match="right before failure"),
+        pytest.raises(PipelineExecutionError),
+    ):
+        run_pipeline(spec)
 
 
 # --------------------------------------------------------------------------- #

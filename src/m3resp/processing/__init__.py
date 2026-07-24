@@ -1,5 +1,9 @@
 """Shared signal-processing primitives used by modality adapters."""
 
+from m3resp.processing.ecg import (
+    EstimatedECGSubtractionResult,
+    estimated_ecg_subtraction,
+)
 from m3resp.processing.filters import (
     bandpass_filter,
     bandstop_filter,
@@ -9,10 +13,6 @@ from m3resp.processing.filters import (
     highpass_filter,
     lowpass_filter,
     notch_filter,
-)
-from m3resp.processing.ecg import (
-    EstimatedECGSubtractionResult,
-    estimated_ecg_subtraction,
 )
 from m3resp.processing.intervals import (
     baseline_crossings,
@@ -57,6 +57,7 @@ from m3resp.processing.windows import (
 )
 
 __all__ = [
+    "EstimatedECGSubtractionResult",
     "amplitude_at_peaks",
     "area_under_baseline",
     "bandpass_filter",
@@ -70,7 +71,6 @@ __all__ = [
     "detect_peaks",
     "detect_peaks_above_moving_average",
     "detect_ventilator_breath_peaks",
-    "EstimatedECGSubtractionResult",
     "estimated_ecg_subtraction",
     "fraction_flag",
     "harmonic_notch_filter",
@@ -93,9 +93,9 @@ __all__ = [
     "rolling_rms_ci",
     "sample_intervals_to_breath_events",
     "skipped_quality_flag",
-    "tidal_variation",
     "threshold_flag",
-    "timing_window_flag",
+    "tidal_variation",
     "time_to_peak",
+    "timing_window_flag",
     "window_integral",
 ]

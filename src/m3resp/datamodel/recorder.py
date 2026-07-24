@@ -45,9 +45,9 @@ from m3resp.data.signals import Signal
 from m3resp.datamodel.entities import (
     Case,
     DataFile,
+    DerivedFeature,
     Device,
     DeviceType,
-    DerivedFeature,
     FileFormat,
     FileRole,
     ProcessingRun,

@@ -254,7 +254,7 @@ def load_synthetic_generator_config(path: str) -> SyntheticGeneratorConfig:
         data = yaml.safe_load(file_obj) or {}
 
     if not isinstance(data, dict):
-        raise ValueError("Synthetic generator YAML must contain a mapping.")
+        raise TypeError("Synthetic generator YAML must contain a mapping.")
 
     config = synthetic_generator_config_from_dict(data)
     if not os.path.isabs(config.output_dir):
@@ -302,7 +302,7 @@ def _nested_dataclass(cls: type, data: Any) -> Any:
     if data is None:
         data = {}
     if not isinstance(data, dict):
-        raise ValueError(f"{cls.__name__} configuration must be a mapping.")
+        raise TypeError(f"{cls.__name__} configuration must be a mapping.")
 
     unknown = set(data) - _field_names(cls)
     if unknown:
@@ -355,6 +355,6 @@ def _record_metadata(record: SyntheticRecord | None) -> dict[str, Any] | None:
         "units": record.units,
         "paths": record.paths,
         "metadata": record.metadata,
-        "n_samples": int(len(record.time)),
+        "n_samples": len(record.time),
         "array_shape": list(record.array.shape),
     }

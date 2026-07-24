@@ -122,12 +122,12 @@ class TestPoccTimeProduct:
         assert result_obj.unit == "cmH2O*s"
         assert result_obj.modality == "pressure"
         np.testing.assert_array_equal(result_obj.value, time_products)
-        assert result_obj.metadata["start_indices"] == list(
+        assert result_obj.metadata["start_indices"] == [
             int(x) for x in o["pocc_start_indices"]
-        )
-        assert result_obj.metadata["end_indices"] == list(
+        ]
+        assert result_obj.metadata["end_indices"] == [
             int(x) for x in o["pocc_end_indices"]
-        )
+        ]
         assert np.all(time_products > 0)
 
     def test_matches_the_native_window_integral_equivalence_proof(self):

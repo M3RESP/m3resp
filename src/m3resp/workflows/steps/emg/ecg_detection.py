@@ -6,8 +6,8 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.core.session import M3Session
 from m3resp.core.events import Event
+from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 

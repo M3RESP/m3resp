@@ -21,8 +21,10 @@ from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
 from m3resp.data.processing import ProcessingHistory
 from m3resp.export.session_export import export_session_summary
-from m3resp.modalities.eit import EITRecording, load as load_eit_recording
-from m3resp.modalities.emg import EMGRecording, load as load_emg_recording
+from m3resp.modalities.eit import EITRecording
+from m3resp.modalities.eit import load as load_eit_recording
+from m3resp.modalities.emg import EMGRecording
+from m3resp.modalities.emg import load as load_emg_recording
 from m3resp.synchronization.alignment import align_events_by_modality_offset
 from m3resp.synchronization.cropping import (
     crop_loaded_modality,

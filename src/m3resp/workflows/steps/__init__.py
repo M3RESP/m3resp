@@ -5,7 +5,7 @@ functions), so importing this package never requires the optional ``eitprocessin
 or ``resurfemg`` packages.
 """
 
-from m3resp.workflows.steps import (  # noqa: F401
+from m3resp.workflows.steps import (
     eit,
     emg,
     export,

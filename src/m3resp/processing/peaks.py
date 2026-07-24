@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from itertools import pairwise
 from typing import Any, Literal, overload
 
 import numpy as np
@@ -211,7 +212,7 @@ def pair_valley_peak_valley(
     peaks = np.asarray(peak_indices, dtype=int)
     valleys = np.asarray(valley_indices, dtype=int)
     pairs: list[tuple[int, int, int]] = []
-    for start, end in zip(valleys[:-1], valleys[1:]):
+    for start, end in pairwise(valleys):
         between = peaks[(peaks > start) & (peaks < end)]
         if len(between):
             pairs.append((int(start), int(between[0]), int(end)))

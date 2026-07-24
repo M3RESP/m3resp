@@ -12,10 +12,10 @@ from __future__ import annotations
 import warnings
 
 from m3resp.workflows import (
+    STEP_REGISTRY,
     PipelineContext,
     PipelineResult,
     PipelineSpec,
-    STEP_REGISTRY,
     StepDefinition,
     StepSpec,
     available_steps,

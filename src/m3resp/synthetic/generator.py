@@ -57,19 +57,19 @@ __all__ = [
     "DriftConfig",
     "EITGeneratorConfig",
     "EMGGeneratorConfig",
-    "VentilatorGeneratorConfig",
     "RespiratoryPatternConfig",
     "TimingDriftConfig",
+    "VentilatorGeneratorConfig",
     "generate_drift",
-    "synthetic_generator_config_from_dict",
-    "generate_synthetic_dataset",
     "generate_eit_record",
     "generate_emg_record",
-    "generate_ventilator_record",
+    "generate_synthetic_dataset",
     "generate_synthetic_draeger_data",
+    "generate_ventilator_record",
+    "main",
     "pack_draeger_frame",
     "save_draeger_bin",
-    "main",
+    "synthetic_generator_config_from_dict",
 ]
 
 FORMAT_SPECS = {
@@ -203,11 +203,11 @@ def generate_emg_record(
 
     synth = _load_resurfemg_synthetic()
     rng = np.random.default_rng(config.seed)
-    fs_emg = int(round(config.emg.sample_frequency_hz))
-    expected_samples = int(round(config.duration_seconds * fs_emg))
+    fs_emg = round(config.emg.sample_frequency_hz)
+    expected_samples = round(config.duration_seconds * fs_emg)
     channels = []
     for channel_index, amplitude_uv in enumerate(config.emg.channel_amplitudes_uv):
-        heart_rate_bpm = int(round(config.emg.heart_rate_bpm))
+        heart_rate_bpm = round(config.emg.heart_rate_bpm)
         if config.emg.heart_rate_bpm <= 0:
             heart_rate_bpm = int(
                 rng.integers(
@@ -293,7 +293,7 @@ def generate_ventilator_record(
     """Generate ventilator data with ReSurfEMG and write portable exports."""
 
     synth = _load_resurfemg_synthetic()
-    fs_vent = int(round(config.ventilator.sample_frequency_hz))
+    fs_vent = round(config.ventilator.sample_frequency_hz)
     with _seeded_vendor_randomness(config.seed):
         y_vent, p_mus = synth.simulate_ventilator_data(
             t_end=config.duration_seconds,

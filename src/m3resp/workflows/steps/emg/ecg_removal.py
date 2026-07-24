@@ -6,11 +6,13 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.core.session import M3Session
 from m3resp.core.events import Event
+from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult, Signal
 from m3resp.processing.ecg import (
     OutputBandpassStage,
+)
+from m3resp.processing.ecg import (
     estimated_ecg_subtraction as _estimated_ecg_subtraction,
 )
 from m3resp.processing.windows import rolling_arv

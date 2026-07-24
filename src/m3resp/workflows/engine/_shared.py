@@ -57,7 +57,7 @@ class PipelineResult:
     started_at: str | None = None
     finished_at: str | None = None
     duration_seconds: float | None = None
-    compiled_pipeline: "CompiledPipeline | None" = None
+    compiled_pipeline: CompiledPipeline | None = None
     step_records: tuple[StepExecutionRecord, ...] = ()
     diagnostics: tuple[Diagnostic, ...] = ()
     warnings: tuple[CapturedWarning, ...] = ()

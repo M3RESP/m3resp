@@ -220,7 +220,7 @@ def estimate_offset_from_interference(
         if time.size != values.size:
             raise ValueError("emg_time must match emg_values length")
 
-    step = max(1, int(round(sample_frequency / detection_rate_hz)))
+    step = max(1, round(sample_frequency / detection_rate_hz))
     time_ds = time[::step]
     power_ds = power[::step]
     rate_ds = sample_frequency / step

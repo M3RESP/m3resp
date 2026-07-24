@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 
-class _DefaultsProtocol(Protocol):
+class _DefaultsProtocol(Protocol):  # noqa: PYI046 -- used via `cast()` in _core.py
     """What `_CoreMixin` calls on the defaults mixin."""
 
     def _preprocess_default(self, signal: Any, **kwargs: Any) -> Any: ...
@@ -19,7 +19,7 @@ class _DefaultsProtocol(Protocol):
     ) -> dict[str, Any]: ...
 
 
-class _PostprocessingOpsProtocol(Protocol):
+class _PostprocessingOpsProtocol(Protocol):  # noqa: PYI046 -- used as a `self` annotation in _defaults.py
     """What `_DefaultsMixin._postprocess_default` calls on the core/baseline/
     quality mixins."""
 

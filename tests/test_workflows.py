@@ -13,7 +13,6 @@ from m3resp.core.exceptions import PipelineSpecError, UnknownStepError
 from m3resp.core.session import M3Session
 from m3resp.workflows import load_spec, register_step, run_pipeline, validate_spec
 
-
 # --------------------------------------------------------------------------- #
 # Engine core (no upstream modality dependencies)                             #
 # --------------------------------------------------------------------------- #
@@ -249,10 +248,10 @@ class FakeSignal:
         self.sample_frequency = 2.0
         self.unit = None
 
-    def __getitem__(self, _slice: Any) -> "FakeSignal":
+    def __getitem__(self, _slice: Any) -> FakeSignal:
         return FakeSignal(self.label + "_sliced", values=self.values, time=self.time)
 
-    def get_summed_impedance(self, *args: Any, **kwargs: Any) -> "FakeSignal":
+    def get_summed_impedance(self, *args: Any, **kwargs: Any) -> FakeSignal:
         return FakeSignal(
             "global_impedance_(filtered)", values=self.values, time=self.time
         )
@@ -274,7 +273,7 @@ def fake_eitprocessing(monkeypatch):
     pytest.importorskip("eitprocessing")
     import eitprocessing.features.breath_detection as bd
     import eitprocessing.features.rate_detection as rd
-    import eitprocessing.filters.mdn as mdn
+    from eitprocessing.filters import mdn
 
     class FakeRateDetection:
         def __init__(self, subject_type: str, **kwargs: Any) -> None:
@@ -359,7 +358,7 @@ _ROTARC_SPEC: dict[str, Any] = {
 def test_rotarc_pipeline_runs_through_engine(fake_eitprocessing):
     result = run_pipeline(_ROTARC_SPEC, session=_fake_eit_session())
 
-    expected_cv, expected_mean, expected_std, expected_n = _expected_cv()
+    expected_cv, expected_mean, _expected_std, expected_n = _expected_cv()
     assert result.value("cv") == pytest.approx(expected_cv)
     assert result.value("mean") == pytest.approx(expected_mean)
     assert result.value("n") == expected_n

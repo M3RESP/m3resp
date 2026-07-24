@@ -76,6 +76,8 @@ def test_resurfemg_rms_and_arv_envelopes_match_shared_windows_exactly():
     from resurfemg.preprocessing.envelope import (
         full_rolling_arv,
         full_rolling_rms,
+    )
+    from resurfemg.preprocessing.envelope import (
         naive_rolling_rms as resurfemg_naive_rolling_rms,
     )
 

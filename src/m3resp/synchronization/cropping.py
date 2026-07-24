@@ -50,7 +50,7 @@ def normalize_modality(modality: str) -> str:
     return normalized
 
 
-def crop_loaded_modality(session: "M3Session", modality: str, offset: float) -> int:
+def crop_loaded_modality(session: M3Session, modality: str, offset: float) -> int:
     if offset == 0.0:
         return 0
     if modality == "emg" and session.emg is not None:
@@ -63,7 +63,7 @@ def crop_loaded_modality(session: "M3Session", modality: str, offset: float) -> 
     return 0
 
 
-def raw_synchronization_traces(session: "M3Session", modality: str) -> dict[str, Any]:
+def raw_synchronization_traces(session: M3Session, modality: str) -> dict[str, Any]:
     if modality == "emg" and session.emg is not None:
         trace = _emg_raw_trace(session.emg)
         return {"emg": trace} if trace is not None else {}
@@ -238,7 +238,7 @@ def _crop_sample_array(
 
     if sample_axis is None:
         sample_axis = 1 if array.ndim > 1 and array.shape[1] >= array.shape[0] else 0
-    n_samples = int(round(abs(offset) * float(fs)))
+    n_samples = round(abs(offset) * float(fs))
     axis_len = array.shape[sample_axis]
     if n_samples <= 0 or n_samples >= axis_len:
         return values, 0

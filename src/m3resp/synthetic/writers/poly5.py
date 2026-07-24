@@ -46,7 +46,7 @@ def _write_poly5_file(
     num_samples = int(values.shape[DEFAULT_SECOND_AXIS])
     samples_per_block = DEFAULT_POLY5_SAMPLES_PER_BLOCK
     num_data_blocks = int(np.ceil(num_samples / samples_per_block))
-    now = datetime.now()
+    now = datetime.now().astimezone()
 
     header = struct.pack(
         DEFAULT_POLY5_HEADER_FORMAT,
@@ -86,7 +86,7 @@ def _write_poly5_file(
 
 
 def _coerce_poly5_sample_rate(sample_frequency: float) -> int:
-    sample_rate = int(round(float(sample_frequency)))
+    sample_rate = round(float(sample_frequency))
     if sample_rate <= 0:
         raise ValueError("Poly5 sample_frequency must be positive")
     if not np.isclose(float(sample_frequency), float(sample_rate)):

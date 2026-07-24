@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 from m3resp.core.session import M3Session
 from m3resp.synchronization.ventilator import (
     iter_ventilator_detections,

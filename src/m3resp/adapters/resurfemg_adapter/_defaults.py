@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-
 from m3resp.core.events import BreathEvent
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
 from m3resp.processing.filters import harmonic_notch_filter
@@ -28,6 +27,7 @@ from m3resp.processing.peaks import (
 )
 from m3resp.processing.windows import rolling_arv
 
+from ._protocols import _PostprocessingOpsProtocol
 from ._shared import (
     _category_for_function,
     _missing_postprocessing_dependency,
@@ -35,7 +35,6 @@ from ._shared import (
     _require_emg_recording,
     _unavailable_postprocessing_result,
 )
-from ._protocols import _PostprocessingOpsProtocol
 from ._signals import peak_indices_from_events, ventilator_signals
 
 

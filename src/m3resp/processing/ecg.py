@@ -330,7 +330,7 @@ def _validate_qrs_rate(
 
 
 def _window_samples(duration_seconds: float, sample_frequency: float) -> int:
-    return max(1, int(round(duration_seconds * sample_frequency)))
+    return max(1, round(duration_seconds * sample_frequency))
 
 
 def _dynamic_midrange_threshold(
@@ -392,8 +392,8 @@ def _correct_qrs_periodicity(
         while next_peak - corrected[-1] > (1 + tolerance) * median_interval:
             expected = corrected[-1] + median_interval
             radius = tolerance * median_interval
-            start = max(corrected[-1] + 1, int(round(expected - radius)))
-            end = min(next_peak, int(round(expected + radius)) + 1)
+            start = max(corrected[-1] + 1, round(expected - radius))
+            end = min(next_peak, round(expected + radius) + 1)
             if end <= start:
                 break
             local = detection_signal[start:end]

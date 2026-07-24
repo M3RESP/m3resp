@@ -73,5 +73,5 @@ def interval_cv(intervals: Any) -> dict[str, Any]:
         "cv": float(std / mean),
         "mean": mean,
         "std": std,
-        "n": int(len(intervals.intervals)),
+        "n": len(intervals.intervals),
     }

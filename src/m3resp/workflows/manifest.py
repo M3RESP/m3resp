@@ -55,7 +55,7 @@ def sha256_file(path: str | Path) -> str | None:
         return None
 
 
-def collect_input_checksums(result: "PipelineResult") -> dict[str, str]:
+def collect_input_checksums(result: PipelineResult) -> dict[str, str]:
     """Sha256 every existing file referenced by a path-typed step parameter
     across the run's step records (Phase 6.3's "input ... checksums when
     configured"). Skips values that are not existing regular files."""
@@ -79,7 +79,7 @@ def build_manifest(
     run_id: str,
     status: str,
     pipeline_name: str,
-    spec: "PipelineSpec",
+    spec: PipelineSpec,
     started_at: str | None,
     finished_at: str | None = None,
     duration_seconds: float | None = None,

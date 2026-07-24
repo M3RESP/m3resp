@@ -331,4 +331,4 @@ def rotarc_result(
     return {"result_path": str(result_path)}
 
 
-__all__ = ["scalar_file", "json_file", "session_summary", "rotarc_result"]
+__all__ = ["json_file", "rotarc_result", "scalar_file", "session_summary"]

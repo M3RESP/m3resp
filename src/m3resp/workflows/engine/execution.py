@@ -277,7 +277,7 @@ def _record_processing_step(ctx: PipelineContext, record: StepExecutionRecord) -
 
 
 def _bind_compiled_arguments(
-    compiled_step: "CompiledStep", ctx: PipelineContext
+    compiled_step: CompiledStep, ctx: PipelineContext
 ) -> dict[str, Any]:
     """Build a step's call kwargs from an already-compiled step:
     context reads resolve against the live context; static parameters were
@@ -292,7 +292,7 @@ def _bind_compiled_arguments(
 
 
 def _store_compiled_outputs(
-    compiled_step: "CompiledStep", ctx: PipelineContext, result: Any
+    compiled_step: CompiledStep, ctx: PipelineContext, result: Any
 ) -> None:
     if not isinstance(result, dict):
         raise PipelineSpecError(

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -53,7 +53,7 @@ def test_store_builds_case_session_stream_file_run_feature_chain():
             signal_type="eit_waveform",
             unit="a.u.",
             sampling_frequency_hz=50.0,
-            start_time=datetime.now(timezone.utc).timestamp(),
+            start_time=datetime.now(UTC).timestamp(),
         )
     )
     data_file = store.add_data_file(

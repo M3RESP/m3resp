@@ -256,7 +256,11 @@ print(result.offset_seconds, result.source)
 # Then apply it (Stage-1 cropping is relative to a reference modality):
 session.synchronize_raw_modalities(
     method="manual_offset",
-    offset_seconds={"eit": 0.0, "vent": -result.offset_seconds, "emg": -result.offset_seconds},
+    offset_seconds={
+        "eit": 0.0,
+        "vent": -result.offset_seconds,
+        "emg": -result.offset_seconds,
+    },
     reference_modality="eit",
 )
 ```

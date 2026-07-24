@@ -192,7 +192,7 @@ def load(
     ),
 )
 def slice_signal(
-    signal: Any, *, start: int | float, end: int | float, mode: str = "index"
+    signal: Any, *, start: float, end: float, mode: str = "index"
 ) -> dict[str, Any]:
     return {
         "result": slice_signal_by_mode(signal, start=start, end=end, slicing_mode=mode)

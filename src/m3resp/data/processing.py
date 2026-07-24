@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -28,9 +28,7 @@ class ProcessingStep:
     parameters: dict[str, Any] = field(default_factory=dict)
     software: str = "m3resp"
     version: str | None = None
-    timestamp: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     #: Stage 2 pipeline-structure Phase 5.1: the step's outcome
     #: ("succeeded"/"failed"/"cancelled"), so a universal per-step log entry
     #: also carries what happened, not just what was configured.

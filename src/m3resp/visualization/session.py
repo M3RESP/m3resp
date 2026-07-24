@@ -92,7 +92,7 @@ def plot_eit_processing_summary(session: M3Session):
 
     processed = session.processed.get("eit")
     if not isinstance(processed, dict):
-        raise ValueError("No processed EIT dictionary found on the session.")
+        raise TypeError("No processed EIT dictionary found on the session.")
 
     signal = processed.get("filtered_global_impedance") or processed.get(
         "raw_global_impedance"

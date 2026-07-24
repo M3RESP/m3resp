@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -22,8 +22,8 @@ class FakeCollection(dict):
 
 class FakeEITData:
     label = "raw"
-    time = [0.0, 1.0, 2.0]
-    pixel_impedance = [[[1.0]], [[2.0]], [[3.0]]]
+    time: ClassVar = [0.0, 1.0, 2.0]
+    pixel_impedance: ClassVar = [[[1.0]], [[2.0]], [[3.0]]]
     sample_frequency = 1.0
 
     def get_summed_impedance(self, return_label: str | None = None, **kwargs: Any):
@@ -52,7 +52,7 @@ class FakeBreath:
 
 
 class FakeIntervals:
-    values = [FakeBreath()]
+    values: ClassVar = [FakeBreath()]
 
 
 def test_load_eit_sets_preferred_and_legacy_session_slots():

@@ -319,6 +319,7 @@ def _maybe_log_summary(
 
     try:
         from loguru import logger
+
         from m3resp.workflows.utils import log_workflow_summary
     except ImportError:
         return

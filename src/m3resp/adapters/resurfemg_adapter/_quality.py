@@ -6,7 +6,6 @@ from typing import Any
 
 import numpy as np
 
-
 from ._shared import (
     _emg_optional_dependency_error,
     _require_1d_array,

@@ -31,10 +31,16 @@ def test_resurfemg_feature_primitives_match_upstream():
     pytest.importorskip("resurfemg.postprocessing.features")
     from resurfemg.postprocessing.features import (
         amplitude,
-        area_under_baseline as upstream_area_under_baseline,
-        pseudo_slope as upstream_pseudo_slope,
         respiratory_rate,
         time_product,
+    )
+    from resurfemg.postprocessing.features import (
+        area_under_baseline as upstream_area_under_baseline,
+    )
+    from resurfemg.postprocessing.features import (
+        pseudo_slope as upstream_pseudo_slope,
+    )
+    from resurfemg.postprocessing.features import (
         time_to_peak as upstream_time_to_peak,
     )
 
