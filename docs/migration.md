@@ -1,11 +1,6 @@
 # Migrating from `eitprocessing`/`resurfemg` calls to `m3resp`
 
-`m3resp` does not reimplement `eitprocessing` or `resurfemg` algorithms - it
-calls them (see [developer/architecture.md](developer/architecture.md)'s
-dependency direction and the regression tests in `tests/regression/`, which
-pin down that the wrappers reproduce the underlying calls exactly).
-Migrating existing code means replacing manual calls into those packages
-with the equivalent `m3resp` call, not rewriting the science.
+`m3resp` does not reimplement `eitprocessing` or `resurfemg` algorithms - it calls them (see [developer/architecture.md](developer/architecture.md)'s dependency direction and the regression tests in `tests/regression/`, which pin down that the wrappers reproduce the underlying calls exactly). Migrating existing code means replacing manual calls into those packages with the equivalent `m3resp` call, not rewriting the science.
 
 Modality-specific migration tables:
 
@@ -24,8 +19,5 @@ Modality-specific migration tables:
 
 ## What does not change
 
-- `eitprocessing` and `resurfemg` remain independent, installable, and usable
-  on their own - `m3resp` depends on them, never the reverse.
-- Passing a custom callable (`preprocess=`, `detector=`, `compute=`) to the
-  relevant `M3Session`/adapter method still works, for anything not covered
-  by the built-in conversions.
+- `eitprocessing` and `resurfemg` remain independent, installable, and usable on their own - `m3resp` depends on them, never the reverse.
+- Passing a custom callable (`preprocess=`, `detector=`, `compute=`) to the relevant `M3Session`/adapter method still works, for anything not covered by the built-in conversions.

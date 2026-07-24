@@ -1,8 +1,7 @@
 # Pipeline contracts
 
 `m3resp` has two different mechanisms that both happen to be called "run a
-pipeline" - this page is about the smaller one, `Pipeline`/presets
-(Milestone 2.4). For the declarative YAML/JSON step-registry engine
+pipeline" - this page is about the smaller one, `Pipeline`/presets. For the declarative YAML/JSON step-registry engine
 (`m3resp.workflows`), see [../pipelines.md](../pipelines.md).
 
 ## `Pipeline` (`src/m3resp/presets/base.py`)
