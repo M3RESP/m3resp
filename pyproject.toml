@@ -48,7 +48,7 @@ dev = [
   "pre-commit",
   "pytest",
   "pytest-cov",
-  "ruff",
+  "ruff>=0.16,<0.17",
   "mypy",
   "types-PyYAML",
   "pandas-stubs",

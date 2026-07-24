@@ -5,12 +5,12 @@ repos:
         name: ruff check
         entry: ruff check --fix
         language: python
-        additional_dependencies: ["ruff==0.15.16"]
+        additional_dependencies: ["ruff==0.16.0"]
         types_or: [python, pyi]
 
       - id: ruff-format
         name: ruff format
         entry: ruff format
         language: python
-        additional_dependencies: ["ruff==0.15.16"]
+        additional_dependencies: ["ruff==0.16.0"]
         types_or: [python, pyi]
