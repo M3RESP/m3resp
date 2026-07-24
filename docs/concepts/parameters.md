@@ -1,5 +1,30 @@
 # `ParameterResult`
 
+## Plain-language overview
+
+This is the type for any computed number (a "parameter" in the scientific
+sense: tidal impedance variation, respiratory rate, EMG amplitude, and so
+on), whether it is a single scalar number or an array (like a map of
+regional lung ventilation).
+
+Its fields let you say exactly what the number applies to, since these are
+all optional and can be combined:
+
+- `breath_id`, this number is about one specific breath.
+- `breath_ids`, this number was computed across several breaths (for
+  example a rolling average).
+- `start_time`/`end_time`, this number applies to a time window (for
+  example "during the intervention").
+- If none of the above are set, the number applies to the whole recording.
+
+Where they come from: same pattern as `Signal`, the adapters have
+`to_parameters()` methods, called automatically by
+`preprocess_eit`/`postprocess_emg`. There is also a cross-modality source:
+`session.compute_multimodal_parameters()`, covered in
+[synchronization.md](synchronization.md). All of them land in
+`session.parameter_results`, which supports filtering like
+`.for_modality("eit")` and exports to a CSV file.
+
 A named, unit-tagged metric produced by a processing step - covers both
 scalar metrics (EIT TIV, EMG amplitude, respiratory rate) and array-valued
 ones (regional ventilation maps).

@@ -1,5 +1,27 @@
 # `QualityFlag`
 
+## Plain-language overview
+
+This represents the result of one quality check: did this signal/breath
+pass or fail some validity test? Key fields:
+
+- `passed`, a true/false verdict.
+- `severity`, how serious a failure is: `"info"`, `"warning"`, `"error"`,
+  or `"critical"`.
+- `threshold`/`value`, the cutoff used and the actual measured value, so
+  you can see why it passed or failed.
+
+An important rule: if a check genuinely does not apply (skipped, not
+computable), the code should simply not emit a flag at all, rather than
+inventing a fake pass/fail. This avoids quietly turning "we did not check
+this" into "this passed," which would be misleading.
+
+`QualityFlag` is the lightweight, in-memory version of a more permanent
+database-style record called `QualityAnnotation` (see
+[provenance.md](provenance.md)); the conversion between the two only
+happens if you opt into the deeper persistence layer (Layer 2, described
+in that document).
+
 The outcome of one quality check against a signal, breath, or run.
 
 ```python

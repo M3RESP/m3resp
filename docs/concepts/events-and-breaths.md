@@ -1,5 +1,31 @@
 # `Event` and `BreathEvent`
 
+## Plain-language overview
+
+`Event` is for something that happens at a single instant, like a detected
+heartbeat: it has a `time`, a `name`, which `modality` it came from, and an
+optional `confidence` (how sure the detector was).
+
+`BreathEvent` is different: a breath is not instantaneous, it spans a
+period, so instead of one `time` it has `start_time` and `end_time` (plus
+an optional `peak_time` for the moment of peak inhalation/exhalation). It
+also has a computed property (a value calculated on demand from other
+fields, rather than stored directly) called `duration`, which is just
+`end_time - start_time`.
+
+The key design point: EIT breath detection, EMG breath detection, and
+ventilator breath detection all produce this same `BreathEvent` type,
+instead of each modality inventing its own breath class. That is what lets
+breaths from different modalities be compared and matched later (see
+[synchronization.md](synchronization.md)).
+
+There is deliberately no `BreathCollection` type (a dedicated container
+class). Breaths just live inside `session.events`, the same plain
+dictionary from Stage 1, under keys like `"eit_breaths"`. This is
+intentional: since Stage 1 code already depends on that dictionary shape,
+introducing a second, separate container for breaths would fork (split
+into two competing systems) rather than unify the API.
+
 `m3resp.core.events` defines two timestamped types shared across modalities.
 
 ## `Event`

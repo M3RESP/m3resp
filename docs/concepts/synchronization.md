@@ -1,5 +1,40 @@
 # Synchronization and multimodal parameters
 
+## Plain-language overview
+
+This module's job is lining up data from different modalities (EIT/EMG/
+ventilator) that were recorded on separate clocks or files, so they can be
+compared on one shared time axis. Key pieces:
+
+- `session.synchronize_raw_modalities(...)` shifts the raw signals in time,
+  before any processing, using a manual offset you supply (for example
+  "EMG started 5 seconds after EIT").
+- `session.align_modalities(...)` does the same thing but for
+  already-detected events (breaths), not raw signals.
+- `resample_signal(...)` changes a signal's sampling rate to match another
+  signal's, since two devices rarely sample at the same rate.
+
+`LinkedBreath` is the object that represents "the same physical breath, as
+seen by different modalities." It is a dictionary-like structure
+(`breaths: dict[str, BreathEvent]`) mapping a modality name to that
+modality's version of the matched breath, plus a `confidence` score based
+on how close in time the matches were. Matching is done by
+`link_breaths_by_time` (or `session.link_breaths()`), which works greedily
+and one-to-one (it matches the closest available pair first, and each
+breath can only be used once) with no clock-drift correction (it assumes
+the recordings' clocks do not slowly drift apart over time, that is
+explicitly out of scope). If a breath from one modality has no match in
+the others, it still produces a `LinkedBreath` with only its own slot
+filled in, so nothing gets silently dropped.
+
+Once you have linked breaths, `session.compute_multimodal_parameters()`
+turns them into cross-modality `ParameterResult`s using three underlying
+calculations: timing delay (how many seconds apart two modalities' breath
+timings are), breath duration difference (how much longer/shorter one
+modality's breath looks compared to another's), and event agreement (what
+fraction of breaths were detected consistently across all requested
+modalities, a rough "did every sensor agree a breath happened here" score).
+
 `m3resp.synchronization` (Milestone 2.5) aligns and links data across
 modalities, deliberately kept modest: manual offset, timestamp alignment,
 resampling, and nearest-neighbor breath linking. Clock-drift correction is

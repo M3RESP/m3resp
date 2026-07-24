@@ -1,5 +1,45 @@
 # Provenance and processing history
 
+## Plain-language overview
+
+There are three layers of "what produced this result," each heavier and
+more structured than the last:
+
+1. `ProvenanceRecord`, the lightest layer: one entry per `M3Session` method
+   call (action name, modality, parameters, timestamp), appended to
+   `session.provenance`.
+
+2. `ProcessingStep`/`ProcessingHistory`, a step up in detail. Instead of
+   just "an action happened," it records exactly which `input_keys` and
+   `output_keys` (the dictionary/context keys the step read from and wrote
+   to) were touched, plus a `status` (`"succeeded"`, `"failed"`, or
+   `"cancelled"`). This is filled in automatically by the declarative
+   workflow engine (the system that runs pipelines described by YAML spec
+   files) whenever a step runs through it, without any step function
+   needing to remember to log anything itself. It does not replace
+   `ProvenanceRecord`, both exist side by side, tracking slightly
+   different things.
+
+3. Layer 2, `m3resp.datamodel`, an opt-in (only active if explicitly
+   attached) heavier layer. If you set
+   `session.datamodel = DataModelRecorder(session)`, the session
+   additionally builds up a set of validated, database-style records
+   (`Case`, `RecordingSession`, `ProcessingRun`, `DerivedFeature`,
+   `QualityAnnotation`, and more) inside a `DataModelStore`. This is meant
+   for a proper audit trail (a complete, checkable record suitable for
+   compliance/reproducibility purposes) and for a future GUI or backend
+   service to query. It is a different shape of bookkeeping than
+   `ProcessingHistory`: for example, there is exactly one `ProcessingRun`
+   record per full pipeline run, versus one `ProcessingStep` per individual
+   step inside that run.
+
+There is also a `validate_store(store, require_complete=True)` option that
+checks the deeper layer has all the descriptive detail a finished dataset
+needs (units, sampling rates, file checksums); a store built while a
+session is still mid-run usually will not pass that check yet, since some
+of those details (like a file's checksum) only exist once the file is
+actually written to disk.
+
 Three complementary layers record "what produced this result," from
 lightest to heaviest.
 
