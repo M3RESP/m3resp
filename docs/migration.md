@@ -12,8 +12,7 @@ Modality-specific migration tables:
 - [migration/from-eitprocessing.md](migration/from-eitprocessing.md)
 - [migration/from-resurfemg.md](migration/from-resurfemg.md)
 
-## Cross-modality bookkeeping you previously did by hand
-
+## Cross-modality bookkeeping
 | Manual approach | `m3resp` equivalent |
 |---|---|
 | Tracking which package/version/parameters produced a file yourself | `session.provenance` (lightweight log) or attach `session.datamodel = DataModelRecorder(session)` for a full, validated `ProcessingRun`/`DataFile`/`DerivedFeature` audit trail (see [concepts/provenance.md](concepts/provenance.md)) |
