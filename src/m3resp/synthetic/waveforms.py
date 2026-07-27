@@ -285,16 +285,22 @@ def generate_event_series(
 
     event_markers = np.zeros(len(time_seconds), dtype=DEFAULT_INT32_DTYPE)
     event_texts = [DEFAULT_EMPTY_STRING] * len(time_seconds)
+    if len(time_seconds) == 0:
+        return event_markers, event_texts
+
     midpoint_index = int(len(time_seconds) * config.midpoint_fraction)
     midpoint_index = min(max(midpoint_index, int(DEFAULT_ZERO)), len(time_seconds) - 1)
-    events_to_insert = [
-        (config.start_time_seconds, config.start_marker, config.start_text),
-        (
-            time_seconds[midpoint_index],
-            config.midpoint_marker,
-            config.midpoint_text,
-        ),
-    ]
+    events_to_insert = sorted(
+        [
+            (config.start_time_seconds, config.start_marker, config.start_text),
+            (
+                time_seconds[midpoint_index],
+                config.midpoint_marker,
+                config.midpoint_text,
+            ),
+        ],
+        key=lambda event: event[0],
+    )
     current_marker = DEFAULT_NO_EXTREMA_FLAG
     event_index = int(DEFAULT_ZERO)
     for index, time_value in enumerate(time_seconds):
