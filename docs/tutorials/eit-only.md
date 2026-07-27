@@ -52,10 +52,19 @@ call's keyword arguments. See
 
 ## Choosing what gets computed
 
-`preprocess_eit`/`detect_eit_breaths` accept keyword arguments controlling
-filter mode (`mdn`, `lowpass`, `bandpass`, `none`), which optional outputs to
-compute (rates, TIV, EELI, pixel TIV), and breath-detection parameters - see
+`preprocess_eit` owns filtering and derived-parameter output: keyword
+arguments control filter mode (`mdn`, `lowpass`, `bandpass`, `none`),
+breath-interval detection (`breath_min_duration_seconds`), and which optional
+parameters to compute on top of that (rates, TIV, EELI, pixel TIV) - see
 `EITProcessingAdapter.preprocess` in
 [../developer/adapters.md](../developer/adapters.md) for the exact mapping.
+Note that rate detection runs before filtering when `filter_mode="mdn"`,
+since MDN filtering is itself parameterized by the detected rates - so
+splitting filtering and parameter computation into separate calls isn't a
+clean before/after split.
+
+`detect_eit_breaths` only normalizes breath detections into `BreathEvent`s;
+its keyword arguments are passed straight through to the detector (or to a
+custom `detector=callable`) and don't affect what `preprocess_eit` computes.
 A custom `preprocess=callable` bypasses the typed-collection conversion
 entirely, for algorithms not yet covered by the adapter.

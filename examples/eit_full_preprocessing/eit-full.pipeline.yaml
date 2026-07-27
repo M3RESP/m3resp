@@ -85,13 +85,19 @@ steps:
     uses: eit.roi_tiv_lungspace
     with: { threshold: 0.15 }
 
-  # See docs/pipelines.md for upstream's warning against using amplitude
-  # alone as a general-purpose functional lung-space definition - it is
-  # computed here primarily to feed eit.roi_watershed.
+  # Standalone step, included only to exercise the operation - its output is
+  # not consumed by eit.roi_watershed below. eit.roi_watershed computes its
+  # own internal TIV/amplitude lung-space masks via upstream's
+  # WatershedLungspace and needs no other ROI step run first. See
+  # docs/pipelines.md for upstream's warning against using amplitude alone
+  # as a general-purpose functional lung-space definition.
   - id: roi_amplitude_lungspace
     uses: eit.roi_amplitude_lungspace
     with: { threshold: 0.15 }
 
+  # Self-contained - internally derives its own TIV and amplitude lung-space
+  # masks from filtered_eit/global_impedance; does not depend on the
+  # roi_tiv_lungspace or roi_amplitude_lungspace steps above.
   - id: roi_watershed
     uses: eit.roi_watershed
     with: { threshold_fraction: 0.15 }
