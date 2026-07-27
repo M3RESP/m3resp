@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field, is_dataclass
 from typing import TYPE_CHECKING, Any, cast
@@ -12,11 +13,20 @@ if TYPE_CHECKING:
 
 @dataclass
 class Event:
-    """A timestamped event from one modality."""
+    """A timestamped event from one modality.
+
+    ``id`` is a per-process, in-memory identifier (not persisted or globally
+    unique like Layer 2's ids) that lets other Layer 1 objects - notably
+    ``ParameterResult.event_id`` - reference this specific event, e.g. a
+    blood-gas draw or an intervention timepoint. It is excluded from
+    equality (``compare=False``) so two structurally identical events - the
+    common case in tests and deduplication - still compare equal.
+    """
 
     name: str
     modality: str
     time: float
+    id: str = field(default_factory=lambda: uuid.uuid4().hex, compare=False)
     sample_index: int | None = None
     label: str | None = None
     confidence: float | None = None
@@ -45,6 +55,7 @@ class BreathEvent:
     modality: str
     start_time: float
     end_time: float
+    id: str = field(default_factory=lambda: uuid.uuid4().hex, compare=False)
     peak_time: float | None = None
     start_index: int | None = None
     peak_index: int | None = None
@@ -82,6 +93,9 @@ def coerce_event(
         return value
 
     if isinstance(value, Mapping):
+        kwargs: dict[str, Any] = {}
+        if "id" in value:
+            kwargs["id"] = str(value["id"])
         return Event(
             name=_required_str(value.get("name", name), "name"),
             modality=_required_str(value.get("modality", modality), "modality"),
@@ -90,9 +104,14 @@ def coerce_event(
             label=value.get("label", label),
             confidence=value.get("confidence"),
             metadata=dict(value.get("metadata", {})),
+            **kwargs,
         )
 
     if hasattr(value, "time"):
+        kwargs = {}
+        value_id = getattr(value, "id", None)
+        if value_id is not None:
+            kwargs["id"] = str(value_id)
         return Event(
             name=_required_str(getattr(value, "name", name), "name"),
             modality=_required_str(getattr(value, "modality", modality), "modality"),
@@ -101,6 +120,7 @@ def coerce_event(
             label=getattr(value, "label", label),
             confidence=getattr(value, "confidence", None),
             metadata=dict(getattr(value, "metadata", {}) or {}),
+            **kwargs,
         )
 
     event_name, event_modality, time, *rest = value
@@ -129,6 +149,9 @@ def coerce_breath_event(
         return value
 
     if isinstance(value, Mapping):
+        kwargs: dict[str, Any] = {}
+        if "id" in value:
+            kwargs["id"] = str(value["id"])
         return BreathEvent(
             modality=_required_str(value.get("modality", modality), "modality"),
             start_time=float(value["start_time"]),
@@ -142,12 +165,17 @@ def coerce_breath_event(
             source=value.get("source", source),
             confidence=value.get("confidence"),
             metadata=dict(value.get("metadata", {})),
+            **kwargs,
         )
 
     if hasattr(value, "start_time") and hasattr(value, "end_time"):
         peak_time = getattr(value, "peak_time", None)
         if peak_time is None:
             peak_time = getattr(value, "middle_time", None)
+        kwargs = {}
+        value_id = getattr(value, "id", None)
+        if value_id is not None:
+            kwargs["id"] = str(value_id)
         return BreathEvent(
             modality=_required_str(
                 getattr(value, "modality", modality),
@@ -164,6 +192,7 @@ def coerce_breath_event(
             source=getattr(value, "source", source),
             confidence=getattr(value, "confidence", None),
             metadata=dict(getattr(value, "metadata", {}) or {}),
+            **kwargs,
         )
 
     start_time, end_time, *rest = value

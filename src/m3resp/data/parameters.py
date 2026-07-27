@@ -31,6 +31,9 @@ class ParameterResult:
     - a single timepoint (``start_time`` set, ``end_time`` left ``None``);
     - a time period, e.g. during an intervention or every 30 seconds
       (``start_time`` and ``end_time`` both set);
+    - a specific ``m3resp.core.events.Event`` (``event_id``), e.g. a
+      blood-gas draw used for a P/F ratio, or a labeled intervention like a
+      Baydur maneuver;
     - the whole signal, when none of the above are set.
 
     ``name`` stays a free-form, human-readable label. ``metric_type`` is the
@@ -58,6 +61,7 @@ class ParameterResult:
     metric_type: str | None = None
     breath_id: str | None = None
     breath_ids: list[str] | None = None
+    event_id: str | None = None
     start_time: float | None = None
     end_time: float | None = None
     region: str | None = None
@@ -93,6 +97,7 @@ class ParameterResult:
             "metric_type": self.metric_type,
             "breath_id": self.breath_id,
             "breath_ids": self.breath_ids,
+            "event_id": self.event_id,
             "start_time": self.start_time,
             "end_time": self.end_time,
             "region": self.region,

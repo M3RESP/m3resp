@@ -13,6 +13,10 @@ all optional and can be combined:
 - `breath_id`, this number is about one specific breath.
 - `breath_ids`, this number was computed across several breaths (for
   example a rolling average).
+- `event_id`, this number is tied to a specific
+  [`Event`](events-and-breaths.md) - for example a blood-gas value recorded
+  at that timepoint, or a validation value resulting from a labeled
+  intervention like a Baydur maneuver.
 - `start_time`/`end_time`, this number applies to a time window (for
   example "during the intervention").
 - If none of the above are set, the number applies to the whole recording.
@@ -38,6 +42,7 @@ class ParameterResult:
     unit: str | None = None
     breath_id: str | None = None
     breath_ids: list[str] | None = None
+    event_id: str | None = None
     start_time: float | None = None
     end_time: float | None = None
     region: str | None = None

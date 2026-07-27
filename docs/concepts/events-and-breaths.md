@@ -4,7 +4,12 @@
 
 `Event` is for something that happens at a single instant, like a detected
 heartbeat: it has a `time`, a `name`, which `modality` it came from, and an
-optional `confidence` (how sure the detector was).
+optional `confidence` (how sure the detector was). It also has an `id`
+(auto-generated, in-memory only) so other Layer 1 objects can point back at
+this specific event - see `ParameterResult.event_id` in
+[parameters.md](parameters.md), used e.g. to attach a blood-gas value to the
+timepoint it was drawn at, or a validation value to a labeled intervention
+like a Baydur maneuver.
 
 `BreathEvent` is different: a breath is not instantaneous, it spans a
 period, so instead of one `time` it has `start_time` and `end_time` (plus
@@ -38,11 +43,17 @@ class Event:
     name: str
     modality: str
     time: float
+    id: str = field(default_factory=lambda: uuid.uuid4().hex, compare=False)
     sample_index: int | None = None
     label: str | None = None
     confidence: float | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 ```
+
+`id` is generated automatically (an in-memory identifier, not persisted or
+globally unique like Layer 2's ids) so other Layer 1 objects can reference
+this exact event, e.g. `ParameterResult.event_id`. It's excluded from
+equality so two structurally identical events still compare equal.
 
 ## `BreathEvent`
 
@@ -57,6 +68,7 @@ class BreathEvent:
     modality: str
     start_time: float
     end_time: float
+    id: str = field(default_factory=lambda: uuid.uuid4().hex, compare=False)
     peak_time: float | None = None
     start_index: int | None = None
     peak_index: int | None = None
