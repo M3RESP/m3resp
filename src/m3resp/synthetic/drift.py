@@ -23,7 +23,9 @@ DEFAULT_SECOND_AXIS = 1
 def generate_drift(time_seconds: np.ndarray, config: DriftConfig) -> np.ndarray:
     """Generate a named drift component for any time series."""
 
-    if not config.enabled or config.amplitude == DEFAULT_ZERO:
+    if not config.enabled:
+        return np.zeros_like(time_seconds, dtype=float)
+    if config.kind != "linear" and config.amplitude == DEFAULT_ZERO:
         return np.zeros_like(time_seconds, dtype=float)
 
     if config.kind == "sinusoidal":

@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from m3resp.synthetic import generator
+from m3resp.synthetic.config import EventSeriesConfig
 
 
 def read_poly5_like_resurfemg(path):
@@ -105,6 +106,34 @@ def test_drift_disabled_and_enabled_are_deterministic():
     assert np.allclose(disabled, 0.0)
     assert not np.allclose(enabled, 0.0)
     assert np.allclose(enabled, enabled_again)
+
+
+def test_linear_drift_uses_an_explicit_slope_when_amplitude_is_zero():
+    time = np.asarray([5.0, 6.0, 7.0])
+
+    drift = generator.generate_drift(
+        time,
+        generator.DriftConfig(
+            enabled=True,
+            kind="linear",
+            amplitude=0.0,
+            slope_per_second=0.01,
+        ),
+    )
+
+    np.testing.assert_allclose(drift, [0.0, 0.01, 0.02])
+
+
+def test_event_series_inserts_midpoint_when_start_marker_is_out_of_range():
+    time = np.asarray([10.0, 11.0, 12.0, 13.0])
+
+    markers, texts = generator.generate_event_series(
+        time,
+        EventSeriesConfig(start_time_seconds=999.0),
+    )
+
+    np.testing.assert_array_equal(markers, [0, 0, 2, 2])
+    assert texts == ["", "", "midpoint", ""]
 
 
 def test_timing_drift_shifts_arrays_along_selected_sample_axis():
