@@ -5,16 +5,18 @@ from pydantic import ValidationError
 
 from m3resp.datamodel import (
     Case,
+    ClinicalEvent,
     DataFile,
     DataModelStore,
     DataModelStoreError,
     Device,
     ProcessingRun,
+    QualityAnnotation,
     RecordingSession,
     SignalStream,
     validate_store,
 )
-from m3resp.datamodel.entities import DerivedFeature
+from m3resp.datamodel.entities import DerivedFeature, TargetType
 
 
 def test_entities_reject_unknown_coded_values():
@@ -38,6 +40,85 @@ def test_store_enforces_foreign_keys():
     )
     with pytest.raises(DataModelStoreError):
         store.add_signal_stream(stream)
+
+
+def test_store_rejects_quality_annotation_for_an_unknown_target():
+    store = DataModelStore()
+
+    with pytest.raises(DataModelStoreError, match="Unknown signal target id"):
+        store.add_quality_annotation(
+            QualityAnnotation(
+                target_type="signal",
+                target_id="missing-signal",
+                quality_label="invalid",
+            )
+        )
+
+
+def test_store_accepts_quality_annotations_for_every_target_type():
+    store = DataModelStore()
+    case = store.add_case(Case())
+    session = store.add_session(RecordingSession(case_id=case.case_id))
+    device = store.add_device(Device(device_type="eit"))
+    stream = store.add_signal_stream(
+        SignalStream(
+            session_id=session.session_id,
+            device_id=device.device_id,
+            signal_type="eit_waveform",
+        )
+    )
+    data_file = store.add_data_file(
+        DataFile(
+            session_id=session.session_id,
+            signal_id=stream.signal_id,
+            file_path="subject.eit",
+        )
+    )
+    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+    event = store.add_clinical_event(
+        ClinicalEvent(session_id=session.session_id, event_type="other")
+    )
+    feature = store.add_derived_feature(
+        DerivedFeature(
+            processing_run_id=run.processing_run_id,
+            feature_name="tidal_impedance_variation",
+        )
+    )
+    targets: dict[TargetType, str] = {
+        "signal": stream.signal_id,
+        "file": data_file.file_id,
+        "session": session.session_id,
+        "event": event.event_id,
+        "feature": feature.feature_id,
+    }
+
+    for target_type, target_id in targets.items():
+        annotation = store.add_quality_annotation(
+            QualityAnnotation(
+                target_type=target_type,
+                target_id=target_id,
+                quality_label="valid",
+            )
+        )
+        assert annotation.target_id == target_id
+
+
+def test_validate_store_flags_a_dangling_quality_annotation():
+    store = DataModelStore()
+    annotation = QualityAnnotation(
+        target_type="signal",
+        target_id="missing-signal",
+        quality_label="invalid",
+    )
+    # Simulate a legacy/imported store that bypassed add_quality_annotation().
+    store.quality_annotations[annotation.quality_annotation_id] = annotation
+
+    problems = validate_store(store)
+
+    assert any(
+        "QualityAnnotation" in problem and "missing-signal" in problem
+        for problem in problems
+    )
 
 
 def test_store_builds_case_session_stream_file_run_feature_chain():

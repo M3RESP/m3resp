@@ -127,6 +127,13 @@ class DataModelStore:
     def add_quality_annotation(
         self, annotation: QualityAnnotation
     ) -> QualityAnnotation:
+        if not self.has_quality_annotation_target(
+            annotation.target_type, annotation.target_id
+        ):
+            raise DataModelStoreError(
+                f"Unknown {annotation.target_type} target id referenced: "
+                f"{annotation.target_id!r}"
+            )
         self.quality_annotations[annotation.quality_annotation_id] = annotation
         return annotation
 
@@ -159,6 +166,21 @@ class DataModelStore:
             for a in self.quality_annotations.values()
             if a.target_type == target_type and a.target_id == target_id
         ]
+
+    def has_quality_annotation_target(self, target_type: str, target_id: str) -> bool:
+        """Return whether a quality annotation target exists in this store."""
+
+        if target_type == "signal":
+            return target_id in self.signal_streams
+        if target_type == "file":
+            return target_id in self.data_files
+        if target_type == "session":
+            return target_id in self.sessions
+        if target_type == "event":
+            return target_id in self.clinical_events
+        if target_type == "feature":
+            return target_id in self.derived_features
+        return False
 
     # -- internals --------------------------------------------------------
 
