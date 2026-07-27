@@ -54,10 +54,7 @@ def onoff_from_baseline_crossings(
             valid_ends[peak_number] = False
 
         if peak_number > 0 and starts[peak_number] <= ends[peak_number - 1]:
-            if (
-                valid_starts[peak_number] is False
-                or valid_ends[peak_number - 1] is False
-            ):
+            if not valid_starts[peak_number] or not valid_ends[peak_number - 1]:
                 pass
             elif (
                 peak_index - starts[peak_number]
@@ -144,7 +141,7 @@ def onoff_from_slope(
             valid_ends[peak_number] = False
 
         if peak_number > 0 and start_index < ends[peak_number - 1]:
-            if valid_ends[peak_number - 1] is False:
+            if not valid_ends[peak_number - 1]:
                 pass
             elif new_upslope > -previous_downslope:
                 valid_ends[peak_number - 1] = False
