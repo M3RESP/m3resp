@@ -316,6 +316,10 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
     session.parameters["raw_alignment"] = {
         "offset_seconds": {"eit": 0.0, "emg": -0.002, "vent": 0.0}
     }
+    session.add_events(
+        "emg_breaths",
+        [BreathEvent("emg", 0.002, 0.004, peak_time=0.003)],
+    )
 
     fig = plot_synchronization_comparison(session, max_seconds=None)
 
@@ -332,6 +336,7 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
         ) = fig.axes
         assert list(emg_before_ax.lines[0].get_ydata()) == [0.0, 0.0, 1.0, 2.0]
         assert list(emg_after_ax.lines[0].get_ydata()) == [1.0, 2.0]
+        assert list(emg_after_ax.lines[1].get_xdata()) == [0.001, 0.001]
         assert emg_before_ax.get_title() == "EMG raw (EMG) before synchronization"
         assert emg_after_ax.get_title() == "EMG raw (EMG) after synchronization"
         assert list(pressure_before_ax.lines[0].get_ydata()) == [8.0, 9.0, 10.0]

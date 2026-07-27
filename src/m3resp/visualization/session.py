@@ -9,6 +9,7 @@ import numpy as np
 
 from m3resp.core.events import BreathEvent
 from m3resp.core.session import M3Session
+from m3resp.synchronization.alignment import align_events_by_modality_offset
 
 
 def plot_session_overview(
@@ -162,6 +163,7 @@ def plot_synchronization_comparison(
     )
     if not isinstance(offsets, dict):
         offsets = {}
+    after_events = _after_synchronization_events(session, synchronized, offsets)
 
     rows = _get_synchronization_plot_rows(session, emg_channel, eit_waveform, offsets)
     if not rows:
@@ -214,7 +216,7 @@ def plot_synchronization_comparison(
         )
         _plot_events(
             [after_ax],
-            synchronized.get(event_key, []),
+            after_events.get(event_key, []),
             color=color,
             label=f"{label} synchronized",
         )
@@ -223,6 +225,27 @@ def plot_synchronization_comparison(
         ax.set_xlabel("Time (s)")
     _deduplicate_legends(axes.ravel())
     return fig
+
+
+def _after_synchronization_events(
+    session: M3Session,
+    synchronized: dict[str, Any],
+    offsets: dict[str, float],
+) -> dict[str, list[Any]]:
+    """Return event overlays on the synchronized time base.
+
+    ``align_modalities`` stores shifted event copies in ``synchronized``. Raw
+    synchronization crops the signal arrays directly instead, so it has to
+    shift the original events here to draw them on the cropped trace's clock.
+    """
+
+    if synchronized:
+        return synchronized
+    return {
+        name: align_events_by_modality_offset(events, offsets)
+        for name, events in session.events.items()
+        if isinstance(events, list)
+    }
 
 
 def _get_eit_rows(
