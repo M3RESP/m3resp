@@ -247,17 +247,26 @@ def test_detect_rates_step_works_without_eitprocessing_and_matches_declared_writ
     assert {"respiratory_rate", "heart_rate"} <= names
 
 
-def test_detect_rates_rejects_negative_rate():
+@pytest.mark.parametrize(
+    ("rate_name", "rate"),
+    [
+        ("respiratory_rate_hz", -0.1),
+        ("heart_rate_hz", 0.0),
+    ],
+)
+def test_detect_rates_rejects_non_positive_rate(rate_name, rate):
     session = _session_with_fake_adapter()
-    session.eit_adapter.detect_rates = lambda *a, **k: {  # type: ignore[method-assign]
-        "respiratory_rate_hz": -0.1,
+    rates = {
+        "respiratory_rate_hz": 0.3,
         "heart_rate_hz": 1.0,
         "rate_detector": None,
         "rate_captures": {},
     }
+    rates[rate_name] = rate
+    session.eit_adapter.detect_rates = lambda *a, **k: rates  # type: ignore[method-assign]
     raw = _FakeEITData(np.ones((4, 1, 1)), time=np.arange(4, dtype=float))
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="non-finite/non-positive"):
         detect_rates(raw, session)
 
 

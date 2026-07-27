@@ -137,9 +137,10 @@ def detect_rates(
         ("respiratory_rate_hz", respiratory_rate_hz),
         ("heart_rate_hz", heart_rate_hz),
     ):
-        if not math.isfinite(value) or value < 0:
+        if not math.isfinite(value) or value <= 0:
             raise ValueError(
-                f"eit.detect_rates produced a non-finite/negative {name}: {value!r}."
+                f"eit.detect_rates produced a non-finite/non-positive {name}: "
+                f"{value!r}."
             )
 
     metadata = _upstream_metadata(
