@@ -88,7 +88,7 @@ def test_native_primitive_step_records_m3resp_as_the_source_package():
             "inputs": {"vent_file": str(EMG_PATH)},  # unused, just needs a value
             "steps": [
                 {
-                    "uses": "emg.pocc_intervals",
+                    "uses": "ventilator.pocc_intervals",
                     "in": {
                         "ventilator_signals": "_ventilator_signals_input",
                         "pocc_indices": "_pocc_indices_input",
@@ -105,7 +105,7 @@ def test_native_primitive_step_records_m3resp_as_the_source_package():
         },
     )
 
-    record = _provenance_for(result.session, "emg.pocc_intervals")
+    record = _provenance_for(result.session, "ventilator.pocc_intervals")
     params = record.parameters
     assert params["source_package"] == "m3resp"
     assert params["implementation"] == "m3resp.processing.intervals"

@@ -60,8 +60,8 @@ happens underneath it without anything downstream needing to change.
 
 | Attribute | Populated by | Contains |
 |---|---|---|
-| `session.signals` | `preprocess_eit`/`preprocess_emg` (default adapter path) | [`Signal`](signals.md) |
-| `session.events` | `detect_eit_breaths`/`detect_emg_breaths`/`add_events` | [`BreathEvent`/`Event`](events-and-breaths.md) lists, keyed by name |
+| `session.signals` | `preprocess_eit`/`preprocess_emg`/`preprocess_ventilator` (default adapter path) | [`Signal`](signals.md) |
+| `session.events` | `detect_eit_breaths`/`detect_emg_breaths`/`detect_ventilator_breaths`/`add_events` | [`BreathEvent`/`Event`](events-and-breaths.md) lists, keyed by name |
 | `session.parameter_results` | `preprocess_eit`/`postprocess_emg`/`compute_multimodal_parameters` | [`ParameterResult`](parameters.md) |
 | `session.quality` | `preprocess_eit`/`postprocess_emg` | [`QualityFlag`](quality.md) |
 | `session.linked_breaths` | `session.link_breaths()` | [`LinkedBreath`](synchronization.md) |
@@ -73,17 +73,70 @@ A custom `preprocess=callable` passed to `preprocess_eit` bypasses the typed
 collections (its output shape isn't guaranteed to match what the conversion
 methods expect) - everything else about the session keeps working.
 
+### Ventilator data
+
+Ventilator data is being promoted to a peer modality alongside EIT and EMG.
+`session.load_ventilator(path)` mirrors `load_eit`/`load_emg`: it stores a
+`VentilatorRecording` on `session.ventilator` and under
+`session.raw["ventilator"]` (plus the legacy `raw["vent"]` alias, pointing at
+the same object).
+
+Processing goes through `VentilatorAdapter`, which is notable for wrapping **no
+upstream library**. Neither `eitprocessing` nor `resurfemg` implements
+ventilator preprocessing - that is precisely why ventilator channels used to be
+consumed unfiltered - so its defaults are native, built on
+`m3resp.processing.filters` and `m3resp.processing.peaks`. In that sense the
+ventilator path is already where Stage 3 is taking the other two.
+
+`VentilatorAdapter.preprocess()` splits the recording into pressure/flow/volume
+and low-passes each channel (20 Hz by default, clamped below Nyquist; pass
+`lowpass_hz=None` to disable). The unfiltered arrays stay available under
+`"raw"`, mirroring how the EMG bundle keeps `raw_channel` alongside `filtered`
+and `envelope`. The cutoff is a conservative anti-noise default rather than a
+clinical parameter: respiratory content sits below roughly 5 Hz, so 20 Hz
+leaves breath morphology - including the sharp pressure upstroke that Pocc
+quality assessment measures - untouched.
+
+`to_signals()` tags every channel `modality="ventilator"` with its physical
+quantity in `category` (`airway_pressure`/`airflow`/`volume`), which is what
+lets one device contribute three distinguishable signals. See
+[signals.md](signals.md) for why those are separate fields.
+
+Loading is the one part that still delegates: ventilator channels usually
+arrive in the same multi-channel file as the sEMG (e.g. a Biopac export), so
+`session.load_ventilator` reads through `session.emg_adapter` unless you pass
+`ventilator_adapter=` to `M3Session(...)`. Injecting one EMG loader therefore
+covers both modalities.
+
+`session.preprocess_ventilator()` and `session.detect_ventilator_breaths()`
+complete the chain, taking the same `variant`/`overwrite` arguments as their
+EIT/EMG counterparts:
+
+```python
+session.load_ventilator("recording.txt")
+session.preprocess_ventilator()               # or lowpass_hz=None to skip filtering
+session.detect_ventilator_breaths()           # -> session.events["ventilator_breaths"]
+session.link_breaths()                        # matched against EIT/EMG breaths
+```
+
+Ventilator breath detection is now a method of its own;
+`postprocess_emg` still populates `session.events["ventilator_breaths"]` exactly
+as before.
+
 ## Method overview
 
 | Method | Does |
 |---|---|
 | `load_eit(path, vendor=..., **kwargs)` | Load an EIT recording via `EITProcessingAdapter`. |
-| `load_emg(path, **kwargs)` | Load an EMG/ventilator recording via `ReSurfEMGAdapter`. |
+| `load_emg(path, **kwargs)` | Load an EMG recording via `ReSurfEMGAdapter`. |
+| `load_ventilator(path, **kwargs)` | Load a ventilator recording -> `session.ventilator`, `session.raw["ventilator"]`. |
 | `preprocess_eit(variant=None, **kwargs)` | Filter/derive EIT signals; populates `signals`/`parameter_results`/`quality`. |
 | `preprocess_emg(variant=None, **kwargs)` | Filter/derive EMG signals; populates `signals`. |
+| `preprocess_ventilator(variant=None, **kwargs)` | Split and filter ventilator pressure/flow/volume; populates `signals`. |
 | `synchronize_raw_modalities(...)` | Align raw signals across modalities before processing. |
 | `detect_eit_breaths(variant=None, **kwargs)` | Detect EIT breaths -> `session.events["eit_breaths"]`. |
 | `detect_emg_breaths(variant=None, **kwargs)` | Detect EMG breaths -> `session.events["emg_breaths"]`. |
+| `detect_ventilator_breaths(variant=None, **kwargs)` | Detect ventilator breaths -> `session.events["ventilator_breaths"]`. |
 | `add_events(name, events)` / `get_events(name, default=None)` | Store/retrieve a named event list directly. |
 | `postprocess_emg(**kwargs)` | Compute EMG features/quality; populates `parameter_results`/`quality`. |
 | `align_modalities(method="manual_offset", offset_seconds=..., reference_modality=...)` | Shift already-detected event lists onto a common time axis. |

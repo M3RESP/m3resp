@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Any
 
 from m3resp.core.events import BreathEvent, Event, coerce_breath_event
+from m3resp.synchronization.cropping import VENTILATOR
 
 
 def iter_ventilator_detections(detections: Any) -> list[Any]:
@@ -24,14 +25,18 @@ def normalize_ventilator_breath(
     width_seconds: float,
 ) -> BreathEvent:
     if isinstance(detection, BreathEvent):
-        return replace(detection, modality="vent")
+        return replace(detection, modality=VENTILATOR)
     if isinstance(detection, Mapping):
-        breath = coerce_breath_event(detection, modality="vent", source="ventilator")
-        return replace(breath, modality="vent")
+        breath = coerce_breath_event(
+            detection, modality=VENTILATOR, source="ventilator"
+        )
+        return replace(breath, modality=VENTILATOR)
 
     if hasattr(detection, "start_time") and hasattr(detection, "end_time"):
-        breath = coerce_breath_event(detection, modality="vent", source="ventilator")
-        return replace(breath, modality="vent")
+        breath = coerce_breath_event(
+            detection, modality=VENTILATOR, source="ventilator"
+        )
+        return replace(breath, modality=VENTILATOR)
 
     if fs is None:
         raise ValueError(
@@ -43,7 +48,7 @@ def normalize_ventilator_breath(
     peak_time = sample_index / float(fs)
     half_width = width_seconds / 2
     return BreathEvent(
-        modality="vent",
+        modality=VENTILATOR,
         start_time=max(0.0, peak_time - half_width),
         end_time=peak_time + half_width,
         peak_time=peak_time,

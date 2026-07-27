@@ -288,6 +288,7 @@ def mdn_filter(
         name=getattr(filtered_eit, "name", None)
         or getattr(filtered_eit, "label", None),
         modality="eit",
+        category="impedance",
         channel="pixel_impedance",
         processing_state="filtered",
         source="eitprocessing",

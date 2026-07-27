@@ -38,13 +38,13 @@ class TestNormalizeVentilatorBreath:
     def test_breath_event_is_retagged_with_vent_modality(self):
         breath = BreathEvent(modality="eit", start_time=0.0, end_time=1.0)
         normalized = normalize_ventilator_breath(breath, fs=None, width_seconds=0.5)
-        assert normalized.modality == "vent"
+        assert normalized.modality == "ventilator"
         assert normalized.start_time == 0.0
 
     def test_sample_index_derives_start_end_peak_from_fs(self):
         normalized = normalize_ventilator_breath(100, fs=10.0, width_seconds=0.4)
 
-        assert normalized.modality == "vent"
+        assert normalized.modality == "ventilator"
         assert normalized.peak_time == pytest.approx(10.0)
         assert normalized.start_time == pytest.approx(9.8)
         assert normalized.end_time == pytest.approx(10.2)

@@ -81,8 +81,14 @@ def continuous_data_to_signal(
     processing_state: ProcessingState,
     source: str | None = None,
     method: str | None = None,
+    category: str | None = "impedance",
 ) -> Signal:
-    """Convert an `eitprocessing.ContinuousData`-shaped object to a `Signal`."""
+    """Convert an `eitprocessing.ContinuousData`-shaped object to a `Signal`.
+
+    Everything `eitprocessing` emits through this path is an impedance
+    (global or pixel-resolved), so ``category`` defaults accordingly; pass it
+    explicitly for a channel that measures something else.
+    """
 
     return Signal(
         values=obj.values,
@@ -91,6 +97,7 @@ def continuous_data_to_signal(
         unit=getattr(obj, "unit", None),
         name=getattr(obj, "name", None) or getattr(obj, "label", None),
         modality=modality,
+        category=category,
         channel=channel,
         processing_state=processing_state,
         source=source,

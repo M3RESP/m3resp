@@ -21,11 +21,18 @@ import numpy as np
 
 from m3resp.core.session import M3Session
 from m3resp.data.timeseries import TimeSeries
+from m3resp.synchronization.cropping import (
+    VENTILATOR,
+    normalize_modality,
+    ventilator_raw,
+)
 from m3resp.synchronization.offset_estimation import estimate_sync_offset
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 
 #: Raw signal sources ``sync.estimate_offset`` can pull from (see `_raw_source`).
-_SIGNAL_SOURCES = ("eit", "emg", "vent")
+#: ``"vent"`` is accepted alongside ``"ventilator"`` because it shipped as a
+#: spec parameter value; both normalize to the same source.
+_SIGNAL_SOURCES = ("eit", "emg", VENTILATOR, "vent")
 
 
 def _dict_array(obj: Any) -> dict[str, Any] | None:
@@ -101,15 +108,17 @@ def _raw_source(
 ) -> TimeSeries | None:
     """Return the raw :class:`TimeSeries` for ``source`` (``eit``/``emg``/``vent``)."""
 
+    source = normalize_modality(source)
     if source == "eit":
         signal = _eit_global_impedance_timeseries(session)
     elif source == "emg":
         signal = _channel_timeseries(getattr(session, "emg", None), channel)
-    elif source == "vent":
-        signal = _channel_timeseries(session.raw.get("vent"), channel)
+    elif source == VENTILATOR:
+        signal = _channel_timeseries(ventilator_raw(session), channel)
     else:
         raise ValueError(
-            f"Unknown signal source {source!r}; expected 'eit', 'emg', or 'vent'."
+            f"Unknown signal source {source!r}; expected 'eit', 'emg', or "
+            f"'{VENTILATOR}'."
         )
     if signal is None and required:
         raise ValueError(
@@ -194,7 +203,7 @@ def _raw_source(
         StepParameter(
             name="reference_source",
             value_type="choice",
-            default="vent",
+            default=VENTILATOR,
             choices=_SIGNAL_SOURCES,
             description="Raw source for the reference breathing signal used for cross-correlation.",
         ),
@@ -262,7 +271,7 @@ def estimate_offset(
     emg_channel: int = 0,
     target_source: str = "eit",
     target_channel: int = 0,
-    reference_source: str = "vent",
+    reference_source: str = VENTILATOR,
     reference_channel: int = 0,
     reference_duration_seconds: float | None = None,
     manual_offset_seconds: float = 0.0,
@@ -274,8 +283,8 @@ def estimate_offset(
     Reads the raw, un-cropped signals from the session:
 
     * ``emg_source``/``emg_channel`` -- the interference-bearing sEMG (the diaphragm
-      sEMG channel; ``'emg'`` for a dedicated EMG recording or ``'vent'`` if the
-      sEMG shares the Biopac ventilator file).
+      sEMG channel; ``'emg'`` for a dedicated EMG recording or ``'ventilator'``
+      if the sEMG shares the Biopac ventilator file).
     * ``target_source``/``target_channel`` -- the breathing target, normally EIT
       global impedance (``'eit'``).
     * ``reference_source``/``reference_channel`` -- the reference breathing signal
@@ -381,7 +390,7 @@ def estimate_offset(
         StepParameter(
             name="source_modalities",
             value_type="list",
-            default=("emg", "vent"),
+            default=("emg", VENTILATOR),
             description="Modalities cropped by the negative estimated offset. Must not include 'target_modality'.",
         ),
     ),
@@ -398,7 +407,7 @@ def apply_estimated_offset(
     offset_seconds: float,
     *,
     target_modality: str = "eit",
-    source_modalities: tuple[str, ...] | list[str] = ("emg", "vent"),
+    source_modalities: tuple[str, ...] | list[str] = ("emg", VENTILATOR),
 ) -> dict[str, Any]:
     """Crop source-clock recordings so they start with the target recording.
 
@@ -407,8 +416,8 @@ def apply_estimated_offset(
     on each source modality, with the target modality held at zero.
     """
 
-    target = str(target_modality).lower()
-    sources = tuple(str(modality).lower() for modality in source_modalities)
+    target = normalize_modality(target_modality)
+    sources = tuple(normalize_modality(modality) for modality in source_modalities)
     if not sources:
         raise ValueError("source_modalities must contain at least one modality")
     if target in sources:

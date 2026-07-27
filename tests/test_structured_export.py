@@ -147,6 +147,7 @@ def test_scalar_only_run_produces_the_same_csv_content_as_before(tmp_path):
             "name": "tiv",
             "value": "1.5",
             "modality": "eit",
+            "category": "",
             "unit": "a.u.",
             "metric_type": "tidal_impedance_variation",
             "breath_id": "",

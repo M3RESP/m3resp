@@ -332,7 +332,8 @@ def respiratory_rate(peak_indices: Any, processed_emg: Any) -> dict[str, Any]:
 
 
 @register_step(
-    "emg.ventilator_respiratory_rate",
+    "ventilator.respiratory_rate",
+    aliases=("emg.ventilator_respiratory_rate",),
     reads={
         "ventilator_breath_indices": "ventilator_breath_indices",
         "ventilator_signals": "ventilator_signals",
@@ -341,12 +342,12 @@ def respiratory_rate(peak_indices: Any, processed_emg: Any) -> dict[str, Any]:
     summary="Compute respiratory rate from detected ventilator breaths.",
     description="Compute respiratory rate from the detected ventilator breath peak indices.",
     category="parameters",
-    modality="emg",
+    modality="ventilator",
     input_artifacts=(
         StepArtifact(
             name="ventilator_breath_indices",
             artifact_type="index_array",
-            description="Ventilator breath peak indices from 'emg.detect_ventilator_breath'.",
+            description="Ventilator breath peak indices from 'ventilator.detect_breaths'.",
         ),
         StepArtifact(
             name="ventilator_signals",

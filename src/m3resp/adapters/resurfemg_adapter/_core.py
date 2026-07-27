@@ -131,6 +131,10 @@ class _CoreMixin:
                     sample_frequency=fs,
                     name=name,
                     modality="emg",
+                    # Raw trace and envelope are both electrical potentials -
+                    # what differs between them is processing_state, not the
+                    # physical quantity.
+                    category="electrical_potential",
                     channel=channel_name,
                     processing_state=processing_state,
                 )

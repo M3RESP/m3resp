@@ -28,9 +28,9 @@ class TestNormalizeModality:
         [
             ("EMG", "emg"),
             ("eit", "eit"),
-            ("ventilator", "vent"),
-            ("Ventilation", "vent"),
-            ("vent", "vent"),
+            ("ventilator", "ventilator"),
+            ("Ventilation", "ventilator"),
+            ("vent", "ventilator"),
         ],
     )
     def test_normalizes_case_and_ventilator_aliases(self, modality, expected):
@@ -40,19 +40,19 @@ class TestNormalizeModality:
 class TestResolveAlignmentOffsets:
     def test_scalar_offset_applies_only_to_emg(self):
         offsets = resolve_alignment_offsets(1.5)
-        assert offsets == {"eit": 0.0, "emg": 1.5, "vent": 0.0}
+        assert offsets == {"eit": 0.0, "emg": 1.5, "ventilator": 0.0}
 
     def test_mapping_offset_normalizes_modality_keys(self):
         offsets = resolve_alignment_offsets({"EIT": 0.5, "Ventilation": -0.25})
-        assert offsets == {"eit": 0.5, "emg": 0.0, "vent": -0.25}
+        assert offsets == {"eit": 0.5, "emg": 0.0, "ventilator": -0.25}
 
 
 class TestOffsetsRelativeToReference:
     def test_subtracts_reference_offset_from_every_modality(self):
         offsets = offsets_relative_to_reference(
-            {"eit": 1.0, "emg": 1.5, "vent": 0.5}, reference_modality="eit"
+            {"eit": 1.0, "emg": 1.5, "ventilator": 0.5}, reference_modality="eit"
         )
-        assert offsets == {"eit": 0.0, "emg": 0.5, "vent": -0.5}
+        assert offsets == {"eit": 0.0, "emg": 0.5, "ventilator": -0.5}
 
 
 class TestCropLoadedModality:

@@ -39,7 +39,7 @@ GRANULAR_SPEC = {
     "inputs": {"emg_file": str(EMG_PATH), "vent_file": str(VENT_PATH)},
     "steps": [
         {"uses": "emg.load", "with": {"file": "@emg_file"}},
-        {"uses": "emg.load_ventilator", "with": {"file": "@vent_file"}},
+        {"uses": "ventilator.load", "with": {"file": "@vent_file"}},
         {
             "uses": "emg.preprocess",
             "with": {"channel": 0, "high_pass_hz": 80, "envelope_window_seconds": 0.5},
@@ -50,18 +50,18 @@ GRANULAR_SPEC = {
         },
         {"uses": "emg.peak_indices"},
         {
-            "uses": "emg.ventilator_channels",
+            "uses": "ventilator.channels",
             "with": {"pressure_channel": 0, "flow_channel": 1, "volume_channel": 2},
         },
         {
             "uses": "emg.moving_baseline",
             "with": {"window_seconds": 30.0, "step_seconds": 1.0, "percentile": 33.0},
         },
-        {"uses": "emg.find_occluded_breaths"},
-        {"uses": "emg.detect_ventilator_breath", "with": {"breath_width_seconds": 0.5}},
-        {"uses": "emg.detect_non_consecutive_manoeuvres"},
+        {"uses": "ventilator.find_occluded_breaths"},
+        {"uses": "ventilator.detect_breaths", "with": {"breath_width_seconds": 0.5}},
+        {"uses": "ventilator.detect_non_consecutive_manoeuvres"},
         {
-            "uses": "emg.normalize_ventilator_breaths",
+            "uses": "ventilator.normalize_breaths",
             "with": {"breath_width_seconds": 0.5},
         },
     ],

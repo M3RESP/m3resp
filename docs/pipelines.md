@@ -297,20 +297,20 @@ Every step also writes its raw/compatibility output(s) unchanged (existing consu
 | `emg.detect_breaths` | — | `min_breath_width_seconds`, `half_window_seconds`, `prominence_factor`, `threshold` | `emg_breath_events` | native |
 | `emg.moving_baseline` | `processed_emg` | `window_seconds`, `step_seconds`, `percentile` (0-100) | `baseline_signal` | upstream |
 | `emg.slopesum_baseline` | `processed_emg` | `window_seconds`, `step_seconds`, `percentile`, `augmented_percentile`, `moving_average_seconds`, `percentile_window_seconds` | `baseline_signal`, `baseline_running_mean_signal`, `baseline_running_std_signal`, `slopesum_baseline_native_detail` (NumPy-only) | upstream |
-| `emg.pocc_intervals` | `ventilator_signals`, `pocc_indices` | `peep` (defaults to the pressure median) | `pocc_events` (`BreathEvent`, `modality="pressure"`) | native (`onoff_from_baseline_crossings`) |
-| `emg.pocc_time_product` | `ventilator_signals`, `pocc_start_indices`, `pocc_end_indices` | `peep` | `pocc_time_product_result` (unit `<pressure-unit>*s`) | native (`window_integral`) |
+| `ventilator.pocc_intervals` | `ventilator_signals`, `pocc_indices` | `peep` (defaults to the pressure median) | `pocc_events` (`BreathEvent`, `modality="pressure"`) | native (`onoff_from_baseline_crossings`) |
+| `ventilator.pocc_time_product` | `ventilator_signals`, `pocc_start_indices`, `pocc_end_indices` | `peep` | `pocc_time_product_result` (unit `<pressure-unit>*s`) | native (`window_integral`) |
 | `emg.snr_pseudo` | `processed_emg`, `peak_indices`, `baseline` | `minimum_snr` (optional) | `snr_pseudo_results`; `snr_pseudo_flags` only if `minimum_snr` is set | upstream |
 | `emg.percentage_under_baseline` | `processed_emg`, `peak_indices`, `start_indices`, `end_indices`, `baseline` | `aub_window_seconds`, `aub_threshold` | `percentage_under_baseline_results`, `_flags` | upstream |
 | `emg.detect_local_high_aub` | `area_under_baseline`, `peak_indices` | `threshold_percentile`, `threshold_factor` | `_flags`, `detect_local_high_aub_threshold_result` | upstream |
 | `emg.detect_extreme_time_products` | `time_product`, `peak_indices` | `upper_percentile`, `upper_factor`, `lower_percentile`, `lower_factor` | `_flags`, `detect_extreme_time_products_bounds_result` | upstream |
-| `emg.detect_non_consecutive_manoeuvres` | `ventilator_breath_indices`, `pocc_indices` | — | `_flags` (`modality="pressure"`) | upstream |
+| `ventilator.detect_non_consecutive_manoeuvres` | `ventilator_breath_indices`, `pocc_indices` | — | `_flags` (`modality="pressure"`) | upstream |
 | `emg.evaluate_bell_curve_error` | `peak_indices`, `start_indices`, `end_indices`, `processed_emg`, `time_product` | — | `_results` (incl. a separate array result per breath for the fitted bell-curve parameters), `_flags` | upstream |
 | `emg.evaluate_event_timing` | `peak_indices`, `processed_emg`, `ventilator_breath_indices`, `ventilator_signals` | — | `_results`, `_flags`, `evaluate_event_timing_unmatched_count` | upstream |
 | `emg.evaluate_respiratory_rates` | `peak_indices`, `processed_emg`, `ventilator_respiratory_rate` | `minimum_fraction` | `evaluate_respiratory_rates_result`, `_flag` | upstream |
-| `emg.pocc_quality` | `ventilator_signals`, `pocc_indices`, `pocc_end_indices`, `pocc_time_products` | `dp_up_10_threshold`, `dp_up_90_threshold`, `dp_up_90_norm_threshold` | `pocc_quality_results` (labeled `dp_up_10`/`dp_up_90`/`dp_up_90_norm`, 3 per manoeuvre), `pocc_quality_flags` (1 per manoeuvre) | upstream |
+| `ventilator.pocc_quality` | `ventilator_signals`, `pocc_indices`, `pocc_end_indices`, `pocc_time_products` | `dp_up_10_threshold`, `dp_up_90_threshold`, `dp_up_90_norm_threshold` | `pocc_quality_results` (labeled `dp_up_10`/`dp_up_90`/`dp_up_90_norm`, 3 per manoeuvre), `pocc_quality_flags` (1 per manoeuvre) | upstream |
 | `emg.interpeak_dist` | `ecg_peak_indices`, `peak_indices`, `processed_emg` | `threshold` (default `1.1`) | `interpeak_dist_result` (median ECG/EMG interval in seconds + ratio), `interpeak_dist_flag` | upstream |
 
-Run `m3resp steps` for the full list including the pre-existing feature steps (`emg.time_to_peak`, `emg.pseudo_slope`, `emg.amplitude`, `emg.time_product`, `emg.area_under_baseline`, `emg.respiratory_rate`) and event-detection steps (`emg.onoffpeak_baseline_crossing`, `emg.onoffpeak_slope_extrapolation`, `emg.detect_ventilator_breath`, `emg.find_occluded_breaths`) this migration routes through the adapter without changing their contracts. The registry metadata (`reads`/`writes`/`summary`) is enough for a GUI to render controls and disable an operation whose inputs are missing, without importing `resurfemg` or inspecting a function's signature.
+Run `m3resp steps` for the full list including the pre-existing feature steps (`emg.time_to_peak`, `emg.pseudo_slope`, `emg.amplitude`, `emg.time_product`, `emg.area_under_baseline`, `emg.respiratory_rate`) and event-detection steps (`emg.onoffpeak_baseline_crossing`, `emg.onoffpeak_slope_extrapolation`, `ventilator.detect_breaths`, `ventilator.find_occluded_breaths`) this migration routes through the adapter without changing their contracts. The registry metadata (`reads`/`writes`/`summary`) is enough for a GUI to render controls and disable an operation whose inputs are missing, without importing `resurfemg` or inspecting a function's signature.
 
 ### Channel selection and time-base rules
 
@@ -429,16 +429,16 @@ A quality step's raw upstream output is not automatically a clinical pass/fail r
 
 ### Pocc prerequisites and thresholds
 
-`emg.pocc_quality` needs Pocc end indices and pressure-time products that `emg.find_occluded_breaths` alone doesn't produce - `emg.pocc_intervals` and `emg.pocc_time_product` supply them:
+`ventilator.pocc_quality` needs Pocc end indices and pressure-time products that `ventilator.find_occluded_breaths` alone doesn't produce - `ventilator.pocc_intervals` and `ventilator.pocc_time_product` supply them:
 
 ```
-emg.find_occluded_breaths  ->  pocc_indices
-emg.pocc_intervals          ->  pocc_start_indices, pocc_end_indices
-emg.pocc_time_product       ->  pocc_time_products
-emg.pocc_quality             (needs all of the above)
+ventilator.find_occluded_breaths  ->  pocc_indices
+ventilator.pocc_intervals          ->  pocc_start_indices, pocc_end_indices
+ventilator.pocc_time_product       ->  pocc_time_products
+ventilator.pocc_quality             (needs all of the above)
 ```
 
-`emg.pocc_quality`'s three thresholds (`dp_up_10_threshold=0.0`, `dp_up_90_threshold=2.0`, `dp_up_90_norm_threshold=0.8`) are ReSurfEMG's defaults for the pressure upslope after occlusion release (Warnaar et al. 2024); its criteria matrix is exposed as three explicitly labeled result names (`pocc_quality_dp_up_10`/`_dp_up_90`/`_dp_up_90_norm`) rather than a raw 3-by-N array.
+`ventilator.pocc_quality`'s three thresholds (`dp_up_10_threshold=0.0`, `dp_up_90_threshold=2.0`, `dp_up_90_norm_threshold=0.8`) are ReSurfEMG's defaults for the pressure upslope after occlusion release (Warnaar et al. 2024); its criteria matrix is exposed as three explicitly labeled result names (`pocc_quality_dp_up_10`/`_dp_up_90`/`_dp_up_90_norm`) rather than a raw 3-by-N array.
 
 ### Missing, skipped, and unmatched events
 

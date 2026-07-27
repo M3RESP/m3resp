@@ -17,7 +17,8 @@ from ._shared import (
 
 
 @register_step(
-    "emg.normalize_ventilator_breaths",
+    "ventilator.normalize_breaths",
+    aliases=("emg.normalize_ventilator_breaths",),
     reads={
         "ventilator_breath_indices": "ventilator_breath_indices",
         "ventilator_signals": "ventilator_signals",
@@ -27,12 +28,12 @@ from ._shared import (
     summary="Normalize detected ventilator breath indices into session events.",
     description="Convert detected ventilator breath peak indices into native BreathEvents and store them on the session as 'ventilator_breaths'.",
     category="detection",
-    modality="emg",
+    modality="ventilator",
     input_artifacts=(
         StepArtifact(
             name="ventilator_breath_indices",
             artifact_type="index_array",
-            description="Ventilator breath peak indices from 'emg.detect_ventilator_breath'.",
+            description="Ventilator breath peak indices from 'ventilator.detect_breaths'.",
         ),
         StepArtifact(
             name="ventilator_signals",

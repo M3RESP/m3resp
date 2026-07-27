@@ -11,16 +11,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, get_args
 
+from m3resp.data.categories import Category, normalize_category
 from m3resp.data.timeseries import TimeSeries
 
-#: Common values for ``Signal.modality`` (data model doc Sec 2.5). This is an
-#: open vocabulary, not an enum: a loader/adapter implementation can use any
-#: string here (e.g. a new device or a more specific quantity type than
-#: "ventilator" - pressure, flow, volume, EAdi, ...). These are listed for
-#: documentation/IDE-completion convenience and are not enforced at runtime.
-_KNOWN_MODALITIES_LITERAL = Literal[
-    "eit", "emg", "ventilator", "pressure", "flow", "unknown"
-]
+#: Common values for ``Signal.modality`` (data model doc Sec 2.5): the
+#: *device/technique* that produced the data. This is an open vocabulary, not
+#: an enum - a loader/adapter can use any string here for a new device. These
+#: are listed for documentation/IDE-completion convenience and are not enforced
+#: at runtime.
+#:
+#: What the numbers physically *are* is a separate axis: see
+#: :data:`m3resp.data.categories.Category` and ``Signal.category``. Physical
+#: quantities such as pressure/flow/volume used to appear in this vocabulary
+#: too, which made "ventilator device, volume quantity" inexpressible; they now
+#: belong in ``category``. The values here line up with Layer 2's
+#: ``Device.device_type`` (``m3resp.datamodel.entities``).
+_KNOWN_MODALITIES_LITERAL = Literal["eit", "emg", "ventilator", "monitor", "unknown"]
 Modality = _KNOWN_MODALITIES_LITERAL | str
 KNOWN_MODALITIES = frozenset(get_args(_KNOWN_MODALITIES_LITERAL))
 
@@ -52,6 +58,12 @@ class Signal(TimeSeries):
     Provenance fields (``source`` vs ``method`` are distinct and often
     confused):
 
+    - ``modality``: *which device/technique produced this* - ``"eit"``,
+      ``"emg"``, ``"ventilator"``. Orthogonal to ``category``.
+    - ``category``: *what physical quantity these numbers are* - an impedance,
+      an airway pressure, a flow. Known aliases are canonicalized via
+      :func:`m3resp.data.categories.normalize_category`; an unrecognized value
+      is kept as-is, since the vocabulary is open. ``None`` means unspecified.
     - ``channel``: which physical/logical channel this is (e.g. an EMG
       lead name, ``"global_impedance"`` for EIT).
     - ``source``: *where the data came from* - the upstream producer/origin,
@@ -71,6 +83,7 @@ class Signal(TimeSeries):
     """
 
     modality: Modality = "unknown"
+    category: Category | None = None
     channel: str | None = None
     source: str | None = None
     processing_state: ProcessingState = "raw"
@@ -79,6 +92,10 @@ class Signal(TimeSeries):
 
     def __post_init__(self) -> None:
         super().__post_init__()
+        # Canonicalize a known alias; pass an unrecognized value through
+        # unchanged, since `Category` is an open vocabulary and there is no
+        # separate field preserving the caller's original label.
+        self.category = normalize_category(self.category) or self.category
         if self.processing_state not in _VALID_PROCESSING_STATES:
             raise ValueError(
                 f"Unknown Signal.processing_state {self.processing_state!r}; "
@@ -98,6 +115,7 @@ class Signal(TimeSeries):
         row.update(
             {
                 "modality": self.modality,
+                "category": self.category,
                 "channel": self.channel,
                 "source": self.source,
                 "processing_state": self.processing_state,

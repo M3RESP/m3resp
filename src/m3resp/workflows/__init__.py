@@ -28,6 +28,7 @@ from m3resp.workflows.lifecycle import (
     StepExecutionRecord,
 )
 from m3resp.workflows.registry import (
+    STEP_ALIASES,
     STEP_REGISTRY,
     StepDefinition,
     available_steps,
@@ -39,6 +40,7 @@ from m3resp.workflows.spec import PipelineSpec, StepSpec, load_spec
 
 __all__ = [
     "RESOLVED_OUTPUT_DIR_KEY",
+    "STEP_ALIASES",
     "STEP_REGISTRY",
     "CancellationToken",
     "CapturedWarning",

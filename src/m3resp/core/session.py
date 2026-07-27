@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
 from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
+from m3resp.adapters.ventilator_adapter import VentilatorAdapter
 from m3resp.core.events import BreathEvent
 from m3resp.core.exceptions import MissingModalityDataError, VariantAlreadyExistsError
 from m3resp.core.metadata import SessionMetadata
@@ -25,8 +26,11 @@ from m3resp.modalities.eit import EITRecording
 from m3resp.modalities.eit import load as load_eit_recording
 from m3resp.modalities.emg import EMGRecording
 from m3resp.modalities.emg import load as load_emg_recording
+from m3resp.modalities.ventilator import VentilatorRecording
+from m3resp.modalities.ventilator import load as load_ventilator_recording
 from m3resp.synchronization.alignment import align_events_by_modality_offset
 from m3resp.synchronization.cropping import (
+    VENTILATOR,
     crop_loaded_modality,
     normalize_modality,
     offsets_relative_to_reference,
@@ -47,8 +51,26 @@ if TYPE_CHECKING:
 ALIGNMENT_EVENT_LISTS = {
     "eit": "eit_breaths",
     "emg": "emg_breaths",
-    "vent": "ventilator_breaths",
+    VENTILATOR: "ventilator_breaths",
 }
+
+
+def set_ventilator_raw(raw: dict[str, Any], recording: Any) -> None:
+    """Store a ventilator recording under both `session.raw` keys.
+
+    ``"ventilator"`` is canonical; ``"vent"`` is the key Stage 1 shipped and is
+    still read by existing notebooks and specs. Both reference the *same*
+    object, and cropping mutates the underlying payload in place, so the two
+    views can never drift apart.
+
+    `M3Session.load_ventilator` passes a `VentilatorRecording` here, matching
+    what `raw["eit"]`/`raw["emg"]` hold. A bare payload dict (what Stage 1
+    stored) is still accepted, and
+    `m3resp.synchronization.cropping.ventilator_payload` unwraps either shape.
+    """
+
+    raw[VENTILATOR] = recording
+    raw["vent"] = recording
 
 
 class M3Session:
@@ -60,18 +82,32 @@ class M3Session:
         emg_adapter: ReSurfEMGAdapter | None = None,
         metadata: SessionMetadata | dict[str, Any] | None = None,
         allow_overwrite: bool = False,
+        ventilator_adapter: Any | None = None,
     ):
         self.eit_adapter = eit_adapter or EITProcessingAdapter()
         self.emg_adapter = emg_adapter or ReSurfEMGAdapter()
+        # Ventilator processing is native (`VentilatorAdapter` wraps no upstream
+        # library), but *loading* goes through the EMG adapter by default: the
+        # ventilator channels usually arrive in the same multi-channel file as
+        # the sEMG, so an injected EMG loader covers both without a second
+        # injection. Pass `ventilator_adapter=` to separate them entirely.
+        self.ventilator_adapter = ventilator_adapter or VentilatorAdapter(
+            loader=lambda path, **kwargs: self.emg_adapter.load(path, **kwargs)
+        )
 
         self.eit: EITRecording | None = None
         self.emg: EMGRecording | None = None
+        self.ventilator: VentilatorRecording | None = None
         self.raw: dict[str, Any] = {}
         self.processed: dict[str, Any] = {}
         # Named alternate preprocessing results, e.g. for algorithms that
         # need the same raw recording preprocessed differently (see
         # preprocess_eit`/`preprocess_emg`'s `variant` parameter).
-        self.processed_variants: dict[str, dict[str, Any]] = {"eit": {}, "emg": {}}
+        self.processed_variants: dict[str, dict[str, Any]] = {
+            "eit": {},
+            "emg": {},
+            VENTILATOR: {},
+        }
         # Session-wide default for preprocess_eit/preprocess_emg's `overwrite`
         # kwarg, so notebook/exploratory code can set this once instead of
         # passing `overwrite=True` on every call. Left off by default so code
@@ -130,6 +166,21 @@ class M3Session:
         self.emg = recording
         self.raw["emg"] = recording
         self._record("load_emg", "emg", path=str(path))
+        return recording.data
+
+    def load_ventilator(self, path: str | Path, **kwargs: Any) -> Any:
+        """Load ventilator data and store it under `raw["ventilator"]`.
+
+        Mirrors `load_eit`/`load_emg`. The recording is additionally stored
+        under the legacy `raw["vent"]` key, pointing at the same object.
+        """
+
+        recording = load_ventilator_recording(
+            path, adapter=self.ventilator_adapter, **kwargs
+        )
+        self.ventilator = recording
+        set_ventilator_raw(self.raw, recording)
+        self._record("load_ventilator", VENTILATOR, path=str(path))
         return recording.data
 
     def preprocess_eit(
@@ -224,6 +275,57 @@ class M3Session:
         if name == "default":
             self.processed["emg"] = result
         self._record("preprocess_emg", "emg", variant=variant, **kwargs)
+        return result
+
+    def preprocess_ventilator(
+        self,
+        *,
+        variant: str | None = None,
+        overwrite: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """Split and filter the ventilator channels through the adapter.
+
+        See `preprocess_eit` for what `variant`/`overwrite`/`allow_overwrite`
+        do - it persists this result under
+        `session.processed_variants["ventilator"][name]`, raising
+        `VariantAlreadyExistsError` if `name` is already populated, and mirrors
+        it onto `session.processed["ventilator"]` only when `name` is
+        `"default"`.
+
+        Unlike its EIT/EMG siblings this runs native code rather than an
+        upstream library: nothing in `eitprocessing`/`resurfemg` preprocesses
+        ventilator data, which is why these channels used to be consumed
+        unfiltered. See `m3resp.adapters.ventilator_adapter` for the defaults
+        (a per-channel low-pass; pass `lowpass_hz=None` to skip filtering).
+        """
+
+        recording = self._require_raw(VENTILATOR)
+        name = variant if variant is not None else "default"
+        if (
+            not (overwrite or self.allow_overwrite)
+            and name in self.processed_variants[VENTILATOR]
+        ):
+            raise VariantAlreadyExistsError(
+                f"Ventilator preprocessing variant {name!r} already exists; "
+                "pass a different `variant=`, or `overwrite=True` to replace it."
+            )
+        result = self.ventilator_adapter.preprocess(recording, **kwargs)
+        if self.ventilator is not None and isinstance(result, dict):
+            self.ventilator.pressure = result.get("pressure")
+            self.ventilator.flow = result.get("flow")
+            self.ventilator.volume = result.get("volume")
+            self.ventilator.fs = result.get("fs")
+        for signal in self.ventilator_adapter.to_signals(result):
+            self.signals.add(signal)
+        for parameter in self.ventilator_adapter.to_parameters(result):
+            self.parameter_results.add(parameter)
+        for flag in self.ventilator_adapter.to_quality_flags(result):
+            self.quality.add(flag)
+        self.processed_variants[VENTILATOR][name] = result
+        if name == "default":
+            self.processed[VENTILATOR] = result
+        self._record("preprocess_ventilator", VENTILATOR, variant=variant, **kwargs)
         return result
 
     def synchronize_raw_modalities(
@@ -329,6 +431,40 @@ class M3Session:
         events = self.emg_adapter.detect_breaths(data, **kwargs)
         self.add_events(event_key, events)
         self._record("detect_emg_breaths", "emg", variant=variant, **kwargs)
+        return self.events[event_key]
+
+    def detect_ventilator_breaths(
+        self, *, variant: str | None = None, **kwargs: Any
+    ) -> Any:
+        """Detect ventilator breaths from the volume channel.
+
+        See `detect_eit_breaths` for what `variant` does.
+
+        This promotes what used to be a side effect of `postprocess_emg` into a
+        method of its own, so ventilator breaths can be detected without
+        running EMG postprocessing first. `postprocess_emg` still populates
+        `session.events["ventilator_breaths"]` as before.
+        """
+
+        if variant is not None:
+            data = self.processed_variants[VENTILATOR].get(variant)
+            if data is None:
+                raise MissingModalityDataError(
+                    f"No ventilator preprocessing variant {variant!r}; call "
+                    f"preprocess_ventilator(variant={variant!r}, ...) first."
+                )
+            event_key = f"ventilator_breaths:{variant}"
+        else:
+            data = self.processed.get(VENTILATOR)
+            if data is None:
+                # Detection needs the split channels, which raw data doesn't
+                # have - so preprocess on the fly rather than failing, matching
+                # how `postprocess_emg` accepts a raw ventilator recording.
+                data = self.ventilator_adapter.preprocess(self._require_raw(VENTILATOR))
+            event_key = "ventilator_breaths"
+        events = self.ventilator_adapter.detect_breaths(data, **kwargs)
+        self.add_events(event_key, events)
+        self._record("detect_ventilator_breaths", VENTILATOR, variant=variant, **kwargs)
         return self.events[event_key]
 
     def add_events(self, name: str, events: Any) -> list[Any]:
@@ -445,7 +581,7 @@ class M3Session:
             {
                 "eit": _breaths("eit_breaths"),
                 "emg": _breaths("emg_breaths"),
-                "ventilator": _breaths("ventilator_breaths"),
+                VENTILATOR: _breaths("ventilator_breaths"),
             },
             time_tolerance=time_tolerance,
         )
@@ -553,14 +689,14 @@ class M3Session:
         if reference_modality is not None:
             return normalize_modality(reference_modality), None
         if self.events.get("ventilator_breaths"):
-            return "vent", None
+            return VENTILATOR, None
         return "eit", "eit"
 
     def _resolve_raw_alignment_reference(self, reference_modality: str | None) -> str:
         if reference_modality is not None:
             return normalize_modality(reference_modality)
-        if "vent" in self.raw:
-            return "vent"
+        if VENTILATOR in self.raw or "vent" in self.raw:
+            return VENTILATOR
         if "eit" in self.raw:
             return "eit"
         if "emg" in self.raw:

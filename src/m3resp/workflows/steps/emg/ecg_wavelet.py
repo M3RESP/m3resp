@@ -208,6 +208,7 @@ def ecg_wavelet_denoising(
         unit=unit,
         name=f"{label}_ecg_wavelet_cleaned",
         modality="emg",
+        category="electrical_potential",
         channel=label,
         source="resurfemg",
         processing_state="filtered",

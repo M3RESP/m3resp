@@ -27,8 +27,10 @@ time by rows by columns).
 subclassing: `Signal` gets everything `TimeSeries` has, plus extra fields)
 by adding:
 
-- `modality`, which kind of data this is (`"eit"`, `"emg"`, `"ventilator"`,
-  or any custom string).
+- `modality`, which **device or technique** recorded this (`"eit"`, `"emg"`,
+  `"ventilator"`, or any custom string).
+- `category`, what the numbers **physically are** (`"impedance"`,
+  `"airway_pressure"`, `"airflow"`, `"volume"`, ...).
 - `processing_state`, where this signal sits in its journey from raw to
   usable: `"raw"` means straight off the device, untouched; `"filtered"`
   means cleaned up a bit but not the final version; `"processed"` means the
@@ -75,7 +77,8 @@ provenance context:
 ```python
 @dataclass
 class Signal(TimeSeries):
-    modality: Modality = "unknown"        # "eit" | "emg" | "ventilator" | "pressure" | "flow" | "unknown" | any str
+    modality: Modality = "unknown"        # "eit" | "emg" | "ventilator" | "monitor" | "unknown" | any str
+    category: Category | None = None      # "impedance" | "airway_pressure" | "airflow" | "volume" | ... | any str
     channel: str | None = None
     source: str | None = None
     processing_state: ProcessingState = "raw"   # "raw" | "filtered" | "processed" | "derived"
@@ -83,9 +86,48 @@ class Signal(TimeSeries):
     method: str | None = None
 ```
 
-`modality` is an open vocabulary, not an enum - a loader/adapter can use any
-string (e.g. a new device, or a more specific quantity type than
-"ventilator" such as pressure/flow/volume/EAdi).
+### `modality` vs `category`: two independent axes
+
+`modality` is the **device/technique**; `category` is the **physical
+quantity**. They are deliberately separate fields because they do not nest:
+
+- one device emits several quantities (a ventilator produces pressure *and*
+  flow *and* volume);
+- one quantity comes from several devices (airway pressure can come from a
+  ventilator or a standalone monitor).
+
+Collapsing them into a single string makes some combinations inexpressible.
+Ventilator volume is the concrete case: with only `modality`, a volume channel
+had to be tagged either `"ventilator"` (losing which quantity it was) or
+`"volume"` (losing which device produced it). The persisted Layer 2 model has
+always kept the two apart - `Device.device_type` and `SignalStream.signal_type`
+- so a single Layer 1 string had to be split heuristically on the way in, and
+`"ventilator_volume"` was unreachable in practice.
+
+`modality`'s vocabulary lines up 1:1 with Layer 2's `Device.device_type`.
+`category`'s vocabulary is deliberately *modality-agnostic*, following the same
+principle as `eitprocessing`'s shared category catalogue: a taxonomy of
+physical quantities with no notion of which device measured them.
+
+Both are open vocabularies, not enums - a loader/adapter can use any string.
+A known alias is canonicalized on construction (`category="paw"` is stored as
+`"airway_pressure"`); an unrecognized value is kept verbatim, so a custom or
+experimental category is never silently dropped or relabelled.
+
+Query either axis independently:
+
+```python
+session.signals.for_modality("ventilator")      # every ventilator channel
+session.signals.for_category("airway_pressure") # pressure, whatever recorded it
+```
+
+`for_category` is available on `session.signals`, `session.parameter_results`,
+and `session.quality`, and accepts aliases (`for_category("paw")` works).
+
+The category vocabulary is extensible without editing the package - see
+`m3resp.data.categories.register_category_alias` for a single addition, and
+`load_category_aliases` to adopt an externally-maintained catalogue from a
+YAML/JSON file.
 
 `processing_state`:
 

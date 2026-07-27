@@ -180,7 +180,7 @@ class TestDetectExtremeTimeProducts:
 
 
 class TestDetectNonConsecutiveManoeuvres:
-    def test_writes_one_pressure_flag_per_manoeuvre(self):
+    def test_writes_one_airway_pressure_flag_per_manoeuvre(self):
         session = M3Session()
         ventilator_breaths = np.array([0, 1000, 2000, 3000, 4000])
         manoeuvres = np.array([500, 2500])
@@ -188,7 +188,8 @@ class TestDetectNonConsecutiveManoeuvres:
 
         flags = out["detect_non_consecutive_manoeuvres_flags"]
         assert len(flags) == len(manoeuvres)
-        assert all(f.modality == "pressure" for f in flags)
+        assert all(f.modality == "ventilator" for f in flags)
+        assert all(f.category == "airway_pressure" for f in flags)
 
 
 class TestEvaluateBellCurveError:

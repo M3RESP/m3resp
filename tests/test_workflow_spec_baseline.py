@@ -123,7 +123,15 @@ def test_workflows_public_api_is_stable():
 def test_available_steps_covers_every_modality_prefix():
     steps = set(available_steps())
     prefixes = {name.split(".", 1)[0] for name in steps}
-    assert prefixes == {"eit", "emg", "export", "metric", "session", "sync"}
+    assert prefixes == {
+        "eit",
+        "emg",
+        "export",
+        "metric",
+        "session",
+        "sync",
+        "ventilator",
+    }
 
 
 def test_pipeline_result_value_reads_produced_context_key():

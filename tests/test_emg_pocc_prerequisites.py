@@ -37,17 +37,17 @@ POCC_SPEC = {
     "inputs": {"emg_file": str(EMG_PATH), "vent_file": str(VENT_PATH)},
     "steps": [
         {"uses": "emg.load", "with": {"file": "@emg_file"}},
-        {"uses": "emg.load_ventilator", "with": {"file": "@vent_file"}},
-        {"uses": "emg.ventilator_channels"},
-        {"uses": "emg.find_occluded_breaths"},
-        {"uses": "emg.pocc_intervals"},
-        {"uses": "emg.pocc_time_product"},
+        {"uses": "ventilator.load", "with": {"file": "@vent_file"}},
+        {"uses": "ventilator.channels"},
+        {"uses": "ventilator.find_occluded_breaths"},
+        {"uses": "ventilator.pocc_intervals"},
+        {"uses": "ventilator.pocc_time_product"},
     ],
 }
 
 
 class TestPoccIntervals:
-    def test_writes_start_end_validity_and_pressure_modality_events(self):
+    def test_writes_start_end_validity_and_ventilator_modality_events(self):
         result = run_pipeline(POCC_SPEC)
         o = result.outputs
 
@@ -70,7 +70,7 @@ class TestPoccIntervals:
 
         for index, event in enumerate(events):
             assert isinstance(event, BreathEvent)
-            assert event.modality == "pressure"
+            assert event.modality == "ventilator"
             assert event.metadata["event_type"] == "pocc"
             assert event.start_index == int(starts[index])
             assert event.end_index == int(ends[index])
@@ -93,7 +93,7 @@ class TestPoccIntervals:
         # case where a far-off baseline never crosses again after the last
         # peak (a pre-existing primitive limitation, not this step's bug).
         spec = {**POCC_SPEC, "steps": [*POCC_SPEC["steps"]]}
-        spec["steps"][-2] = {"uses": "emg.pocc_intervals", "with": {"peep": 5.2}}
+        spec["steps"][-2] = {"uses": "ventilator.pocc_intervals", "with": {"peep": 5.2}}
         result = run_pipeline(spec)
         for event in result.value("pocc_events"):
             assert event.metadata["peep"] == 5.2
@@ -120,7 +120,8 @@ class TestPoccTimeProduct:
         assert isinstance(result_obj, ParameterResult)
         assert len(time_products) == len(o["pocc_indices"])
         assert result_obj.unit == "cmH2O*s"
-        assert result_obj.modality == "pressure"
+        assert result_obj.modality == "ventilator"
+        assert result_obj.category == "airway_pressure"
         np.testing.assert_array_equal(result_obj.value, time_products)
         assert result_obj.metadata["start_indices"] == [
             int(x) for x in o["pocc_start_indices"]

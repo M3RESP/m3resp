@@ -21,7 +21,8 @@ from ._shared import (
 
 
 @register_step(
-    "emg.detect_non_consecutive_manoeuvres",
+    "ventilator.detect_non_consecutive_manoeuvres",
+    aliases=("emg.detect_non_consecutive_manoeuvres",),
     reads={
         "session": "session",
         "ventilator_breath_indices": "ventilator_breath_indices",
@@ -34,7 +35,7 @@ from ._shared import (
     summary="Flag non-consecutive occlusion manoeuvres against ventilator breaths.",
     description="Flag Pocc manoeuvres that are not consecutive ventilator breaths, since a valid occlusion trial requires uninterrupted breaths.",
     category="quality",
-    modality="emg",
+    modality="ventilator",
     optional_packages=_RESURFEMG,
     input_artifacts=(
         _SESSION_ARTIFACT,
@@ -71,17 +72,18 @@ def detect_non_consecutive_manoeuvres(
     flags = _per_breath_flags(
         "detect_non_consecutive_manoeuvres",
         result,
-        modality="pressure",
+        modality="ventilator",
+        category="airway_pressure",
         peak_indices=pocc_indices,
     )
     for flag in flags:
         session.quality.add(flag)
     _record_step(
         session,
-        "emg.detect_non_consecutive_manoeuvres",
+        "ventilator.detect_non_consecutive_manoeuvres",
         metadata=_upstream_metadata(
             source_function="resurfemg.postprocessing.quality_assessment.detect_non_consecutive_manoeuvres",
-            operation="emg.detect_non_consecutive_manoeuvres",
+            operation="ventilator.detect_non_consecutive_manoeuvres",
             parameters={},
         ),
     )
@@ -426,7 +428,7 @@ def evaluate_event_timing(
             name="ventilator_respiratory_rate",
             artifact_type="scalar_metric",
             unit="breaths/min",
-            description="Ventilator-derived respiratory rate from 'emg.ventilator_respiratory_rate'.",
+            description="Ventilator-derived respiratory rate from 'ventilator.respiratory_rate'.",
         ),
     ),
     parameters=(

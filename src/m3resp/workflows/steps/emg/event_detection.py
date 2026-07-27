@@ -32,18 +32,19 @@ from ._shared import (
 
 
 @register_step(
-    "emg.detect_ventilator_breath",
+    "ventilator.detect_breaths",
+    aliases=("emg.detect_ventilator_breath",),
     reads={"ventilator_signals": "ventilator_signals"},
     writes=("ventilator_breath_indices",),
     summary="Detect ventilator breaths from the ventilator volume channel.",
     description="Detect ventilator breath peaks from the volume channel.",
     category="detection",
-    modality="emg",
+    modality="ventilator",
     input_artifacts=(
         StepArtifact(
             name="ventilator_signals",
             artifact_type="ventilator_channel_bundle",
-            description="Ventilator channel bundle from 'emg.ventilator_channels'.",
+            description="Ventilator channel bundle from 'ventilator.channels'.",
         ),
     ),
     parameters=(
@@ -82,18 +83,19 @@ def detect_ventilator_breath(
 
 
 @register_step(
-    "emg.find_occluded_breaths",
+    "ventilator.find_occluded_breaths",
+    aliases=("emg.find_occluded_breaths",),
     reads={"ventilator_signals": "ventilator_signals"},
     writes=("pocc_indices",),
     summary="Detect occluded (Pocc) breaths from the ventilator pressure channel.",
     description="Detect occlusion (Pocc) manoeuvre peaks from the pressure channel.",
     category="detection",
-    modality="emg",
+    modality="ventilator",
     input_artifacts=(
         StepArtifact(
             name="ventilator_signals",
             artifact_type="ventilator_channel_bundle",
-            description="Ventilator channel bundle from 'emg.ventilator_channels'.",
+            description="Ventilator channel bundle from 'ventilator.channels'.",
         ),
     ),
     parameters=(
@@ -132,7 +134,8 @@ def find_occluded_breaths(
 
 
 @register_step(
-    "emg.pocc_intervals",
+    "ventilator.pocc_intervals",
+    aliases=("emg.pocc_intervals",),
     reads={
         "session": "session",
         "ventilator_signals": "ventilator_signals",
@@ -147,18 +150,18 @@ def find_occluded_breaths(
     summary="Find Pocc manoeuvre start/end indices from the pressure channel.",
     description="Find Pocc manoeuvre start/end indices around each detected peak via baseline crossing, and record BreathEvents.",
     category="detection",
-    modality="emg",
+    modality="ventilator",
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(
             name="ventilator_signals",
             artifact_type="ventilator_channel_bundle",
-            description="Ventilator channel bundle from 'emg.ventilator_channels'.",
+            description="Ventilator channel bundle from 'ventilator.channels'.",
         ),
         StepArtifact(
             name="pocc_indices",
             artifact_type="index_array",
-            description="Pocc peak indices from 'emg.find_occluded_breaths'.",
+            description="Pocc peak indices from 'ventilator.find_occluded_breaths'.",
         ),
     ),
     parameters=(
@@ -168,7 +171,7 @@ def find_occluded_breaths(
             required=False,
             default=None,
             unit="cmH2O",
-            description="PEEP baseline. Should match the value used in 'emg.find_occluded_breaths'; defaults to the median pressure when unset.",
+            description="PEEP baseline. Should match the value used in 'ventilator.find_occluded_breaths'; defaults to the median pressure when unset.",
         ),
     ),
     output_artifacts=(
@@ -205,7 +208,7 @@ def pocc_intervals(
     fs = float(ventilator_signals["fs"])
     peaks = np.asarray(pocc_indices, dtype=int)
 
-    # Same PEEP rule as emg.find_occluded_breaths, so pocc_indices (detected
+    # Same PEEP rule as ventilator.find_occluded_breaths, so pocc_indices (detected
     # against this same baseline) and these intervals stay consistent.
     effective_peep = peep if peep is not None else float(np.nanmedian(pressure))
     baseline = np.full(pressure.shape, effective_peep)
@@ -218,7 +221,7 @@ def pocc_intervals(
     for index, peak in enumerate(peaks):
         events.append(
             BreathEvent(
-                modality="pressure",
+                modality="ventilator",
                 start_time=float(starts[index]) / fs,
                 end_time=float(ends[index]) / fs,
                 peak_time=float(peak) / fs,
@@ -241,10 +244,10 @@ def pocc_intervals(
 
     _record_step(
         session,
-        "emg.pocc_intervals",
+        "ventilator.pocc_intervals",
         metadata=_upstream_metadata(
             source_function="m3resp.processing.intervals.onoff_from_baseline_crossings",
-            operation="emg.pocc_intervals",
+            operation="ventilator.pocc_intervals",
             parameters={"peep": effective_peep, "requested_peep": peep},
             source_package="m3resp",
             implementation="m3resp.processing.intervals",
@@ -259,7 +262,8 @@ def pocc_intervals(
 
 
 @register_step(
-    "emg.pocc_time_product",
+    "ventilator.pocc_time_product",
+    aliases=("emg.pocc_time_product",),
     reads={
         "session": "session",
         "ventilator_signals": "ventilator_signals",
@@ -270,23 +274,23 @@ def pocc_intervals(
     summary="Compute the pressure-time product for each Pocc manoeuvre.",
     description="Integrate pressure above the PEEP baseline over each Pocc manoeuvre's start/end window.",
     category="parameters",
-    modality="emg",
+    modality="ventilator",
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(
             name="ventilator_signals",
             artifact_type="ventilator_channel_bundle",
-            description="Ventilator channel bundle from 'emg.ventilator_channels'.",
+            description="Ventilator channel bundle from 'ventilator.channels'.",
         ),
         StepArtifact(
             name="pocc_start_indices",
             artifact_type="index_array",
-            description="Pocc manoeuvre start indices from 'emg.pocc_intervals'.",
+            description="Pocc manoeuvre start indices from 'ventilator.pocc_intervals'.",
         ),
         StepArtifact(
             name="pocc_end_indices",
             artifact_type="index_array",
-            description="Pocc manoeuvre end indices from 'emg.pocc_intervals'.",
+            description="Pocc manoeuvre end indices from 'ventilator.pocc_intervals'.",
         ),
     ),
     parameters=(
@@ -296,7 +300,7 @@ def pocc_intervals(
             required=False,
             default=None,
             unit="cmH2O",
-            description="PEEP baseline. Should match the value used in 'emg.pocc_intervals'; defaults to the median pressure when unset.",
+            description="PEEP baseline. Should match the value used in 'ventilator.pocc_intervals'; defaults to the median pressure when unset.",
         ),
     ),
     output_artifacts=(
@@ -336,7 +340,8 @@ def pocc_time_product(
     result = ParameterResult(
         name="pocc_time_product",
         value=time_products,
-        modality="pressure",
+        modality="ventilator",
+        category="airway_pressure",
         unit=f"{pressure_unit}*s",
         method="m3resp.processing.metrics.window_integral",
         metadata={
@@ -348,10 +353,10 @@ def pocc_time_product(
 
     _record_step(
         session,
-        "emg.pocc_time_product",
+        "ventilator.pocc_time_product",
         metadata=_upstream_metadata(
             source_function="m3resp.processing.metrics.window_integral",
-            operation="emg.pocc_time_product",
+            operation="ventilator.pocc_time_product",
             parameters=parameters,
             source_package="m3resp",
             implementation="m3resp.processing.metrics",
@@ -364,7 +369,8 @@ _POCC_CRITERIA_ROW_NAMES = ("dp_up_10", "dp_up_90", "dp_up_90_norm")
 
 
 @register_step(
-    "emg.pocc_quality",
+    "ventilator.pocc_quality",
+    aliases=("emg.pocc_quality",),
     reads={
         "session": "session",
         "ventilator_signals": "ventilator_signals",
@@ -381,7 +387,7 @@ _POCC_CRITERIA_ROW_NAMES = ("dp_up_10", "dp_up_90", "dp_up_90_norm")
     summary="Evaluate Pocc manoeuvre quality from the pressure upslope (Warnaar et al. 2024).",
     description="Evaluate Pocc manoeuvre validity from the pressure upslope shape against three configurable thresholds (Warnaar et al. 2024), producing one QualityFlag and three criterion measurements per manoeuvre.",
     category="quality",
-    modality="emg",
+    modality="ventilator",
     optional_packages=_RESURFEMG,
     input_artifacts=(
         _SESSION_ARTIFACT,
@@ -393,17 +399,17 @@ _POCC_CRITERIA_ROW_NAMES = ("dp_up_10", "dp_up_90", "dp_up_90_norm")
         StepArtifact(
             name="pocc_indices",
             artifact_type="index_array",
-            description="Pocc peak indices from 'emg.find_occluded_breaths'.",
+            description="Pocc peak indices from 'ventilator.find_occluded_breaths'.",
         ),
         StepArtifact(
             name="pocc_end_indices",
             artifact_type="index_array",
-            description="Pocc end indices from 'emg.pocc_intervals'.",
+            description="Pocc end indices from 'ventilator.pocc_intervals'.",
         ),
         StepArtifact(
             name="pocc_time_products",
             artifact_type="array",
-            description="Pocc time products from 'emg.pocc_time_product'.",
+            description="Pocc time products from 'ventilator.pocc_time_product'.",
         ),
     ),
     parameters=(
@@ -483,7 +489,8 @@ def pocc_quality(
     flags = _per_breath_flags(
         "pocc_quality",
         valid,
-        modality="pressure",
+        modality="ventilator",
+        category="airway_pressure",
         peak_indices=pocc_indices,
         extra_metadata={"pressure_sample_index_end": None},
     )
@@ -497,7 +504,8 @@ def pocc_quality(
             _per_breath_results(
                 f"pocc_quality_{row_name}",
                 row_values,
-                modality="pressure",
+                modality="ventilator",
+                category="airway_pressure",
                 peak_indices=pocc_indices,
                 unit=pressure_unit,
                 method="resurfemg.pocc_quality",
@@ -515,10 +523,10 @@ def pocc_quality(
 
     _record_step(
         session,
-        "emg.pocc_quality",
+        "ventilator.pocc_quality",
         metadata=_upstream_metadata(
             source_function="resurfemg.postprocessing.quality_assessment.pocc_quality",
-            operation="emg.pocc_quality",
+            operation="ventilator.pocc_quality",
             parameters={
                 "dp_up_10_threshold": dp_up_10_threshold,
                 "dp_up_90_threshold": dp_up_90_threshold,

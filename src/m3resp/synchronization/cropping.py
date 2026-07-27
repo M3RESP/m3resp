@@ -20,15 +20,28 @@ if TYPE_CHECKING:
     from m3resp.core.session import M3Session
 
 
+#: Canonical name for the ventilator modality. ``"vent"`` was the Stage 1
+#: internal spelling while ``"ventilator"`` was used in the docs, by
+#: ``M3Session.link_breaths``, and by ``Signal.modality`` - so a breath could
+#: carry ``modality="vent"`` while the ``LinkedBreath`` holding it was keyed
+#: ``"ventilator"``. Everything now canonicalizes here.
+VENTILATOR = "ventilator"
+
+#: Accepted spellings that normalize to :data:`VENTILATOR`. ``"vent"`` is kept
+#: indefinitely: it shipped as a ``session.raw`` key and as a pipeline-spec
+#: parameter value, so specs and user code still pass it.
+_VENTILATOR_ALIASES = frozenset({"vent", "ventilator", "ventilation"})
+
+
 def resolve_alignment_offsets(
     offset_seconds: float | Mapping[str, float],
 ) -> dict[str, float]:
     if isinstance(offset_seconds, Mapping):
-        offsets = {"eit": 0.0, "emg": 0.0, "vent": 0.0}
+        offsets = {"eit": 0.0, "emg": 0.0, VENTILATOR: 0.0}
         for modality, offset in offset_seconds.items():
             offsets[normalize_modality(modality)] = float(offset)
         return offsets
-    return {"eit": 0.0, "emg": float(offset_seconds), "vent": 0.0}
+    return {"eit": 0.0, "emg": float(offset_seconds), VENTILATOR: 0.0}
 
 
 def offsets_relative_to_reference(
@@ -44,10 +57,44 @@ def offsets_relative_to_reference(
 
 
 def normalize_modality(modality: str) -> str:
+    """Canonicalize a modality name, mapping every ventilator spelling to
+    :data:`VENTILATOR`."""
+
     normalized = str(modality).lower()
-    if normalized in {"ventilator", "ventilation"}:
-        return "vent"
+    if normalized in _VENTILATOR_ALIASES:
+        return VENTILATOR
     return normalized
+
+
+def ventilator_raw(session: M3Session) -> Any:
+    """The loaded ventilator recording, under either key.
+
+    ``session.raw`` stores it under both ``"ventilator"`` (canonical) and
+    ``"vent"`` (the key Stage 1 shipped), pointing at the same object. Reading
+    through here means code stays correct whichever key a caller populated -
+    including a user who assigned ``session.raw["vent"]`` directly.
+    """
+
+    recording = session.raw.get(VENTILATOR)
+    if recording is None:
+        recording = session.raw.get("vent")
+    return recording
+
+
+def ventilator_payload(recording: Any) -> dict[str, Any] | None:
+    """The ``{"array", "metadata"}`` payload of a ventilator recording.
+
+    Accepts either a :class:`~m3resp.modalities.ventilator.VentilatorRecording`
+    (which keeps it under ``.data``, like every other modality) or a bare dict,
+    which is what Stage 1 stored directly in ``session.raw["vent"]``.
+    """
+
+    if isinstance(recording, dict) and "array" in recording:
+        return recording
+    data = getattr(recording, "data", None)
+    if isinstance(data, dict) and "array" in data:
+        return data
+    return None
 
 
 def crop_loaded_modality(session: M3Session, modality: str, offset: float) -> int:
@@ -55,9 +102,8 @@ def crop_loaded_modality(session: M3Session, modality: str, offset: float) -> in
         return 0
     if modality == "emg" and session.emg is not None:
         return _crop_emg_recording(session.emg, offset)
-    if modality == "vent":
-        ventilator = session.raw.get("vent")
-        return _crop_recording_dict(ventilator, offset)
+    if modality == VENTILATOR:
+        return _crop_ventilator_recording(ventilator_raw(session), offset)
     if modality == "eit" and session.eit is not None:
         return _crop_eit_recording(session.eit, offset)
     return 0
@@ -70,9 +116,26 @@ def raw_synchronization_traces(session: M3Session, modality: str) -> dict[str, A
     if modality == "eit" and session.eit is not None:
         trace = _eit_raw_trace(session.eit)
         return {"eit": trace} if trace is not None else {}
-    if modality == "vent":
-        return _ventilator_raw_traces(session.raw.get("vent"))
+    if modality == VENTILATOR:
+        return _ventilator_raw_traces(ventilator_payload(ventilator_raw(session)))
     return {}
+
+
+def _crop_ventilator_recording(recording: Any, offset: float) -> int:
+    """Crop a ventilator recording in place, mirroring `_crop_emg_recording`.
+
+    The payload dict is mutated rather than replaced, so both ``session.raw``
+    keys - which reference the same object - stay consistent.
+    """
+
+    cropped = _crop_recording_dict(ventilator_payload(recording), offset)
+    if not cropped:
+        return 0
+    data = getattr(recording, "data", None)
+    if isinstance(data, dict):
+        recording.raw = data.get("array")
+        recording.metadata = data.get("metadata")
+    return cropped
 
 
 def _emg_raw_trace(recording: EMGRecording) -> dict[str, Any] | None:

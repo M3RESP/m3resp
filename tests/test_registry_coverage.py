@@ -16,7 +16,15 @@ from pathlib import Path
 import m3resp.workflows.steps  # noqa: F401 - ensure built-in steps are registered
 from m3resp.workflows.registry import STEP_REGISTRY, describe_steps
 
-_KNOWN_PREFIXES = {"eit", "emg", "export", "metric", "session", "sync"}
+_KNOWN_PREFIXES = {
+    "eit",
+    "emg",
+    "export",
+    "metric",
+    "session",
+    "sync",
+    "ventilator",
+}
 
 #: Packages a step module must never import at module scope (Phase 1.4/8.4:
 #: "no eager optional import during discovery").

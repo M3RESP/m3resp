@@ -174,6 +174,15 @@ class StepDefinition:
 
 STEP_REGISTRY: dict[str, StepDefinition] = {}
 
+#: Retired step name -> the canonical name it now resolves to. Populated by
+#: ``register_step(..., aliases=...)``.
+#:
+#: Aliases resolve silently and are deliberately kept out of `available_steps`,
+#: `describe_steps` and the "available steps" text of `UnknownStepError`: an
+#: existing spec keeps running unchanged, while discovery and any GUI built on
+#: it only ever offer the current name.
+STEP_ALIASES: dict[str, str] = {}
+
 
 def register_step(
     name: str,
@@ -194,6 +203,7 @@ def register_step(
     resource_profile: str | None = None,
     version: str | None = None,
     deprecated_since: str | None = None,
+    aliases: tuple[str, ...] = (),
 ) -> Callable[[StepCallable], StepCallable]:
     """Register ``func`` under ``name`` as a pipeline step.
 
@@ -206,11 +216,26 @@ def register_step(
     additive GUI/discovery metadata (Phase 1 of the pipeline-structure plan).
     A step with none of them declared is still fully valid and executable;
     they are being backfilled module by module.
+
+    ``aliases`` lists former names this step was registered under, so specs
+    written against them keep compiling. They resolve silently and are hidden
+    from discovery - see :data:`STEP_ALIASES`.
     """
 
     def decorator(func: StepCallable) -> StepCallable:
         if name in STEP_REGISTRY:
             raise ValueError(f"Pipeline step '{name}' is already registered.")
+        for alias in aliases:
+            if alias in STEP_REGISTRY:
+                raise ValueError(
+                    f"Cannot alias '{alias}' to '{name}': '{alias}' is itself a "
+                    "registered step."
+                )
+            if STEP_ALIASES.get(alias) not in (None, name):
+                raise ValueError(
+                    f"Pipeline step alias '{alias}' is already mapped to "
+                    f"'{STEP_ALIASES[alias]}'."
+                )
         definition = StepDefinition(
             name=name,
             func=func,
@@ -235,6 +260,8 @@ def register_step(
         )
         _validate_step_definition(definition)
         STEP_REGISTRY[name] = definition
+        for alias in aliases:
+            STEP_ALIASES[alias] = name
         return func
 
     return decorator
@@ -386,15 +413,24 @@ def _validate_json_safe(definition: StepDefinition) -> None:
 
 
 def get_step(name: str) -> StepDefinition:
-    """Return the registered step definition for ``name``."""
+    """Return the registered step definition for ``name``.
 
-    try:
-        return STEP_REGISTRY[name]
-    except KeyError as exc:
-        available = ", ".join(sorted(STEP_REGISTRY)) or "(none registered)"
-        raise UnknownStepError(
-            f"Unknown pipeline step '{name}'. Available steps: {available}."
-        ) from exc
+    A retired name registered as an alias resolves silently to its current
+    step, so specs written against the old name keep working.
+    """
+
+    definition = STEP_REGISTRY.get(name)
+    if definition is not None:
+        return definition
+
+    canonical = STEP_ALIASES.get(name)
+    if canonical is not None and canonical in STEP_REGISTRY:
+        return STEP_REGISTRY[canonical]
+
+    available = ", ".join(sorted(STEP_REGISTRY)) or "(none registered)"
+    raise UnknownStepError(
+        f"Unknown pipeline step '{name}'. Available steps: {available}."
+    )
 
 
 def available_steps() -> dict[str, str]:

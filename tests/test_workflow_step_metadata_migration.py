@@ -59,7 +59,7 @@ def test_sync_estimate_offset_source_choices_are_consistent():
     ]
     assert len(source_params) == 3
     for param in source_params:
-        assert param.choices == ("eit", "emg", "vent")
+        assert param.choices == ("eit", "emg", "ventilator", "vent")
 
 
 def test_export_session_summary_boolean_defaults_match_function():

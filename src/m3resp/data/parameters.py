@@ -12,6 +12,7 @@ from typing import Any
 
 import numpy as np
 
+from m3resp.data.categories import normalize_category
 from m3resp.data.metrics import normalize_metric_name
 from m3resp.data.units import normalize_unit
 
@@ -40,12 +41,19 @@ class ParameterResult:
     metric (so nothing is mislabelled). Pass ``metric_type`` explicitly to
     override the derivation.
 
+    ``modality`` names the device/technique this metric came from; ``category``
+    names the physical quantity it is derived from (see
+    :mod:`m3resp.data.categories`). They are independent axes - a Pocc
+    pressure-time product is ``modality="ventilator"``,
+    ``category="airway_pressure"``.
+
     ``unit`` is normalized via :func:`m3resp.data.units.normalize_unit`.
     """
 
     name: str
     value: float | np.ndarray
     modality: str
+    category: str | None = None
     unit: str | None = None
     metric_type: str | None = None
     breath_id: str | None = None
@@ -59,6 +67,7 @@ class ParameterResult:
 
     def __post_init__(self) -> None:
         self.unit = normalize_unit(self.unit)
+        self.category = normalize_category(self.category) or self.category
         if self.metric_type is None:
             self.metric_type = normalize_metric_name(self.name)
 
@@ -79,6 +88,7 @@ class ParameterResult:
             "name": self.name,
             "value": serialized_value,
             "modality": self.modality,
+            "category": self.category,
             "unit": self.unit,
             "metric_type": self.metric_type,
             "breath_id": self.breath_id,

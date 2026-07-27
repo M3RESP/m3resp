@@ -15,8 +15,6 @@ from m3resp.workflows.registry import describe_step, describe_steps
 
 _EMG_STEP_NAMES = [
     "emg.load",
-    "emg.load_ventilator",
-    "emg.ventilator_channels",
     "emg.preprocess",
     "emg.detect_breaths",
     "emg.peak_indices",
@@ -26,11 +24,6 @@ _EMG_STEP_NAMES = [
     "emg.ecg_estimated_subtraction",
     "emg.ecg_gating",
     "emg.ecg_wavelet_denoising",
-    "emg.detect_ventilator_breath",
-    "emg.find_occluded_breaths",
-    "emg.pocc_intervals",
-    "emg.pocc_time_product",
-    "emg.pocc_quality",
     "emg.interpeak_dist",
     "emg.onoffpeak_baseline_crossing",
     "emg.onoffpeak_slope_extrapolation",
@@ -40,40 +33,57 @@ _EMG_STEP_NAMES = [
     "emg.time_product",
     "emg.area_under_baseline",
     "emg.respiratory_rate",
-    "emg.ventilator_respiratory_rate",
     "emg.snr_pseudo",
     "emg.percentage_under_baseline",
     "emg.detect_local_high_aub",
     "emg.detect_extreme_time_products",
-    "emg.detect_non_consecutive_manoeuvres",
     "emg.evaluate_bell_curve_error",
     "emg.evaluate_event_timing",
     "emg.evaluate_respiratory_rates",
-    "emg.normalize_ventilator_breaths",
 ]
 
+#: Ventilator steps, split out of the `emg.*` namespace once the
+#: ventilator became a modality in its own right. Their functions still
+#: live in `workflows/steps/emg/`; only the registered ids moved.
+_VENTILATOR_STEP_NAMES = [
+    "ventilator.load",
+    "ventilator.channels",
+    "ventilator.detect_breaths",
+    "ventilator.find_occluded_breaths",
+    "ventilator.pocc_intervals",
+    "ventilator.pocc_time_product",
+    "ventilator.pocc_quality",
+    "ventilator.respiratory_rate",
+    "ventilator.detect_non_consecutive_manoeuvres",
+    "ventilator.normalize_breaths",
+]
+
+_ALL_STEP_NAMES = _EMG_STEP_NAMES + _VENTILATOR_STEP_NAMES
+
 _QUALITY_STEP_NAMES = [
-    "emg.pocc_quality",
+    "ventilator.pocc_quality",
     "emg.interpeak_dist",
     "emg.snr_pseudo",
     "emg.percentage_under_baseline",
     "emg.detect_local_high_aub",
     "emg.detect_extreme_time_products",
-    "emg.detect_non_consecutive_manoeuvres",
+    "ventilator.detect_non_consecutive_manoeuvres",
     "emg.evaluate_bell_curve_error",
     "emg.evaluate_event_timing",
     "emg.evaluate_respiratory_rates",
 ]
 
 
-def test_all_thirty_six_emg_steps_are_registered_and_described():
-    descriptions = describe_steps(prefix="emg.")
-    assert {d.name for d in descriptions} == set(_EMG_STEP_NAMES)
-    assert len(_EMG_STEP_NAMES) == 36
+def test_all_thirty_six_emg_and_ventilator_steps_are_registered_and_described():
+    emg = {d.name for d in describe_steps(prefix="emg.")}
+    ventilator = {d.name for d in describe_steps(prefix="ventilator.")}
+    assert emg == set(_EMG_STEP_NAMES)
+    assert ventilator == set(_VENTILATOR_STEP_NAMES)
+    assert len(_ALL_STEP_NAMES) == 36
 
 
 def test_every_emg_step_declares_some_metadata_and_is_json_safe():
-    for name in _EMG_STEP_NAMES:
+    for name in _ALL_STEP_NAMES:
         description = describe_step(name)
         assert description.description, name
         assert (
@@ -144,7 +154,7 @@ def test_pocc_quality_threshold_defaults_match_function_signature():
         for name, p in inspect.signature(pocc_quality).parameters.items()
         if name.endswith("_threshold")
     }
-    description = describe_step("emg.pocc_quality")
+    description = describe_step("ventilator.pocc_quality")
     declared_defaults = {
         p.name: p.default
         for p in description.parameters
@@ -156,6 +166,14 @@ def test_pocc_quality_threshold_defaults_match_function_signature():
 def test_describe_steps_prefix_filter_covers_emg_module():
     names = {d.name for d in describe_steps(prefix="emg.")}
     assert names == set(_EMG_STEP_NAMES)
+
+
+def test_describe_steps_prefix_filter_separates_ventilator_from_emg():
+    # The rename's whole point: ventilator steps are discoverable under their
+    # own prefix rather than buried in the EMG namespace.
+    names = {d.name for d in describe_steps(prefix="ventilator.")}
+    assert names == set(_VENTILATOR_STEP_NAMES)
+    assert not names & set(_EMG_STEP_NAMES)
 
 
 def test_all_ninety_six_built_in_steps_still_describe_without_error():

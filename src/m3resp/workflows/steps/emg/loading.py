@@ -99,6 +99,7 @@ def load(
                 unit=unit,
                 name=label,
                 modality="emg",
+                category="electrical_potential",
                 channel=label,
                 source=str(recording.path),
                 processing_state="raw",
@@ -120,13 +121,14 @@ def load(
 
 
 @register_step(
-    "emg.load_ventilator",
+    "ventilator.load",
+    aliases=("emg.load_ventilator",),
     reads={"session": "session"},
     writes=("ventilator_raw",),
     summary="Load a ventilator recording into the session.",
     description="Load a ventilator recording file through ReSurfEMGAdapter.",
     category="loading",
-    modality="emg",
+    modality="ventilator",
     optional_packages=_RESURFEMG,
     input_artifacts=(_SESSION_ARTIFACT,),
     parameters=(
@@ -148,26 +150,30 @@ def load(
     ),
 )
 def load_ventilator(session: M3Session, *, file: str) -> dict[str, Any]:
-    recording = session.emg_adapter.load(str(file), verbose=False)
-    # Stored on the session too so `session.sync_raw` (which crops
-    # `session.raw["vent"]` in place) keeps this same dict object in sync.
-    session.raw["vent"] = recording
-    return {"ventilator_raw": recording}
+    # Delegates to the session method - the same shape as `emg.load` calling
+    # `session.load_emg` - so provenance and `session.raw` bookkeeping happen
+    # in one place. The step still emits the raw payload dict, which is what
+    # `ventilator.channels` downstream expects.
+    session.load_ventilator(file, verbose=False)
+    recording = session.ventilator
+    assert recording is not None
+    return {"ventilator_raw": recording.data}
 
 
 @register_step(
-    "emg.ventilator_channels",
+    "ventilator.channels",
+    aliases=("emg.ventilator_channels",),
     reads={"ventilator_raw": "ventilator_raw"},
     writes=("ventilator_signals",),
     summary="Split a raw ventilator recording into pressure/flow/volume channels.",
     description="Split a raw ventilator recording into named pressure/flow/volume channel arrays plus sample frequency.",
     category="preprocessing",
-    modality="emg",
+    modality="ventilator",
     input_artifacts=(
         StepArtifact(
             name="ventilator_raw",
             artifact_type="ventilator_recording",
-            description="Raw ventilator recording from 'emg.load_ventilator'.",
+            description="Raw ventilator recording from 'ventilator.load'.",
             compatibility_only=True,
         ),
     ),

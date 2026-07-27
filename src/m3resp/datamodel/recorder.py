@@ -67,17 +67,38 @@ if TYPE_CHECKING:
 #: Provenance actions that correspond to loading a modality's raw data.
 _LOAD_ACTIONS = {"load_eit": "eit", "load_emg": "emg"}
 
-#: Maps both Stage 1 session modality keys ("vent") and Layer 1
-#: ``Signal.modality`` values ("ventilator", "pressure", "flow") onto the
-#: persisted ``Device.device_type`` vocabulary.
+#: Maps Stage 1 session modality keys ("vent") and Layer 1 ``Signal.modality``
+#: values onto the persisted ``Device.device_type`` vocabulary. Since
+#: ``modality`` is now purely the device axis (physical quantities moved to
+#: ``Signal.category``), this is close to an identity map.
+#:
+#: ``"pressure"``/``"flow"`` are retained only as legacy aliases, for signals
+#: produced before the split or by third-party code still using the old
+#: combined vocabulary. They assume a ventilator, which is exactly the wrong
+#: guess for esophageal or gastric pressure - tag those ``modality="monitor"``
+#: (or the actual device) with ``category="esophageal_pressure"`` instead.
 _MODALITY_DEVICE_TYPE: dict[str, DeviceType] = {
     "eit": "eit",
     "emg": "emg",
     "vent": "ventilator",
     "ventilator": "ventilator",
+    "monitor": "monitor",
     "pressure": "ventilator",
     "flow": "ventilator",
 }
+
+
+def _stream_key(modality: str | None, category: str | None) -> str:
+    """Cache key identifying one recorded ``SignalStream``.
+
+    Both axes are needed: one device emits several streams. Falls back to the
+    bare modality when no category is set, so EIT/EMG signals (which have one
+    stream per modality) keep the keys they had before categories existed.
+    """
+
+    resolved = modality or "unknown"
+    return f"{resolved}:{category}" if category else resolved
+
 
 #: Fallback signal type for the provenance-inference path (Milestone 1),
 #: keyed by Stage 1 session modality.
@@ -125,6 +146,11 @@ class DataModelRecorder:
         )
 
         self._devices: dict[str, str] = {}
+        # Keyed by `_stream_key(modality, category)`. One device now emits
+        # several streams (a ventilator produces pressure, flow and volume), so
+        # modality alone no longer identifies a stream - keying by it would let
+        # each ventilator channel overwrite the previous one and misattribute
+        # every derived feature to whichever was recorded last.
         self._signals: dict[str, str] = {}
         self._files: dict[str, str] = {}
 
@@ -149,10 +175,12 @@ class DataModelRecorder:
         signal_type = _signal_type_for(signal)
         if signal_type is None:
             logger.warning(
-                "Skipping signal with modality {!r}: no data model stream type "
-                "for it. Tag the signal's modality (eit/emg/ventilator/...) to "
-                "record it.",
+                "Skipping signal with modality={!r} category={!r}: no data "
+                "model stream type for that pair. Tag the signal's modality "
+                "(eit/emg/ventilator/...) and, for a device that emits several "
+                "quantities, its category (airway_pressure/airflow/volume).",
                 signal.modality,
+                signal.category,
             )
             return None
 
@@ -167,7 +195,8 @@ class DataModelRecorder:
                 sample_count=signal.n_samples,
             )
         )
-        self._signals[signal.modality] = stream.signal_id
+        stream_key = _stream_key(signal.modality, signal.category)
+        self._signals[stream_key] = stream.signal_id
 
         if file_path is not None:
             data_file = self.store.add_data_file(
@@ -179,15 +208,39 @@ class DataModelRecorder:
                     file_role=file_role,
                 )
             )
-            self._files[signal.modality] = data_file.file_id
+            self._files[stream_key] = data_file.file_id
         return stream
+
+    def _lookup_signal_id(
+        self, modality: str | None, category: str | None
+    ) -> str | None:
+        """Find the recorded stream a parameter/flag belongs to.
+
+        Prefers an exact ``(modality, category)`` match. A result that names
+        only its modality falls back to that modality's first recorded stream,
+        which is what everything did before categories existed.
+        """
+
+        if modality is None:
+            return None
+        signal_id = self._signals.get(_stream_key(modality, category))
+        if signal_id is not None:
+            return signal_id
+        signal_id = self._signals.get(modality)
+        if signal_id is not None:
+            return signal_id
+        prefix = f"{modality}:"
+        for stored_key, stored_id in self._signals.items():
+            if stored_key.startswith(prefix):
+                return stored_id
+        return None
 
     def record_parameter(
         self, parameter: ParameterResult, *, processing_run_id: str
     ) -> DerivedFeature:
         """Materialize a ``ParameterResult`` as a ``DerivedFeature``."""
 
-        signal_id = self._signals.get(parameter.modality)
+        signal_id = self._lookup_signal_id(parameter.modality, parameter.category)
         return self.store.add_derived_feature(
             DerivedFeature(
                 source_signal_ids=[signal_id] if signal_id is not None else [],
@@ -215,7 +268,7 @@ class DataModelRecorder:
         resolved_type: TargetType = target_type or "signal"
         resolved_id = target_id
         if resolved_id is None and flag.modality is not None:
-            resolved_id = self._signals.get(flag.modality)
+            resolved_id = self._lookup_signal_id(flag.modality, flag.category)
         if resolved_id is None:
             resolved_type = "session"
             resolved_id = self.recording_session.session_id
@@ -430,23 +483,51 @@ class DataModelRecorder:
         return data_file
 
 
-def _signal_type_for(signal: Signal) -> SignalType | None:
-    """Map a runtime signal's modality to a stored stream type.
+#: ``(modality, category) -> SignalType``. Layer 2 keys streams by a name that
+#: fuses device and quantity, so both Layer 1 axes are needed to resolve one.
+#: Before ``Signal.category`` existed this had to be guessed from ``modality``
+#: alone, which meant every ventilator signal was recorded as
+#: ``ventilator_pressure`` and ``ventilator_volume`` was unreachable.
+_SIGNAL_TYPE_BY_MODALITY_CATEGORY: dict[tuple[str, str], SignalType] = {
+    ("eit", "impedance"): "eit_waveform",
+    ("ventilator", "airway_pressure"): "ventilator_pressure",
+    ("ventilator", "airflow"): "ventilator_flow",
+    ("ventilator", "volume"): "ventilator_volume",
+    ("ventilator", "tidal_volume"): "ventilator_volume",
+}
 
-    Returns ``None`` for a modality the data model has no stream type for (for
-    example the default ``"unknown"``), so the caller can skip it instead of
-    failing.
+#: Fallback ``modality -> SignalType`` for signals with no ``category`` set,
+#: used only where the modality alone is unambiguous. ``"ventilator"`` is
+#: deliberately absent: without a category there is no way to tell pressure
+#: from flow from volume, and guessing is what produced wrong audit records.
+_SIGNAL_TYPE_BY_MODALITY: dict[str, SignalType] = {
+    "eit": "eit_waveform",
+}
+
+
+def _signal_type_for(signal: Signal) -> SignalType | None:
+    """Map a runtime signal's ``(modality, category)`` to a stored stream type.
+
+    Returns ``None`` when the pair does not identify a stream type - either an
+    untagged modality (the default ``"unknown"``), or a modality that needs a
+    category to be resolvable (``"ventilator"``) and doesn't have one. The
+    caller skips those with a warning instead of failing.
     """
 
-    if signal.modality == "eit":
-        return "eit_waveform"
-    if signal.modality == "emg":
+    modality = signal.modality
+    category = signal.category
+
+    # EMG's split is by processing stage, not by physical quantity: raw trace
+    # and envelope are both electrical potentials.
+    if modality == "emg":
         return "emg_envelope" if signal.processing_state == "processed" else "emg_raw"
-    if signal.modality in ("ventilator", "pressure"):
-        return "ventilator_pressure"
-    if signal.modality == "flow":
-        return "ventilator_flow"
-    return None
+
+    if category is not None:
+        signal_type = _SIGNAL_TYPE_BY_MODALITY_CATEGORY.get((modality, category))
+        if signal_type is not None:
+            return signal_type
+
+    return _SIGNAL_TYPE_BY_MODALITY.get(modality)
 
 
 def _output_provenance_entry(value: ParameterResult | Signal) -> dict[str, Any]:

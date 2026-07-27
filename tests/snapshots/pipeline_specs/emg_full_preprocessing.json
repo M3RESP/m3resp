@@ -37,7 +37,7 @@
       "id": "load_ventilator",
       "in": {},
       "out": {},
-      "uses": "emg.load_ventilator",
+      "uses": "ventilator.load",
       "with": {
         "file": "@vent_file"
       }
@@ -46,7 +46,7 @@
       "id": "ventilator_channels",
       "in": {},
       "out": {},
-      "uses": "emg.ventilator_channels",
+      "uses": "ventilator.channels",
       "with": {
         "flow_channel": 1,
         "pressure_channel": 0,
@@ -171,7 +171,7 @@
       "id": "detect_ventilator_breath",
       "in": {},
       "out": {},
-      "uses": "emg.detect_ventilator_breath",
+      "uses": "ventilator.detect_breaths",
       "with": {
         "breath_width_seconds": 0.5
       }
@@ -180,35 +180,35 @@
       "id": "find_occluded_breaths",
       "in": {},
       "out": {},
-      "uses": "emg.find_occluded_breaths",
+      "uses": "ventilator.find_occluded_breaths",
       "with": {}
     },
     {
       "id": "ventilator_respiratory_rate",
       "in": {},
       "out": {},
-      "uses": "emg.ventilator_respiratory_rate",
+      "uses": "ventilator.respiratory_rate",
       "with": {}
     },
     {
       "id": "pocc_intervals",
       "in": {},
       "out": {},
-      "uses": "emg.pocc_intervals",
+      "uses": "ventilator.pocc_intervals",
       "with": {}
     },
     {
       "id": "pocc_time_product",
       "in": {},
       "out": {},
-      "uses": "emg.pocc_time_product",
+      "uses": "ventilator.pocc_time_product",
       "with": {}
     },
     {
       "id": "normalize_ventilator_breaths",
       "in": {},
       "out": {},
-      "uses": "emg.normalize_ventilator_breaths",
+      "uses": "ventilator.normalize_breaths",
       "with": {
         "breath_width_seconds": 0.5
       }
@@ -245,7 +245,7 @@
       "id": "detect_non_consecutive_manoeuvres",
       "in": {},
       "out": {},
-      "uses": "emg.detect_non_consecutive_manoeuvres",
+      "uses": "ventilator.detect_non_consecutive_manoeuvres",
       "with": {}
     },
     {
@@ -273,7 +273,7 @@
       "id": "pocc_quality",
       "in": {},
       "out": {},
-      "uses": "emg.pocc_quality",
+      "uses": "ventilator.pocc_quality",
       "with": {}
     },
     {

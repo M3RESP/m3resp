@@ -19,6 +19,7 @@ from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from m3resp.data.categories import normalize_category
 from m3resp.data.parameters import ParameterResult
 from m3resp.data.quality import QualityFlag
 from m3resp.data.signals import Signal
@@ -43,7 +44,21 @@ class SignalCollection:
         return signal
 
     def for_modality(self, modality: str) -> list[Signal]:
+        """Filter by producing device/technique (e.g. ``"ventilator"``)."""
+
         return [signal for signal in self.items if signal.modality == modality]
+
+    def for_category(self, category: str) -> list[Signal]:
+        """Filter by physical quantity (e.g. ``"airway_pressure"``).
+
+        Independent of `for_modality`: a ventilator contributes several
+        categories, and one category can come from several devices. `category`
+        is matched after canonicalization, so a known alias (``"paw"``) finds
+        signals stored under the canonical name.
+        """
+
+        resolved = normalize_category(category) or category
+        return [signal for signal in self.items if signal.category == resolved]
 
     def to_manifest_rows(self) -> list[dict[str, Any]]:
         return [signal.to_manifest_row() for signal in self.items]
@@ -70,7 +85,15 @@ class ParameterResultCollection:
         return parameter
 
     def for_modality(self, modality: str) -> list[ParameterResult]:
+        """Filter by producing device/technique (e.g. ``"ventilator"``)."""
+
         return [p for p in self.items if p.modality == modality]
+
+    def for_category(self, category: str) -> list[ParameterResult]:
+        """Filter by source physical quantity (see `SignalCollection.for_category`)."""
+
+        resolved = normalize_category(category) or category
+        return [p for p in self.items if p.category == resolved]
 
     def for_name(self, name: str) -> list[ParameterResult]:
         return [p for p in self.items if p.name == name]
@@ -99,7 +122,15 @@ class QualityReport:
         return [flag for flag in self.items if not flag.passed]
 
     def for_modality(self, modality: str) -> list[QualityFlag]:
+        """Filter by producing device/technique (e.g. ``"ventilator"``)."""
+
         return [flag for flag in self.items if flag.modality == modality]
+
+    def for_category(self, category: str) -> list[QualityFlag]:
+        """Filter by checked physical quantity (see `SignalCollection.for_category`)."""
+
+        resolved = normalize_category(category) or category
+        return [flag for flag in self.items if flag.category == resolved]
 
     def for_signal(self, signal_name: str) -> list[QualityFlag]:
         return [flag for flag in self.items if flag.signal_name == signal_name]

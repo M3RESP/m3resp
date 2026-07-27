@@ -180,13 +180,13 @@ def test_emg_postprocessing_registers_one_step_per_function():
     steps = set(m3resp.available_steps())
     assert "emg.postprocess" not in steps
     assert {
-        "emg.load_ventilator",
-        "emg.ventilator_channels",
+        "ventilator.load",
+        "ventilator.channels",
         "emg.peak_indices",
         "emg.moving_baseline",
         "emg.slopesum_baseline",
-        "emg.detect_ventilator_breath",
-        "emg.find_occluded_breaths",
+        "ventilator.detect_breaths",
+        "ventilator.find_occluded_breaths",
         "emg.onoffpeak_baseline_crossing",
         "emg.onoffpeak_slope_extrapolation",
         "emg.time_to_peak",
@@ -195,16 +195,16 @@ def test_emg_postprocessing_registers_one_step_per_function():
         "emg.time_product",
         "emg.area_under_baseline",
         "emg.respiratory_rate",
-        "emg.ventilator_respiratory_rate",
+        "ventilator.respiratory_rate",
         "emg.snr_pseudo",
         "emg.percentage_under_baseline",
         "emg.detect_local_high_aub",
         "emg.detect_extreme_time_products",
-        "emg.detect_non_consecutive_manoeuvres",
+        "ventilator.detect_non_consecutive_manoeuvres",
         "emg.evaluate_bell_curve_error",
         "emg.evaluate_event_timing",
         "emg.evaluate_respiratory_rates",
-        "emg.normalize_ventilator_breaths",
+        "ventilator.normalize_breaths",
     } <= steps
 
 

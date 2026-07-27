@@ -208,6 +208,7 @@ def ecg_gating(
         unit=unit,
         name=f"{label}_ecg_gated",
         modality="emg",
+        category="electrical_potential",
         channel=label,
         source="resurfemg",
         processing_state="filtered",
