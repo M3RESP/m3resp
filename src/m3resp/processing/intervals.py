@@ -35,7 +35,12 @@ def onoff_from_baseline_crossings(
         delta_samples = peak_index - crossings[crossings < peak_index]
         if len(delta_samples) < 1:
             starts[peak_number] = 0
-            ends[peak_number] = crossings[crossings > peak_index][0]
+            crossings_after = crossings[crossings > peak_index]
+            ends[peak_number] = (
+                int(crossings_after[0])
+                if len(crossings_after) >= 1
+                else len(values) - 1
+            )
         else:
             crossing_index = np.argmin(delta_samples)
             starts[peak_number] = int(crossings[crossing_index])
@@ -48,8 +53,8 @@ def onoff_from_baseline_crossings(
             valid_starts[peak_number] = False
 
         if (
-            peak_number < (len(peaks) - 2)
-            and valid_ends[peak_number] > peaks[peak_number + 1]
+            peak_number < (len(peaks) - 1)
+            and ends[peak_number] > peaks[peak_number + 1]
         ):
             valid_ends[peak_number] = False
 
@@ -137,7 +142,7 @@ def onoff_from_slope(
             valid_starts[peak_number] = False
         if end_index < peak_index:
             valid_ends[peak_number] = False
-        if peak_number < (len(peaks) - 2) and end_index > peaks[peak_number + 1]:
+        if peak_number < (len(peaks) - 1) and end_index > peaks[peak_number + 1]:
             valid_ends[peak_number] = False
 
         if peak_number > 0 and start_index < ends[peak_number - 1]:

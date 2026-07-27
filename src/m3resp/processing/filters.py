@@ -236,7 +236,7 @@ def compute_power_loss(
         nperseg=n_segment,
         noverlap=noverlap,
     )
-    return float(100 * (1 - (np.sum(original_density) / np.sum(processed_density))))
+    return float(100 * (1 - (np.sum(processed_density) / np.sum(original_density))))
 
 
 def _normalize_cutoff_frequency(
