@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
+from inspect import Parameter, signature
 from typing import Any
 
 import numpy as np
@@ -55,9 +56,20 @@ def _require_eit_sequence(sequence: Any) -> None:
 
 
 def add_to_collection(collection: Any, value: Any) -> None:
+    """Add a value while supporting old collections without ``overwrite``."""
+
+    parameters: Iterable[Parameter]
     try:
+        parameters = signature(collection.add).parameters.values()
+    except (TypeError, ValueError):
+        parameters = ()
+    supports_overwrite = any(
+        parameter.name == "overwrite" or parameter.kind is Parameter.VAR_KEYWORD
+        for parameter in parameters
+    )
+    if supports_overwrite:
         collection.add(value, overwrite=True)
-    except TypeError:
+    else:
         collection.add(value)
 
 

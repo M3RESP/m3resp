@@ -24,6 +24,48 @@ from m3resp.core.exceptions import OptionalDependencyError
 pytest.importorskip("eitprocessing")
 
 
+class _ModernCollection:
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, bool]] = []
+
+    def add(self, value: object, *, overwrite: bool = False) -> None:
+        self.calls.append((value, overwrite))
+
+
+class _LegacyCollection:
+    def __init__(self) -> None:
+        self.calls: list[object] = []
+
+    def add(self, value: object) -> None:
+        self.calls.append(value)
+
+
+class _InvalidValueCollection:
+    def add(self, value: object, *, overwrite: bool = False) -> None:
+        raise TypeError("value must be a data container")
+
+
+def test_add_to_collection_uses_overwrite_when_supported():
+    collection = _ModernCollection()
+
+    add_to_collection(collection, "value")
+
+    assert collection.calls == [("value", True)]
+
+
+def test_add_to_collection_supports_legacy_collections_without_overwrite():
+    collection = _LegacyCollection()
+
+    add_to_collection(collection, "value")
+
+    assert collection.calls == ["value"]
+
+
+def test_add_to_collection_propagates_an_internal_type_error():
+    with pytest.raises(TypeError, match="value must be a data container"):
+        add_to_collection(_InvalidValueCollection(), "wrong-value")
+
+
 def _fixture_path() -> str:
     repo_root = Path(__file__).resolve().parents[1]
     path = os.path.join(
