@@ -303,8 +303,14 @@ def _crop_sample_array(
         sample_axis = 1 if array.ndim > 1 and array.shape[1] >= array.shape[0] else 0
     n_samples = round(abs(offset) * float(fs))
     axis_len = array.shape[sample_axis]
-    if n_samples <= 0 or n_samples >= axis_len:
+    if n_samples <= 0:
         return values, 0
+    if n_samples >= axis_len:
+        raise ValueError(
+            "Crop offset would remove every sample: "
+            f"offset={offset!r} seconds, sample_frequency={fs!r} Hz, "
+            f"requested_samples={n_samples}, axis_length={axis_len}."
+        )
 
     if offset < 0:
         sample_slice = slice(n_samples, None)

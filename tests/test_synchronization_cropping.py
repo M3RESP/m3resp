@@ -74,9 +74,40 @@ class TestCropLoadedModality:
         assert session.emg.data["array"].shape[1] == 90
         assert session.emg.raw is session.emg.data["array"]
 
+    def test_rejects_an_offset_that_would_remove_every_emg_sample(self):
+        session = M3Session()
+        array = np.arange(100.0).reshape(1, 100)
+        session.emg = EMGRecording(
+            data={"array": array, "metadata": {"fs": 10.0}},
+            path=Path("synthetic.npy"),
+        )
+
+        with pytest.raises(ValueError, match="would remove every sample"):
+            crop_loaded_modality(session, "emg", offset=10.0)
+
+        np.testing.assert_array_equal(session.emg.data["array"], array)
+
     def test_missing_recording_is_a_no_op(self):
         session = M3Session()
         assert crop_loaded_modality(session, "eit", 1.0) == 0
+
+
+class TestSynchronizeRawModalities:
+    def test_rejects_an_oversized_offset_without_recording_alignment(self):
+        session = M3Session()
+        session.emg = EMGRecording(
+            data={
+                "array": np.arange(100.0).reshape(1, 100),
+                "metadata": {"fs": 10.0},
+            },
+            path=Path("synthetic.npy"),
+        )
+
+        with pytest.raises(ValueError, match="would remove every sample"):
+            session.synchronize_raw_modalities(offset_seconds={"emg": 10.0})
+
+        assert "raw_alignment" not in session.parameters
+        assert "raw_synchronization" not in session.processed
 
 
 class TestRawSynchronizationTraces:
