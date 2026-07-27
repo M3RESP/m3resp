@@ -590,7 +590,7 @@ class EITProcessingAdapter:
                     modality="eit",
                     channel="global_impedance",
                     processing_state="filtered",
-                    method=preprocessed.get("filter_mode"),
+                    method=f"eitprocessing.{preprocessed.get('filter_mode')}_filter",
                 )
             )
         return signals

@@ -86,6 +86,13 @@ class Signal(TimeSeries):
     method: str | None = None
 ```
 
+`method` names the algorithm that produced the signal, formatted
+`"<library>.<function_or_class_name>"` (e.g. `"resurfemg.moving_baseline"`,
+`"eitprocessing.RateDetection"`). The prefix disambiguates functions that
+share a name across libraries; it is convention only - a plain string with no
+runtime validation - so it's up to each adapter/step to follow it rather than
+passing through an upstream library's own unqualified names.
+
 ### `modality` vs `category`: two independent axes
 
 `modality` is the **device/technique**; `category` is the **physical
