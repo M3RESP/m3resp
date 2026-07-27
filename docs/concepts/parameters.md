@@ -78,6 +78,13 @@ become lists) are the two helper members.
 - Cross-modality: `session.compute_multimodal_parameters()` computes timing
   delays, breath-duration differences, and event-agreement scores from
   `session.linked_breaths` - see [synchronization.md](synchronization.md).
+  These are deliberately timing-only metrics. A cross-modality index that
+  jointly analyzes signal *values* rather than breath timing (e.g. an
+  EMG-effort-to-EIT-pendelluft coupling index) is genuinely new science with
+  no upstream equivalent, which is out of scope for Stage 2 - see
+  ["A completely new algorithm with no upstream equivalent"](../developer/architecture.md)
+  and the Stage 3 outlook there for where it belongs once Stage 3's native
+  packages exist.
 
 `session.parameter_results` (`m3resp.data.collections.ParameterResultCollection`)
 is queryable via `.for_modality(name)`/`.for_name(name)`, and exports to

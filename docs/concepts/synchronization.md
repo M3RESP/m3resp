@@ -11,8 +11,15 @@ compared on one shared time axis. Key pieces:
   "EMG started 5 seconds after EIT").
 - `session.align_modalities(...)` does the same thing but for
   already-detected events (breaths), not raw signals.
-- `resample_signal(...)` changes a signal's sampling rate to match another
-  signal's, since two devices rarely sample at the same rate.
+- `resample_signal(...)` is a standalone utility that changes a signal's
+  sampling rate to match another signal's, for the cases where you need two
+  signals on one shared sample grid (e.g. a sample-by-sample comparison).
+  It's not part of the alignment pipeline above and isn't called
+  automatically: breath linking and the multimodal parameter calculations
+  below work on real-world timestamps (`BreathEvent.start_time`/`end_time`/
+  `peak_time`), not sample indices, so most analysis stays at each
+  modality's original sample rate and resampling is only needed when you
+  explicitly ask for it.
 
 `LinkedBreath` is the object that represents "the same physical breath, as
 seen by different modalities." It is a dictionary-like structure
