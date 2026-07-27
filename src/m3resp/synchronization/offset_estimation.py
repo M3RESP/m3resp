@@ -311,6 +311,22 @@ def refine_offset_by_crosscorrelation(
     reference_values = np.asarray(reference_values, dtype=float)
     stretch = float(stretch)
 
+    # A single NaN sample (e.g. a masked-invalid breath value) would otherwise
+    # propagate through np.interp's neighboring grid points, then through
+    # a.mean()/a.std(), turning the *entire* z-scored array into NaN and
+    # silently collapsing np.correlate to an all-NaN result - argmax on that
+    # picks index 0 with no error, i.e. a bogus lag with a NaN
+    # peak_correlation that no caller checks for. Drop non-finite samples
+    # before interpolating instead.
+    target_finite = np.isfinite(target_values)
+    if not np.all(target_finite):
+        target_time = target_time[target_finite]
+        target_values = target_values[target_finite]
+    reference_finite = np.isfinite(reference_values)
+    if not np.all(reference_finite):
+        reference_time = reference_time[reference_finite]
+        reference_values = reference_values[reference_finite]
+
     empty = CrossCorrelationOffsetResult(
         lag_seconds=0.0,
         refined_offset_seconds=float(base_offset_seconds),
