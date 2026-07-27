@@ -19,6 +19,7 @@ from m3resp.workflows.steps.emg import (
     ecg_gating,
     ecg_wavelet_denoising,
 )
+from m3resp.workflows.steps.emg.ecg_gating import _build_gate_mask
 
 pytest.importorskip("resurfemg")
 np = pytest.importorskip("numpy")
@@ -109,6 +110,13 @@ class TestEcgDetectPeaks:
 
 
 class TestEcgGating:
+    def test_gate_mask_includes_the_symmetric_window_endpoints(self):
+        mask = _build_gate_mask(10, [5], gate_width_samples=4)
+        edge_mask = _build_gate_mask(10, [0], gate_width_samples=4)
+
+        np.testing.assert_array_equal(np.flatnonzero(mask), [3, 4, 5, 6, 7])
+        np.testing.assert_array_equal(np.flatnonzero(edge_mask), [0, 1, 2])
+
     def test_updates_processed_emg_and_session_with_the_gated_signal(self):
         session = M3Session()
         processed_emg = _fake_processed_emg()

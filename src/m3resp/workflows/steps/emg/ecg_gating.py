@@ -32,7 +32,7 @@ def _build_gate_mask(
     half_width = gate_width_samples // 2
     for peak in peak_indices:
         start = max(0, int(peak) - half_width)
-        end = min(n_samples, int(peak) + half_width)
+        end = min(n_samples, int(peak) + half_width + 1)
         mask[start:end] = True
     return mask
 
