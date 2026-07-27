@@ -171,6 +171,21 @@ def _require_equal_length(*named_arrays: tuple[str, np.ndarray]) -> None:
         raise ValueError(f"Arrays must have equal length; got {lengths}.")
 
 
+def _mask_invalid(values: Any, validity: Any) -> np.ndarray:
+    """Replace entries at invalid breath positions with NaN, preserving
+    array length/index alignment with `peak_indices`. `valid_peaks` (from
+    `onoff_from_baseline_crossings`) flags breaths whose onset/offset window
+    overlaps a neighboring breath or was never found; letting those through
+    unmasked would make an overlapping/degenerate window masquerade as a
+    real measurement."""
+
+    array = np.array(values, dtype=float, copy=True)
+    valid = np.asarray(validity, dtype=bool)
+    _require_equal_length(("values", array), ("validity", valid))
+    array[~valid] = np.nan
+    return array
+
+
 def _require_integer_valued_sample_frequency(sample_frequency: float) -> int:
     """Normalize `sample_frequency` to `int` for upstream calls that need an
     exact integer (e.g. `fs // 200` fed straight into a pandas rolling

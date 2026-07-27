@@ -30,6 +30,7 @@ from m3resp.processing.windows import rolling_arv
 from ._protocols import _PostprocessingOpsProtocol
 from ._shared import (
     _category_for_function,
+    _mask_invalid,
     _missing_postprocessing_dependency,
     _normalize_selected_postprocessing,
     _require_emg_recording,
@@ -352,6 +353,7 @@ class _DefaultsMixin:
 
         start_indices = None
         end_indices = None
+        start_end_validity = None
         if len(peak_indices_array) and baseline is not None:
             if enabled(("event_detection", "onoffpeak_baseline_crossing")):
                 computed["event_detection"]["onoffpeak_baseline_crossing"] = (
@@ -361,9 +363,10 @@ class _DefaultsMixin:
                         peak_indices_array,
                     )
                 )
-                start_indices, end_indices, *_ = computed["event_detection"][
-                    "onoffpeak_baseline_crossing"
-                ]
+                start_indices, end_indices, _valid_starts, _valid_ends, valid_peaks = (
+                    computed["event_detection"]["onoffpeak_baseline_crossing"]
+                )
+                start_end_validity = np.asarray(valid_peaks, dtype=bool)
             slope_window_samples = max(1, int(slope_window_seconds * fs))
             if enabled(("event_detection", "onoffpeak_slope_extrapolation")):
                 computed["event_detection"]["onoffpeak_slope_extrapolation"] = (
@@ -377,16 +380,23 @@ class _DefaultsMixin:
 
             if start_indices is not None and end_indices is not None:
                 if enabled(("features", "time_to_peak")):
-                    computed["features"]["time_to_peak"] = time_to_peak(
+                    absolute_times, percent_times = time_to_peak(
                         envelope,
                         start_indices,
                         end_indices,
                     )
+                    computed["features"]["time_to_peak"] = (
+                        _mask_invalid(absolute_times, start_end_validity),
+                        _mask_invalid(percent_times, start_end_validity),
+                    )
                 if enabled(("features", "pseudo_slope")):
-                    computed["features"]["pseudo_slope"] = pseudo_slope(
-                        envelope,
-                        start_indices,
-                        end_indices,
+                    computed["features"]["pseudo_slope"] = _mask_invalid(
+                        pseudo_slope(
+                            envelope,
+                            start_indices,
+                            end_indices,
+                        ),
+                        start_end_validity,
                     )
                 if enabled(("features", "amplitude")):
                     computed["features"]["amplitude"] = amplitude_at_peaks(
@@ -395,15 +405,18 @@ class _DefaultsMixin:
                         baseline,
                     )
                 if enabled(("features", "time_product")):
-                    computed["features"]["time_product"] = window_integral(
-                        envelope,
-                        fs,
-                        start_indices,
-                        end_indices,
-                        baseline,
+                    computed["features"]["time_product"] = _mask_invalid(
+                        window_integral(
+                            envelope,
+                            fs,
+                            start_indices,
+                            end_indices,
+                            baseline,
+                        ),
+                        start_end_validity,
                     )
                 if enabled(("features", "area_under_baseline")):
-                    computed["features"]["area_under_baseline"] = area_under_baseline(
+                    areas, references = area_under_baseline(
                         envelope,
                         fs,
                         peak_indices_array,
@@ -411,6 +424,10 @@ class _DefaultsMixin:
                         end_indices,
                         max(1, int(aub_window_seconds * fs)),
                         baseline,
+                    )
+                    computed["features"]["area_under_baseline"] = (
+                        _mask_invalid(areas, start_end_validity),
+                        _mask_invalid(references, start_end_validity),
                     )
             else:
                 skipped["features"] = (
@@ -497,32 +514,39 @@ class _DefaultsMixin:
                         / float(vent_signals["fs"]),
                     )
                 )
-                if (
-                    enabled(("quality_assessment", "evaluate_respiratory_rates"))
-                    and len(ventilator_breath_indices) >= 2
-                ):
-                    rr_vent = computed["quality_assessment"][
-                        "ventilator_respiratory_rate"
-                    ][0]
-                    computed["quality_assessment"]["evaluate_respiratory_rates"] = (
-                        self.evaluate_respiratory_rates(
-                            peak_indices_array,
-                            len(envelope) / fs,
-                            rr_vent,
-                        )
-                    )
-                elif enabled(("quality_assessment", "evaluate_respiratory_rates")):
-                    skipped["quality_assessment.evaluate_respiratory_rates"] = (
-                        "Needs at least two ventilator breaths."
-                    )
             elif enabled(("quality_assessment", "evaluate_event_timing")):
                 skipped["quality_assessment.evaluate_event_timing"] = (
                     "Needs ventilator breath timing."
                 )
-                if enabled(("quality_assessment", "evaluate_respiratory_rates")):
-                    skipped["quality_assessment.evaluate_respiratory_rates"] = (
-                        "Needs ventilator respiratory rate."
+
+            # Deliberately independent of 'evaluate_event_timing' above: its
+            # only real prerequisite is that 'ventilator_respiratory_rate' was
+            # computed (near the top of this function), which does not
+            # require 'evaluate_event_timing' to be selected. Nesting this
+            # under that block previously meant selecting
+            # 'evaluate_respiratory_rates' alone (without also selecting
+            # 'evaluate_event_timing') silently produced nothing - no result,
+            # no skip reason.
+            if (
+                enabled(("quality_assessment", "evaluate_respiratory_rates"))
+                and "ventilator_respiratory_rate" in computed["quality_assessment"]
+            ):
+                rr_vent = computed["quality_assessment"]["ventilator_respiratory_rate"][
+                    0
+                ]
+                computed["quality_assessment"]["evaluate_respiratory_rates"] = (
+                    self.evaluate_respiratory_rates(
+                        peak_indices_array,
+                        len(envelope) / fs,
+                        rr_vent,
                     )
+                )
+            elif enabled(("quality_assessment", "evaluate_respiratory_rates")):
+                skipped["quality_assessment.evaluate_respiratory_rates"] = (
+                    "Needs ventilator respiratory rate (requires "
+                    "'evaluate_respiratory_rates' selected together with at "
+                    "least two ventilator breaths)."
+                )
         else:
             for name in (
                 "onoffpeak_baseline_crossing",
