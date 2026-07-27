@@ -152,6 +152,7 @@ def test_scalar_only_run_produces_the_same_csv_content_as_before(tmp_path):
             "metric_type": "tidal_impedance_variation",
             "breath_id": "",
             "breath_ids": "",
+            "event_id": "",
             "start_time": "",
             "end_time": "",
             "region": "",
