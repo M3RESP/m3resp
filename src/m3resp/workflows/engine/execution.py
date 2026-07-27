@@ -142,7 +142,9 @@ def run_pipeline(
         try:
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always")
-                result = definition.func(**kwargs) or {}
+                result = definition.func(**kwargs)
+                if result is None:
+                    result = {}
         except Exception as exc:
             # A warning issued right before the failure must still be
             # captured/re-emitted, not silently dropped - `caught` stays

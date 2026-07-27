@@ -38,7 +38,17 @@ def _temp_steps():
     def _bad_output() -> dict[str, Any]:
         return {"something_else": 1}
 
-    created.extend(["t.make", "t.double", "t.bad_output"])
+    @register_step("t.no_output", writes=())
+    def _no_output() -> None:
+        return None
+
+    @register_step("t.falsy_output", writes=())
+    def _falsy_output(*, value: Any) -> Any:
+        return value
+
+    created.extend(
+        ["t.make", "t.double", "t.bad_output", "t.no_output", "t.falsy_output"]
+    )
     yield
     for name in created:
         STEP_REGISTRY.pop(name, None)
@@ -90,6 +100,26 @@ def test_validation_allows_duplicate_step_with_out_rename():
 def test_engine_rejects_undeclared_output():
     spec = {"name": "bad", "steps": [{"uses": "t.bad_output"}]}
     with pytest.raises(PipelineSpecError, match="did not return it"):
+        run_pipeline(spec)
+
+
+def test_engine_allows_none_for_a_step_with_no_outputs():
+    result = run_pipeline({"name": "no-output", "steps": [{"uses": "t.no_output"}]})
+
+    assert result.outputs == {}
+
+
+@pytest.mark.parametrize(
+    ("value", "returned_type"),
+    [(0, "int"), (False, "bool"), ("", "str"), ([], "list")],
+)
+def test_engine_rejects_falsy_non_mapping_step_returns(value, returned_type):
+    spec = {
+        "name": "falsy-output",
+        "steps": [{"uses": "t.falsy_output", "with": {"value": value}}],
+    }
+
+    with pytest.raises(PipelineSpecError, match=f"got {returned_type}"):
         run_pipeline(spec)
 
 
