@@ -28,6 +28,14 @@ class ProcessingStep:
     parameters: dict[str, Any] = field(default_factory=dict)
     software: str = "m3resp"
     version: str | None = None
+    #: Installed version of each optional upstream package (e.g.
+    #: ``resurfemg``, ``eitprocessing``) this step's operation declared a
+    #: dependency on, or ``None`` if that package wasn't importable when the
+    #: step ran. Without this, exact reconstruction of a step's numeric
+    #: output isn't possible even with deterministic code, since an upstream
+    #: library upgrade between runs can change results under the same
+    #: operation name and parameters.
+    optional_package_versions: dict[str, str | None] = field(default_factory=dict)
     timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     #: Stage 2 pipeline-structure Phase 5.1: the step's outcome
     #: ("succeeded"/"failed"/"cancelled"), so a universal per-step log entry

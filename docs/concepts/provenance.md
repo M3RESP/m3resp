@@ -72,6 +72,7 @@ class ProcessingStep:
     parameters: dict[str, Any] = field(default_factory=dict)
     software: str = "m3resp"
     version: str | None = None
+    optional_package_versions: dict[str, str | None] = field(default_factory=dict)
     timestamp: str = ...
     status: str = "succeeded"   # "succeeded" | "failed" | "cancelled"
 ```
@@ -83,6 +84,15 @@ engine knows the exact operation, bindings, parameters, timing, and outcome
 of each step and records it after execution, so no step function has to
 remember to call anything itself. `ProvenanceRecord` is not replaced by
 this; both stay in use.
+
+`name` (the registered operation id, e.g. `"eit.pixel_tiv"`) plus
+`parameters` plus `input_keys`/`output_keys` are enough to replay a
+deterministic step exactly - but only once you also know which version of
+each optional upstream package (`resurfemg`, `eitprocessing`) it ran
+against, since the same operation/parameters can produce different output
+after a library upgrade. `optional_package_versions` records the installed version of every optional package the step's
+operation declares a dependency on (`None` if that package wasn't
+importable), captured by the engine at execution time.
 
 ## Layer 2: `m3resp.datamodel` (opt-in, persisted/audit entities)
 

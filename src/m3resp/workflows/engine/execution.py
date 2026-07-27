@@ -273,6 +273,7 @@ def _record_processing_step(ctx: PipelineContext, record: StepExecutionRecord) -
         parameters=dict(record.parameters),
         timestamp=record.finished_at or record.started_at or utc_now_iso(),
         status=record.status,
+        optional_package_versions=dict(record.optional_package_versions),
     )
 
 
