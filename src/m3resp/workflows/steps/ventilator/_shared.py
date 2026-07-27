@@ -104,6 +104,21 @@ def _require_equal_length(**named_arrays: Any) -> None:
         raise ValueError(f"Arrays must have equal length; got {lengths}.")
 
 
+def _mask_invalid(values: Any, validity: Any) -> np.ndarray:
+    """Replace entries at invalid manoeuvre positions with NaN, preserving
+    array length/index alignment with 'pocc_indices'. 'pocc_interval_validity'
+    (from 'ventilator.pocc_intervals') flags manoeuvres whose start/end
+    window overlaps a neighboring manoeuvre or was never found; letting
+    those silently through would make an overlapping/degenerate window
+    masquerade as a real measurement."""
+
+    array = np.array(values, dtype=float, copy=True)
+    valid = np.asarray(validity, dtype=bool)
+    _require_equal_length(values=array, validity=valid)
+    array[~valid] = np.nan
+    return array
+
+
 def _breath_metadata(peak_index: Any, *, fs: float | None = None) -> dict[str, Any]:
     metadata: dict[str, Any] = {"peak_sample_index": int(peak_index)}
     if fs is not None:

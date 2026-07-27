@@ -22,6 +22,8 @@ from m3resp.processing.metrics import (
 )
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 
+from ._shared import _mask_invalid
+
 
 @register_step(
     "emg.time_to_peak",
@@ -29,6 +31,7 @@ from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
         "processed_emg": "processed_emg",
         "start_indices": "start_indices",
         "end_indices": "end_indices",
+        "start_end_validity": "start_end_validity",
     },
     writes=("time_to_peak",),
     summary="Compute EMG breath time-to-peak.",
@@ -51,22 +54,39 @@ from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
             artifact_type="index_array",
             description="Breath offset indices.",
         ),
+        StepArtifact(
+            name="start_end_validity",
+            artifact_type="boolean_array",
+            description="Per-breath validity from 'emg.onoffpeak_baseline_crossing'.",
+        ),
     ),
     output_artifacts=(
         StepArtifact(
             name="time_to_peak",
             artifact_type="array",
             unit="s",
-            description="Time-to-peak per breath.",
+            description="Time-to-peak per breath (NaN where the onset/offset window is invalid).",
         ),
     ),
 )
 def time_to_peak(
-    processed_emg: Any, start_indices: Any, end_indices: Any
+    processed_emg: Any,
+    start_indices: Any,
+    end_indices: Any,
+    *,
+    start_end_validity: Any = None,
 ) -> dict[str, Any]:
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
-    return {"time_to_peak": _time_to_peak(envelope, start_indices, end_indices)}
+    absolute_times, percent_times = _time_to_peak(envelope, start_indices, end_indices)
+    if start_end_validity is None:
+        return {"time_to_peak": (absolute_times, percent_times)}
+    return {
+        "time_to_peak": (
+            _mask_invalid(absolute_times, start_end_validity),
+            _mask_invalid(percent_times, start_end_validity),
+        )
+    }
 
 
 @register_step(
@@ -75,6 +95,7 @@ def time_to_peak(
         "processed_emg": "processed_emg",
         "start_indices": "start_indices",
         "end_indices": "end_indices",
+        "start_end_validity": "start_end_validity",
     },
     writes=("pseudo_slope",),
     summary="Compute EMG breath pseudo-slope.",
@@ -97,21 +118,33 @@ def time_to_peak(
             artifact_type="index_array",
             description="Breath offset indices.",
         ),
+        StepArtifact(
+            name="start_end_validity",
+            artifact_type="boolean_array",
+            description="Per-breath validity from 'emg.onoffpeak_baseline_crossing'.",
+        ),
     ),
     output_artifacts=(
         StepArtifact(
             name="pseudo_slope",
             artifact_type="array",
-            description="Pseudo-slope per breath.",
+            description="Pseudo-slope per breath (NaN where the onset/offset window is invalid).",
         ),
     ),
 )
 def pseudo_slope(
-    processed_emg: Any, start_indices: Any, end_indices: Any
+    processed_emg: Any,
+    start_indices: Any,
+    end_indices: Any,
+    *,
+    start_end_validity: Any = None,
 ) -> dict[str, Any]:
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
-    return {"pseudo_slope": _pseudo_slope(envelope, start_indices, end_indices)}
+    result = _pseudo_slope(envelope, start_indices, end_indices)
+    if start_end_validity is None:
+        return {"pseudo_slope": result}
+    return {"pseudo_slope": _mask_invalid(result, start_end_validity)}
 
 
 @register_step(
@@ -164,6 +197,7 @@ def amplitude(processed_emg: Any, peak_indices: Any, baseline: Any) -> dict[str,
         "start_indices": "start_indices",
         "end_indices": "end_indices",
         "baseline": "baseline",
+        "start_end_validity": "start_end_validity",
     },
     writes=("time_product",),
     summary="Compute EMG breath time-product (area above baseline).",
@@ -191,26 +225,35 @@ def amplitude(processed_emg: Any, peak_indices: Any, baseline: Any) -> dict[str,
             artifact_type="signal_array",
             description="Baseline from 'emg.moving_baseline' or 'emg.slopesum_baseline'.",
         ),
+        StepArtifact(
+            name="start_end_validity",
+            artifact_type="boolean_array",
+            description="Per-breath validity from 'emg.onoffpeak_baseline_crossing'.",
+        ),
     ),
     output_artifacts=(
         StepArtifact(
             name="time_product",
             artifact_type="array",
-            description="Time-product per breath.",
+            description="Time-product per breath (NaN where the onset/offset window is invalid).",
         ),
     ),
 )
 def time_product(
-    processed_emg: Any, start_indices: Any, end_indices: Any, baseline: Any
+    processed_emg: Any,
+    start_indices: Any,
+    end_indices: Any,
+    baseline: Any,
+    *,
+    start_end_validity: Any = None,
 ) -> dict[str, Any]:
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
     fs = float(processed_emg["fs"])
-    return {
-        "time_product": window_integral(
-            envelope, fs, start_indices, end_indices, baseline
-        )
-    }
+    result = window_integral(envelope, fs, start_indices, end_indices, baseline)
+    if start_end_validity is None:
+        return {"time_product": result}
+    return {"time_product": _mask_invalid(result, start_end_validity)}
 
 
 @register_step(
@@ -221,6 +264,7 @@ def time_product(
         "start_indices": "start_indices",
         "end_indices": "end_indices",
         "baseline": "baseline",
+        "start_end_validity": "start_end_validity",
     },
     writes=("area_under_baseline",),
     summary="Compute EMG area under baseline around each breath peak.",
@@ -253,6 +297,11 @@ def time_product(
             artifact_type="signal_array",
             description="Baseline from 'emg.moving_baseline' or 'emg.slopesum_baseline'.",
         ),
+        StepArtifact(
+            name="start_end_validity",
+            artifact_type="boolean_array",
+            description="Per-breath validity from 'emg.onoffpeak_baseline_crossing'.",
+        ),
     ),
     parameters=(
         StepParameter(
@@ -268,7 +317,7 @@ def time_product(
         StepArtifact(
             name="area_under_baseline",
             artifact_type="array",
-            description="Area-under-baseline result per breath, and supporting arrays.",
+            description="Area-under-baseline result per breath, and supporting arrays (NaN where the onset/offset window is invalid).",
         ),
     ),
 )
@@ -280,12 +329,13 @@ def area_under_baseline(
     baseline: Any,
     *,
     window_seconds: float = 5.0,
+    start_end_validity: Any = None,
 ) -> dict[str, Any]:
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
     fs = float(processed_emg["fs"])
     window_samples = max(1, int(window_seconds * fs))
-    result = _area_under_baseline(
+    areas, references = _area_under_baseline(
         envelope,
         fs,
         peak_indices,
@@ -294,7 +344,14 @@ def area_under_baseline(
         window_samples,
         baseline,
     )
-    return {"area_under_baseline": result}
+    if start_end_validity is None:
+        return {"area_under_baseline": (areas, references)}
+    return {
+        "area_under_baseline": (
+            _mask_invalid(areas, start_end_validity),
+            _mask_invalid(references, start_end_validity),
+        )
+    }
 
 
 @register_step(

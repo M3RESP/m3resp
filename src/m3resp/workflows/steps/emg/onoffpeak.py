@@ -175,7 +175,7 @@ def interpeak_dist(
         "baseline": "baseline",
         "peak_indices": "peak_indices",
     },
-    writes=("start_indices", "end_indices"),
+    writes=("start_indices", "end_indices", "start_end_validity"),
     summary="Find EMG breath on/offset indices by baseline crossing.",
     description="Find each breath's onset/offset sample indices where the envelope crosses the baseline.",
     category="detection",
@@ -209,6 +209,11 @@ def interpeak_dist(
             artifact_type="index_array",
             description="Breath offset sample indices.",
         ),
+        StepArtifact(
+            name="start_end_validity",
+            artifact_type="boolean_array",
+            description="Whether each breath's onset/offset window is valid (found, non-overlapping).",
+        ),
     ),
 )
 def onoffpeak_baseline_crossing(
@@ -217,10 +222,14 @@ def onoffpeak_baseline_crossing(
     import numpy as np
 
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
-    start_indices, end_indices, *_rest = onoff_from_baseline_crossings(
-        envelope, baseline, peak_indices
+    start_indices, end_indices, _valid_starts, _valid_ends, valid_peaks = (
+        onoff_from_baseline_crossings(envelope, baseline, peak_indices)
     )
-    return {"start_indices": start_indices, "end_indices": end_indices}
+    return {
+        "start_indices": start_indices,
+        "end_indices": end_indices,
+        "start_end_validity": np.asarray(valid_peaks, dtype=bool),
+    }
 
 
 @register_step(
