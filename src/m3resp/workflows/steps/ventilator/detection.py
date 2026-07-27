@@ -1,4 +1,4 @@
-"""Registered EMG/ventilator breath and Pocc event-detection pipeline steps."""
+"""Registered ventilator breath and Pocc event-detection pipeline steps."""
 
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ from ._shared import (
         ),
     ),
 )
-def detect_ventilator_breath(
+def detect_breaths(
     ventilator_signals: Any, *, breath_width_seconds: float = 0.5
 ) -> dict[str, Any]:
     import numpy as np

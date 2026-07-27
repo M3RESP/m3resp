@@ -6,6 +6,14 @@ Postprocessing steps keep the one-step-per-operation structure used by
 remaining upstream imports are deferred to call time so the package installs
 without the optional ``resurfemg`` dependency.
 
+Ventilator-only steps (loading, channel splitting, breath/Pocc detection,
+respiratory rate, non-consecutive-manoeuvre quality) live in
+``m3resp.workflows.steps.ventilator``, not here - see that package's
+docstring. A handful of steps below still read ventilator artifacts alongside
+EMG ones (``emg.evaluate_event_timing``, ``emg.evaluate_respiratory_rates``):
+those stay in this package because they are genuinely cross-modal, scoring
+*EMG* detection quality against a ventilator reference.
+
 This package mirrors the former single ``emg.py`` module, split by pipeline
 stage for readability. Importing it registers every step below (each
 submodule's ``@register_step`` decorators run on import), and every public
@@ -20,14 +28,6 @@ from .ecg_detection import ecg_detect_peaks
 from .ecg_gating import ecg_gating
 from .ecg_removal import ecg_estimated_subtraction
 from .ecg_wavelet import ecg_wavelet_denoising
-from .event_detection import (
-    detect_ventilator_breath,
-    find_occluded_breaths,
-    pocc_intervals,
-    pocc_quality,
-    pocc_time_product,
-)
-from .event_normalization import normalize_ventilator_breaths
 from .features import (
     amplitude,
     area_under_baseline,
@@ -35,15 +35,12 @@ from .features import (
     respiratory_rate,
     time_product,
     time_to_peak,
-    ventilator_respiratory_rate,
 )
 from .loading import (
     detect_breaths,
     load,
-    load_ventilator,
     peak_indices,
     preprocess,
-    ventilator_channels,
 )
 from .onoffpeak import (
     interpeak_dist,
@@ -51,7 +48,6 @@ from .onoffpeak import (
     onoffpeak_slope_extrapolation,
 )
 from .quality_events import (
-    detect_non_consecutive_manoeuvres,
     evaluate_bell_curve_error,
     evaluate_event_timing,
     evaluate_respiratory_rates,
@@ -69,8 +65,6 @@ __all__ = [
     "detect_breaths",
     "detect_extreme_time_products",
     "detect_local_high_aub",
-    "detect_non_consecutive_manoeuvres",
-    "detect_ventilator_breath",
     "ecg_detect_peaks",
     "ecg_estimated_subtraction",
     "ecg_gating",
@@ -78,19 +72,13 @@ __all__ = [
     "evaluate_bell_curve_error",
     "evaluate_event_timing",
     "evaluate_respiratory_rates",
-    "find_occluded_breaths",
     "interpeak_dist",
     "load",
-    "load_ventilator",
     "moving_baseline",
-    "normalize_ventilator_breaths",
     "onoffpeak_baseline_crossing",
     "onoffpeak_slope_extrapolation",
     "peak_indices",
     "percentage_under_baseline",
-    "pocc_intervals",
-    "pocc_quality",
-    "pocc_time_product",
     "preprocess",
     "pseudo_slope",
     "respiratory_rate",
@@ -98,6 +86,4 @@ __all__ = [
     "snr_pseudo",
     "time_product",
     "time_to_peak",
-    "ventilator_channels",
-    "ventilator_respiratory_rate",
 ]

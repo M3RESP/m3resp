@@ -53,7 +53,7 @@ from ._shared import (
         ),
     ),
 )
-def normalize_ventilator_breaths(
+def normalize_breaths(
     ventilator_breath_indices: Any,
     ventilator_signals: Any,
     session: M3Session,

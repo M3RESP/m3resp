@@ -59,9 +59,19 @@ come from several devices.
   current names. `register_step` gained an `aliases=` argument and the registry
   exports `STEP_ALIASES`.
 
-  Only the registered ids moved; the step *functions* still live in
-  `m3resp/workflows/steps/emg/`, so `from m3resp.workflows.steps.emg import
-  pocc_quality` is unaffected.
+  The step *functions* moved too, into a new `m3resp.workflows.steps.ventilator`
+  package (`loading.py`/`detection.py`/`normalization.py`/`features.py`/
+  `quality.py`, plus its own `_shared.py` mirroring the EIT/EMG packages'
+  pattern of a per-modality provenance helper rather than a cross-package
+  import). `from m3resp.workflows.steps.emg import pocc_quality` etc. must
+  become `from m3resp.workflows.steps.ventilator import pocc_quality`.
+
+  Moving these off the EMG package's shared `_record_step` also **fixes** a
+  latent bug: `ventilator.pocc_intervals`/`.pocc_time_product`/`.pocc_quality`/
+  `.detect_non_consecutive_manoeuvres` were recording their step-level
+  provenance under `modality="emg"` (the EMG helper's hardcoded value) even
+  though nothing about them is EMG-specific. They now correctly record
+  `modality="ventilator"`.
 - New `VentilatorAdapter` (`m3resp.adapters.ventilator_adapter`), completing the
   set alongside `EITProcessingAdapter` and `ReSurfEMGAdapter`. It is the first
   adapter that wraps **no upstream library**: neither `eitprocessing` nor

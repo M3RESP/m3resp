@@ -147,7 +147,7 @@ def test_snr_pseudo_flags_are_optional_matching_conditional_behavior():
 def test_pocc_quality_threshold_defaults_match_function_signature():
     import inspect
 
-    from m3resp.workflows.steps.emg import pocc_quality
+    from m3resp.workflows.steps.ventilator import pocc_quality
 
     sig_defaults = {
         name: p.default

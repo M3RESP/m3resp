@@ -15,15 +15,17 @@ from m3resp.workflows.steps.emg import (
     area_under_baseline,
     detect_extreme_time_products,
     detect_local_high_aub,
-    detect_non_consecutive_manoeuvres,
     evaluate_bell_curve_error,
     evaluate_event_timing,
     evaluate_respiratory_rates,
     interpeak_dist,
     percentage_under_baseline,
-    pocc_quality,
     snr_pseudo,
     time_product,
+)
+from m3resp.workflows.steps.ventilator import (
+    detect_non_consecutive_manoeuvres,
+    pocc_quality,
 )
 
 pytest.importorskip("resurfemg")
