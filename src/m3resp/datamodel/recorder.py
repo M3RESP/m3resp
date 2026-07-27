@@ -444,7 +444,7 @@ class DataModelRecorder:
             return _output_provenance_entry(value)
         if isinstance(value, bool):
             return None
-        if isinstance(value, (int, float)):
+        if isinstance(value, (int, float, np.integer, np.floating)):
             self.store.add_derived_feature(
                 DerivedFeature(
                     processing_run_id=run.processing_run_id,
