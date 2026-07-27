@@ -110,6 +110,27 @@ class Signal(TimeSeries):
                 f"one of {sorted(_VALID_PROCESSING_STATES)}"
             )
 
+    def __eq__(self, other: object) -> bool:
+        # TimeSeries.__eq__ already handles `values`/`time` array comparison
+        # safely (np.array_equal); extend it with Signal's own fields rather
+        # than letting the dataclass default reintroduce the ambiguous-array
+        # `==` crash for this subclass.
+        if type(other) is not type(self):
+            return NotImplemented
+        base_equal = super().__eq__(other)
+        if base_equal is NotImplemented:
+            return NotImplemented
+        return (
+            base_equal
+            and self.modality == other.modality
+            and self.category == other.category
+            and self.channel == other.channel
+            and self.source == other.source
+            and self.processing_state == other.processing_state
+            and self.derived_from == other.derived_from
+            and self.method == other.method
+        )
+
     def to_manifest_row(self) -> dict[str, object]:
         row = super().to_manifest_row()
         row.update(

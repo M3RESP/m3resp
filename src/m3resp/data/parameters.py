@@ -75,6 +75,31 @@ class ParameterResult:
         if self.metric_type is None:
             self.metric_type = normalize_metric_name(self.name)
 
+    def __eq__(self, other: object) -> bool:
+        # The dataclass-generated __eq__ compares `value` with plain `==`,
+        # which raises ValueError ("truth value of an array with more than
+        # one element is ambiguous") for array-valued parameters - use
+        # np.array_equal instead, which collapses to a single bool.
+        if type(other) is not type(self):
+            return NotImplemented
+        return (
+            self.name == other.name
+            and np.array_equal(self.value, other.value)
+            and self.modality == other.modality
+            and self.category == other.category
+            and self.unit == other.unit
+            and self.metric_type == other.metric_type
+            and self.breath_id == other.breath_id
+            and self.breath_ids == other.breath_ids
+            and self.event_id == other.event_id
+            and self.start_time == other.start_time
+            and self.end_time == other.end_time
+            and self.region == other.region
+            and self.channel == other.channel
+            and self.method == other.method
+            and self.metadata == other.metadata
+        )
+
     @property
     def is_scalar(self) -> bool:
         """Whether :attr:`value` is a single number rather than an array."""
