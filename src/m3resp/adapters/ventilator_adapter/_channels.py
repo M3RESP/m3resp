@@ -84,19 +84,25 @@ def split_channels(
     units = list(metadata.get("units") or [])
     labels = list(metadata.get("labels") or [])
 
+    # A 1D array carries a single channel; treat it as `channel_count == 1`
+    # rather than silently aliasing every requested index onto the whole
+    # array (that previously made pressure/flow/volume identical whenever a
+    # non-multi-row recording came in, with no error).
+    channel_count = array.shape[0] if array.ndim > 1 else 1
+
     channels: dict[str, Any] = {}
     channel_units: dict[str, str | None] = {}
     channel_labels: dict[str, str | None] = {}
     for name, index in indices.items():
-        if array.ndim > 1:
-            if index >= array.shape[0]:
-                raise IndexError(
-                    f"Ventilator {name} channel index {index} is out of range "
-                    f"for a recording with {array.shape[0]} channels."
-                )
-            channels[name] = np.asarray(array[index], dtype=float)
-        else:
-            channels[name] = np.asarray(array, dtype=float)
+        if index >= channel_count:
+            raise IndexError(
+                f"Ventilator {name} channel index {index} is out of range "
+                f"for a recording with {channel_count} channel"
+                f"{'s' if channel_count != 1 else ''}."
+            )
+        channels[name] = np.asarray(
+            array[index] if array.ndim > 1 else array, dtype=float
+        )
         channel_units[name] = (
             units[index]
             if index < len(units) and units[index]
