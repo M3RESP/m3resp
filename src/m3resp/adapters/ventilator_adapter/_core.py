@@ -10,6 +10,7 @@ import numpy as np
 from m3resp.core.events import BreathEvent
 from m3resp.core.exceptions import UnsupportedWorkflowError
 from m3resp.data import ParameterResult, QualityFlag, Signal
+from m3resp.data.signals import ProcessingState
 from m3resp.synchronization.ventilator import (
     iter_ventilator_detections,
     normalize_ventilator_breath,
@@ -105,10 +106,11 @@ class _CoreMixin:
         signals: list[Signal] = []
         for name in _CHANNEL_NAMES:
             category = CHANNEL_CATEGORIES[name]
-            for values, processing_state in (
+            channel_sources: tuple[tuple[Any, ProcessingState], ...] = (
                 (raw.get(name), "raw"),
                 (filtered.get(name), "processed"),
-            ):
+            )
+            for values, processing_state in channel_sources:
                 if values is None:
                     continue
                 values = np.asarray(values, dtype=float)
