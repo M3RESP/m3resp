@@ -382,12 +382,22 @@ def _get_emg_rows(
     if fs <= 0:
         return []
 
-    channel = int(processed.get("channel", 0) if channel is None else channel)
+    processed_channel = int(processed.get("channel", 0))
+    if channel is not None and channel != processed_channel:
+        raise ValueError(
+            f"EMG channel {channel} was requested for plotting, but the available "
+            f"processed data is for channel {processed_channel}. Preprocess the "
+            "requested channel before plotting it."
+        )
     metadata = processed.get("metadata", {})
     labels = metadata.get("labels") or []
     units = metadata.get("units") or []
-    label = labels[channel] if channel < len(labels) else f"channel {channel}"
-    unit = units[channel] if channel < len(units) else "a.u."
+    label = (
+        labels[processed_channel]
+        if processed_channel < len(labels)
+        else f"channel {processed_channel}"
+    )
+    unit = units[processed_channel] if processed_channel < len(units) else "a.u."
     ylabel = _emg_amplitude_label(unit)
 
     rows: list[tuple[str, str, np.ndarray, np.ndarray, str]] = []

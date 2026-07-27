@@ -177,6 +177,42 @@ def test_emg_overview_y_axis_labels_include_amplitude_and_units():
         plt.close(fig)
 
 
+def test_emg_overview_uses_the_preprocessed_channel_label_and_unit():
+    plt = pytest.importorskip("matplotlib.pyplot")
+    session = M3Session()
+    session.processed["emg"] = {
+        "channel": 1,
+        "fs": 1000.0,
+        "metadata": {
+            "labels": ["unused", "diaphragm"],
+            "units": ["mV", "uV"],
+        },
+        "envelope": [0.0, 0.25, 0.0],
+    }
+
+    fig = plot_session_overview(session, max_seconds=None)
+
+    try:
+        assert fig.axes[0].get_title() == "EMG envelope (diaphragm)"
+        assert fig.axes[0].get_ylabel() == "EMG amplitude (uV)"
+    finally:
+        plt.close(fig)
+
+
+def test_emg_overview_rejects_a_channel_that_was_not_preprocessed():
+    pytest.importorskip("matplotlib.pyplot")
+    session = M3Session()
+    session.processed["emg"] = {
+        "channel": 0,
+        "fs": 1000.0,
+        "metadata": {"labels": ["diaphragm", "intercostal"], "units": ["uV"]},
+        "envelope": [0.0, 0.25, 0.0],
+    }
+
+    with pytest.raises(ValueError, match="available processed data is for channel 0"):
+        plot_session_overview(session, emg_channel=1)
+
+
 def test_synchronization_comparison_shifts_signal_time_by_alignment_offset():
     plt = pytest.importorskip("matplotlib.pyplot")
     session = M3Session()
