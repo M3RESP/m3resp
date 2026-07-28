@@ -1,6 +1,6 @@
 # Multimodal (EIT + diaphragm sEMG + airway pressure) pipeline for the
 # eit_emg_annemijn dataset -- the same data used by the marimo multimodal
-# viewer (tools/visualization_tool/multimodal_vis.py).
+# viewer (tools/visualization_tools/2_annemijn_multimodal_vis.py).
 #
 # Dataset:
 #   * EIT    -- Draeger, 50 Hz frame rate. Registration 03 is the one recorded
@@ -47,21 +47,17 @@ steps:
   - uses: emg.load
     with: { file: "@emg_file" }
 
-  # Estimate the EIT-to-Biopac offset from the full, un-cropped recording. The
-  # EIT interference edge on diaphragm sEMG (channel 1) provides the absolute
-  # anchor; cross-correlation with Paw (channel 0) refines the breathing phase.
+  # There is no robust general-purpose automatic sync method, so the offset is
+  # supplied manually. This value was found interactively with the marimo
+  # multimodal viewer's protocol-specific estimators (interference-artifact
+  # anchor + cross-correlation refinement) - see
+  # tools/visualization_tools/utils/offset_estimation.md for how it was
+  # derived and tools/visualization_tools/2_annemijn_multimodal_vis.py to
+  # re-derive it if the dataset changes.
   - uses: sync.estimate_offset
     with:
-      method: interference+crosscorrelation
-      emg_source: emg
-      emg_channel: 1
-      target_source: eit
-      target_channel: 0
-      reference_source: emg
-      reference_channel: 0
-      crosscorrelation_kwargs:
-        window: [60.0, 180.0]
-        max_lag_seconds: 10.0
+      method: manual
+      manual_offset_seconds: 1050.62
 
   # Apply the estimated offset before modality-specific preprocessing. Paw and
   # diaphragm sEMG share the same Biopac clock and are cropped together.

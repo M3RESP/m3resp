@@ -49,20 +49,8 @@
       "out": {},
       "uses": "sync.estimate_offset",
       "with": {
-        "crosscorrelation_kwargs": {
-          "max_lag_seconds": 10.0,
-          "window": [
-            60.0,
-            180.0
-          ]
-        },
-        "emg_channel": 1,
-        "emg_source": "emg",
-        "method": "interference+crosscorrelation",
-        "reference_channel": 0,
-        "reference_source": "emg",
-        "target_channel": 0,
-        "target_source": "eit"
+        "manual_offset_seconds": 1050.62,
+        "method": "manual"
       }
     },
     {

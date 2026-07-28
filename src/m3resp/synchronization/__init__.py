@@ -13,15 +13,8 @@ from m3resp.synchronization.multimodal_parameters import (
     compute_timing_delay,
 )
 from m3resp.synchronization.offset_estimation import (
-    CrossCorrelationOffsetResult,
-    InterferenceOffsetResult,
     SyncOffsetResult,
-    estimate_offset_from_interference,
-    estimate_offset_from_interference_signal,
     estimate_sync_offset,
-    interference_power,
-    refine_offset_by_crosscorrelation,
-    refine_offset_by_crosscorrelation_signals,
 )
 from m3resp.synchronization.resampling import resample_signal
 from m3resp.synchronization.timebase import Timebase
@@ -31,8 +24,6 @@ from m3resp.synchronization.ventilator import (
 )
 
 __all__ = [
-    "CrossCorrelationOffsetResult",
-    "InterferenceOffsetResult",
     "SyncOffsetResult",
     "Timebase",
     "align_events_by_modality_offset",
@@ -42,14 +33,9 @@ __all__ = [
     "compute_multimodal_parameters",
     "compute_offsets_from_timestamps",
     "compute_timing_delay",
-    "estimate_offset_from_interference",
-    "estimate_offset_from_interference_signal",
     "estimate_sync_offset",
-    "interference_power",
     "iter_ventilator_detections",
     "link_breaths_by_time",
     "normalize_ventilator_breath",
-    "refine_offset_by_crosscorrelation",
-    "refine_offset_by_crosscorrelation_signals",
     "resample_signal",
 ]

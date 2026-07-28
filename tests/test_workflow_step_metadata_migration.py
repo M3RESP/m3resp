@@ -50,18 +50,6 @@ def test_sync_estimate_offset_method_choices_match_estimator():
     assert set(method.choices or ()) == set(_METHODS)
 
 
-def test_sync_estimate_offset_source_choices_are_consistent():
-    description = describe_step("sync.estimate_offset")
-    source_params = [
-        p
-        for p in description.parameters
-        if p.name in {"emg_source", "target_source", "reference_source"}
-    ]
-    assert len(source_params) == 3
-    for param in source_params:
-        assert param.choices == ("eit", "emg", "ventilator", "vent")
-
-
 def test_export_session_summary_boolean_defaults_match_function():
     from m3resp.workflows.steps.export import session_summary
 

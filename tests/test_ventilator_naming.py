@@ -111,17 +111,3 @@ class TestLegacyAliasStillWorks:
         session = M3Session()
         session.raw["vent"] = _recording()
         assert session._resolve_raw_alignment_reference(None) == VENTILATOR
-
-    def test_sync_step_accepts_both_spellings_as_a_source(self):
-        # An existing YAML spec pinning `reference_source: vent` must still
-        # validate against the step's `choices`.
-        import m3resp.workflows.steps  # noqa: F401 - registers built-in steps
-        from m3resp.workflows.registry import describe_step
-
-        choices = next(
-            parameter.choices
-            for parameter in describe_step("sync.estimate_offset").parameters
-            if parameter.name == "reference_source"
-        )
-        assert "ventilator" in choices
-        assert "vent" in choices

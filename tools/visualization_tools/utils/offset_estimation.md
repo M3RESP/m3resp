@@ -1,20 +1,25 @@
-# Multimodal offset estimation
+# Multimodal offset estimation (marimo-viewer utilities)
 
-`m3resp.synchronization.offset_estimation` estimates the constant time offset
-that aligns two devices recording the same subject on **independent clocks** —
-e.g. a Draeger EIT device (~50 Hz frame rate) and a Biopac amplifier (2 kHz)
-carrying airway pressure (Paw) and diaphragm sEMG. The two files share no common
-timestamp, so the offset between them has to be recovered from the signals
-themselves before the recordings can be cropped onto a common window.
+`tools/visualization_tools/utils/offset_estimation` estimates the constant
+time offset that aligns two devices recording the same subject on
+**independent clocks** — e.g. a Draeger EIT device (~50 Hz frame rate) and a
+Biopac amplifier (2 kHz) carrying airway pressure (Paw) and diaphragm sEMG.
+The two files share no common timestamp, so the offset between them has to be
+recovered from the signals themselves before the recordings can be cropped
+onto a common window.
 
-This module was extracted from the interactive marimo viewer
-(`tools/visualization_tool/multimodal_vis.py`), which lets you find the offset by
-hand. The module makes the same logic reusable, testable, and available as a
-declarative pipeline step.
+**This is a marimo-viewer utility, not part of the installable `m3resp`
+package.** The estimators here are protocol-specific — they were tuned
+against the Annemijn `eit_emg` dataset's specific acquisition artifact and are
+not a robust, general-purpose automatic sync method. `m3resp.synchronization`
+itself only supports a manual offset (`sync.estimate_offset`'s `method`
+defaults to `"manual"`); use `2_annemijn_multimodal_vis.py` interactively to
+find an offset by hand for a given recording, then hardcode the result as
+`manual_offset_seconds` in your pipeline spec (see the Annemijn example).
 
 > **Estimate vs. apply.** `M3Session.synchronize_raw_modalities`
 > (`session.sync_raw`) *applies* a known offset by cropping. This module
-> *finds* the offset. They are complementary.
+> *finds* the offset, for interactive/manual use only. They are complementary.
 
 ---
 
@@ -210,138 +215,56 @@ respiratory timing.
 
 ## Public API
 
-All functions are numpy-only and importable from `m3resp.synchronization`.
+All functions are numpy-only and importable from
+`tools.visualization_tools.utils.offset_estimation` (not from
+`m3resp.synchronization` - see the note at the top of this file).
 
 | Object | Purpose |
 | --- | --- |
 | `estimate_offset_from_interference(emg_values, sample_frequency, reference_duration_seconds, …)` | Interference-edge anchor on plain arrays. Returns `InterferenceOffsetResult`. |
 | `refine_offset_by_crosscorrelation(target_time, target_values, reference_time, reference_values, base_offset_seconds, …)` | Cross-correlation refinement on plain arrays. Returns `CrossCorrelationOffsetResult`. |
-| `estimate_sync_offset(method=…, emg=…, target=…, reference=…, …)` | Orchestrates both, dispatched by `method`. Returns `SyncOffsetResult`. |
 | `interference_power(emg_values, sample_frequency, …)` | The high-frequency power envelope (exposed for plotting). |
 | `estimate_offset_from_interference_signal(emg, reference_duration_seconds, …)` | `TimeSeries` wrapper for the interference anchor. |
 | `refine_offset_by_crosscorrelation_signals(target, reference, base_offset_seconds, …)` | `TimeSeries` wrapper for the refinement. |
 
-`estimate_sync_offset` methods:
-
-- `"manual"` — return `manual_offset_seconds` unchanged.
-- `"interference"` — interference anchor only (falls back to the manual offset if
-  no edge is found).
-- `"crosscorrelation"` — cross-correlation refinement of the manual offset.
-- `"interference+crosscorrelation"` — anchor, then refine (recommended).
-
-Result dataclasses (`InterferenceOffsetResult`, `CrossCorrelationOffsetResult`,
-`SyncOffsetResult`) carry both the scalar answer and the diagnostic arrays
-(power trace, correlation curve) so you can verify a fit visually.
+Result dataclasses (`InterferenceOffsetResult`, `CrossCorrelationOffsetResult`)
+carry both the scalar answer and the diagnostic arrays (power trace,
+correlation curve) so you can verify a fit visually - exactly what the marimo
+viewer plots.
 
 ---
 
-## Programmatic usage
+## Interactive usage (marimo viewer)
 
 ```python
-from m3resp.synchronization import estimate_sync_offset
-from m3resp.data.timeseries import TimeSeries
+from tools.visualization_tools.utils.offset_estimation import (
+    estimate_offset_from_interference_signal,
+    refine_offset_by_crosscorrelation_signals,
+)
 
 # emg_ts:  diaphragm sEMG (full, un-cropped, incl. the artifact-off tail)
 # gi_ts:   EIT global impedance
 # paw_ts:  airway pressure (Paw)
 
-result = estimate_sync_offset(
-    method="interference+crosscorrelation",
-    emg=emg_ts,
-    target=gi_ts,
-    reference=paw_ts,
+interference = estimate_offset_from_interference_signal(
+    emg_ts, reference_duration_seconds=gi_ts.duration
 )
-print(result.offset_seconds, result.source)
-
-# Then apply it (Stage-1 cropping is relative to a reference modality):
-session.synchronize_raw_modalities(
-    method="manual_offset",
-    offset_seconds={
-        "eit": 0.0,
-        "vent": -result.offset_seconds,
-        "emg": -result.offset_seconds,
-    },
-    reference_modality="eit",
+refined = refine_offset_by_crosscorrelation_signals(
+    gi_ts, paw_ts, interference.offset_seconds
 )
+print(refined.refined_offset_seconds)
 ```
 
-Or call the estimators directly on arrays — see the docstrings for every tuning
+Once you've confirmed the fit against the power/correlation traces (see
+`2_annemijn_multimodal_vis.py`), hardcode the resulting offset as
+`manual_offset_seconds` in your pipeline spec's `sync.estimate_offset` step -
+see `examples/annemijn_multimodal/annemijn.pipeline.yaml` for the actual
+values used for this dataset.
+
+Or call the estimators directly on arrays - see the docstrings for every tuning
 knob (`detection_rate_hz`, `search_window_seconds`, `plateau_guard_seconds`,
 `tail_seconds`, `min_power_ratio`, `min_drop_fraction`, `max_lag_seconds`,
 `grid_rate_hz`, `stretch`, `window`).
-
----
-
-## Pipeline step: `sync.estimate_offset`
-
-Registered in `m3resp.workflows.steps.sync`. It reads the **raw, un-cropped**
-signals straight from the session (`session.emg`, `session.raw["vent"]`,
-`session.eit.global_impedance`), so it must run **after the `*.load` steps and
-before `session.sync_raw`**.
-
-It writes two context artifacts:
-
-- `estimated_offset_seconds` — the float offset.
-- `offset_estimation` — a JSON-friendly summary (per-estimator detail), also
-  stored on `session.parameters["offset_estimation"]` for provenance/QA.
-
-Parameters:
-
-| Parameter | Default | Meaning |
-| --- | --- | --- |
-| `method` | `"interference"` | any `estimate_sync_offset` method |
-| `emg_source` / `emg_channel` | `"emg"` / `0` | where the interference-bearing sEMG lives: `"emg"` (dedicated EMG file) or `"vent"` (sEMG shares the Biopac ventilator file) |
-| `target_source` / `target_channel` | `"eit"` / `0` | breathing target, normally EIT global impedance |
-| `reference_source` / `reference_channel` | `"vent"` / `0` | reference breathing signal for cross-correlation, normally Paw |
-| `reference_duration_seconds` | `None` | override for the EIT duration (defaults to the target's duration) |
-| `manual_offset_seconds` | `0.0` | fallback / base offset |
-| `interference_kwargs`, `crosscorrelation_kwargs` | `None` | pass-through tuning dicts |
-
-> **Match the sources to how you loaded the data.** In this dataset the
-> interference-bearing sEMG is channel 2 of the Biopac `.txt`. If that `.txt` is
-> loaded as the ventilator modality, set `emg_source: vent`, `emg_channel: 1`
-> (0-based). If a dedicated EMG file is loaded, keep `emg_source: emg`.
-
-Spec fragment:
-
-```yaml
-steps:
-  - uses: eit.load
-    with: { file: "@eit_file", vendor: draeger }
-  - uses: emg.load_ventilator
-    with: { file: "@vent_file" }
-
-  # Estimate the offset from the raw signals (before any cropping)
-  - uses: sync.estimate_offset
-    with:
-      method: interference
-      emg_source: vent        # sEMG is in the Biopac ventilator file …
-      emg_channel: 1          # … channel 2 (0-based)
-```
-
-### Applying the estimate
-
-Use `sync.apply_estimated_offset` immediately after `sync.estimate_offset`. It
-reads `estimated_offset_seconds` from the pipeline context and applies the
-equivalent raw crop before modality-specific preprocessing:
-
-```yaml
-- uses: sync.apply_estimated_offset
-  in: { offset_seconds: estimated_offset_seconds }
-  with:
-    target_modality: eit
-    source_modalities: [emg, vent]
-```
-
-When multiple channels share one source clock, list the loaded modality that
-owns their common recording. For example, Paw and diaphragm sEMG in one Biopac
-EMG file are both cropped by `source_modalities: [emg]`.
-
-A single `manual_offset` crop only trims one end of each modality, so for a Biopac
-recording that both *precedes* and *follows* the EIT recording (leading lead-in +
-trailing EIT-off tail) you will generally window it in code rather than with one
-`sync.sync_raw` offset. Auto-applying the crop is deliberately left out of this
-step to avoid an incorrect one-sided trim.
 
 ---
 

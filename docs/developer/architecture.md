@@ -157,7 +157,9 @@ src/m3resp/
 ├── synchronization/ Alignment, resampling, breath linking, multimodal
 │   │                parameters (Milestone 2.5, see concepts/synchronization.md)
 │   ├── alignment.py    manual-offset + timestamp-derived offsets
-│   ├── offset_estimation.py  cross-correlation-based offset estimation
+│   ├── offset_estimation.py  manual-offset passthrough (no robust automatic
+│   │                sync method; protocol-specific estimators live in
+│   │                tools/visualization_tools/utils/, not in the package)
 │   ├── timebase.py     Timebase - common time-axis representation
 │   ├── resampling.py   resample_signal - common time base
 │   ├── linking.py      link_breaths_by_time - nearest-neighbor breath linking
