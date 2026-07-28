@@ -121,6 +121,11 @@ def test_mdn_filter_matches_direct_mdn_filter_call(pipeline_result):
 
     signal = pipeline_result.value("filtered_eit_signal")
     np.testing.assert_array_equal(signal.values, expected.pixel_impedance)
+    # Regression guard: MDNFilter.apply deep-copies the raw input and only
+    # overwrites attributes passed as explicit kwargs, so `name` must be
+    # passed explicitly or the filtered signal silently keeps the raw
+    # object's own name ("raw") instead of describing itself as filtered.
+    assert signal.name == "MDN-filtered EIT data (mdn_filtered)"
 
 
 def test_eeli_matches_direct_eeli_call(pipeline_result):

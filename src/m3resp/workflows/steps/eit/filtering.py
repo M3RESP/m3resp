@@ -267,6 +267,8 @@ def mdn_filter(
         respiratory_rate_hz=respiratory_rate_hz,
         heart_rate_hz=heart_rate_hz,
         label=label,
+        name=f"MDN-filtered EIT data ({label})",
+        description="EIT data filtered with MDN heart-rate noise removal.",
     )
     filtered_eit = result["filtered_eit"]
     filter_captures = result["filter_captures"]

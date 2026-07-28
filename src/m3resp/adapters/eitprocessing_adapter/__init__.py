@@ -591,6 +591,8 @@ class EITProcessingAdapter:
                     channel="global_impedance",
                     processing_state="intermediate",
                     method=f"eitprocessing.{preprocessed.get('filter_mode')}_filter",
+                    name=getattr(filtered_gi, "name", None)
+                    or getattr(filtered_gi, "label", None),
                 )
             )
         return signals
