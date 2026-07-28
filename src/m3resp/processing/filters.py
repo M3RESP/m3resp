@@ -19,7 +19,7 @@ def butterworth_filter(
     cutoff_frequency: float | Sequence[float],
     sample_frequency: float,
     order: int,
-    axis: int = -1,
+    axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
     """Apply a zero-phase Butterworth filter using second-order sections."""
@@ -61,7 +61,7 @@ def lowpass_filter(
     cutoff_frequency: float,
     sample_frequency: float,
     order: int,
-    axis: int = -1,
+    axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
     """Apply a low-pass Butterworth filter."""
@@ -83,7 +83,7 @@ def highpass_filter(
     cutoff_frequency: float,
     sample_frequency: float,
     order: int,
-    axis: int = -1,
+    axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
     """Apply a high-pass Butterworth filter."""
@@ -105,7 +105,7 @@ def bandpass_filter(
     cutoff_frequency: Sequence[float],
     sample_frequency: float,
     order: int,
-    axis: int = -1,
+    axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
     """Apply a band-pass Butterworth filter."""
@@ -127,7 +127,7 @@ def bandstop_filter(
     cutoff_frequency: Sequence[float],
     sample_frequency: float,
     order: int,
-    axis: int = -1,
+    axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
     """Apply a band-stop Butterworth filter."""
@@ -149,7 +149,7 @@ def notch_filter(
     frequency: float,
     sample_frequency: float,
     quality_factor: float,
-    axis: int = -1,
+    axis: int = 0,
 ) -> np.ndarray:
     """Apply an IIR notch filter at one frequency."""
 
@@ -171,7 +171,7 @@ def harmonic_notch_filter(
     distance: float | None = None,
     order: int = 4,
     quality_factor: float = 30.0,
-    axis: int = -1,
+    axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
     """Apply notch or band-stop filtering at harmonics of a base frequency."""
