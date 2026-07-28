@@ -57,3 +57,47 @@ happens to contain only one breath, because the claim being made
 elements the set has. `breath_id` is reserved for algorithms that are
 inherently single-breath by design. See the discussion on
 [PR #24](https://github.com/M3RESP/m3resp/pull/24) for the full reasoning.
+
+## Name the shared primitive by what it computes; name the domain quantity by its literature term
+
+When a generic math primitive in `m3resp.processing` (shared across
+modalities) underlies a domain-specific, literature-named quantity in one
+modality's adapter, name each thing for its own audience rather than giving
+the shared primitive the domain term. The primitive's name should describe
+what it mathematically does; the domain-specific name stays wherever it's
+actually user- or literature-facing (dict keys, registered step names,
+docstrings of the modality-specific functions that consume it).
+
+Concretely: `m3resp.processing.metrics.window_integral` computes "integrate
+signal-minus-baseline over a window" - a primitive already reused by both
+EMG and ventilator step code for different purposes. In EMG, that
+computation produces the quantity respiratory-EMG literature calls
+"time-product"/ETP (Electrical Time Product), and that name is preserved
+everywhere it's domain-facing: the `"time_product"` dict key, the
+registered `emg.time_product` step, and the quality-assessment functions
+that take `time_products` as an argument. Naming the shared primitive
+itself `time_product` would have been the actual mistake, since ventilator
+code calls it for something that isn't ETP at all. See the discussion on
+[PR #24](https://github.com/M3RESP/m3resp/pull/24) for the full reasoning.
+
+## Two ways to specify one value: both default to `None`, raise if both are set
+
+When a function offers two parameters that specify the same underlying
+value in different units or forms (e.g. `gate_width_seconds` /
+`gate_width_samples`, `min_peak_width_samples` / `min_peak_width_s`), give
+both a default of `None` rather than giving one of them a concrete default
+like `1`. Resolve the effective value only after checking both: if both are
+`None`, fall back to the real default; if both are explicitly set, raise
+`ValueError` rather than silently letting one win.
+
+A concrete non-`None` default on one of the two breaks this: it makes it
+impossible to tell whether the caller explicitly passed that value or just
+left it at default, so you can neither warn nor error correctly when the
+other parameter is also set - you'd get false positives whenever the
+default happens to differ from what the caller passed for the other one.
+`None`-by-default on both sides is what makes "was this explicitly set?"
+answerable at all. See `ecg_gating`'s `gate_width_seconds`/
+`gate_width_samples` handling and `detect_emg_breath_peaks`'s
+`min_peak_width_samples`/`min_peak_width_s` handling for the pattern in
+practice, and the discussion on
+[PR #24](https://github.com/M3RESP/m3resp/pull/24) for the full reasoning.
