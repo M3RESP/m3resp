@@ -465,6 +465,8 @@ def ecg_estimated_subtraction(
             modality="emg",
             time=float(r_index) / fs,
             sample_index=int(r_index),
+            signal_name=label,
+            sample_frequency=fs,
             metadata={
                 **parameters,
                 "q_sample_index": int(q_index),

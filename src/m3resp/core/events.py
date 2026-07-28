@@ -21,6 +21,13 @@ class Event:
     blood-gas draw or an intervention timepoint. It is excluded from
     equality (``compare=False``) so two structurally identical events - the
     common case in tests and deduplication - still compare equal.
+
+    ``sample_index`` is only meaningful together with ``signal_name``/
+    ``sample_frequency``, which identify which signal and time axis it is
+    relative to - a modality can have multiple signals at different sampling
+    rates, so ``sample_index`` alone is ambiguous. Mirrors the same fields on
+    :class:`BreathEvent`. All three are optional and ``None`` when the event
+    wasn't derived from indexing into a specific signal.
     """
 
     name: str
@@ -28,6 +35,8 @@ class Event:
     time: float
     id: str = field(default_factory=lambda: uuid.uuid4().hex, compare=False)
     sample_index: int | None = None
+    signal_name: str | None = None
+    sample_frequency: float | None = None
     label: str | None = None
     confidence: float | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -101,6 +110,8 @@ def coerce_event(
             modality=_required_str(value.get("modality", modality), "modality"),
             time=float(value["time"]),
             sample_index=value.get("sample_index"),
+            signal_name=value.get("signal_name"),
+            sample_frequency=value.get("sample_frequency"),
             label=value.get("label", label),
             confidence=value.get("confidence"),
             metadata=dict(value.get("metadata", {})),
@@ -117,6 +128,8 @@ def coerce_event(
             modality=_required_str(getattr(value, "modality", modality), "modality"),
             time=float(value.time),
             sample_index=getattr(value, "sample_index", None),
+            signal_name=getattr(value, "signal_name", None),
+            sample_frequency=getattr(value, "sample_frequency", None),
             label=getattr(value, "label", label),
             confidence=getattr(value, "confidence", None),
             metadata=dict(getattr(value, "metadata", {}) or {}),

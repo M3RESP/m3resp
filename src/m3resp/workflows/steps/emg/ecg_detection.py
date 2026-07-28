@@ -190,6 +190,8 @@ def ecg_detect_peaks(
             modality="emg",
             time=float(index) / fs,
             sample_index=int(index),
+            signal_name=source_label,
+            sample_frequency=fs,
             metadata=dict(detection_parameters),
         )
         for index in indices

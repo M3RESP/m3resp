@@ -45,10 +45,19 @@ class Event:
     time: float
     id: str = field(default_factory=lambda: uuid.uuid4().hex, compare=False)
     sample_index: int | None = None
+    signal_name: str | None = None
+    sample_frequency: float | None = None
     label: str | None = None
     confidence: float | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 ```
+
+`sample_index` is only meaningful together with `signal_name`/
+`sample_frequency`, which say which signal and time axis it's relative to -
+a modality can have multiple signals at different sampling rates, so
+`sample_index` alone doesn't tell you which one. Mirrors the same fields on
+`BreathEvent` below, for the same reason. All three are `None` when an event
+wasn't derived from indexing into a specific signal.
 
 `id` is generated automatically (an in-memory identifier, not persisted or
 globally unique like Layer 2's ids) so other Layer 1 objects can reference
