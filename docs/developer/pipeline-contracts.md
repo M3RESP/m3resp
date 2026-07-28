@@ -56,9 +56,15 @@ when a real batch-processing use case appears.
   custom YAML/JSON step-list spec built from individually composable steps
   (`eit.mdn_filter`, `emg.ecg_gating`, ...) - the Stage 1
   `m3resp.workflows` engine, documented in [../pipelines.md](../pipelines.md).
-  Those granular steps are pure data transforms; they don't populate the
-  typed collections or record provenance themselves. Use this for bespoke or
-  batch workflows where the exact sequence of operations varies per project.
+  Most of these steps take a `session` binding and populate the typed
+  collections and record provenance through the same `M3Session._record()`
+  seam the `Pipeline` presets use (see `_record_step` in each modality's
+  `_shared.py`) - `eit.roi_amplitude_lungspace`, `emg.ecg_gating`, and so on
+  all do this. The exception is the small set of pure per-breath feature
+  steps (e.g. `emg.time_to_peak`, `ventilator.features`) that operate on
+  already-extracted arrays with no natural collection to write to, and so
+  stay stateless. Use this for bespoke or batch workflows where the exact
+  sequence of operations varies per project.
 - `session.run_pipeline("eit" | "emg" | "multimodal", config=...)` (a method
   on `M3Session`, this page) runs one of the small, built-in `Pipeline`
   presets, each a fixed sequence of calls to the session's own

@@ -1,10 +1,13 @@
 # Tutorial: EIT-only processing
 
 This walks through loading, preprocessing, detecting breaths, and exporting
-a single EIT recording using `M3Session` directly. For the same processing
-expressed as a declarative YAML spec (every individual operation, not just
-the default preset), see `examples/eit_full_preprocessing/eit-full.pipeline.yaml`
-and [../pipelines.md](../pipelines.md).
+a single EIT recording using `M3Session` directly - the same processing as
+the `"eit"` preset. For the full pipeline expressed as a declarative YAML
+spec, including pixel-level and ROI operations (`eit.pixel_breaths`,
+`eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace`, `eit.roi_watershed`,
+`eit.roi_filter_by_size`) that have no `M3Session`-level equivalent yet, see
+`examples/eit_full_preprocessing/eit-full.pipeline.yaml` and
+[../pipelines.md](../pipelines.md).
 
 ## Step by step
 

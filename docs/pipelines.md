@@ -258,7 +258,7 @@ Update `inputs.eit_file` in the ROTARC example before running it — it contains
 |---|---|
 | `m3resp run spec.yaml [--dry-run] [--debug]` | Execute a spec end-to-end. `--dry-run` compiles and prints the resolved plan (`compile_pipeline(...).as_dict()`) without running any step; `--debug` prints a full traceback instead of a short message on error. Ctrl-C cooperatively cancels (finishes the current step, keeps completed work and its manifest, exits `EXIT_CANCELLED`). |
 | `m3resp validate spec.yaml [--readiness] [--json]` | Structural (and, with `--readiness`, capability/file-existence) validation without running anything — see "Validation and readiness" above. |
-| `m3resp steps [--details] [--json]` | List every registered step; `--details` adds parameters/artifacts/capability state per step. |
+| `m3resp steps [--details] [--json]` | List every registered step, tagging any whose optional package isn't installed (e.g. `[missing_optional_dependency]`) without importing it; `--details` adds parameters/artifacts/full capability state per step. |
 | `m3resp describe <operation>` | One step's full discovery description (e.g. `m3resp describe eit.detect_rates`). |
 
 | Exit code | Meaning |
