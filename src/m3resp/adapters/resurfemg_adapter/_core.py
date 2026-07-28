@@ -115,7 +115,7 @@ class _CoreMixin:
         signals: list[Signal] = []
         channel_sources: list[tuple[str, str, ProcessingState]] = [
             ("raw_channel", "raw_channel", "raw"),
-            ("filtered", "filtered", "filtered"),
+            ("filtered", "filtered", "intermediate"),
             ("envelope", "envelope", "processed"),
         ]
         for key, name, processing_state in channel_sources:

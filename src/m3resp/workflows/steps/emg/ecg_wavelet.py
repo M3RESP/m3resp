@@ -211,7 +211,7 @@ def ecg_wavelet_denoising(
         category="electrical_potential",
         channel=label,
         source="resurfemg",
-        processing_state="filtered",
+        processing_state="intermediate",
         derived_from="processed",
         method="resurfemg.wavelet_denoising",
         metadata=dict(wavelet_parameters),

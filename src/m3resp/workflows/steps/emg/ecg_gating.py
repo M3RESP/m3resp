@@ -211,7 +211,7 @@ def ecg_gating(
         category="electrical_potential",
         channel=label,
         source="resurfemg",
-        processing_state="filtered",
+        processing_state="intermediate",
         derived_from="processed",
         method="resurfemg.gating",
         metadata=dict(gating_parameters),

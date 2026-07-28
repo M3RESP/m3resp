@@ -402,7 +402,7 @@ def ecg_estimated_subtraction(
         category="electrical_potential",
         channel=label,
         source="m3resp",
-        processing_state="filtered",
+        processing_state="intermediate",
         derived_from="processed",
         method=method,
         metadata=signal_metadata,

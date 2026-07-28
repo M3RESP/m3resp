@@ -32,11 +32,12 @@ by adding:
 - `category`, what the numbers **physically are** (`"impedance"`,
   `"airway_pressure"`, `"airflow"`, `"volume"`, ...).
 - `processing_state`, where this signal sits in its journey from raw to
-  usable: `"raw"` means straight off the device, untouched; `"filtered"`
-  means cleaned up a bit but not the final version; `"processed"` means the
-  final, ready-to-use version; `"derived"` means computed from another
-  signal (like a difference between two signals), rather than being a
-  cleanup step of its own raw data.
+  usable: `"raw"` means straight off the device, untouched; `"intermediate"`
+  means some pre-processing step has run (not necessarily filtering - e.g.
+  segmentation, slicing) but this isn't the final version; `"processed"`
+  means the final, ready-to-use version; `"derived"` means computed from
+  another signal (like a difference between two signals), rather than being
+  a cleanup step of its own raw data.
 - `channel`, which specific physical/logical channel this is (e.g. an EMG
   lead name, `"global_impedance"` for EIT).
 - `source`, where the data originally came from - the upstream tool/loader
@@ -44,7 +45,7 @@ by adding:
   different from `method`: `source` says who produced it, `method` says
   what was done to it.
 - `method`, which distinguishes two signals that are both, say,
-  `"filtered"` but used different filtering techniques.
+  `"intermediate"` but used different filtering techniques.
 
 Where they come from: the adapters (the wrapper objects that translate
 calls from `m3resp` into calls on an outside library) have `to_signals()`
@@ -86,7 +87,7 @@ class Signal(TimeSeries):
     category: Category | None = None      # "impedance" | "airway_pressure" | "airflow" | "volume" | ... | any str
     channel: str | None = None
     source: str | None = None
-    processing_state: ProcessingState = "raw"   # "raw" | "filtered" | "processed" | "derived"
+    processing_state: ProcessingState = "raw"   # "raw" | "intermediate" | "processed" | "derived"
     derived_from: ProcessingState | None = None
     method: str | None = None
 ```
@@ -144,17 +145,18 @@ YAML/JSON file.
 `processing_state`:
 
 - `"raw"` - untouched, straight from the source/loader.
-- `"filtered"` - an intermediate signal-processing step has been applied;
-  not yet the final signal a downstream parameter computation should use.
+- `"intermediate"` - some pre-processing step has been applied (not
+  necessarily a filter - e.g. segmentation, slicing); not yet the final
+  signal a downstream parameter computation should use.
 - `"processed"` - the final signal for this channel, ready to compute
   parameters/results from.
 - `"derived"` - computed from another signal (e.g. a difference between two
-  signals), rather than a step in that signal's own raw -> filtered ->
+  signals), rather than a step in that signal's own raw -> intermediate ->
   processed pipeline; `derived_from` records which state it was derived
   from.
 
 Multiple differently produced signals can share the same `channel` and
-`processing_state` (e.g. two "filtered" variants using different filter
+`processing_state` (e.g. two "intermediate" variants using different filter
 methods) - use `method` to tell them apart, not a new state.
 
 ## Where `Signal`s come from

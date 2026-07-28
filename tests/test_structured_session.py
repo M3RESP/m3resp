@@ -95,7 +95,7 @@ def test_preprocess_emg_populates_signals_on_default_adapter_path():
 
     assert len(session.signals) == 3
     processing_states = {s.processing_state for s in session.signals}
-    assert processing_states == {"raw", "filtered", "processed"}
+    assert processing_states == {"raw", "intermediate", "processed"}
     assert all(s.modality == "emg" for s in session.signals)
 
 

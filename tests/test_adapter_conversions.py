@@ -47,7 +47,7 @@ class TestEITAdapterConversions:
 
         assert len(signals) == 2
         assert all(isinstance(s, Signal) for s in signals)
-        assert [s.processing_state for s in signals] == ["raw", "filtered"]
+        assert [s.processing_state for s in signals] == ["raw", "intermediate"]
         assert all(
             s.modality == "eit" and s.channel == "global_impedance" for s in signals
         )
@@ -167,7 +167,11 @@ class TestReSurfEMGAdapterConversions:
 
         signals = adapter.to_signals(processed_emg)
 
-        assert [s.processing_state for s in signals] == ["raw", "filtered", "processed"]
+        assert [s.processing_state for s in signals] == [
+            "raw",
+            "intermediate",
+            "processed",
+        ]
         assert all(s.modality == "emg" and s.channel == "0" for s in signals)
         assert all(s.sample_frequency == 100.0 for s in signals)
 

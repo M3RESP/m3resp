@@ -291,7 +291,7 @@ def mdn_filter(
         modality="eit",
         category="impedance",
         channel="pixel_impedance",
-        processing_state="filtered",
+        processing_state="intermediate",
         source="eitprocessing",
         metadata=dict(metadata),
     )

@@ -131,7 +131,7 @@ class TestEcgGating:
 
         signal = result["ecg_gated_signal"]
         assert isinstance(signal, Signal)
-        assert signal.processing_state == "filtered"
+        assert signal.processing_state == "intermediate"
         assert signal.method == "resurfemg.gating"
         assert any(signal is item for item in session.signals)
 

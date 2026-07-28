@@ -33,21 +33,25 @@ KNOWN_MODALITIES = frozenset(get_args(_KNOWN_MODALITIES_LITERAL))
 #: Controlled vocabulary for ``Signal.processing_state``:
 #:
 #: - ``raw``: untouched, straight from the source/loader.
-#: - ``filtered``: an intermediate signal-processing step has been applied
-#:   (e.g. noise/frequency filtering) - work in progress, not yet the final
-#:   signal a downstream parameter computation should use.
+#: - ``intermediate``: some pre-processing step has been applied (e.g.
+#:   noise/frequency filtering, segmentation, slicing) - work in progress,
+#:   not yet the final signal a downstream parameter computation should use.
+#:   (Named ``intermediate`` rather than ``filtered`` since not every
+#:   pre-processing step is a filter - see PR #23 discussion on
+#:   ``data/signals.py``.)
 #: - ``processed``: the final signal for this channel, ready to compute
 #:   parameters/results from.
 #: - ``derived``: computed from another signal (e.g. a difference between
 #:   two signals, or a transform), rather than a step in that signal's own
-#:   raw -> filtered -> processed pipeline. Use ``Signal.derived_from`` to
-#:   record which processing_state it was derived from (raw or filtered),
-#:   since a channel can have derived signals from either.
+#:   raw -> intermediate -> processed pipeline. Use ``Signal.derived_from``
+#:   to record which processing_state it was derived from (raw or
+#:   intermediate), since a channel can have derived signals from either.
 #:
 #: Multiple differently produced signals can share the same ``channel`` and
-#: ``processing_state`` (e.g. two "filtered" variants using different filter
-#: methods) - use ``Signal.method`` to tell them apart, not a new state.
-ProcessingState = Literal["raw", "filtered", "processed", "derived"]
+#: ``processing_state`` (e.g. two "intermediate" variants using different
+#: filter methods) - use ``Signal.method`` to tell them apart, not a new
+#: state.
+ProcessingState = Literal["raw", "intermediate", "processed", "derived"]
 _VALID_PROCESSING_STATES = frozenset(get_args(ProcessingState))
 
 
@@ -74,7 +78,7 @@ class Signal(TimeSeries):
       ``"resurfemg.postprocessing.moving_baseline"``). This is what
       distinguishes two signals sharing the same ``channel`` and
       ``processing_state`` (e.g. two differently-filtered variants).
-    - ``processing_state``: how far along the raw -> filtered -> processed
+    - ``processing_state``: how far along the raw -> intermediate -> processed
       pipeline this signal is, or ``"derived"`` if computed from another
       signal. See :data:`ProcessingState`.
     - ``derived_from``: for a ``"derived"`` signal, the ``processing_state``
