@@ -38,8 +38,8 @@ def butterworth_filter(
             "Butterworth filter."
         )
 
-    _capture(captures, "unfiltered_data", data)
-    _capture(captures, "sample_frequency", sample_frequency)
+    capture_value(captures, "unfiltered_data", data)
+    capture_value(captures, "sample_frequency", sample_frequency)
     _capture_butterworth_parameters(captures, filter_type, cutoff)
 
     sos = scipy_signal.butter(
@@ -51,7 +51,7 @@ def butterworth_filter(
         output="sos",
     )
     filtered = scipy_signal.sosfiltfilt(sos, data, axis=axis)
-    _capture(captures, "filtered_data", filtered)
+    capture_value(captures, "filtered_data", filtered)
     return filtered
 
 
@@ -278,7 +278,7 @@ def _validate_common_filter_arguments(
         raise ValueError("sample_frequency must be positive")
 
 
-def _capture(
+def capture_value(
     captures: dict[str, Any] | None,
     key: str,
     value: Any,
@@ -300,15 +300,15 @@ def _capture_butterworth_parameters(
 ) -> None:
     match filter_type:
         case "lowpass":
-            _capture(captures, "low_pass_frequency", cutoff)
+            capture_value(captures, "low_pass_frequency", cutoff)
         case "highpass":
-            _capture(captures, "high_pass_frequency", cutoff)
+            capture_value(captures, "high_pass_frequency", cutoff)
         case "bandpass":
             assert isinstance(cutoff, tuple), "bandpass cutoff must be (low, high)"
-            _capture(captures, "low_pass_frequency", cutoff[1])
-            _capture(captures, "high_pass_frequency", cutoff[0])
+            capture_value(captures, "low_pass_frequency", cutoff[1])
+            capture_value(captures, "high_pass_frequency", cutoff[0])
         case "bandstop":
-            _capture(captures, "frequency_bands", cutoff, append_to_list=True)
+            capture_value(captures, "frequency_bands", cutoff, append_to_list=True)
 
 
 def _scipy_signal():

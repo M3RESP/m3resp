@@ -3,41 +3,12 @@
 from __future__ import annotations
 
 from itertools import pairwise
-from typing import Any, Literal, overload
+from typing import Any
 
 import numpy as np
 
 from m3resp.core.exceptions import OptionalDependencyError
-
-
-@overload
-def detect_peaks(
-    values: np.ndarray,
-    *,
-    height: float | np.ndarray | None = None,
-    prominence: float | None = None,
-    width: float | None = None,
-    distance: float | None = None,
-    threshold: float | None = None,
-    invert: bool = False,
-    return_properties: Literal[False] = False,
-    **kwargs: Any,
-) -> np.ndarray: ...
-
-
-@overload
-def detect_peaks(
-    values: np.ndarray,
-    *,
-    height: float | np.ndarray | None = None,
-    prominence: float | None = None,
-    width: float | None = None,
-    distance: float | None = None,
-    threshold: float | None = None,
-    invert: bool = False,
-    return_properties: Literal[True],
-    **kwargs: Any,
-) -> tuple[np.ndarray, dict[str, Any]]: ...
+from m3resp.processing.filters import capture_value
 
 
 def detect_peaks(
@@ -49,10 +20,16 @@ def detect_peaks(
     distance: float | None = None,
     threshold: float | None = None,
     invert: bool = False,
-    return_properties: bool = False,
+    captures: dict[str, Any] | None = None,
     **kwargs: Any,
-) -> np.ndarray | tuple[np.ndarray, dict[str, Any]]:
-    """Detect peaks using SciPy, optionally after inverting the signal."""
+) -> np.ndarray:
+    """Detect peaks using SciPy, optionally after inverting the signal.
+
+    Always returns just the peak indices, not a shape that varies with a
+    flag. Pass a dict via `captures` to also get SciPy's peak `properties`
+    (heights/widths/prominences/...) under `captures["properties"]` -
+    same pattern as `m3resp.processing.filters`.
+    """
 
     signal = _scipy_signal()
     data = -np.asarray(values) if invert else np.asarray(values)
@@ -65,7 +42,8 @@ def detect_peaks(
         threshold=threshold,
         **kwargs,
     )
-    return (indices, properties) if return_properties else indices
+    capture_value(captures, "properties", properties)
+    return indices
 
 
 def detect_peaks_above_moving_average(
