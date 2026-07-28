@@ -226,7 +226,7 @@ def test_synchronization_comparison_shifts_signal_time_by_alignment_offset():
         "emg_breaths",
         [BreathEvent("emg", 0.002, 0.004, peak_time=0.003)],
     )
-    session.align_modalities(offset_seconds={"emg": -0.002})
+    session.synchronize_multimodal_breaths(offset_seconds={"emg": -0.002})
 
     fig = plot_synchronization_comparison(session, max_seconds=None)
 

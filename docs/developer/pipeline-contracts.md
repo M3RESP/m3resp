@@ -34,7 +34,7 @@ not `Pipeline` - populate the typed collections (`session.signals`,
 |---|---|---|
 | `EITPipeline` | `"eit"` | `session.preprocess_eit(...)`, `session.detect_eit_breaths(...)` |
 | `EMGPipeline` | `"emg"` | `session.preprocess_emg(...)`, `session.detect_emg_breaths(...)`, `session.postprocess_emg(...)` |
-| `MultimodalPipeline` | `"multimodal"` | `session.synchronize_raw_modalities(...)`, `session.align_modalities(...)` |
+| `MultimodalPipeline` | `"multimodal"` | `session.synchronize_raw_modalities(...)`, `session.synchronize_multimodal_breaths(...)` |
 
 `presets/registry.py` maps each `name` to its class via `register_pipeline`/
 `get_pipeline`. `M3Session.run_pipeline(name, config=...)` looks the preset up

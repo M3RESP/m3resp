@@ -36,7 +36,7 @@ session.postprocess_emg()
 
 # Align the detected event lists (in case synchronize_raw_modalities alone
 # wasn't enough - e.g. a manually estimated offset changed after loading).
-session.align_modalities(method="manual_offset", offset_seconds={"emg": 0.0})
+session.synchronize_multimodal_breaths(method="manual_offset", offset_seconds={"emg": 0.0})
 
 # Match breaths across modalities into LinkedBreath objects.
 linked = session.link_breaths(time_tolerance=0.5)
@@ -91,7 +91,7 @@ session.compute_multimodal_parameters(delay_pairs=[("emg", "eit")], duration_pai
 session.run_pipeline("multimodal")
 ```
 
-Calls `synchronize_raw_modalities()` then `align_modalities()` - run this
+Calls `synchronize_raw_modalities()` then `synchronize_multimodal_breaths()` - run this
 after the per-modality `"eit"`/`"emg"` presets so their breath events
 already exist, then call `session.link_breaths()` and
 `session.compute_multimodal_parameters()` directly (there is no preset for

@@ -100,7 +100,9 @@ class TestMultimodalPipeline:
         session = M3Session()
         calls: list[tuple[str, dict[str, Any]]] = []
         session.synchronize_raw_modalities = _spy(calls, "synchronize_raw_modalities")
-        session.align_modalities = _spy(calls, "align_modalities")
+        session.synchronize_multimodal_breaths = _spy(
+            calls, "synchronize_multimodal_breaths"
+        )
 
         session.run_pipeline(
             "multimodal",
@@ -109,9 +111,9 @@ class TestMultimodalPipeline:
 
         assert [name for name, _ in calls] == [
             "synchronize_raw_modalities",
-            "align_modalities",
+            "synchronize_multimodal_breaths",
         ]
-        assert calls[-1] == ("align_modalities", {"offset_seconds": 0.5})
+        assert calls[-1] == ("synchronize_multimodal_breaths", {"offset_seconds": 0.5})
 
 
 def test_session_run_pipeline_is_distinct_from_module_level_run_pipeline():

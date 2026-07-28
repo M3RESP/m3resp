@@ -185,7 +185,7 @@ class TestSessionLinkBreaths:
 
         # Shift emg 5s later relative to eit: after alignment the two breaths
         # are far apart and should no longer link together.
-        session.align_modalities(offset_seconds={"emg": 5.0})
+        session.synchronize_multimodal_breaths(offset_seconds={"emg": 5.0})
         linked = session.link_breaths(time_tolerance=0.5)
 
         assert len(linked) == 2

@@ -509,13 +509,19 @@ class M3Session:
         self._record("postprocess_emg", "emg", **kwargs)
         return self.parameters["emg_postprocessing"]
 
-    def align_modalities(
+    def synchronize_multimodal_breaths(
         self,
         method: str = "manual_offset",
         offset_seconds: float | Mapping[str, float] = 0.0,
         reference_modality: str | None = None,
     ) -> dict[str, Any]:
-        """Apply basic Stage 1 alignment to stored event lists."""
+        """Apply basic Stage 1 alignment to stored breath event lists.
+
+        Named to mirror `synchronize_raw_modalities`: that one shifts raw
+        signals in time before processing, this one shifts already-detected
+        breath events (`ALIGNMENT_EVENT_LISTS`) in time after detection.
+        Previously named `align_modalities`, kept below as an alias.
+        """
 
         if method != "manual_offset":
             raise ValueError("Stage 1 supports only method='manual_offset'")
@@ -549,7 +555,7 @@ class M3Session:
             "missing_event_lists": missing_event_lists,
         }
         self._record(
-            "align_modalities",
+            "synchronize_multimodal_breaths",
             parameters={
                 "method": method,
                 "reference_modality": resolved_reference,
@@ -558,13 +564,27 @@ class M3Session:
         )
         return synchronized
 
+    def align_modalities(
+        self,
+        method: str = "manual_offset",
+        offset_seconds: float | Mapping[str, float] = 0.0,
+        reference_modality: str | None = None,
+    ) -> dict[str, Any]:
+        """Deprecated alias for `synchronize_multimodal_breaths` - kept for
+        backward compatibility with existing calling code."""
+
+        return self.synchronize_multimodal_breaths(
+            method, offset_seconds, reference_modality=reference_modality
+        )
+
     def link_breaths(self, *, time_tolerance: float = 0.5) -> list[LinkedBreath]:
         """Link breaths across modalities into `LinkedBreath` objects (Milestone 2.5).
 
-        Prefers the aligned breath lists produced by `align_modalities`
-        (``self.processed["synchronized"]``) over the raw per-modality event
-        lists in ``self.events``, so breaths are matched on a common time
-        axis whenever alignment has already been run.
+        Prefers the aligned breath lists produced by
+        `synchronize_multimodal_breaths` (``self.processed["synchronized"]``)
+        over the raw per-modality event lists in ``self.events``, so breaths
+        are matched on a common time axis whenever alignment has already
+        been run.
         """
 
         synchronized = self.processed.get("synchronized")

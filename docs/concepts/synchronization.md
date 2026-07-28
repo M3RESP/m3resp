@@ -9,7 +9,7 @@ compared on one shared time axis. Key pieces:
 - `session.synchronize_raw_modalities(...)` shifts the raw signals in time,
   before any processing, using a manual offset you supply (for example
   "EMG started 5 seconds after EIT").
-- `session.align_modalities(...)` does the same thing but for
+- `session.synchronize_multimodal_breaths(...)` does the same thing but for
   already-detected events (breaths), not raw signals.
 - `resample_signal(...)` is a standalone utility that changes a signal's
   sampling rate to match another signal's, for the cases where you need two
@@ -51,7 +51,7 @@ intentionally out of scope.
 
 - `session.synchronize_raw_modalities(...)` aligns raw signals before
   per-modality processing.
-- `session.align_modalities(method="manual_offset", offset_seconds=..., reference_modality=...)`
+- `session.synchronize_multimodal_breaths(method="manual_offset", offset_seconds=..., reference_modality=...)`
   shifts already-detected event lists (`session.events`) onto a common time
   axis. `offset_seconds` accepts either a single float or a per-modality
   mapping (e.g. `{"emg": 5.0}`).
@@ -86,7 +86,7 @@ class LinkedBreath:
 
 `breaths` maps an arbitrary modality name (`"eit"`, `"emg"`, `"ventilator"`,
 or anything else) to that modality's matched breath. Run
-`session.align_modalities(...)` first if the modalities are not already on a
+`session.synchronize_multimodal_breaths(...)` first if the modalities are not already on a
 common time axis - `session.link_breaths()` prefers the aligned event lists
 over the raw ones when both exist.
 

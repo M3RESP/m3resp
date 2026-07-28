@@ -234,7 +234,7 @@ def _after_synchronization_events(
 ) -> dict[str, list[Any]]:
     """Return event overlays on the synchronized time base.
 
-    ``align_modalities`` stores shifted event copies in ``synchronized``. Raw
+    ``synchronize_multimodal_breaths`` stores shifted event copies in ``synchronized``. Raw
     synchronization crops the signal arrays directly instead, so it has to
     shift the original events here to draw them on the cropped trace's clock.
     """

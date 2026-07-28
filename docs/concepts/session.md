@@ -139,7 +139,7 @@ as before.
 | `detect_ventilator_breaths(variant=None, **kwargs)` | Detect ventilator breaths -> `session.events["ventilator_breaths"]`. |
 | `add_events(name, events)` / `get_events(name, default=None)` | Store/retrieve a named event list directly. |
 | `postprocess_emg(**kwargs)` | Compute EMG features/quality; populates `parameter_results`/`quality`. |
-| `align_modalities(method="manual_offset", offset_seconds=..., reference_modality=...)` | Shift already-detected event lists onto a common time axis. |
+| `synchronize_multimodal_breaths(method="manual_offset", offset_seconds=..., reference_modality=...)` | Shift already-detected event lists onto a common time axis. |
 | `link_breaths(time_tolerance=0.5)` | Match breaths across modalities into [`LinkedBreath`](synchronization.md) objects. |
 | `compute_multimodal_parameters(...)` | Compute timing-delay/duration-difference/event-agreement [`ParameterResult`](parameters.md)s from `session.linked_breaths`. |
 | `run_pipeline(name, config=...)` | Run a built-in `"eit"`/`"emg"`/`"multimodal"` preset - see [pipeline-contracts.md](../developer/pipeline-contracts.md). |
