@@ -243,6 +243,7 @@ def _cmd_steps(args: argparse.Namespace) -> int:
         return EXIT_SUCCESS
 
     from m3resp import available_steps
+    from m3resp.workflows.registry import step_capability_state
 
     steps = available_steps()
     if not steps:
@@ -250,7 +251,9 @@ def _cmd_steps(args: argparse.Namespace) -> int:
         return EXIT_SUCCESS
     width = max(len(name) for name in steps)
     for name, summary in steps.items():
-        print(f"  {name:<{width}}  {summary}")
+        capability = step_capability_state(name)
+        tag = f"  [{capability}]" if capability != "available" else ""
+        print(f"  {name:<{width}}  {summary}{tag}")
     return EXIT_SUCCESS
 
 
