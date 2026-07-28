@@ -145,6 +145,24 @@ def ecg_gating(
     fill_method: int = 1,
     envelope_window_seconds: float | None = None,
 ) -> dict[str, Any]:
+    """Remove ECG peaks from an EMG channel by gating each detected peak (zero/interpolate/replace), via ReSurfEMGAdapter.gate_ecg.
+
+    Args:
+        session (M3Session): The M3Session object.
+        processed_emg (Any): The processed EMG bundle supplying 'source' and 'fs'.
+        ecg_peak_indices (Any): The ECG peak indices from 'emg.ecg_detect_peaks'.
+        source (str): Key into processed_emg to gate.
+        gate_width_seconds (float | None): Gate width in seconds. Mutually exclusive with 'gate_width_samples'.
+        gate_width_samples (int | None): Gate width in samples. Mutually exclusive with 'gate_width_seconds'.
+        fill_method (int): Gate fill strategy.
+        envelope_window_seconds (float | None): Envelope recomputation window on the gated signal.
+
+    Returns:
+        ecg_gated_emg (signal_array): Gated EMG array.
+        processed_emg_after_ecg (emg_processed_bundle): Updated processed-EMG bundle with the gated signal as its 'filtered'/'envelope'.
+        ecg_gated_signal (signal): Native Signal wrapping the gated EMG.
+        ecg_gate_mask_result (parameter_result): Native array-valued ParameterResult: boolean mask of gated samples.
+    """
     if gate_width_seconds is not None and gate_width_samples is not None:
         raise ValueError(
             "emg.ecg_gating: set only one of gate_width_seconds or "

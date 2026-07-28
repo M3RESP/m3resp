@@ -27,7 +27,20 @@ class _QualityMixin:
         sample_frequency: float,
     ) -> np.ndarray:
         """Pseudo signal-to-noise ratio per peak: peak height relative to a
-        local baseline window."""
+        local baseline window.
+
+        Approximate the signal-to-noise ratio (SNR) of the signal based
+        on the peak height relative to the baseline.
+
+        Args:
+            envelope: Envelope of the signal to evaluate.
+            peak_indices: List of individual peak indices.
+            baseline: Baseline signal to evaluate SNR to.
+            sample_frequency: Sampling rate.
+
+        Returns:
+            numpy.ndarray: The SNR per peak.
+        """
 
         try:
             from resurfemg.postprocessing.quality_assessment import snr_pseudo
@@ -51,10 +64,29 @@ class _QualityMixin:
         dp_up_90_threshold: float = 2.0,
         dp_up_90_norm_threshold: float = 0.8,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Evaluate occlusion-manoeuvre (Pocc) quality (Warnaar et al. 2024).
+        """Evaluation of occlusion pressure (Pocc) quality, in accordance with Warnaar
+        et al. (2024). Poccs are labelled invalid if too many negative deflections
+        happen in the upslope (first decile < 0), or if the upslope is to steep
+        (high absolute or relative 9th decile), indicating occlusion release before
+        the patient's inspiriratory effort has ended.
 
-        Returns `(valid_poccs, criteria_matrix)`; `criteria_matrix` rows are
-        `dp_up_10`, `dp_up_90`, `dp_up_90_norm`, in that order.
+        Args:
+            pressure_signal: Airway pressure signal.
+            pocc_peak_indices: List of individual peak indices.
+            pocc_end_indices: List of individual peak end indices.
+            pocc_time_products: List of pressure-time products for each occlusion.
+            dp_up_10_threshold (float): Minimum first decile of upslope after the
+                (negative) occlusion pressure peak.
+            dp_up_90_threshold (float): Maximum 9th decile of upslope after the
+                (negative) occlusion pressure peak.
+            dp_up_90_norm_threshold (float): Maximum normalised 9th decile of upslope
+                after the (negative) occlusion pressure peak.
+
+        Returns:
+            tuple:
+                - valid_poccs (numpy.ndarray): Boolean list of valid Pocc peaks.
+                - criteria_matrix (numpy.ndarray): Matrix of the calculated criteria.
+                    rows are `dp_up_10`, `dp_up_90`, `dp_up_90_norm`, in that order.
         """
 
         try:
@@ -90,7 +122,20 @@ class _QualityMixin:
         threshold: float = 1.1,
     ) -> bool:
         """Whether the median ECG-to-median-EMG interpeak distance ratio is
-        within `threshold` (Warnaar et al. 2024)."""
+        within `threshold` (Warnaar et al. 2024).
+
+        Calculate the median interpeak distances for ECG and EMG and check if their
+        ratio is above the given threshold, i.e. if cardiac frequency is higher
+        than respiratory frequency (True)
+
+        Args:
+            ecg_peak_indices: Indices of ECG peaks.
+            emg_peak_indices: Indices of EMG peaks.
+            threshold (float): The threshold value to compare against. Default is 1.1.
+
+        Returns:
+            bool: Boolean value indicating if the interpeak distance is valid.
+        """
 
         try:
             from resurfemg.postprocessing.quality_assessment import interpeak_dist
@@ -119,11 +164,27 @@ class _QualityMixin:
         reference_signal: Any | None = None,
         aub_threshold: float = 40.0,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Percentage area-under-baseline per breath (Warnaar et al. 2024).
+        """Calculate the percentage area under the baseline, in accordance with
+        Warnaar et al. (2024).
 
-        Returns `(valid_time_products, percentages_aub, reference_values)` -
-        `reference_values` (upstream's undocumented third return value) are
-        the nadir reference levels used per breath.
+        Args:
+            signal: Signal in which the peaks are detected.
+            sample_frequency: Sampling frequency.
+            peak_indices: List of individual peak indices.
+            start_indices: List of individual peak start indices.
+            end_indices: List of individual peak end indices.
+            baseline: Running baseline of the signal.
+            sample_frequency (float): Sampling frequency of the signal.
+            aub_window_samples (int, optional): Number of samples before and after peak_indices
+                to look for the nadir.
+            reference_signal (numpy.ndarray, optional): Signal in which the nadir is searched.
+            aub_threshold (float): Maximum AUB error percentage for a peak.
+
+        Returns:
+            tuple:
+                - valid_time_products (numpy.ndarray): Boolean list of valid time products.
+                - percentages_aub (numpy.ndarray): List of calculated AUB percentages.
+                - reference_values (numpy.ndarray): Reference signal nadir values per breath.
         """
 
         try:
@@ -169,7 +230,18 @@ class _QualityMixin:
         threshold_percentile: float = 75.0,
         threshold_factor: float = 4.0,
     ) -> np.ndarray:
-        """Flag area-under-baseline values that are locally high outliers."""
+        """Flag area-under-baseline values that are locally high outliers.
+
+        Detect local upward deflections in the area under the baseline.
+
+        Args:
+            aub_values: List of area under the baseline values.
+            threshold_percentile (float): Percentile for detecting high baseline.
+            threshold_factor (float): Multiplication factor for threshold_percentile.
+
+        Returns:
+            numpy.ndarray: Boolean list of AUB values under threshold.
+        """
 
         try:
             from resurfemg.postprocessing.quality_assessment import (
@@ -198,7 +270,15 @@ class _QualityMixin:
         lower_factor: float = 0.1,
     ) -> np.ndarray:
         """Flag time-product (area above baseline) values outside the
-        expected percentile-based bounds."""
+        expected percentile-based bounds.
+
+        Args:
+            time_products (numpy.ndarray): List of time product values.
+            upper_percentile (float): Percentile for detecting high time products.
+            upper_factor (float): Multiplication factor for upper_percentile.
+            lower_percentile (float): Percentile for detecting low time products.
+            lower_factor (float): Multiplication factor for lower_percentile.
+        """
 
         try:
             from resurfemg.postprocessing.quality_assessment import (
@@ -225,8 +305,24 @@ class _QualityMixin:
         ventilator_breath_indices: Any,
         manoeuvre_indices: Any,
     ) -> np.ndarray:
-        """Flag manoeuvres (e.g. Pocc) with no supported ventilator breath
-        between them and the next manoeuvre."""
+        """Detect non-consecutive manoeuvres.
+
+        Flag manoeuvres (e.g. Pocc) with no supported ventilator breath
+        between them and the next manoeuvre.
+
+        Input are the ventilator breaths, to be detected with the
+        function post_processing.event_detecton.detect_supported_breaths
+        If no supported breaths are detected in between two manoeuvres,
+        valid_manoeuvres is "True".
+        Note: fs of both signals should be equal.
+
+        Args:
+            ventilator_breath_indices (numpy.ndarray): List of supported breath indices.
+            manoeuvre_indices (numpy.ndarray): List of manoeuvres indices.
+
+        Returns:
+            numpy.ndarray: Boolean list of valid manoeuvres.
+        """
 
         try:
             from resurfemg.postprocessing.quality_assessment import (
@@ -253,11 +349,29 @@ class _QualityMixin:
         bell_window_samples: int | None = None,
         bell_threshold: float = 40.0,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """How well each breath's envelope fits a bell curve
-        (Warnaar et al. 2024).
+        """Calculate the bell-curve error of signal peaks.
 
-        Returns `(valid_peak, percentage_bell_error, bell_error, y_min,
-        fitted_parameters)`.
+        Calculate the bell-curve error of signal peaks, in accordance with Warnaar
+        et al. (2024).
+
+        Args:
+            peak_indices: List of peak indices.
+            start_indices: List of onset indices.
+            end_indices: List of offset indices.
+            signal: Filtered signal.
+            time_products: List of area under the curves per peak.
+            sample_frequency (float): Sampling frequency of the signal.
+            bell_window_samples (int, optional): Number of samples before and after peak_indices
+                to look for the nadir.
+            bell_threshold (float): Maximum bell error percentage for a valid peak.
+
+        Returns:
+            tuple:
+                - valid_peak (numpy.ndarray): Boolean list of valid peaks.
+                - percentage_bell_error (numpy.ndarray): Calculated bell errors in percentage.
+                - bell_error (numpy.ndarray): Calculated bell errors.
+                - y_min (numpy.ndarray): Minimum value of the baseline.
+                - fitted_parameters (numpy.ndarray): Fitted bell curve parameters.
         """
 
         try:
@@ -311,10 +425,22 @@ class _QualityMixin:
         min_delta: float = 0.0,
         max_delta: float | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Whether `first_event_times` precede the paired `second_event_times`
-        by between `min_delta` and `max_delta` seconds.
+        """Evaluate the timing of two sets of events.
 
-        Returns `(correct_timing, delta_time)`.
+        Evaluate whether the timing of the events in `first_event_times` preceeds the
+        events in `second_event_times` minimally by `min_delta` and maximally by
+        `max_delta`. `first_event_times` and `second_event_times` should be the same length.
+
+        Args:
+            first_event_times: Timing of the events that should happen first.
+            second_event_times: Timing of the events that should happen second.
+            min_delta (float): The minimum time event 1 should precede event 2.
+            max_delta (float, optional): The maximum time event 1 should precede event 2.
+
+        Returns:
+            tuple:
+                - correct_timing (numpy.ndarray): Boolean list of correct timing.
+                - delta_time (numpy.ndarray): List of delta times between the events.
         """
 
         try:
@@ -345,10 +471,21 @@ class _QualityMixin:
         *,
         minimum_fraction: float = 0.1,
     ) -> tuple[float, bool]:
-        """Fraction of expected EMG breaths actually detected, relative to
-        the ventilator's respiratory rate.
+        """Evaluate the respiratory rate of detected EMG breaths relative to the ventilatory respiratory rate.
 
-        Returns `(detected_fraction, criterion_met)`.
+        This function evaluates fraction of detected EMG breaths relative to the
+        ventilatory respiratory rate.
+
+        Args:
+            emg_breath_indices: EMG breath indices.
+            recording_duration_seconds (float): Recording time in seconds.
+            ventilator_respiratory_rate (float): Ventilatory respiratory rate (breath/min).
+            minimum_fraction (float): Required minimum detected fraction of EMG breaths.
+
+        Returns:
+            tuple:
+                - detected_fraction (float): Fraction of detected EMG breaths.
+                - criterion_met (bool): Boolean indicating if the fraction is above the minimum.
         """
 
         try:

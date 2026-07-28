@@ -26,7 +26,20 @@ class _EcgMixin:
         bandpass_filter: bool = True,
     ) -> np.ndarray:
         """Detect ECG peak sample indices in `signal` (ECG or an
-        ECG-contaminated EMG channel)."""
+        ECG-contaminated EMG channel).
+
+        Args:
+            signal: ECG signals to detect the ECG peaks in.
+            sample_frequency (float): Sampling rate of the EMG signals.
+            peak_fraction (float): ECG peaks amplitude threshold relative to the
+                specified fraction of the min-max values in the ECG signal.
+            peak_width_samples (int, optional): ECG peaks width threshold in samples.
+            peak_distance_samples (int, optional): Minimum time between ECG peaks in samples.
+            bandpass_filter (bool): Bandpass filter the ecg_raw between 1-500 Hz before
+                peak detection.
+
+        Returns:
+            numpy.ndarray: ECG peak indices."""
 
         try:
             from resurfemg.preprocessing.ecg_removal import detect_ecg_peaks
@@ -57,8 +70,22 @@ class _EcgMixin:
     ) -> np.ndarray:
         """Gate (remove) ECG peaks from `signal` around `peak_indices`.
 
-        `fill_method`: 0 zeros, 1 interpolation (default upstream), 2 mean
-        of a neighboring segment, 3 running-RMS-based replacement.
+        Eliminate peaks (e.g. QRS) from emg_raw using gates
+        of width gate_width. The gate either filled by zeros or interpolation.
+        The filling method for the gate is encoded as follows:
+        - 0: Filled with zeros
+        - 1: Interpolation samples before and after (default)
+        - 2: Fill with average of prior segment if exists, otherwise fill with post segment
+        - 3: Fill with running average of RMS
+
+        Args:
+            signal: Signal to process.
+            peak_indices: List of individual peak index places to be gated.
+            gate_width_samples (int): Width of the gate.
+            fill_method (int): Filling method of gate.
+
+        Returns:
+            numpy.ndarray: The gated result.
         """
 
         try:
@@ -98,7 +125,21 @@ class _EcgMixin:
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Remove ECG artifacts from `signal` via a-trous wavelet shrinkage.
 
-        Returns `(cleaned_signal, decomposition, thresholds, gate_mask)`.
+        Args:
+            signal: 1D raw EMG data.
+            peak_indices: List of R-peak indices.
+            sample_frequency (int): Sampling rate of emg_raw.
+            hard_thresholding (bool): True for hard thresholding (default), False for soft.
+            levels (int): Decomposition level (default: 4).
+            wavelet_type (str): Wavelet type (default: "db2", see pywt.swt help).
+            fixed_threshold (float): Fixed threshold multiplier for wavelet coefficients.
+
+        Returns:
+            tuple:
+                - cleaned_signal (numpy.ndarray): Cleaned EMG signal.
+                - decomposition (numpy.ndarray): Wavelet decomposition.
+                - thresholds (numpy.ndarray): Threshold values.
+                - gate_mask (numpy.ndarray): Gated signal based on R-peaks, where gate == 1.
         """
 
         try:

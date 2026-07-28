@@ -22,7 +22,25 @@ def onoff_from_baseline_crossings(
     baseline: np.ndarray,
     peak_indices: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[bool]]:
-    """Find peak starts/ends by nearest baseline crossings around peaks."""
+    """Find peak starts/ends by nearest baseline crossings around peaks.
+
+
+    This function calculates the peaks of each breath using the
+    slopesum baseline of envelope data.
+
+    Args:
+        values (numpy.ndarray): Envelope signal.
+        baseline (numpy.ndarray): Baseline signal of EMG data for baseline detection.
+        peak_indices (numpy.ndarray): List of peak indices for which to find on- and offset.
+
+    Returns:
+        tuple:
+            - numpy.ndarray: List of start indices of the peaks.
+            - numpy.ndarray: List of end indices of the peaks.
+            - numpy.ndarray: List of boolean values for valid starts.
+            - numpy.ndarray: List of boolean values for valid ends.
+            - numpy.ndarray: List of boolean values for valid peaks.
+    """
 
     crossings = baseline_crossings(values, baseline)
     peaks = np.asarray(peak_indices, dtype=int)

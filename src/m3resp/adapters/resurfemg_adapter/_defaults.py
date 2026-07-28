@@ -45,7 +45,7 @@ class _DefaultsMixin:
         recording: Any,
         *,
         channel: int = 0,
-        high_pass_hz: float = 80,
+        high_pass_hz: float = 10.0,
         low_pass_hz: float | None = None,
         envelope_window_seconds: float = 0.5,
         notch_base_frequency: float | None = None,

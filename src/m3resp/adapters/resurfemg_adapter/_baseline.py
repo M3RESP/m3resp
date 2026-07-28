@@ -24,7 +24,17 @@ class _BaselineMixin:
         step_samples: int,
         percentile: float = 33.0,
     ) -> np.ndarray:
-        """Compute a moving baseline over `envelope` (Grasshoff et al. 2021)."""
+        """Compute a moving baseline over `envelope` (Grasshoff et al. 2021).
+
+        Args:
+            envelope: Envelope of the EMG signal.
+            window_samples (int): Number of samples in the moving window.
+            step_samples (int): Number of consecutive samples with the same baseline value.
+            percentile (float): Percentile to use for baseline estimation.
+
+        Returns:
+            numpy.ndarray: Moving baseline of the envelope.
+        """
 
         try:
             from resurfemg.postprocessing.baseline import moving_baseline
@@ -58,10 +68,24 @@ class _BaselineMixin:
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, Any]:
         """Compute the slope-sum (augmented) baseline over `envelope`.
 
-        Returns `(baseline, running_mean, running_std, running_series)` -
-        `running_series` is upstream's `pandas.Series`, kept for the
-        existing compatibility output; use the other three arrays for
-        native/export use.
+        Args:
+            envelope: Envelope of the EMG signal.
+            window_samples (int): Number of samples in the moving window.
+            step_samples (int): Number of consecutive samples with the same baseline value.
+            sample_frequency (float): Sampling frequency of the signal.
+            percentile (float): Percentile to use for baseline estimation.
+            augmented_percentile (float): Percentile to use for augmented baseline estimation.
+            moving_average_samples (int, optional): Number of samples for the moving average.
+            percentile_window_samples (int, optional): Number of samples for the percentile window.
+
+        Returns:
+            tuple:
+                - baseline (numpy.ndarray): Slope-sum baseline of the envelope.
+                - running_mean (numpy.ndarray): Running mean baseline.
+                - running_std (numpy.ndarray): Running standard deviation of the baseline.
+                - running_series (pandas.Series): Running series of the baseline. running_series
+                    is upstream's `pandas.Series`, kept for the existing compatibility output;
+                    use the other three arrays for native/export use.
         """
 
         try:
