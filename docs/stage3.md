@@ -6,7 +6,7 @@ Stage 1 ([stage1.md](stage1.md)) made `m3resp` a thin wrapper (a layer of code t
 
 ## Goal
 
-Make `m3resp` standalone (able to run fully on its own, without needing another *specialist* package installed): EIT and EMG readers, processing, metrics, quality behavior, and GUI-facing services (the backend functions a graphical user interface calls) all live in `m3resp`, with no production runtime dependency (something the finished, shipped software needs installed to run) on `eitprocessing` or `resurfemg`. The general scientific stack (`numpy`/`scipy`) stays a normal dependency either way - only the two dedicated EIT/EMG packages go away. A GUI can then be built on top of `m3resp` without ever importing either upstream package.
+Make `m3resp` standalone (able to run fully on its own, without needing another *specialist* package installed): EIT and EMG readers, processing, metrics, quality behavior, and GUI-facing services (the backend functions a graphical user interface calls) all live in `m3resp`, with no production runtime dependency (something the finished, shipped software needs installed to run) on `eitprocessing` or `resurfemg`. The general scientific stack (`numpy`/`scipy`) stays a normal dependency either way; only the two dedicated EIT/EMG packages go away. A GUI can then be built on top of `m3resp` without ever importing either upstream package.
 
 ## What "merging EIT and EMG" actually means
 
