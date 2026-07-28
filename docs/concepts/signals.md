@@ -37,6 +37,12 @@ by adding:
   final, ready-to-use version; `"derived"` means computed from another
   signal (like a difference between two signals), rather than being a
   cleanup step of its own raw data.
+- `channel`, which specific physical/logical channel this is (e.g. an EMG
+  lead name, `"global_impedance"` for EIT).
+- `source`, where the data originally came from - the upstream tool/loader
+  that produced it (e.g. `"resurfemg"`, `"eitprocessing"`). This is
+  different from `method`: `source` says who produced it, `method` says
+  what was done to it.
 - `method`, which distinguishes two signals that are both, say,
   `"filtered"` but used different filtering techniques.
 
@@ -49,7 +55,15 @@ call that conversion automatically and add the results to `session.signals`.
 `m3resp.data.timeseries.TimeSeries` is the base runtime type every
 continuous signal in `m3resp` is represented as, whatever its modality: a
 value array paired with its time axis, plus sampling rate, unit, and
-free-form metadata.
+free-form metadata. `values`'s leading axis must line up with `time` (one
+entry per timepoint), but there's no constraint on its remaining
+dimensions - a 1D array (one scalar per timepoint, e.g. global impedance), a
+2D array (one value per timepoint per channel/region), or
+higher-dimensional arrays (e.g. EIT pixel-impedance frames: time × rows ×
+cols) are all valid. `unit` is normalized via
+`m3resp.data.units.normalize_unit` (e.g. `"uV"` -> `"µV"`), so equivalent
+units from different loaders end up comparable instead of drifting into
+incompatible spellings.
 
 ```python
 @dataclass
@@ -61,15 +75,6 @@ class TimeSeries:
     name: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 ```
-
-`values`'s leading axis must line up with `time` (one entry per timepoint),
-but there's no constraint on its remaining dimensions - a 1D array (one
-scalar per timepoint, e.g. global impedance), a 2D array (one value per
-timepoint per channel/region), or higher-dimensional arrays (e.g. EIT
-pixel-impedance frames: time × rows × cols) are all valid. `unit` is
-normalized via `m3resp.data.units.normalize_unit` (e.g. `"uV"` -> `"µV"`),
-so equivalent units from different loaders end up comparable instead of
-drifting into incompatible spellings.
 
 `m3resp.data.signals.Signal` subclasses `TimeSeries`, adding modality and
 provenance context:

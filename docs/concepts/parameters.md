@@ -59,8 +59,13 @@ period - are possible):
 - multiple breaths, e.g. a metric computed over a rolling window of breaths
   (`breath_ids`);
 - a single timepoint (`start_time` set, `end_time` left `None`);
-- a time period, e.g. during an intervention or every 30 seconds
-  (`start_time` and `end_time` both set);
+- a time period, e.g. during an intervention or one 30-second window
+  (`start_time` and `end_time` both set) - `start_time`/`end_time` are single
+  values on one `ParameterResult`, not a list, so a signal split into
+  repeated 30-second windows would be one `ParameterResult` per window, not
+  one `ParameterResult` holding all of them. (Nothing in the codebase
+  produces periodic-window results like this yet - this is illustrating what
+  the fields support, not existing behavior.)
 - the whole signal, when none of the above are set.
 
 `unit` is normalized via `m3resp.data.units.normalize_unit`. `is_scalar`

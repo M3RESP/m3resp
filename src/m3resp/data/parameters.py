@@ -29,8 +29,9 @@ class ParameterResult:
     - multiple breaths, e.g. a metric computed over a rolling window of
       breaths (``breath_ids``);
     - a single timepoint (``start_time`` set, ``end_time`` left ``None``);
-    - a time period, e.g. during an intervention or every 30 seconds
-      (``start_time`` and ``end_time`` both set);
+    - a time period, e.g. during an intervention or one 30-second window
+      (``start_time`` and ``end_time`` both set) - these are single values on
+      one instance, not a list, so repeated windows are one instance each;
     - a specific ``m3resp.core.events.Event`` (``event_id``), e.g. a
       blood-gas draw used for a P/F ratio, or a labeled intervention like a
       Baydur maneuver;

@@ -39,7 +39,12 @@ def pseudo_slope(
     smooth: bool = True,
     smoothing: bool | None = None,
 ) -> np.ndarray:
-    """Compute the initial per-breath pseudo-slope in units per sample."""
+    """Compute the initial per-breath pseudo-slope in units per sample.
+
+    An approximate rise rate, not a true slope: for each breath, this
+    divides the peak height by the time it took to reach the peak, rather
+    than fitting an actual slope to the rising edge.
+    """
 
     if smoothing is not None:
         smooth = smoothing

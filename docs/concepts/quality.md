@@ -3,7 +3,9 @@
 ## Plain-language overview
 
 This represents the result of one quality check: did this signal/breath
-pass or fail some validity test? Key fields:
+pass or fail some validity test? It's the same idea as
+[`ParameterResult`](parameters.md) - a value tied to a signal/breath/time
+window - but for a pass/fail check instead of a measurement. Key fields:
 
 - `passed`, a true/false verdict.
 - `severity`, how serious a failure is: `"info"`, `"warning"`, `"error"`,
