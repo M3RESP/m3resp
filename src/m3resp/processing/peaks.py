@@ -70,18 +70,29 @@ def detect_emg_breath_peaks(
     emg_baseline: np.ndarray | None = None,
     threshold: float = 0,
     prominence_factor: float = 0.5,
-    min_peak_width_samples: int = 1,
+    min_peak_width_samples: int | None = None,
     min_peak_width_s: int | None = None,
 ) -> np.ndarray:
     """Detect EMG breath peaks with ReSurfEMG-compatible defaults."""
+
+    if min_peak_width_samples is not None and min_peak_width_s is not None:
+        raise ValueError(
+            "detect_emg_breath_peaks: set only one of min_peak_width_samples "
+            "or min_peak_width_s, not both."
+        )
+    effective_min_peak_width_samples = (
+        min_peak_width_s
+        if min_peak_width_s is not None
+        else min_peak_width_samples
+        if min_peak_width_samples is not None
+        else 1
+    )
 
     envelope = np.asarray(envelope)
     if baseline is None and emg_baseline is not None:
         baseline = emg_baseline
     if baseline is None:
         baseline = np.zeros(envelope.shape)
-    if min_peak_width_s is not None:
-        min_peak_width_samples = min_peak_width_s
     delta = envelope - baseline
     prominence = prominence_factor * (
         np.nanpercentile(delta, 75) + np.nanpercentile(delta, 50)
@@ -90,7 +101,7 @@ def detect_emg_breath_peaks(
         envelope,
         height=threshold,
         prominence=prominence,
-        width=min_peak_width_samples,
+        width=effective_min_peak_width_samples,
     )
 
 
