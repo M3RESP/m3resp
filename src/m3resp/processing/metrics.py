@@ -8,6 +8,8 @@ from typing import Any
 import numpy as np
 from scipy.integrate import trapezoid
 
+from m3resp.processing.windows import running_smoother
+
 
 def time_to_peak(
     values: np.ndarray,
@@ -218,16 +220,6 @@ def tidal_variation(
     output = np.full(output_shape, np.nan)
     output[valid_breath_indices] = variation
     return output
-
-
-def running_smoother(values: np.ndarray) -> np.ndarray:
-    """Smooth values with ReSurfEMG's running smoother."""
-
-    data = np.asarray(values)
-    n_samples = len(data) // 10
-    new_values = np.convolve(abs(data), np.ones(n_samples), "valid") / n_samples
-    zeros = np.zeros(n_samples - 1)
-    return np.hstack((new_values, zeros))
 
 
 def _breath_time(breath: Any, name: str) -> float:

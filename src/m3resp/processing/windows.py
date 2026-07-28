@@ -50,6 +50,16 @@ def moving_average(
     return np.convolve(padded_data, weights, mode="valid")
 
 
+def running_smoother(values: np.ndarray) -> np.ndarray:
+    """Smooth values with ReSurfEMG's running smoother."""
+
+    data = np.asarray(values)
+    n_samples = len(data) // 10
+    new_values = np.convolve(abs(data), np.ones(n_samples), "valid") / n_samples
+    zeros = np.zeros(n_samples - 1)
+    return np.hstack((new_values, zeros))
+
+
 def rolling_rms(
     values: np.ndarray,
     *,
