@@ -91,6 +91,13 @@ output_max_bytes = 50_000_000
 line-length = 88
 target-version = "py312"
 
+[tool.ruff.lint.per-file-ignores]
+# marimo stores notebooks as plain Python: every cell is a function that ends in
+# a bare expression (its output) and a `return` of the variables other cells
+# consume. Both are load-bearing in that format, not dead code.
+"notebooks/**/*.py" = ["B018", "PLR1711"]
+"tools/visualization_tools/**/*.py" = ["B018", "PLR1711"]
+
 [tool.mypy]
 python_version = "3.12"
 packages = ["m3resp"]

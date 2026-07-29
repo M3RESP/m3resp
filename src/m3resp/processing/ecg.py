@@ -425,6 +425,19 @@ def _segment_containing(mask: np.ndarray, index: int) -> tuple[int, int]:
     return start, end
 
 
+# A beat whose Q-R or R-S scale sits far below the pack's typical scale is
+# almost always a misplaced Q/S fiducial (e.g. landing one sample from R on a
+# flat stretch) rather than a genuinely small QRS complex. Normalizing by
+# such a near-zero scale blows the beat's normalized values up to whatever
+# multiple of the pack's scale the local noise happens to be (seen in
+# practice: a two-sample-apart Q/R pair with 1/2500th of the median scale
+# produced a normalized peak of ~1900), and `np.mean` over
+# `normalized_segments` then bakes that single outlier into the shared
+# template used for every reconstructed beat. Rejecting scales below this
+# fraction of the pack's median keeps such outliers out of the average.
+_MINIMUM_RELATIVE_QRS_SCALE = 0.25
+
+
 def _template_segments(
     signal: np.ndarray,
     peak_indices: np.ndarray,
@@ -435,11 +448,8 @@ def _template_segments(
     if window_samples % 2 == 0:
         window_samples += 1
     half_window = window_samples // 2
-    qrs_rows: list[tuple[int, int, int]] = []
-    template_peaks: list[int] = []
-    normalized: list[np.ndarray] = []
-    amplitudes: list[tuple[float, float, float]] = []
 
+    candidates: list[tuple[int, int, int, int, int, float, float, float]] = []
     for detection_peak in peak_indices:
         segment_start, segment_end = _segment_containing(
             above_threshold, int(detection_peak)
@@ -463,7 +473,47 @@ def _template_segments(
         rs_scale = r_value - s_value
         if qr_scale <= np.finfo(float).eps or rs_scale <= np.finfo(float).eps:
             continue
+        candidates.append(
+            (
+                int(detection_peak),
+                q_index,
+                r_index,
+                s_index,
+                start,
+                end,
+                qr_scale,
+                rs_scale,
+            )
+        )
 
+    qrs_rows: list[tuple[int, int, int]] = []
+    template_peaks: list[int] = []
+    normalized: list[np.ndarray] = []
+    amplitudes: list[tuple[float, float, float]] = []
+    if candidates:
+        median_qr_scale = float(np.median([c[6] for c in candidates]))
+        median_rs_scale = float(np.median([c[7] for c in candidates]))
+        min_qr_scale = median_qr_scale * _MINIMUM_RELATIVE_QRS_SCALE
+        min_rs_scale = median_rs_scale * _MINIMUM_RELATIVE_QRS_SCALE
+    else:
+        min_qr_scale = min_rs_scale = 0.0
+
+    for (
+        detection_peak,
+        q_index,
+        r_index,
+        s_index,
+        start,
+        end,
+        qr_scale,
+        rs_scale,
+    ) in candidates:
+        if qr_scale < min_qr_scale or rs_scale < min_rs_scale:
+            continue
+
+        q_value = float(signal[q_index])
+        r_value = float(signal[r_index])
+        s_value = float(signal[s_index])
         beat = signal[start:end]
         relative_r = half_window
         normalized_beat = np.empty(window_samples, dtype=float)
@@ -472,7 +522,7 @@ def _template_segments(
         ) / qr_scale
         normalized_beat[relative_r:] = (beat[relative_r:] - s_value) / rs_scale
         qrs_rows.append((q_index, r_index, s_index))
-        template_peaks.append(int(detection_peak))
+        template_peaks.append(detection_peak)
         normalized.append(normalized_beat)
         amplitudes.append((q_value, r_value, s_value))
 

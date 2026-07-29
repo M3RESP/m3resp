@@ -121,6 +121,35 @@ def test_template_creation_skips_a_window_that_crosses_a_recording_boundary():
     assert amplitudes.shape == (1, 3)
 
 
+def test_template_creation_rejects_a_beat_with_a_near_zero_qr_scale():
+    # One beat's Q and R land on nearly identical values (e.g. a fiducial
+    # landing on a flat stretch by mistake). Normalizing by that near-zero
+    # scale used to blow the beat's normalized values up to hundreds of
+    # times the others', corrupting the shared template averaged over all
+    # beats.
+    signal = np.zeros(2000)
+    above_threshold = np.zeros(2000, dtype=bool)
+    peaks = [200, 600, 1000, 1400, 1800]
+    for peak in peaks:
+        above_threshold[peak - 20 : peak + 21] = True
+        signal[peak - 10] = -1.0
+        signal[peak] = 2.0
+        signal[peak + 10] = -0.8
+    degenerate_peak = 1000
+    signal[degenerate_peak - 20 : degenerate_peak] = 1.999999
+
+    template_peaks, _, normalized, _ = _template_segments(
+        signal,
+        np.asarray(peaks),
+        above_threshold=above_threshold,
+        window_samples=41,
+    )
+
+    assert degenerate_peak not in template_peaks
+    assert normalized.shape[0] == len(peaks) - 1
+    assert np.max(np.abs(normalized)) < 5.0
+
+
 @pytest.mark.parametrize(
     ("values", "sample_frequency", "message"),
     [
