@@ -177,6 +177,127 @@ def load_spec(
     return _parse_spec(raw, root=resolved_root or path.parent)
 
 
+def spec_to_dict(spec: PipelineSpec) -> dict[str, Any]:
+    """The inverse of ``load_spec()``'s parsing: a plain, JSON-safe dict
+    that reproduces ``spec`` when passed back through ``load_spec()``.
+
+    Every ``StepSpec.inputs``/``params``/``outputs`` value is already the
+    raw, unresolved form the parser stored (``@name`` references are kept
+    as literal ``"@name"`` strings, never substituted - resolution only
+    happens later, at compile time), so they carry over unchanged. Each
+    step's ``id`` is always written explicitly, so a step keeps the exact
+    id it had even if reordering would otherwise change its generated
+    default.
+
+    ``outputs.dir`` is written relative to ``spec.root`` when it is
+    actually a subpath of it (the common case, since the compiler only
+    ever resolves a spec's own relative paths *forward*, against that same
+    root) and as an absolute path otherwise, so a spec saved next to its
+    data does not accumulate a machine-specific absolute path.
+
+    A field left at its dataclass default is omitted from the output
+    entirely, so a spec that never touched e.g. ``execution`` or
+    ``experiment`` doesn't grow a block of defaults on every save; this
+    does not affect what a reload produces, since an omitted field parses
+    back to that same default.
+
+    Does not preserve comments or key ordering/formatting from a
+    hand-authored file - if that matters, write to a new file rather than
+    overwriting one a person wrote, and let them diff the two rather than
+    silently losing their comments.
+    """
+
+    result: dict[str, Any] = {"name": spec.name}
+    if spec.schema_version is not None:
+        result["schema_version"] = spec.schema_version
+    if spec.description:
+        result["description"] = spec.description
+    if spec.inputs:
+        result["inputs"] = dict(spec.inputs)
+    if spec.metadata:
+        result["metadata"] = dict(spec.metadata)
+    if spec.execution != SpecExecutionConfig():
+        result["execution"] = {
+            "error_policy": spec.execution.error_policy,
+            "seed": spec.execution.seed,
+        }
+    if spec.outputs != SpecOutputsConfig():
+        result["outputs"] = _outputs_to_dict(spec.outputs, spec.root)
+    if spec.experiment != SpecExperimentConfig():
+        result["experiment"] = {
+            "subject_id": spec.experiment.subject_id,
+            "mode": spec.experiment.mode,
+            "timepoint": spec.experiment.timepoint,
+            "run_identifier": spec.experiment.run_identifier,
+            "selection": spec.experiment.selection,
+        }
+    result["steps"] = [_step_to_dict(step_spec) for step_spec in spec.steps]
+    return result
+
+
+def _outputs_to_dict(outputs: SpecOutputsConfig, root: Path) -> dict[str, Any]:
+    resolved_dir: str | None = None
+    if outputs.dir is not None:
+        try:
+            resolved_dir = outputs.dir.relative_to(root).as_posix()
+        except ValueError:
+            resolved_dir = str(outputs.dir)
+    return {
+        "dir": resolved_dir,
+        "mode": outputs.mode,
+        "timestamped": outputs.timestamped,
+        "summary_json": outputs.summary_json,
+        "event_csvs": outputs.event_csvs,
+        "parameters_csv": outputs.parameters_csv,
+        "postprocessing": outputs.postprocessing,
+        "structured_export": outputs.structured_export,
+        "figures": outputs.figures,
+        "checksums": outputs.checksums,
+    }
+
+
+def _step_to_dict(step_spec: StepSpec) -> dict[str, Any]:
+    result: dict[str, Any] = {"id": step_spec.id, "uses": step_spec.uses}
+    if step_spec.inputs:
+        result["in"] = dict(step_spec.inputs)
+    if step_spec.params:
+        result["with"] = dict(step_spec.params)
+    if step_spec.outputs:
+        result["out"] = dict(step_spec.outputs)
+    return result
+
+
+def dump_spec(
+    spec: PipelineSpec,
+    path: str | Path,
+    *,
+    format: Literal["yaml", "json"] | None = None,
+) -> Path:
+    """Write ``spec`` to ``path`` as YAML (default) or JSON.
+
+    ``format`` is inferred from ``path``'s suffix (``.json`` -> JSON,
+    anything else -> YAML) when not given explicitly, mirroring
+    ``load_spec()``'s own suffix-based detection.
+
+    This does not check whether ``path`` already exists or was
+    hand-authored - see ``spec_to_dict()``'s docstring on comment loss.
+    Callers building an editor on top of this should save to a new file
+    rather than silently overwriting one a person wrote.
+    """
+
+    target = Path(path).expanduser()
+    resolved_format = format or ("json" if target.suffix.lower() == ".json" else "yaml")
+    payload = spec_to_dict(spec)
+    if resolved_format == "json":
+        target.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    else:
+        target.write_text(
+            yaml.safe_dump(payload, sort_keys=False, default_flow_style=False),
+            encoding="utf-8",
+        )
+    return target
+
+
 # --------------------------------------------------------------------------- #
 # Versioned (strict) document model                                          #
 # --------------------------------------------------------------------------- #
