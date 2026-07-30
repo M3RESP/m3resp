@@ -63,7 +63,7 @@ steps:
   # below instead of the (also ECG-contaminated) EMG channel itself.
   - id: preprocess
     uses: emg.preprocess
-    with: { channel: 1, high_pass_hz: 80, envelope_window_seconds: 0.5 }
+    with: { channel: 1, envelope_window_seconds: 0.5 }
     out: { processed_emg: processed_emg_before_ecg }
 
   - id: ecg_detect_peaks
