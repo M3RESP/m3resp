@@ -226,6 +226,64 @@ def test_allows_parameter_when_function_accepts_var_keyword(_cleanup):
 # --------------------------------------------------------------------------- #
 
 
+# --------------------------------------------------------------------------- #
+# parameters_reviewed                                                         #
+# --------------------------------------------------------------------------- #
+
+
+def test_parameters_reviewed_defaults_false_with_no_parameters(_cleanup):
+    @register_step("meta_test.unreviewed", writes=("value",))
+    def _plain() -> dict[str, Any]:
+        return {"value": 1}
+
+    _cleanup.append("meta_test.unreviewed")
+    assert STEP_REGISTRY["meta_test.unreviewed"].parameters_reviewed is False
+
+
+def test_parameters_reviewed_auto_true_when_parameters_declared(_cleanup):
+    @register_step(
+        "meta_test.has_params",
+        parameters=(StepParameter(name="x", value_type="integer"),),
+    )
+    def _plain(*, x: Any) -> dict[str, Any]:
+        return {}
+
+    _cleanup.append("meta_test.has_params")
+    assert STEP_REGISTRY["meta_test.has_params"].parameters_reviewed is True
+
+
+def test_parameters_reviewed_explicit_true_with_no_parameters(_cleanup):
+    @register_step("meta_test.audited_empty", parameters_reviewed=True)
+    def _plain() -> dict[str, Any]:
+        return {}
+
+    _cleanup.append("meta_test.audited_empty")
+    definition = STEP_REGISTRY["meta_test.audited_empty"]
+    assert definition.parameters == ()
+    assert definition.parameters_reviewed is True
+
+
+def test_describe_step_carries_parameters_reviewed():
+    description = describe_step("metric.interval_cv")
+    assert description.parameters_reviewed is True
+    assert description.as_dict()["parameters_reviewed"] is True
+
+
+def test_every_registered_step_has_reviewed_parameters():
+    """Guards the Phase A audit (plan/06_gui_readiness_plan.md §1): an empty
+    ``parameters`` tuple must mean "confirmed no tunable parameter", not
+    "nobody has looked yet". Any new step must set ``parameters_reviewed``
+    (directly, or implicitly by declaring real ``parameters``) at
+    registration time."""
+
+    unreviewed = sorted(
+        name
+        for name, definition in STEP_REGISTRY.items()
+        if not definition.parameters_reviewed
+    )
+    assert unreviewed == []
+
+
 def test_describe_step_matches_registered_metadata():
     description = describe_step("metric.interval_cv")
     assert description.name == "metric.interval_cv"

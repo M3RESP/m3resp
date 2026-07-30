@@ -21,6 +21,7 @@ from m3resp.workflows.registry import StepArtifact, register_step
         "modality's interval collection."
     ),
     category="reducer",
+    parameters_reviewed=True,
     input_artifacts=(
         StepArtifact(
             name="intervals",

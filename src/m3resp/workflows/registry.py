@@ -138,6 +138,12 @@ class StepDefinition:
     #: Static (``with:``) parameter metadata. Optional during migration; see
     #: the module docstring.
     parameters: tuple[StepParameter, ...] = ()
+    #: Whether a user has confirmed ``parameters`` is complete, i.e. that an
+    #: empty tuple means "audited, genuinely has no tunable static parameter"
+    #: rather than "not looked at yet". Set automatically when ``parameters``
+    #: is non-empty; otherwise must be set explicitly via
+    #: ``register_step(..., parameters_reviewed=True)`` once audited.
+    parameters_reviewed: bool = False
     #: Groups of parameter names that must not be set together in the same
     #: step invocation (e.g. ``emg.ecg_gating``'s ``gate_width_seconds``/
     #: ``gate_width_samples``) - a structural, compile-time constraint on top
@@ -193,6 +199,7 @@ def register_step(
     summary: str = "",
     description: str = "",
     parameters: tuple[StepParameter, ...] = (),
+    parameters_reviewed: bool = False,
     mutually_exclusive_parameters: tuple[tuple[str, ...], ...] = (),
     input_artifacts: tuple[StepArtifact, ...] = (),
     output_artifacts: tuple[StepArtifact, ...] = (),
@@ -216,6 +223,11 @@ def register_step(
     additive GUI/discovery metadata (Phase 1 of the pipeline-structure plan).
     A step with none of them declared is still fully valid and executable;
     they are being backfilled module by module.
+
+    ``parameters_reviewed`` records whether an empty ``parameters`` tuple has
+    been confirmed complete rather than simply never audited; it is set to
+    ``True`` automatically whenever ``parameters`` is non-empty, since
+    declaring real parameter metadata is itself evidence of review.
 
     ``aliases`` lists former names this step was registered under, so specs
     written against them keep compiling. They resolve silently and are hidden
@@ -245,6 +257,7 @@ def register_step(
             summary=summary or (func.__doc__ or "").strip().split("\n", 1)[0],
             description=description,
             parameters=tuple(parameters),
+            parameters_reviewed=parameters_reviewed or bool(parameters),
             mutually_exclusive_parameters=tuple(
                 tuple(group) for group in mutually_exclusive_parameters
             ),
@@ -456,6 +469,7 @@ class StepDescription:
     modality: str | None
     category: str | None
     parameters: tuple[StepParameter, ...]
+    parameters_reviewed: bool
     input_artifacts: tuple[StepArtifact, ...]
     output_artifacts: tuple[StepArtifact, ...]
     alternatives: tuple[str, ...]
@@ -473,6 +487,7 @@ class StepDescription:
             "modality": self.modality,
             "category": self.category,
             "parameters": [p.as_dict() for p in self.parameters],
+            "parameters_reviewed": self.parameters_reviewed,
             "input_artifacts": [a.as_dict() for a in self.input_artifacts],
             "output_artifacts": [a.as_dict() for a in self.output_artifacts],
             "alternatives": list(self.alternatives),
@@ -518,6 +533,7 @@ def describe_step(name: str) -> StepDescription:
         modality=definition.modality,
         category=definition.category,
         parameters=definition.parameters,
+        parameters_reviewed=definition.parameters_reviewed,
         input_artifacts=definition.input_artifacts,
         output_artifacts=definition.output_artifacts,
         alternatives=definition.alternatives,

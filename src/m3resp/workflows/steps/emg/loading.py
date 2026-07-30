@@ -190,6 +190,7 @@ def detect_breaths(session: M3Session, **kwargs: Any) -> dict[str, Any]:
     description="Convert detected EMG breath events into peak sample indices into the processed envelope.",
     category="detection",
     modality="emg",
+    parameters_reviewed=True,
     input_artifacts=(
         StepArtifact(
             name="events",

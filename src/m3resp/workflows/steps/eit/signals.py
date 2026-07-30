@@ -34,6 +34,7 @@ from ._shared import (
     category="preprocessing",
     modality="eit",
     optional_packages=_EITPROCESSING,
+    parameters_reviewed=True,
     input_artifacts=(
         StepArtifact(
             name="signal",
@@ -128,6 +129,7 @@ def detect_breaths(signal: Any, *, min_duration_s: float = 2 / 3) -> dict[str, A
     category="detection",
     modality="eit",
     optional_packages=_EITPROCESSING,
+    parameters_reviewed=True,
     input_artifacts=(
         StepArtifact(
             name="breath_intervals",
@@ -158,6 +160,7 @@ def normalize_breaths(breath_intervals: Any, session: M3Session) -> dict[str, An
     category="parameters",
     modality="eit",
     optional_packages=_EITPROCESSING,
+    parameters_reviewed=True,
     input_artifacts=(
         StepArtifact(
             name="signal",

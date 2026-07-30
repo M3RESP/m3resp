@@ -38,6 +38,7 @@ from ._shared import _mask_invalid
     description="Compute the time from breath onset to peak for each detected breath.",
     category="features",
     modality="emg",
+    parameters_reviewed=True,
     input_artifacts=(
         StepArtifact(
             name="processed_emg",
@@ -102,6 +103,7 @@ def time_to_peak(
     description="Compute the pseudo-slope (rise rate) of the envelope for each detected breath.",
     category="features",
     modality="emg",
+    parameters_reviewed=True,
     input_artifacts=(
         StepArtifact(
             name="processed_emg",
@@ -159,6 +161,7 @@ def pseudo_slope(
     description="Compute the envelope amplitude above baseline at each breath peak.",
     category="features",
     modality="emg",
+    parameters_reviewed=True,
     input_artifacts=(
         StepArtifact(
             name="processed_emg",
@@ -204,6 +207,7 @@ def amplitude(processed_emg: Any, peak_indices: Any, baseline: Any) -> dict[str,
     description="Integrate the envelope above baseline over each breath's onset/offset window.",
     category="features",
     modality="emg",
+    parameters_reviewed=True,
     input_artifacts=(
         StepArtifact(
             name="processed_emg",
@@ -362,6 +366,7 @@ def area_under_baseline(
     description="Compute respiratory rate from the detected EMG breath peak indices.",
     category="parameters",
     modality="emg",
+    parameters_reviewed=True,
     input_artifacts=(
         StepArtifact(
             name="peak_indices",

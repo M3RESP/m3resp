@@ -33,6 +33,7 @@ from ._shared import (
     category="quality",
     modality="ventilator",
     optional_packages=_RESURFEMG,
+    parameters_reviewed=True,
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(

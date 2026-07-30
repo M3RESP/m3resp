@@ -181,6 +181,7 @@ def interpeak_dist(
     category="detection",
     modality="emg",
     alternatives=("emg.onoffpeak_slope_extrapolation",),
+    parameters_reviewed=True,
     input_artifacts=(
         StepArtifact(
             name="processed_emg",

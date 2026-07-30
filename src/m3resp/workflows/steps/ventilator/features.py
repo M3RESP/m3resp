@@ -20,6 +20,7 @@ from m3resp.workflows.registry import StepArtifact, register_step
     description="Compute respiratory rate from the detected ventilator breath peak indices.",
     category="parameters",
     modality="ventilator",
+    parameters_reviewed=True,
     input_artifacts=(
         StepArtifact(
             name="ventilator_breath_indices",

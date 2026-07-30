@@ -40,6 +40,7 @@ from ._shared import (
     category="quality",
     modality="emg",
     optional_packages=_RESURFEMG,
+    parameters_reviewed=True,
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(
@@ -185,6 +186,7 @@ def evaluate_bell_curve_error(
     category="quality",
     modality="emg",
     optional_packages=_RESURFEMG,
+    parameters_reviewed=True,
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(
