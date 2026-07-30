@@ -144,6 +144,7 @@ body {
 
 .m3-title-lockup .rubric {
   width: 100%;
+  margin-top: 0.05rem;
 }
 
 .m3-title-continuation {
@@ -163,7 +164,7 @@ body {
 }
 
 .m3-eyebrow {
-  margin-bottom: 0.9rem;
+  margin-bottom: 2rem;
   color: #7ee8dc;
   font-size: 0.8125rem;
   font-weight: 760;
