@@ -43,15 +43,28 @@ After this:
 session.run_pipeline("emg")
 ```
 
-Calls `preprocess_emg()`, `detect_emg_breaths()`, then `postprocess_emg()`
-in sequence. Pass `config={"preprocess": {...}, "detect_breaths": {...}, "postprocess": {...}}`
+Calls `preprocess_emg()`, then ECG peak detection + gating, then
+`detect_emg_breaths()` and `postprocess_emg()` in sequence. Pass
+`config={"preprocess": {...}, "ecg_detect_peaks": {...}, "ecg_gating": {...}, "detect_breaths": {...}, "postprocess": {...}}`
 to override any call's keyword arguments. See
 [../developer/pipeline-contracts.md](../developer/pipeline-contracts.md).
 
+ECG removal is part of the preset because it has to happen *before* the
+envelope that breath detection and every amplitude-derived parameter are
+computed from: a band-pass high enough to suppress ECG still leaves the
+higher-frequency part of each QRS complex inside the pass band. Gating each
+detected ECG peak and recomputing the envelope from the gated signal is the
+standard chain. `config={"ecg_removal": {"enabled": False}}` skips it, for
+data checks and exploration only. If a dedicated reference ECG channel was
+recorded, point detection at it with
+`config={"ecg_detect_peaks": {"ecg_channel": n}}`; otherwise peaks are
+detected in the EMG channel itself.
+
 ## ECG removal and other advanced operations
 
-`preprocess_emg`'s default path handles the common bandpass + envelope
-case. For ECG-contaminated EMG (e.g. diaphragm EMG near the heart), ECG
+`preprocess_emg`'s own default path handles only the bandpass + envelope
+part, so calling it directly (rather than through the preset above) leaves
+ECG in the signal. ECG
 removal (gating, wavelet denoising, or the native estimated-ECG-subtraction
 alternative), custom baselines, and Pocc-specific quality checks are exposed
 individually on `ReSurfEMGAdapter` (see

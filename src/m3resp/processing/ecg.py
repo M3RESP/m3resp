@@ -449,7 +449,7 @@ def _template_segments(
         window_samples += 1
     half_window = window_samples // 2
 
-    candidates: list[tuple[int, int, int, int, int, float, float, float]] = []
+    candidates: list[tuple[int, int, int, int, int, int, float, float]] = []
     for detection_peak in peak_indices:
         segment_start, segment_end = _segment_containing(
             above_threshold, int(detection_peak)

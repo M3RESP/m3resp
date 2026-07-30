@@ -33,7 +33,7 @@ not `Pipeline` - populate the typed collections (`session.signals`,
 | Preset | `name` | Calls |
 |---|---|---|
 | `EITPipeline` | `"eit"` | `session.preprocess_eit(...)`, `session.detect_eit_breaths(...)` |
-| `EMGPipeline` | `"emg"` | `session.preprocess_emg(...)`, `session.detect_emg_breaths(...)`, `session.postprocess_emg(...)` |
+| `EMGPipeline` | `"emg"` | `session.preprocess_emg(...)`, `emg.ecg_detect_peaks` + `emg.ecg_gating`, `session.detect_emg_breaths(...)`, `session.postprocess_emg(...)` |
 | `MultimodalPipeline` | `"multimodal"` | `session.synchronize_raw_modalities(...)`, `session.synchronize_multimodal_breaths(...)` |
 
 `presets/registry.py` maps each `name` to its class via `register_pipeline`/
@@ -45,6 +45,19 @@ session.run_pipeline("eit")
 session.run_pipeline("emg", config={"preprocess": {"variant": "native"}})
 session.run_pipeline("multimodal")
 ```
+
+`EMGPipeline` is the one preset that also calls two registered steps
+(`emg.ecg_detect_peaks`, `emg.ecg_gating`) rather than only `M3Session`
+methods, because there is no session-level ECG-removal method. Those steps
+already record provenance through `M3Session._record()` and populate the
+typed collections themselves, so this is still "a fixed sequence of
+instrumented calls" and not a second execution engine. It runs by default:
+band-pass -> ECG peak detection -> gating -> envelope -> breath detection ->
+postprocessing. `config={"ecg_removal": {"enabled": False}}` skips it, which
+is a data-check/exploratory path only - the envelope and every
+amplitude-derived parameter downstream of it stay ECG-contaminated. Pass
+`config={"ecg_detect_peaks": {"ecg_channel": n}}` when a dedicated reference
+ECG channel was recorded.
 
 There is deliberately no `BatchPipeline` yet - nothing in the current test
 suite or examples needs one; add it in `presets/` following the same shape

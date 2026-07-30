@@ -9,6 +9,7 @@ spying on the session's methods rather than re-deriving domain correctness.
 
 from __future__ import annotations
 
+from importlib import import_module
 from typing import Any
 
 import pytest
@@ -26,11 +27,48 @@ from m3resp.workflows import register_step
 from m3resp.workflows.registry import STEP_REGISTRY
 
 
-def _spy(calls: list[tuple[str, dict[str, Any]]], name: str):
-    def _record(**kwargs: Any) -> None:
+def _spy(calls: list[tuple[str, dict[str, Any]]], name: str, result: Any = None):
+    def _record(**kwargs: Any) -> Any:
         calls.append((name, kwargs))
+        return result
 
     return _record
+
+
+def _step_spy(calls: list[tuple[str, dict[str, Any]]], name: str, result: Any = None):
+    """Spy for a registered step, which takes positional arguments."""
+
+    def _record(*args: Any, **kwargs: Any) -> Any:
+        calls.append((name, kwargs))
+        return result
+
+    return _record
+
+
+def _patch_ecg_removal_steps(
+    monkeypatch: pytest.MonkeyPatch,
+    calls: list[tuple[str, dict[str, Any]]],
+) -> None:
+    """Spy on the two ECG-removal steps `EMGPipeline` calls.
+
+    `EMGPipeline._remove_ecg` imports them lazily from their own modules, so
+    patching the module attributes is what the pipeline actually looks up.
+    """
+
+    # `import_module`, not `from ... import ecg_gating`: the package's
+    # `__init__` re-exports the step *function* under the same name as its
+    # module, which would shadow the module object here.
+    detection_module = import_module("m3resp.workflows.steps.emg.ecg_detection")
+    gating_module = import_module("m3resp.workflows.steps.emg.ecg_gating")
+
+    monkeypatch.setattr(
+        detection_module,
+        "ecg_detect_peaks",
+        _step_spy(calls, "ecg_detect_peaks", result={"ecg_peak_indices": []}),
+    )
+    monkeypatch.setattr(
+        gating_module, "ecg_gating", _step_spy(calls, "ecg_gating", result={})
+    )
 
 
 class TestPipelineRegistry:
@@ -78,21 +116,72 @@ class TestEITPipeline:
 
 
 class TestEMGPipeline:
-    def test_run_calls_preprocess_detect_and_postprocess_in_order(self):
+    def _session_with_spies(self, calls: list[tuple[str, dict[str, Any]]]) -> M3Session:
         session = M3Session()
-        calls: list[tuple[str, dict[str, Any]]] = []
-        session.preprocess_emg = _spy(calls, "preprocess_emg")
+        session.preprocess_emg = _spy(
+            calls, "preprocess_emg", result={"fs": 1000.0, "channel": 0}
+        )
         session.detect_emg_breaths = _spy(calls, "detect_emg_breaths")
         session.postprocess_emg = _spy(calls, "postprocess_emg")
+        return session
+
+    def test_ecg_removal_runs_between_preprocess_and_breath_detection(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """The standard EMG chain gates ECG *before* the envelope feeds
+        breath detection, so the two ECG steps must sit between
+        `preprocess_emg` and `detect_emg_breaths`."""
+
+        calls: list[tuple[str, dict[str, Any]]] = []
+        session = self._session_with_spies(calls)
+        _patch_ecg_removal_steps(monkeypatch, calls)
 
         session.run_pipeline("emg", config={"postprocess": {"peep": 5.0}})
+
+        assert [name for name, _ in calls] == [
+            "preprocess_emg",
+            "ecg_detect_peaks",
+            "ecg_gating",
+            "detect_emg_breaths",
+            "postprocess_emg",
+        ]
+        assert calls[-1] == ("postprocess_emg", {"peep": 5.0})
+
+    def test_ecg_step_kwargs_are_passed_through(self, monkeypatch: pytest.MonkeyPatch):
+        calls: list[tuple[str, dict[str, Any]]] = []
+        session = self._session_with_spies(calls)
+        _patch_ecg_removal_steps(monkeypatch, calls)
+
+        session.run_pipeline(
+            "emg",
+            config={
+                "ecg_detect_peaks": {"ecg_channel": 0},
+                "ecg_gating": {"fill_method": 1},
+            },
+        )
+
+        assert ("ecg_detect_peaks", {"ecg_channel": 0}) in calls
+        assert ("ecg_gating", {"fill_method": 1}) in calls
+
+    def test_ecg_removal_can_be_disabled(self, monkeypatch: pytest.MonkeyPatch):
+        calls: list[tuple[str, dict[str, Any]]] = []
+        session = self._session_with_spies(calls)
+        _patch_ecg_removal_steps(monkeypatch, calls)
+
+        session.run_pipeline("emg", config={"ecg_removal": {"enabled": False}})
 
         assert [name for name, _ in calls] == [
             "preprocess_emg",
             "detect_emg_breaths",
             "postprocess_emg",
         ]
-        assert calls[-1] == ("postprocess_emg", {"peep": 5.0})
+
+    def test_unknown_ecg_removal_option_is_rejected(self):
+        calls: list[tuple[str, dict[str, Any]]] = []
+        session = self._session_with_spies(calls)
+
+        with pytest.raises(TypeError, match="only accepts 'enabled'"):
+            session.run_pipeline("emg", config={"ecg_removal": {"fill_method": 1}})
 
 
 class TestMultimodalPipeline:
