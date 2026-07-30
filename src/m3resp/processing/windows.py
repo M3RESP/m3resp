@@ -1,4 +1,27 @@
-"""Shared rolling-window and envelope primitives."""
+"""Shared rolling-window and envelope primitives.
+
+---------------------------------------------------------------------------
+Provenance
+----------
+Portions of this module are derived from ReSurfEMG.
+
+    Source:     https://github.com/resurfemg-org/ReSurfEMG
+    Revision:   m3resp-integration (c63668689030e4581d5f985e7d09d3a8c01e7a77)
+    Original:   resurfemg/preprocessing/envelope.py::full_rolling_rms,
+                naive_rolling_rms, full_rolling_arv, rolling_rms_ci, rolling_arv_ci;
+                resurfemg/postprocessing/features.py::running_smoother
+    Copyright:  Copyright (c) 2022 Netherlands eScience Center and
+                University of Twente
+    License:    Apache License, Version 2.0
+
+Modified for M3RESP:
+    - `full_rolling_rms`/`full_rolling_arv` renamed to `rolling_rms`/`rolling_arv`.
+    - Parameters renamed and reorganized as keyword-only arguments.
+
+The original copyright and license notices are retained per Apache-2.0 §4.
+Full attribution notice: see top-level NOTICE.md.
+---------------------------------------------------------------------------
+"""
 
 from __future__ import annotations
 

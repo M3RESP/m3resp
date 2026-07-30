@@ -1,4 +1,30 @@
-"""Shared per-breath metric primitives."""
+"""Shared per-breath metric primitives.
+
+---------------------------------------------------------------------------
+Provenance
+----------
+Portions of this module are derived from ReSurfEMG.
+
+    Source:     https://github.com/resurfemg-org/ReSurfEMG
+    Revision:   m3resp-integration (c63668689030e4581d5f985e7d09d3a8c01e7a77)
+    Original:   resurfemg/postprocessing/features.py::time_to_peak, pseudo_slope,
+                amplitude, time_product, area_under_baseline, respiratory_rate
+    Copyright:  Copyright (c) 2022 Netherlands eScience Center and
+                University of Twente
+    License:    Apache License, Version 2.0
+
+Modified for M3RESP:
+    - `amplitude` renamed to `amplitude_at_peaks`, `time_product` renamed to
+      `window_integral`, `respiratory_rate` renamed to
+      `respiratory_rate_from_indices`.
+    - Parameters renamed and reorganized as keyword-only arguments.
+    - `tidal_variation` below is independent M3RESP code (EIT-style tidal
+      variation), not derived from ReSurfEMG.
+
+The original copyright and license notices are retained per Apache-2.0 §4.
+Full attribution notice: see top-level NOTICE.md.
+---------------------------------------------------------------------------
+"""
 
 from __future__ import annotations
 
