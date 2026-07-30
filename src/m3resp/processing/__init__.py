@@ -48,15 +48,18 @@ from m3resp.processing.quality import (
     timing_window_flag,
 )
 from m3resp.processing.windows import (
+    ENVELOPE_METHODS,
     moving_average,
     naive_rolling_rms,
     rolling_arv,
     rolling_arv_ci,
+    rolling_envelope,
     rolling_rms,
     rolling_rms_ci,
 )
 
 __all__ = [
+    "ENVELOPE_METHODS",
     "EstimatedECGSubtractionResult",
     "amplitude_at_peaks",
     "area_under_baseline",
@@ -89,6 +92,7 @@ __all__ = [
     "respiratory_rate_from_indices",
     "rolling_arv",
     "rolling_arv_ci",
+    "rolling_envelope",
     "rolling_rms",
     "rolling_rms_ci",
     "sample_intervals_to_breath_events",

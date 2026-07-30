@@ -40,6 +40,15 @@ def _synthetic_emg_signal(
 
 
 def test_preprocess_reproduces_resurfemg_filtering_and_envelope_exactly():
+    """Pass-through equivalence, with `envelope_method="arv"` requested.
+
+    `resurfemg`'s envelope helper is ARV; the adapter's *default* is RMS (the
+    method respiratory-sEMG literature specifies), so ARV has to be asked for
+    explicitly here for this to be an equivalence test rather than a
+    comparison of two different envelopes - see
+    `test_preprocess_envelope_defaults_to_rms_not_arv` below.
+    """
+
     from resurfemg.preprocessing.envelope import full_rolling_arv
     from resurfemg.preprocessing.filtering import emg_bandpass_butter
 
@@ -61,10 +70,55 @@ def test_preprocess_reproduces_resurfemg_filtering_and_envelope_exactly():
         high_pass_hz=high_pass_hz,
         low_pass_hz=low_pass_hz,
         envelope_window_seconds=envelope_window_seconds,
+        envelope_method="arv",
     )
 
     np.testing.assert_array_equal(processed["filtered"], expected_filtered)
     np.testing.assert_array_equal(processed["envelope"], expected_envelope)
+
+
+def test_preprocess_envelope_defaults_to_rms_not_arv():
+    """The default envelope is RMS, and RMS is not ARV on real bursty sEMG.
+
+    Pins the default itself, so a silent revert to ARV (which the equivalence
+    test above would still pass, since it now requests ARV explicitly) fails
+    here instead of going unnoticed.
+    """
+
+    from resurfemg.preprocessing.envelope import full_rolling_arv
+    from resurfemg.preprocessing.filtering import emg_bandpass_butter
+
+    fs = 1000.0
+    raw = _synthetic_emg_signal(fs=fs)
+    recording = {"array": [raw], "metadata": {"fs": fs}}
+    adapter = ReSurfEMGAdapter()
+
+    processed = adapter.preprocess(recording, high_pass_hz=80.0, low_pass_hz=250.0)
+
+    assert processed["filter"]["envelope_method"] == "rms"
+
+    arv_envelope = full_rolling_arv(
+        emg_bandpass_butter(emg_raw=raw, high_pass=80.0, low_pass=250.0, fs_emg=fs),
+        int(0.5 * fs),
+    )
+    assert not np.allclose(processed["envelope"], arv_envelope)
+    # RMS >= ARV by Cauchy-Schwarz, over every window with any variation.
+    assert np.nanmean(processed["envelope"]) > np.nanmean(arv_envelope)
+
+
+def test_preprocess_bandpass_defaults_to_the_literature_range():
+    """20-500 Hz, capped by Nyquist. The high-pass deliberately does not sit
+    low enough to double as ECG suppression - `emg.ecg_gating` owns that."""
+
+    fs = 2000.0
+    adapter = ReSurfEMGAdapter()
+
+    processed = adapter.preprocess(
+        {"array": [_synthetic_emg_signal(fs=fs)], "metadata": {"fs": fs}}
+    )
+
+    assert processed["filter"]["high_pass_hz"] == 20.0
+    assert processed["filter"]["low_pass_hz"] == 500.0
 
 
 def test_detect_breaths_reproduces_resurfemg_peak_detection_exactly():

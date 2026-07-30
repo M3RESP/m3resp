@@ -14,6 +14,7 @@ from m3resp.processing.windows import (
     naive_rolling_rms,
     rolling_arv,
     rolling_arv_ci,
+    rolling_envelope,
     rolling_rms,
     rolling_rms_ci,
 )
@@ -118,3 +119,33 @@ def test_resurfemg_rolling_confidence_intervals_match_shared_windows_exactly():
     actual_arv = rolling_arv_ci(values, window_length=window_length, alpha=alpha)
     np.testing.assert_array_equal(actual_arv[0], expected_arv[0])
     np.testing.assert_array_equal(actual_arv[1], expected_arv[1])
+
+
+def test_rolling_envelope_dispatches_to_the_named_primitive():
+    """`rolling_envelope` is only a seam over the two primitives above, so it
+    must be bit-identical to calling them directly - no separate code path
+    that could drift from the upstream-equivalence tests in this module."""
+
+    values = _synthetic_signal(duration_seconds=1.0)
+    window_length = 100
+
+    np.testing.assert_array_equal(
+        rolling_envelope(values, window_length=window_length, method="rms"),
+        rolling_rms(values, window_length=window_length),
+    )
+    np.testing.assert_array_equal(
+        rolling_envelope(values, window_length=window_length, method="arv"),
+        rolling_arv(values, window_length=window_length),
+    )
+    # RMS is the default: the method respiratory-sEMG literature specifies.
+    np.testing.assert_array_equal(
+        rolling_envelope(values, window_length=window_length),
+        rolling_rms(values, window_length=window_length),
+    )
+
+
+def test_rolling_envelope_rejects_an_unknown_method():
+    with pytest.raises(ValueError, match="method must be one of"):
+        rolling_envelope(
+            _synthetic_signal(duration_seconds=0.1), window_length=10, method="median"
+        )

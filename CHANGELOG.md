@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+### The standard EMG pipeline now removes ECG, band-passes 20-500 Hz, and computes an RMS envelope
+
+The `"emg"` preset was `preprocess_emg` -> `detect_emg_breaths` ->
+`postprocess_emg`, with no ECG removal anywhere, so the pipeline advertised as
+the standard EMG chain produced an ECG-contaminated envelope - and every breath
+detection and amplitude-derived parameter computed from it. The standard chain
+is band-pass -> ECG peak detection -> gating -> envelope -> baseline, and the
+preset now runs it.
+
+**These are behavior changes: EMG amplitudes, envelopes, and breath detections
+will differ from previous runs.**
+
+- `EMGPipeline` (`session.run_pipeline("emg")`) runs `emg.ecg_detect_peaks` +
+  `emg.ecg_gating` between preprocessing and breath detection. Gating
+  recomputes the envelope from the gated signal, so nothing downstream sees the
+  pre-gating envelope.
+  - `config={"ecg_detect_peaks": {...}}` / `config={"ecg_gating": {...}}` pass
+    keyword arguments to either step; `{"ecg_detect_peaks": {"ecg_channel": n}}`
+    points detection at a dedicated reference ECG channel.
+  - `config={"ecg_removal": {"ecg_peak_indices": [...]}}` gates already-known
+    peaks and skips detection.
+  - `config={"ecg_removal": {"enabled": False}}` restores the old behavior. This
+    is a data-check/exploratory path only.
+- The default EMG band-pass is **20-500 Hz** (`high_pass_hz` was `10.0`).
+  `low_pass_hz` still caps at 0.95 x Nyquist below 1053 Hz sampling. The
+  high-pass no longer doubles as weak ECG suppression, since gating now owns
+  that.
+- The default EMG envelope is **RMS**, not ARV. `preprocess_emg` and
+  `emg.preprocess` gained `envelope_method` (`"rms"` default, `"arv"`);
+  `emg.ecg_gating` gained the same parameter, defaulting to whatever
+  preprocessing used so the recomputed envelope cannot silently switch method.
+  Pass `envelope_method="arv"` to reproduce `resurfemg`'s `full_rolling_arv`
+  exactly.
+- New shared primitive `m3resp.processing.rolling_envelope(values,
+  window_length=..., method=...)` over the existing `rolling_rms`/`rolling_arv`,
+  plus `ENVELOPE_METHODS`.
+- `_preprocess_default` itself is unchanged in scope: it still only filters and
+  envelopes. ECG removal lives in the preset, not in the adapter primitive, so
+  composing the blocks by hand stays possible.
+
 ### Signals carry a data *category* alongside their modality
 
 `Signal`, `ParameterResult`, and `QualityFlag` gained a `category` field.

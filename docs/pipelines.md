@@ -289,9 +289,9 @@ Every step also writes its raw/compatibility output(s) unchanged (existing consu
 | Step | Reads (besides `session`) | Key parameters | Native writes | Implementation |
 |---|---|---|---|---|
 | `emg.load` | — | `file`, `loader_options` | `raw_emg_signals` (one `Signal`/channel) | upstream loader |
-| `emg.preprocess` | — | `channel`, `high_pass_hz`, `low_pass_hz`, `envelope_window_seconds`, `notch_base_frequency`, `notch_quality_factor` | — (raw `processed_emg` dict) | upstream + native notch filter |
+| `emg.preprocess` | — | `channel`, `high_pass_hz` (default 20), `low_pass_hz` (default 500, Nyquist-capped), `envelope_window_seconds`, `envelope_method` (`"rms"` default / `"arv"`), `notch_base_frequency`, `notch_quality_factor` | — (raw `processed_emg` dict) | upstream + native notch filter |
 | `emg.ecg_detect_peaks` | `processed_emg` | `ecg_channel`, `source` (default `"raw_channel"`), `peak_fraction`, `peak_width_seconds`, `peak_distance_seconds`, `bandpass_filter` | `ecg_peak_events` (one `Event`/peak), `ecg_peak_count_result` | upstream |
-| `emg.ecg_gating` | `processed_emg`, `ecg_peak_indices` | `source` (default `"filtered"`), `gate_width_seconds` **xor** `gate_width_samples`, `fill_method` (0-3), `envelope_window_seconds` | `ecg_gated_signal`, `ecg_gate_mask_result` (array) | upstream |
+| `emg.ecg_gating` | `processed_emg`, `ecg_peak_indices` | `source` (default `"filtered"`), `gate_width_seconds` **xor** `gate_width_samples`, `fill_method` (0-3), `envelope_window_seconds`, `envelope_method` (defaults to preprocessing's) | `ecg_gated_signal`, `ecg_gate_mask_result` (array) | upstream |
 | `emg.ecg_estimated_subtraction` | `processed_emg` | 4--50 Hz detection band, smoothing/threshold windows, QRS window, inter-QRS tolerance | cleaned/estimated/detection/threshold signals, QRS events, template arrays | native (`m3resp.processing.ecg`) |
 | `emg.ecg_wavelet_denoising` | `processed_emg`, `ecg_peak_indices` | `source`, `hard_thresholding`, `levels`, `wavelet_type`, `fixed_threshold`, `envelope_window_seconds` | `ecg_wavelet_cleaned_signal`, `wavelet_decomposition_result`, `wavelet_thresholds_result`, `wavelet_gate_mask_result` (all arrays) | upstream |
 | `emg.detect_breaths` | — | `min_breath_width_seconds`, `half_window_seconds`, `prominence_factor`, `threshold` | `emg_breath_events` | native |

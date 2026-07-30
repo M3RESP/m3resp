@@ -176,11 +176,65 @@ class TestEMGPipeline:
             "postprocess_emg",
         ]
 
+    def test_supplied_ecg_peaks_skip_detection_and_are_gated(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """ "ECG peaks detection (if ECG peaks aren't already provided)" - peaks
+        established elsewhere (separate ECG recording, annotations, an earlier
+        run) go straight to gating."""
+
+        calls: list[tuple[str, dict[str, Any]]] = []
+        session = self._session_with_spies(calls)
+        gated: list[Any] = []
+
+        gating_module = import_module("m3resp.workflows.steps.emg.ecg_gating")
+        detection_module = import_module("m3resp.workflows.steps.emg.ecg_detection")
+        monkeypatch.setattr(
+            detection_module,
+            "ecg_detect_peaks",
+            _step_spy(calls, "ecg_detect_peaks", result={"ecg_peak_indices": []}),
+        )
+
+        def _capture_gating(_session: Any, _processed: Any, peaks: Any, **kwargs: Any):
+            calls.append(("ecg_gating", kwargs))
+            gated.append(peaks)
+            return {}
+
+        monkeypatch.setattr(gating_module, "ecg_gating", _capture_gating)
+
+        session.run_pipeline(
+            "emg", config={"ecg_removal": {"ecg_peak_indices": [10, 20, 30]}}
+        )
+
+        assert [name for name, _ in calls] == [
+            "preprocess_emg",
+            "ecg_gating",
+            "detect_emg_breaths",
+            "postprocess_emg",
+        ]
+        assert gated == [[10, 20, 30]]
+
+    def test_supplied_peaks_together_with_detection_kwargs_is_rejected(self):
+        """Detection kwargs alongside supplied peaks would silently configure a
+        pass that never runs."""
+
+        calls: list[tuple[str, dict[str, Any]]] = []
+        session = self._session_with_spies(calls)
+
+        with pytest.raises(TypeError, match="would have no effect"):
+            session.run_pipeline(
+                "emg",
+                config={
+                    "ecg_removal": {"ecg_peak_indices": [10]},
+                    "ecg_detect_peaks": {"ecg_channel": 0},
+                },
+            )
+
     def test_unknown_ecg_removal_option_is_rejected(self):
         calls: list[tuple[str, dict[str, Any]]] = []
         session = self._session_with_spies(calls)
 
-        with pytest.raises(TypeError, match="only accepts 'enabled'"):
+        with pytest.raises(TypeError, match="only accepts 'enabled' and"):
             session.run_pipeline("emg", config={"ecg_removal": {"fill_method": 1}})
 
 

@@ -57,7 +57,11 @@ postprocessing. `config={"ecg_removal": {"enabled": False}}` skips it, which
 is a data-check/exploratory path only - the envelope and every
 amplitude-derived parameter downstream of it stay ECG-contaminated. Pass
 `config={"ecg_detect_peaks": {"ecg_channel": n}}` when a dedicated reference
-ECG channel was recorded.
+ECG channel was recorded, or
+`config={"ecg_removal": {"ecg_peak_indices": [...]}}` to gate already-known
+peaks and skip detection entirely (the two are mutually exclusive - detection
+kwargs alongside supplied peaks would configure a pass that never runs, so
+that combination raises).
 
 There is deliberately no `BatchPipeline` yet - nothing in the current test
 suite or examples needs one; add it in `presets/` following the same shape

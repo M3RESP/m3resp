@@ -25,7 +25,7 @@ from m3resp.processing.peaks import (
     detect_occluded_breath_peaks,
     detect_ventilator_breath_peaks,
 )
-from m3resp.processing.windows import rolling_arv
+from m3resp.processing.windows import rolling_envelope
 
 from ._protocols import _PostprocessingOpsProtocol
 from ._shared import (
@@ -45,14 +45,30 @@ class _DefaultsMixin:
         recording: Any,
         *,
         channel: int = 0,
-        high_pass_hz: float = 10.0,
+        high_pass_hz: float = 20.0,
         low_pass_hz: float | None = None,
         envelope_window_seconds: float = 0.5,
+        envelope_method: str = "rms",
         notch_base_frequency: float | None = None,
         notch_max_frequency: float | None = None,
         notch_quality_factor: float = 30.0,
     ) -> dict[str, Any]:
         """Run the Stage 1 EMG preprocessing pipeline through ReSurfEMG.
+
+        The band-pass defaults to 20-500 Hz, the range respiratory-sEMG
+        literature specifies. The high-pass is deliberately *not* set low
+        enough to double as ECG suppression: removing ECG is the job of a
+        dedicated gating step (``emg.ecg_gating``, which the ``"emg"`` preset
+        runs by default), because a high-pass steep enough to attenuate the
+        QRS complex still leaves its higher-frequency content inside the pass
+        band.
+
+        ``envelope_method`` selects the envelope computed on the band-passed
+        signal - ``"rms"`` (default) or ``"arv"``. RMS is what the literature
+        specifies; ARV is kept as an explicit opt-in because it is not an RMS
+        equivalent on real bursty sEMG. The choice is recorded in the returned
+        ``"filter"`` mapping so a later envelope recomputation (e.g. after ECG
+        gating) reuses the same method rather than silently switching.
 
         ``notch_base_frequency`` opts into harmonic notch filtering (e.g.
         ``50.0`` for mains hum, or a co-recorded EIT device's frame rate, which
@@ -103,7 +119,11 @@ class _DefaultsMixin:
                 quality_factor=notch_quality_factor,
             )
         envelope_window_samples = max(1, int(envelope_window_seconds * fs))
-        envelope = rolling_arv(filtered, window_length=envelope_window_samples)
+        envelope = rolling_envelope(
+            filtered,
+            window_length=envelope_window_samples,
+            method=envelope_method,
+        )
 
         return {
             **recording,
@@ -116,6 +136,7 @@ class _DefaultsMixin:
                 "high_pass_hz": high_pass_hz,
                 "low_pass_hz": low_pass_hz,
                 "envelope_window_seconds": envelope_window_seconds,
+                "envelope_method": envelope_method,
                 "notch_base_frequency": notch_base_frequency,
                 "notch_max_frequency": (
                     (notch_max_frequency or (fs / 2))

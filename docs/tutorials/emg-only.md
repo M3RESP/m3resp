@@ -58,7 +58,28 @@ standard chain. `config={"ecg_removal": {"enabled": False}}` skips it, for
 data checks and exploration only. If a dedicated reference ECG channel was
 recorded, point detection at it with
 `config={"ecg_detect_peaks": {"ecg_channel": n}}`; otherwise peaks are
-detected in the EMG channel itself.
+detected in the EMG channel itself. If the peaks were already established
+elsewhere (an annotation file, a separate ECG recording, an earlier run),
+gate them directly with
+`config={"ecg_removal": {"ecg_peak_indices": [...]}}`, which skips detection.
+
+The resulting chain is the standard one: 20-500 Hz band-pass -> ECG peak
+detection -> gating -> RMS envelope -> baseline (in `postprocess_emg`).
+
+Two defaults worth knowing, both settable per call on
+`config={"preprocess": {...}}`:
+
+- The band-pass is **20-500 Hz** (`high_pass_hz=20.0`; `low_pass_hz` defaults
+  to 500 Hz, capped at 0.95 x Nyquist for lower sampling rates). The high-pass
+  is deliberately not low enough to double as ECG suppression - that is
+  gating's job.
+- The envelope is **RMS** (`envelope_method="rms"`), the method
+  respiratory-sEMG literature specifies. `"arv"` (average rectified value) is
+  available as an explicit opt-in, and is what reproduces `resurfemg`'s
+  `full_rolling_arv` exactly; it is not an RMS equivalent on real bursty sEMG.
+  The choice is recorded in the processed bundle's `"filter"` mapping, so the
+  post-gating envelope recomputation reuses the same method instead of
+  silently switching.
 
 ## ECG removal and other advanced operations
 

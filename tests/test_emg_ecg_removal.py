@@ -13,6 +13,7 @@ import pytest
 from m3resp.core.events import Event
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult, Signal
+from m3resp.processing.windows import rolling_envelope
 from m3resp.workflows import run_pipeline
 from m3resp.workflows.steps.emg import (
     ecg_detect_peaks,
@@ -140,6 +141,60 @@ class TestEcgGating:
         assert mask_result.value.dtype == bool
         assert mask_result.value.shape == gated.shape
         assert mask_result.value.sum() > 0
+
+    def test_recomputed_envelope_reuses_the_preprocessing_envelope_method(self):
+        """The recomputation must not silently switch envelope method: an ARV
+        bundle stays ARV, and the effective choice is carried forward so a
+        later recomputation off the gated bundle agrees too."""
+
+        session = M3Session()
+        processed_emg = _fake_processed_emg()
+        processed_emg["filter"]["envelope_method"] = "arv"
+        peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
+
+        result = ecg_gating(session, processed_emg, peaks)
+
+        gated_bundle = result["processed_emg_after_ecg"]
+        assert gated_bundle["filter"]["envelope_method"] == "arv"
+        np.testing.assert_allclose(
+            gated_bundle["envelope"],
+            rolling_envelope(
+                result["ecg_gated_emg"], window_length=int(0.5 * 2048.0), method="arv"
+            ),
+        )
+        assert (
+            result["ecg_gate_mask_result"].metadata["effective_envelope_method"]
+            == "arv"
+        )
+
+    def test_envelope_method_can_be_overridden_for_the_recomputation(self):
+        session = M3Session()
+        processed_emg = _fake_processed_emg()
+        processed_emg["filter"]["envelope_method"] = "arv"
+        peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
+
+        result = ecg_gating(session, processed_emg, peaks, envelope_method="rms")
+
+        np.testing.assert_allclose(
+            result["processed_emg_after_ecg"]["envelope"],
+            rolling_envelope(
+                result["ecg_gated_emg"], window_length=int(0.5 * 2048.0), method="rms"
+            ),
+        )
+        assert result["processed_emg_after_ecg"]["filter"]["envelope_method"] == "rms"
+
+    def test_bundle_without_an_envelope_method_falls_back_to_rms(self):
+        """`_fake_processed_emg`'s 'filter' has no 'envelope_method' - i.e. a
+        bundle predating the field. It must default to RMS, not ARV."""
+
+        session = M3Session()
+        processed_emg = _fake_processed_emg()
+        assert "envelope_method" not in processed_emg["filter"]
+        peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
+
+        result = ecg_gating(session, processed_emg, peaks)
+
+        assert result["processed_emg_after_ecg"]["filter"]["envelope_method"] == "rms"
 
     def test_rejects_both_gate_width_forms_at_once(self):
         session = M3Session()

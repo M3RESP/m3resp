@@ -39,11 +39,18 @@ class EMGPipeline(Pipeline):
     - ``detect_breaths`` -> ``session.detect_emg_breaths``
     - ``postprocess`` -> ``session.postprocess_emg``
 
-    Plus one toggle: ``{"ecg_removal": {"enabled": False}}`` skips ECG removal
-    entirely, leaving the pre-gating envelope in place. That is a data-check /
-    exploratory path, not a scientifically valid default - the resulting
-    envelope, breath detections, and every amplitude-derived parameter
-    downstream of it still contain cardiac signal.
+    Plus two ``{"ecg_removal": {...}}`` options:
+
+    - ``{"enabled": False}`` skips ECG removal entirely, leaving the pre-gating
+      envelope in place. That is a data-check / exploratory path, not a
+      scientifically valid default - the resulting envelope, breath detections,
+      and every amplitude-derived parameter downstream of it still contain
+      cardiac signal.
+    - ``{"ecg_peak_indices": [...]}`` gates known peaks and skips detection
+      (for peaks already established elsewhere - a separate ECG recording, an
+      annotation file, a previous run). Mutually exclusive with the
+      ``ecg_detect_peaks`` config key, which would otherwise silently
+      configure a detection pass that never runs.
     """
 
     name = "emg"
@@ -74,11 +81,21 @@ class EMGPipeline(Pipeline):
         removal_options = dict((config or {}).get("ecg_removal", {}))
         if not removal_options.pop("enabled", True):
             return
+        supplied_peak_indices = removal_options.pop("ecg_peak_indices", None)
         if removal_options:
             raise TypeError(
-                "EMGPipeline config['ecg_removal'] only accepts 'enabled'; got "
-                f"{sorted(removal_options)}. Step keyword arguments belong "
-                "under config['ecg_detect_peaks'] / config['ecg_gating']."
+                "EMGPipeline config['ecg_removal'] only accepts 'enabled' and "
+                f"'ecg_peak_indices'; got {sorted(removal_options)}. Step "
+                "keyword arguments belong under config['ecg_detect_peaks'] / "
+                "config['ecg_gating']."
+            )
+        detection_kwargs = self._kwargs_for(config, "ecg_detect_peaks")
+        if supplied_peak_indices is not None and detection_kwargs:
+            raise TypeError(
+                "EMGPipeline: config['ecg_removal']['ecg_peak_indices'] skips "
+                "peak detection, so config['ecg_detect_peaks'] "
+                f"({sorted(detection_kwargs)}) would have no effect. Pass one "
+                "or the other."
             )
 
         # Imported here, not at module scope: the step modules import
@@ -88,14 +105,17 @@ class EMGPipeline(Pipeline):
         from m3resp.workflows.steps.emg.ecg_detection import ecg_detect_peaks
         from m3resp.workflows.steps.emg.ecg_gating import ecg_gating
 
-        detected = ecg_detect_peaks(
-            session, processed, **self._kwargs_for(config, "ecg_detect_peaks")
-        )
-        # `or {}` only to satisfy `StepCallable`'s `Mapping | None` return
-        # type; this step always returns its declared writes.
+        if supplied_peak_indices is not None:
+            peak_indices: Any = supplied_peak_indices
+        else:
+            detected = ecg_detect_peaks(session, processed, **detection_kwargs)
+            # `or {}` only to satisfy `StepCallable`'s `Mapping | None` return
+            # type; this step always returns its declared writes.
+            peak_indices = (detected or {})["ecg_peak_indices"]
+
         ecg_gating(
             session,
             processed,
-            (detected or {})["ecg_peak_indices"],
+            peak_indices,
             **self._kwargs_for(config, "ecg_gating"),
         )

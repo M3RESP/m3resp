@@ -109,6 +109,41 @@ def rolling_arv(
     )
 
 
+#: Envelope methods `rolling_envelope` dispatches over. RMS is the default
+#: everywhere an EMG envelope is computed: it is the method respiratory-sEMG
+#: literature specifies, and ARV differs from it by more than a constant
+#: factor on real, bursty sEMG, so the two are not interchangeable.
+ENVELOPE_METHODS = ("rms", "arv")
+
+
+def rolling_envelope(
+    values: np.ndarray,
+    *,
+    window_length: int,
+    method: str = "rms",
+    center: bool = True,
+    min_periods: int = 1,
+) -> np.ndarray:
+    """Compute a rolling envelope by the named method (see `ENVELOPE_METHODS`).
+
+    A single seam for "compute the envelope this way", so that every place
+    that (re)computes an envelope - preprocessing and the post-ECG-removal
+    recomputation - can be handed one method choice instead of each hard-coding
+    its own.
+    """
+
+    normalized = str(method).lower()
+    if normalized not in ENVELOPE_METHODS:
+        raise ValueError(f"method must be one of {ENVELOPE_METHODS}; got {method!r}.")
+    compute = rolling_rms if normalized == "rms" else rolling_arv
+    return compute(
+        values,
+        window_length=window_length,
+        center=center,
+        min_periods=min_periods,
+    )
+
+
 def rolling_rms_ci(
     values: np.ndarray,
     *,

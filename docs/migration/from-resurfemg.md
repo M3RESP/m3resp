@@ -5,7 +5,7 @@
 | Direct `resurfemg` call | `m3resp` equivalent |
 |---|---|
 | `resurfemg.data_connector.converter_functions.load_file(path)` | `m3resp.io.load_emg(path)` or `session.load_emg(path)` |
-| `resurfemg.preprocessing.filtering.emg_bandpass_butter` + `resurfemg.preprocessing.envelope.full_rolling_arv` | `session.preprocess_emg(...)` |
+| `resurfemg.preprocessing.filtering.emg_bandpass_butter` + `resurfemg.preprocessing.envelope.full_rolling_arv` | `session.preprocess_emg(...)` - note the default band-pass is 20-500 Hz and the default envelope is **RMS**, not ARV; pass `envelope_method="arv"` to reproduce `full_rolling_arv` exactly |
 | `resurfemg.postprocessing.event_detection.detect_emg_breaths` | `session.detect_emg_breaths()` -> `BreathEvent` objects (see [../concepts/events-and-breaths.md](../concepts/events-and-breaths.md)) |
 | `resurfemg.postprocessing.features.*` / `resurfemg.postprocessing.quality_assessment.*` called by hand | `session.postprocess_emg(...)`, then read `session.parameter_results` (`ParameterResult`) and `session.quality` (`QualityFlag`) - populated via `ReSurfEMGAdapter.to_parameters`/`to_quality_flags` (see [../developer/adapters.md](../developer/adapters.md)) |
 | Calling an arbitrary `resurfemg.postprocessing` function not covered above | `ReSurfEMGAdapter.run_postprocessing_function(category, function_name, *args, **kwargs)`, or `session.emg_adapter.run_postprocessing_function(...)` |
