@@ -54,6 +54,13 @@ dev = [
   "pandas-stubs",
   "scipy-stubs",
 ]
+docs = [
+  "Sphinx>=8.2",
+  "myst-parser>=4",
+  "pydata-sphinx-theme>=0.16",
+  "sphinx-gallery>=0.19",
+  "matplotlib>=3.9",
+]
 
 [project.scripts]
 m3resp = "m3resp.__main__:main"

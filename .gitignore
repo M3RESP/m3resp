@@ -7,11 +7,17 @@ plan/*
 **/__pycache__
 .*
 !.pre-commit-config.yaml
+!.readthedocs.yaml
 # !.github/
 # !.github/**
 graphify-out/
 tools/visualization_tools/__marimo__
 tools/
+
+# Documentation build products
+docs/_build/
+docs/api/generated/
+docs/generated/
 
 # agentics
 AGENTS.md

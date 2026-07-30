@@ -147,6 +147,6 @@ as before.
 
 ## See also
 
-- [tutorials/](../tutorials/) for end-to-end walkthroughs.
+- [Tutorials](../tutorials/index.md) for end-to-end walkthroughs.
 - [../developer/architecture.md](../developer/architecture.md) for how these
   pieces fit into the package layout.

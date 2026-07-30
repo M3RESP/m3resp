@@ -1,5 +1,12 @@
 # Migrating from `eitprocessing`/`resurfemg` calls to `m3resp`
 
+```{toctree}
+:maxdepth: 1
+
+migration/from-eitprocessing
+migration/from-resurfemg
+```
+
 `m3resp` does not reimplement `eitprocessing` or `resurfemg` algorithms - it calls them (see [developer/architecture.md](developer/architecture.md)'s dependency direction and the regression tests in `tests/regression/`, which pin down that the wrappers reproduce the underlying calls exactly). Migrating existing code means replacing manual calls into those packages with the equivalent `m3resp` call, not rewriting the science.
 
 Modality-specific migration tables:

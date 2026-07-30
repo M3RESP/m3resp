@@ -5,6 +5,13 @@ EIT, EMG, and ventilator signals. It provides a unified API on top of
 `eitprocessing` and `resurfemg` while keeping those packages independent — no
 code is copied, and users can continue to install and use them directly.
 
+## Documentation
+
+The documentation source is available in [docs/](docs/index.md), including
+getting-started instructions, tutorials, concepts, pipeline reference material,
+and the public Python API. The website is configured for Read the Docs; its
+hosted URL will be added here after the M3Resp project has been imported there.
+
 ## Install
 
 For local development:

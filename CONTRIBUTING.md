@@ -32,6 +32,39 @@ Run the checks manually at any time:
 pre-commit run --all-files
 ```
 
+## Documentation
+
+Install the documentation tools and build the website locally:
+
+```bash
+python -m pip install -e ".[docs]"
+python -m sphinx -W --keep-going -b html docs docs/_build/html
+```
+
+Open `docs/_build/html/index.html` to preview the result. The documentation
+workflow runs the same strict build for every pull request, so broken links,
+invalid cross-references, and rendering warnings must be fixed before merging.
+
+Add explanatory pages and tutorials as Markdown files under `docs/`. Include
+each new page in the nearest section's `toctree` so readers can reach it from
+the navigation.
+
+The `docs/gallery_examples/` directory is reserved for future executable
+Sphinx-Gallery examples. When adding the first example:
+
+1. Use a `.py` file with narrative comments in Sphinx-Gallery format.
+2. Use deterministic seeds and data that can be generated with the base
+   package; do not require private recordings or write into the repository.
+3. Add any required plotting package to the `docs` extra.
+4. Add `generated/gallery/index` to the main documentation navigation.
+5. Run the strict documentation build and check the generated `.py` and
+   notebook downloads.
+
+Read the Docs builds the default branch as `latest`. Non-prerelease Git tags
+can be activated as stable and numbered documentation versions in the Read the
+Docs project settings. An organization administrator must import the repository
+and enable pull-request previews before the hosted site becomes available.
+
 ## Types of contributions
 
 We welcome contributions of all kinds:

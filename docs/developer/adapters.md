@@ -2,7 +2,7 @@
 
 `m3resp` does not reimplement EIT/EMG algorithms - it calls
 `eitprocessing`/`resurfemg` and converts their output into the Layer 1
-objects described in [concepts/](../concepts/). The adapter is the
+objects described in the [concept guides](../concepts/index.md). The adapter is the
 conversion boundary: everything on the near side of it (`M3Session`,
 `m3resp.data`, exports) only ever sees `Signal`/`ParameterResult`/
 `QualityFlag`/`BreathEvent`, never a raw `eitprocessing`/`resurfemg` object.

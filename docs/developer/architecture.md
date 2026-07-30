@@ -21,7 +21,7 @@ persisted (Layer 2) objects need to coexist.
 
 **Layer 1: runtime objects (`m3resp.data`)**
 
-These are the objects described in [concepts/](../concepts/): `Signal`,
+These are the objects described in the [concept guides](../concepts/index.md): `Signal`,
 `ParameterResult`, `QualityFlag`, `LinkedBreath`, `Event`/`BreathEvent`.
 "Runtime" means they exist only while code is actually running, in memory,
 created fresh each time a session runs. They are lightweight (a dataclass
@@ -120,7 +120,7 @@ legacy package output (eitprocessing / resurfemg)
    DataModelStore -> validate_store() / export_store()
 ```
 
-- **Layer 1** (`m3resp.data`, described in [concepts/](../concepts/)) is what
+- **Layer 1** (`m3resp.data`, described in the [concept guides](../concepts/index.md)) is what
   processing code actually creates and passes around while a session runs.
 - **Layer 2** (`m3resp.datamodel`) is a validated, queryable record of what
   happened - built for later consumption by things like the audit trail,
@@ -338,10 +338,10 @@ even after production code stops calling them.
 
 ## See also
 
-- [concepts/](../concepts/) - what each Layer 1 object is and what populates it.
-- [tutorials/](../tutorials/) - end-to-end walkthroughs using these objects.
+- [Concept guides](../concepts/index.md) - what each Layer 1 object is and what populates it.
+- [Tutorials](../tutorials/index.md) - end-to-end walkthroughs using these objects.
 - [adapters.md](adapters.md) - the adapter conversion boundary in detail.
 - [pipeline-contracts.md](pipeline-contracts.md) - `Pipeline`/presets vs. the declarative engine.
 - [testing.md](testing.md) - regression tests and the test layout.
 - [../pipelines.md](../pipelines.md) - the declarative YAML/JSON pipeline spec format.
-- [../migration/](../migration/) - calling `eitprocessing`/`resurfemg` directly vs. through `m3resp`.
+- [Migration guides](../migration.md) - calling `eitprocessing`/`resurfemg` directly vs. through `m3resp`.
