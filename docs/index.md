@@ -5,13 +5,12 @@ html_theme.sidebar_secondary.remove: true
 
 # M3Resp documentation
 
-:::::{div} m3-hero
+::::::{div} m3-hero
 :::{div} m3-eyebrow
 MULTIMODAL RESPIRATORY RESEARCH · v{{ m3resp_version }}
 :::
 
-## Respiratory signals,
-
+:::::{div} m3-title-lockup
 ::::{div} m3-modalities
 :::{div} m3-modality
 **EIT**
@@ -26,9 +25,8 @@ MULTIMODAL RESPIRATORY RESEARCH · v{{ m3resp_version }}
 :::
 ::::
 
-:::{div} m3-title-continuation
-one reproducible workflow.
-:::
+## Respiratory signal integration for reproducible multimodal analysis.
+:::::
 
 Bring EIT (Electrical impedance tomography), respiratory EMG (Respiratory muscle activity), and ventilator (Pressure, flow, and volume) recordings into a shared scientific workflow.
 
@@ -50,7 +48,7 @@ Get started
 Explore tutorials
 :::
 ::::
-:::::
+::::::
 
 ## Choose your path
 

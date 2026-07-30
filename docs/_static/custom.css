@@ -8,10 +8,10 @@
   --m3-border: #d9e4e8;
   --m3-text-sm: 0.875rem;
   --m3-text-base: 1rem;
-  --m3-text-lead: 1.125rem;
-  --m3-text-card-title: 1.125rem;
-  --m3-text-section: clamp(1.85rem, 3vw, 2.25rem);
-  --m3-text-display: clamp(2.5rem, 5vw, 4rem);
+  --m3-text-lead: 1.0625rem;
+  --m3-text-card-title: 1.0625rem;
+  --m3-text-section: clamp(1.7rem, 2vw, 1.95rem);
+  --m3-text-display: clamp(2.35rem, 3.2vw, 3.25rem);
 }
 
 html[data-theme="light"] {
@@ -60,6 +60,10 @@ body {
 
 .bd-main .bd-content .bd-article-container {
   max-width: 58rem;
+}
+
+.bd-main .bd-content .bd-article-container:has(#m3resp-documentation) {
+  max-width: 80rem;
 }
 
 .bd-article > section#m3resp-documentation > h1:first-child {
@@ -122,14 +126,24 @@ body {
   color: #fff !important;
   font-size: var(--m3-text-display);
   font-weight: 780;
-  line-height: 1.05;
-  letter-spacing: -0.045em !important;
+  line-height: 1.08;
+  letter-spacing: -0.035em !important;
   overflow-wrap: anywhere;
   white-space: normal;
 }
 
 .m3-hero .rubric {
   margin-bottom: 0.8rem;
+}
+
+.m3-title-lockup {
+  display: inline-flex;
+  flex-direction: column;
+  max-width: 100%;
+}
+
+.m3-title-lockup .rubric {
+  width: 100%;
 }
 
 .m3-title-continuation {
@@ -142,31 +156,36 @@ body {
 
 .m3-hero > p {
   max-width: 43rem;
-  margin-bottom: 1.5rem;
+  margin: 0;
   color: #d8e8eb;
   font-size: var(--m3-text-lead);
   line-height: 1.6;
 }
 
 .m3-eyebrow {
+  margin-bottom: 0.9rem;
   color: #7ee8dc;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 760;
   letter-spacing: 0.15em;
+}
+
+.m3-eyebrow p {
+  margin: 0;
 }
 
 .m3-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
-  margin-top: 1.5rem;
+  margin-top: 1.75rem;
 }
 
 .m3-actions .sd-btn {
   margin: 0;
   padding: 0.72rem 1.15rem;
   border-radius: 0.65rem;
-  font-size: var(--m3-text-base);
+  font-size: 0.9375rem;
   font-weight: 680;
 }
 
@@ -188,11 +207,12 @@ body {
 }
 
 .m3-modalities {
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
-  gap: clamp(1.5rem, 3vw, 2.5rem);
-  margin: 0 0 0.8rem;
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  justify-content: space-between;
+  width: min(5em, 100%);
+  margin: 0 0 0 0.175em;
+  font-size: var(--m3-text-display);
 }
 
 .m3-modality {
@@ -210,8 +230,9 @@ body {
   display: block;
   margin-bottom: 0.25rem;
   color: #7ee8dc;
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
+  font-size: 1.6 rem;
+  font-weight: 760;
+  letter-spacing: 0.1em;
 }
 
 .m3-card-grid {
@@ -300,7 +321,7 @@ body {
   padding-bottom: 0;
   border-bottom: 0;
   color: var(--pst-color-heading);
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   font-weight: 720;
   line-height: 1.25;
 }
@@ -353,9 +374,9 @@ code {
 
 @media (width <= 768px) {
   :root {
-    --m3-text-lead: 1.0625rem;
-    --m3-text-section: 1.85rem;
-    --m3-text-display: clamp(2.25rem, 9vw, 2.75rem);
+    --m3-text-lead: 1rem;
+    --m3-text-section: 1.7rem;
+    --m3-text-display: clamp(2.15rem, 7.5vw, 2.5rem);
   }
 
   .m3-hero .rubric,
@@ -374,15 +395,10 @@ code {
   }
 
   .m3-modalities {
-    flex-direction: column;
-    gap: 0.65rem;
-    margin: 1.25rem 0 1.5rem;
+    gap: 0.75rem;
   }
 
   .m3-modality {
-    display: grid;
-    grid-template-columns: 3.75rem 1fr;
-    align-items: baseline;
-    gap: 0.5rem;
+    display: block;
   }
 }

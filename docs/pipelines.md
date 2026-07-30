@@ -335,7 +335,7 @@ Run `m3resp steps` for the full list including the pre-existing feature steps (`
   out: { processed_emg_after_ecg: processed_emg }
 ```
 
-Estimated ECG Subtraction detects its QRS locations internally and therefore does not need the preceding `emg.ecg_detect_peaks` step. It also needs ECG frequency content that the default 80 Hz EMG high-pass removes.
+Estimated ECG Subtraction detects its QRS locations internally and therefore does not need the preceding `emg.ecg_detect_peaks` step. It also needs ECG frequency content that the default 20 Hz EMG high-pass removes.
 
 #### Estimated ECG Subtraction details
 
