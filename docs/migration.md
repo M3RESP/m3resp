@@ -1,4 +1,7 @@
-# Migrating from `eitprocessing`/`resurfemg` calls to `m3resp`
+# Migration guide
+
+Move existing `eitprocessing` and `resurfemg` workflows into M3Resp while
+preserving the underlying scientific operations.
 
 ```{toctree}
 :maxdepth: 1

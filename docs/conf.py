@@ -19,6 +19,7 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
+    "sphinx_design",
 ]
 
 source_suffix = {
@@ -42,8 +43,12 @@ myst_enable_extensions = [
     "colon_fence",
     "deflist",
     "fieldlist",
+    "substitution",
 ]
 myst_heading_anchors = 4
+myst_substitutions = {
+    "m3resp_version": release,
+}
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
@@ -71,13 +76,25 @@ if gallery_has_examples:
     }
 
 html_theme = "pydata_sphinx_theme"
-html_title = f"{project} {release} documentation"
-html_show_sourcelink = True
+html_title = f"{project} documentation"
+html_show_sourcelink = False
+html_static_path = ["_static"]
+html_css_files = ["custom.css"]
+html_sidebars = {
+    "getting-started": [],
+    "pipelines": [],
+}
 html_theme_options = {
-    "navbar_align": "left",
+    "navbar_align": "content",
+    "navbar_end": [
+        "theme-switcher",
+        "navbar-icon-links",
+    ],
+    "header_links_before_dropdown": 4,
     "navigation_with_keys": True,
     "show_nav_level": 2,
     "show_toc_level": 2,
+    "secondary_sidebar_items": ["page-toc"],
     "icon_links": [
         {
             "name": "GitHub",
@@ -96,4 +113,4 @@ html_context = {
 
 readthedocs_version = os.environ.get("READTHEDOCS_VERSION_NAME")
 if readthedocs_version:
-    html_title = f"{project} {readthedocs_version} documentation"
+    myst_substitutions["m3resp_version"] = readthedocs_version
