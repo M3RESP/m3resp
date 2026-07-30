@@ -29,6 +29,7 @@ from ._shared import (
     description="Convert detected ventilator breath peak indices into native BreathEvents and store them on the session as 'ventilator_breaths'.",
     category="detection",
     modality="ventilator",
+    session_writes=("session.events.ventilator_breaths",),
     input_artifacts=(
         StepArtifact(
             name="ventilator_breath_indices",

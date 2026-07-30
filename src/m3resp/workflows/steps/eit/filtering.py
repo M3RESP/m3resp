@@ -43,6 +43,7 @@ from ._shared import (
     category="detection",
     modality="eit",
     optional_packages=_EITPROCESSING,
+    session_writes=("session.parameter_results",),
     input_artifacts=(
         StepArtifact(
             name="signal",
@@ -197,6 +198,7 @@ def detect_rates(
     category="preprocessing",
     modality="eit",
     optional_packages=_EITPROCESSING,
+    session_writes=("session.signals",),
     input_artifacts=(
         StepArtifact(
             name="signal",

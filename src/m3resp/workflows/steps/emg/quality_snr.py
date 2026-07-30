@@ -34,6 +34,7 @@ from ._shared import (
     category="quality",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_writes=("session.quality", "session.parameter_results"),
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(
@@ -161,6 +162,7 @@ def snr_pseudo(
     category="quality",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_writes=("session.quality", "session.parameter_results"),
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(
@@ -321,6 +323,7 @@ def percentage_under_baseline(
     category="quality",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_writes=("session.quality", "session.parameter_results"),
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(
@@ -449,6 +452,7 @@ def detect_local_high_aub(
     category="quality",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_writes=("session.quality", "session.parameter_results"),
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(

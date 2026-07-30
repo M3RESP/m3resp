@@ -40,6 +40,7 @@ from ._shared import (
     category="quality",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_writes=("session.quality", "session.parameter_results"),
     parameters_reviewed=True,
     input_artifacts=(
         _SESSION_ARTIFACT,
@@ -186,6 +187,7 @@ def evaluate_bell_curve_error(
     category="quality",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_writes=("session.quality", "session.parameter_results"),
     parameters_reviewed=True,
     input_artifacts=(
         _SESSION_ARTIFACT,
@@ -341,6 +343,7 @@ def evaluate_event_timing(
     category="quality",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_writes=("session.quality", "session.parameter_results"),
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(

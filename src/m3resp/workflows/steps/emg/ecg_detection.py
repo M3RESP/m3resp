@@ -71,6 +71,8 @@ def _select_ecg_source(
     category="preprocessing",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_reads=("session.raw.emg",),
+    session_writes=("session.events.ecg_peaks",),
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(

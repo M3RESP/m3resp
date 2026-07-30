@@ -60,6 +60,12 @@ from ._shared import (
     category="preprocessing",
     modality="emg",
     optional_packages=(),
+    session_writes=(
+        "session.processed.emg",
+        "session.signals",
+        "session.events.ees_qrs",
+        "session.parameter_results",
+    ),
     alternatives=("emg.ecg_gating", "emg.ecg_wavelet_denoising"),
     input_artifacts=(
         _SESSION_ARTIFACT,

@@ -40,6 +40,7 @@ from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
     ),
     category="synchronization",
     modality=None,
+    session_writes=("session.parameters.offset_estimation",),
     input_artifacts=(
         StepArtifact(
             name="session",
@@ -128,6 +129,8 @@ def estimate_offset(
         "the negative estimate."
     ),
     category="synchronization",
+    session_reads=("session.raw",),
+    session_writes=("session.raw", "session.parameters.raw_alignment"),
     input_artifacts=(
         StepArtifact(
             name="session",

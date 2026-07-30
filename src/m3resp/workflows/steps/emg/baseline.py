@@ -30,6 +30,7 @@ from ._shared import (
     category="baseline",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_writes=("session.signals",),
     alternatives=("emg.slopesum_baseline",),
     input_artifacts=(
         _SESSION_ARTIFACT,
@@ -160,6 +161,7 @@ def moving_baseline(
     category="baseline",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_writes=("session.signals",),
     alternatives=("emg.moving_baseline",),
     input_artifacts=(
         _SESSION_ARTIFACT,

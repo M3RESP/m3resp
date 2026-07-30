@@ -34,6 +34,7 @@ from ._shared import (
     modality="ventilator",
     optional_packages=_RESURFEMG,
     parameters_reviewed=True,
+    session_writes=("session.quality",),
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(

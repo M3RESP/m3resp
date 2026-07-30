@@ -69,6 +69,7 @@ def _pixel_mask_to_parameter_result(
     category="roi",
     modality="eit",
     optional_packages=_EITPROCESSING,
+    session_writes=("session.parameter_results",),
     input_artifacts=(
         StepArtifact(
             name="eit_data",
@@ -176,6 +177,7 @@ def roi_tiv_lungspace(
     category="roi",
     modality="eit",
     optional_packages=_EITPROCESSING,
+    session_writes=("session.parameter_results",),
     input_artifacts=(
         StepArtifact(
             name="eit_data",
@@ -284,6 +286,7 @@ def roi_amplitude_lungspace(
     category="roi",
     modality="eit",
     optional_packages=_EITPROCESSING,
+    session_writes=("session.parameter_results",),
     input_artifacts=(
         StepArtifact(
             name="eit_data",
@@ -376,6 +379,7 @@ def roi_watershed(
     category="roi",
     modality="eit",
     optional_packages=_EITPROCESSING,
+    session_writes=("session.parameter_results",),
     input_artifacts=(
         StepArtifact(
             name="mask",

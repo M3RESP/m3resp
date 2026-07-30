@@ -41,6 +41,11 @@ from ._shared import (
     category="preprocessing",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_writes=(
+        "session.processed.emg",
+        "session.signals",
+        "session.parameter_results",
+    ),
     alternatives=("emg.ecg_gating", "emg.ecg_estimated_subtraction"),
     input_artifacts=(
         _SESSION_ARTIFACT,

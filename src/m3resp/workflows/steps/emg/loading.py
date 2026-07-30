@@ -29,6 +29,7 @@ from ._shared import (
     category="loading",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_writes=("session.raw.emg", "session.signals"),
     input_artifacts=(_SESSION_ARTIFACT,),
     parameters=(
         StepParameter(
@@ -126,6 +127,7 @@ def load(
     category="preprocessing",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_writes=("session.processed.emg", "session.signals"),
     input_artifacts=(_SESSION_ARTIFACT,),
     parameters=(
         StepParameter(
@@ -158,6 +160,8 @@ def preprocess(session: M3Session, **kwargs: Any) -> dict[str, Any]:
     category="detection",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_reads=("session.processed.emg",),
+    session_writes=("session.events.emg_breaths",),
     input_artifacts=(_SESSION_ARTIFACT,),
     parameters=(
         StepParameter(

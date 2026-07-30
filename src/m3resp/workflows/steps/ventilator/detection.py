@@ -152,6 +152,7 @@ def find_occluded_breaths(
     description="Find Pocc manoeuvre start/end indices around each detected peak via baseline crossing, and record BreathEvents.",
     category="detection",
     modality="ventilator",
+    session_writes=("session.events.pocc_breaths",),
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(
@@ -399,6 +400,7 @@ _POCC_CRITERIA_ROW_NAMES = ("dp_up_10", "dp_up_90", "dp_up_90_norm")
     category="quality",
     modality="ventilator",
     optional_packages=_RESURFEMG,
+    session_writes=("session.quality", "session.parameter_results"),
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(

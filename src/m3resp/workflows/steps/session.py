@@ -24,6 +24,8 @@ from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
         "manual offset per modality. Run before per-modality preprocessing."
     ),
     category="synchronization",
+    session_reads=("session.raw",),
+    session_writes=("session.raw", "session.parameters.raw_alignment"),
     input_artifacts=(
         StepArtifact(
             name="session",

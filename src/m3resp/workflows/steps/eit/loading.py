@@ -39,6 +39,7 @@ from ._shared import (
     category="loading",
     modality="eit",
     optional_packages=_EITPROCESSING,
+    session_writes=("session.raw.eit", "session.signals"),
     input_artifacts=(_SESSION_ARTIFACT,),
     parameters=(
         StepParameter(

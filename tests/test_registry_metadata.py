@@ -7,6 +7,7 @@ so a step declaring none of it must remain fully valid (most built-ins still do)
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 import pytest
@@ -282,6 +283,76 @@ def test_every_registered_step_has_reviewed_parameters():
         if not definition.parameters_reviewed
     )
     assert unreviewed == []
+
+
+# --------------------------------------------------------------------------- #
+# session_reads / session_writes audit #
+# --------------------------------------------------------------------------- #
+
+_AUDITED_SESSION_STEPS = frozenset(
+    {
+        "eit.detect_rates",
+        "eit.eeli",
+        "eit.load",
+        "eit.mdn_filter",
+        "eit.normalize_breaths",
+        "eit.pixel_breaths",
+        "eit.pixel_tiv",
+        "eit.roi_amplitude_lungspace",
+        "eit.roi_filter_by_size",
+        "eit.roi_tiv_lungspace",
+        "eit.roi_watershed",
+        "emg.detect_breaths",
+        "emg.detect_extreme_time_products",
+        "emg.detect_local_high_aub",
+        "emg.ecg_detect_peaks",
+        "emg.ecg_estimated_subtraction",
+        "emg.ecg_gating",
+        "emg.ecg_wavelet_denoising",
+        "emg.evaluate_bell_curve_error",
+        "emg.evaluate_event_timing",
+        "emg.evaluate_respiratory_rates",
+        "emg.interpeak_dist",
+        "emg.load",
+        "emg.moving_baseline",
+        "emg.percentage_under_baseline",
+        "emg.preprocess",
+        "emg.slopesum_baseline",
+        "emg.snr_pseudo",
+        "export.rotarc_result",
+        "export.session_summary",
+        "session.sync_raw",
+        "sync.apply_estimated_offset",
+        "sync.estimate_offset",
+        "ventilator.detect_non_consecutive_manoeuvres",
+        "ventilator.load",
+        "ventilator.normalize_breaths",
+        "ventilator.pocc_intervals",
+        "ventilator.pocc_quality",
+        "ventilator.pocc_time_product",
+    }
+)
+
+
+def test_every_session_taking_step_has_been_audited():
+    """Every step whose function signature takes ``session`` must be a
+    step someone has actually read and classified, not a step that happens
+    to default to empty ``session_reads``/``session_writes`` because nobody
+    looked."""
+
+    actual = set()
+    for name, definition in STEP_REGISTRY.items():
+        try:
+            signature = inspect.signature(definition.func)
+        except (TypeError, ValueError):
+            continue
+        if "session" in signature.parameters:
+            actual.add(name)
+
+    unaudited = sorted(actual - _AUDITED_SESSION_STEPS)
+    stale = sorted(_AUDITED_SESSION_STEPS - actual)
+    assert unaudited == [], f"new session-taking step(s) need auditing: {unaudited}"
+    assert stale == [], f"audited step(s) no longer take 'session': {stale}"
 
 
 def test_describe_step_matches_registered_metadata():

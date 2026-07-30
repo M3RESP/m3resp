@@ -106,6 +106,13 @@ def json_file(payload: dict[str, Any], *, path: str) -> dict[str, Any]:
         "structured (array + scalar) export, each independently toggleable."
     ),
     category="export",
+    session_reads=(
+        "session.parameter_results",
+        "session.quality",
+        "session.signals",
+        "session.events",
+        "session.processing_history",
+    ),
     input_artifacts=(
         StepArtifact(
             name="session",
@@ -204,6 +211,13 @@ def session_summary(
         "'export.session_summary' alongside it."
     ),
     category="export",
+    session_reads=(
+        "session.parameter_results",
+        "session.quality",
+        "session.signals",
+        "session.events",
+        "session.processing_history",
+    ),
     input_artifacts=(
         StepArtifact(
             name="value",

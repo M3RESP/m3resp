@@ -21,6 +21,7 @@ from ._shared import _RESURFEMG, _SESSION_ARTIFACT
     category="loading",
     modality="ventilator",
     optional_packages=_RESURFEMG,
+    session_writes=("session.raw.ventilator",),
     input_artifacts=(_SESSION_ARTIFACT,),
     parameters=(
         StepParameter(

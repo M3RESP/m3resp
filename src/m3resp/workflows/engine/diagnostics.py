@@ -19,6 +19,7 @@ from m3resp.workflows.registry import (
     StepParameter,
     get_step,
 )
+from m3resp.workflows.session_deps import find_session_dependency_conflicts
 from m3resp.workflows.spec import PipelineSpec, StepSpec
 
 from ._shared import _ensure_steps_registered
@@ -179,6 +180,41 @@ def collect_diagnostics(
             if artifact is not None:
                 produced_artifact_type[context_key] = artifact.artifact_type
 
+    diagnostics.extend(_check_session_dependencies(spec))
+
+    return diagnostics
+
+
+def _check_session_dependencies(spec: PipelineSpec) -> list[Diagnostic]:
+    """A step reading a declared ``session_reads`` resource before any step
+    that (later in the same spec) declares writing it usually means the
+    spec's step order silently reordered a session-mediated dependency -
+    see ``m3resp.workflows.session_deps`` and
+    ``plan/06_gui_readiness_plan.md`` §4. Reported as a warning, not an
+    error: the resource may also come from state supplied outside the
+    spec, which this check cannot see and is not a bug."""
+
+    diagnostics: list[Diagnostic] = []
+    for conflict in find_session_dependency_conflicts(spec):
+        reader_label = f"step #{conflict.reader_position} '{conflict.reader_uses}'"
+        writer_label = f"step #{conflict.writer_position} '{conflict.writer_uses}'"
+        diagnostics.append(
+            Diagnostic(
+                severity="warning",
+                code="session_dependency_reordered",
+                message=(
+                    f"{reader_label} reads session resource "
+                    f"'{conflict.resource}' before it is written by "
+                    f"{writer_label}, which runs later in this spec. If "
+                    f"{reader_label} depends on {writer_label}'s output, "
+                    "move it after; if it depends on state supplied "
+                    "outside this spec, this warning can be ignored."
+                ),
+                step_id=conflict.reader_step_id,
+                step_position=conflict.reader_position,
+                operation_id=conflict.reader_uses,
+            )
+        )
     return diagnostics
 
 

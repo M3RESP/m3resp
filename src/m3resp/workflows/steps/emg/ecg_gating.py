@@ -55,6 +55,11 @@ def _build_gate_mask(
     category="preprocessing",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_writes=(
+        "session.processed.emg",
+        "session.signals",
+        "session.parameter_results",
+    ),
     alternatives=("emg.ecg_wavelet_denoising", "emg.ecg_estimated_subtraction"),
     mutually_exclusive_parameters=(("gate_width_seconds", "gate_width_samples"),),
     input_artifacts=(

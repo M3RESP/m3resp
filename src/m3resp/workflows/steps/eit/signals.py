@@ -130,6 +130,7 @@ def detect_breaths(signal: Any, *, min_duration_s: float = 2 / 3) -> dict[str, A
     modality="eit",
     optional_packages=_EITPROCESSING,
     parameters_reviewed=True,
+    session_writes=("session.events.eit_breaths",),
     input_artifacts=(
         StepArtifact(
             name="breath_intervals",
@@ -243,6 +244,7 @@ def _sparse_data_to_array_parameter(
     category="parameters",
     modality="eit",
     optional_packages=_EITPROCESSING,
+    session_writes=("session.parameter_results",),
     input_artifacts=(
         StepArtifact(
             name="signal",

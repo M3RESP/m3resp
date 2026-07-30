@@ -36,6 +36,7 @@ from ._shared import (
     category="quality",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_writes=("session.quality", "session.parameter_results"),
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(

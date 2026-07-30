@@ -155,6 +155,21 @@ class StepDefinition:
     input_artifacts: tuple[StepArtifact, ...] = ()
     #: Artifact metadata for ``writes`` context keys.
     output_artifacts: tuple[StepArtifact, ...] = ()
+    #: Dotted resource names this step reads from the shared ``M3Session``
+    #: object itself (as opposed to an explicit ``reads``/``in:`` context
+    #: key) - e.g. ``"session.processed.emg"`` for a step that calls
+    #: ``session.detect_emg_breaths()``, which reads whatever the most
+    #: recent preprocessing/ECG-removal step left on the session, not a
+    #: declared context key. Optional, additive metadata; see
+    #: ``m3resp.workflows.session_deps``.
+    session_reads: tuple[str, ...] = ()
+    #: Dotted resource names this step writes onto the shared ``M3Session``
+    #: object, e.g. ``"session.raw.eit"`` for a loader, or
+    #: ``"session.quality"`` for a step that calls ``session.quality.add``.
+    #: A resource name is an ancestor of any more specific name sharing its
+    #: dotted prefix (``"session.raw"`` covers ``"session.raw.eit"``), so a
+    #: step may declare whichever granularity it actually audited.
+    session_writes: tuple[str, ...] = ()
     #: Owning modality, e.g. ``"eit"``, ``"emg"``, or ``None`` for a
     #: cross-modality/generic step.
     modality: str | None = None
@@ -203,6 +218,8 @@ def register_step(
     mutually_exclusive_parameters: tuple[tuple[str, ...], ...] = (),
     input_artifacts: tuple[StepArtifact, ...] = (),
     output_artifacts: tuple[StepArtifact, ...] = (),
+    session_reads: tuple[str, ...] = (),
+    session_writes: tuple[str, ...] = (),
     modality: str | None = None,
     category: str | None = None,
     alternatives: tuple[str, ...] = (),
@@ -228,6 +245,11 @@ def register_step(
     been confirmed complete rather than simply never audited; it is set to
     ``True`` automatically whenever ``parameters`` is non-empty, since
     declaring real parameter metadata is itself evidence of review.
+
+    ``session_reads``/``session_writes`` name dotted resources this step
+    reads/writes on the shared ``M3Session`` directly, outside its declared
+    ``reads``/``writes`` context-key bindings - see the field docstrings on
+    :class:`StepDefinition` and ``m3resp.workflows.session_deps``.
 
     ``aliases`` lists former names this step was registered under, so specs
     written against them keep compiling. They resolve silently and are hidden
@@ -263,6 +285,8 @@ def register_step(
             ),
             input_artifacts=tuple(input_artifacts),
             output_artifacts=tuple(output_artifacts),
+            session_reads=tuple(session_reads),
+            session_writes=tuple(session_writes),
             modality=modality,
             category=category,
             alternatives=tuple(alternatives),

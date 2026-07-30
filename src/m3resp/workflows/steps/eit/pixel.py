@@ -46,6 +46,7 @@ def _object_array_to_float(values: Any) -> np.ndarray:
     category="parameters",
     modality="eit",
     optional_packages=_EITPROCESSING,
+    session_writes=("session.parameter_results",),
     input_artifacts=(
         StepArtifact(
             name="filtered_eit",
@@ -209,6 +210,7 @@ def _pixel_breaths_to_landmark_array(values: Any) -> np.ndarray:
     category="detection",
     modality="eit",
     optional_packages=_EITPROCESSING,
+    session_writes=("session.parameter_results",),
     input_artifacts=(
         StepArtifact(
             name="eit_data",
