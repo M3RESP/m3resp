@@ -21,18 +21,24 @@ tracking, so a spec's step order can never silently disagree with it:
 - :func:`downstream_step_positions` - which steps, transitively, depend on
   a given step, through either an explicit context-key edge or a declared
   session-resource edge? Used to answer "what does re-running/editing this
-  step invalidate" (plan/06_gui_readiness_plan.md §5.2's ``rerun-from``).
-
-See ``plan/06_gui_readiness_plan.md`` §4 for the plan this implements.
+  step invalidate" - e.g. for a future results-review "rerun from here"
+  action, which needs to know exactly which downstream steps a session
+  mutation invalidates instead of re-running everything.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 
 from m3resp.core.exceptions import UnknownStepError
 from m3resp.workflows.registry import StepDefinition, get_step
 from m3resp.workflows.spec import PipelineSpec, StepSpec
+
+#: One resolved context-key producer: the position, ``StepSpec``, and
+#: natural output ``name`` (from ``StepDefinition.writes``) of the step
+#: that most recently wrote it.
+ContextKeyProducer = tuple[int, StepSpec, str]
 
 
 def resources_match(write: str, read: str) -> bool:
@@ -49,7 +55,7 @@ def resources_match(write: str, read: str) -> bool:
     return write == read or write.startswith(read + ".") or read.startswith(write + ".")
 
 
-def _resolved_steps(
+def resolve_step_definitions(
     spec: PipelineSpec,
 ) -> list[tuple[int, StepSpec, StepDefinition]]:
     """Every step in ``spec`` paired with its registered definition, in
@@ -66,6 +72,47 @@ def _resolved_steps(
             continue
         resolved.append((position, step_spec, definition))
     return resolved
+
+
+def iter_context_key_producers(
+    steps: list[tuple[int, StepSpec, StepDefinition]],
+) -> Iterator[tuple[int, StepSpec, StepDefinition, dict[str, ContextKeyProducer]]]:
+    """Yield each resolved step alongside the context-key producer map as it
+    stands immediately *before* that step runs - i.e. incorporating every
+    earlier step's ``writes``, not this one's.
+
+    This is the "most recent preceding writer" rule ``engine/diagnostics.py``
+    already applies for context keys, factored out as a reusable primitive so
+    other producer-tracking consumers (this module's own
+    :func:`_build_dependency_edges`, and ``m3resp.workflows.graph``) can't
+    silently drift from it.
+    """
+
+    produced_at: dict[str, ContextKeyProducer] = {}
+    for position, step_spec, definition in steps:
+        yield position, step_spec, definition, produced_at
+        for name in definition.writes:
+            context_key = step_spec.outputs.get(name, name)
+            produced_at[context_key] = (position, step_spec, name)
+
+
+def most_recent_matching_session_writer(
+    steps: list[tuple[int, StepSpec, StepDefinition]],
+    position: int,
+    read_resource: str,
+) -> tuple[int, StepSpec, str] | None:
+    """The latest step before ``position`` whose declared ``session_writes``
+    matches ``read_resource`` (see :func:`resources_match`), as
+    ``(position, step_spec, matched_write_resource)``, or ``None``."""
+
+    best: tuple[int, StepSpec, str] | None = None
+    for writer_position, writer_step_spec, writer_definition in steps:
+        if writer_position >= position:
+            break
+        for write_resource in writer_definition.session_writes:
+            if resources_match(write_resource, read_resource):
+                best = (writer_position, writer_step_spec, write_resource)
+    return best
 
 
 @dataclass(frozen=True)
@@ -97,7 +144,7 @@ def find_session_dependency_conflicts(
     outside the spec's view.
     """
 
-    steps = _resolved_steps(spec)
+    steps = resolve_step_definitions(spec)
     conflicts: list[SessionDependencyConflict] = []
 
     for position, step_spec, definition in steps:
@@ -164,7 +211,7 @@ def downstream_step_positions(spec: PipelineSpec, start_position: int) -> set[in
     invalidate downstream" for a results-review rerun-from flow.
     """
 
-    steps = _resolved_steps(spec)
+    steps = resolve_step_definitions(spec)
     edges = _build_dependency_edges(steps)
 
     downstream: set[int] = set()
@@ -193,42 +240,23 @@ def _build_dependency_edges(
 
     # Explicit context keys: each read binds to the most recent preceding
     # writer of the same context key (mirrors engine/diagnostics.py).
-    produced_at: dict[str, int] = {}
-    for position, step_spec, definition in steps:
+    for position, step_spec, definition, produced_at in iter_context_key_producers(
+        steps
+    ):
         for param, default in definition.reads.items():
             context_key = step_spec.inputs.get(param, default)
             if context_key is not None and context_key in produced_at:
-                add_edge(produced_at[context_key], position)
+                add_edge(produced_at[context_key][0], position)
         for context_key in definition.requires:
             if context_key in produced_at:
-                add_edge(produced_at[context_key], position)
-        for name in definition.writes:
-            context_key = step_spec.outputs.get(name, name)
-            produced_at[context_key] = position
+                add_edge(produced_at[context_key][0], position)
 
     # Session resources: each read binds to the most recent preceding
     # writer whose resource matches (see resources_match()).
     for position, _step_spec, definition in steps:
         for read_resource in definition.session_reads:
-            writer_position = _most_recent_matching_writer_before(
-                steps, position, read_resource
-            )
-            if writer_position is not None:
-                add_edge(writer_position, position)
+            writer = most_recent_matching_session_writer(steps, position, read_resource)
+            if writer is not None:
+                add_edge(writer[0], position)
 
     return edges
-
-
-def _most_recent_matching_writer_before(
-    steps: list[tuple[int, StepSpec, StepDefinition]],
-    position: int,
-    read_resource: str,
-) -> int | None:
-    best: int | None = None
-    for writer_position, _writer_step_spec, writer_definition in steps:
-        if writer_position >= position:
-            break
-        for write_resource in writer_definition.session_writes:
-            if resources_match(write_resource, read_resource):
-                best = writer_position
-    return best

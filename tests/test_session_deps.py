@@ -1,7 +1,6 @@
 """Tests for `m3resp.workflows.session_deps`: the session-resource
 dependency tracking that extends `engine/diagnostics.py`'s positional
-context-key producer tracking onto the shared `M3Session` object (see
-`plan/06_gui_readiness_plan.md` §4).
+context-key producer tracking onto the shared `M3Session` object.
 """
 
 from __future__ import annotations

@@ -189,8 +189,7 @@ def _check_session_dependencies(spec: PipelineSpec) -> list[Diagnostic]:
     """A step reading a declared ``session_reads`` resource before any step
     that (later in the same spec) declares writing it usually means the
     spec's step order silently reordered a session-mediated dependency -
-    see ``m3resp.workflows.session_deps`` and
-    ``plan/06_gui_readiness_plan.md`` §4. Reported as a warning, not an
+    see ``m3resp.workflows.session_deps``. Reported as a warning, not an
     error: the resource may also come from state supplied outside the
     spec, which this check cannot see and is not a bug."""
 

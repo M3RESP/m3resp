@@ -271,11 +271,10 @@ def test_describe_step_carries_parameters_reviewed():
 
 
 def test_every_registered_step_has_reviewed_parameters():
-    """Guards the Phase A audit (plan/06_gui_readiness_plan.md §1): an empty
-    ``parameters`` tuple must mean "confirmed no tunable parameter", not
-    "nobody has looked yet". Any new step must set ``parameters_reviewed``
-    (directly, or implicitly by declaring real ``parameters``) at
-    registration time."""
+    """An empty ``parameters`` tuple must mean "confirmed no tunable
+    parameter", not "nobody has looked yet". Any new step must set
+    ``parameters_reviewed`` (directly, or implicitly by declaring real
+    ``parameters``) at registration time."""
 
     unreviewed = sorted(
         name
