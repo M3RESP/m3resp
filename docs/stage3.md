@@ -97,7 +97,7 @@ Because every section supports editing, the same boundary rules apply throughout
 
 The question asked was whether the workflow-design section could be a *node-based editor* (a canvas where each operation is a box and the connections between boxes show which operation's output feeds which operation's input, as in Blender's shader editor or LabVIEW), built with a fully free front-end library, rather than a conventional form-and-button interface. The answer is yes, and most of the required backend already exists, because a pipeline spec is already a data-flow graph written in list form. See ["Front-end library choice"](#front-end-library-choice) below for which library and why.
 
-### Why the existing engine already fits
+### Existing engine fits already very nicely
 
 Measured against the live registry (60 registered steps as of this writing), the metadata a node editor needs is largely present:
 
