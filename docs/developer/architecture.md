@@ -127,65 +127,66 @@ legacy package output (eitprocessing / resurfemg)
   export, or a future backend/GUI service layer.
 
 ## Package map: where to add new functionality
-
 ```text
-src/m3resp/
-├── core/            Session, events, exceptions, provenance, metadata
-│   └── session.py     M3Session - see concepts/session.md
+src/m3resp/ 
+├── core/                               Session, events, exceptions, provenance, metadata
+│   └── session.py                      M3Session - see concepts/session.md
 │
-├── data/            Layer 1: runtime scientific objects (Milestone 2.1/2.2/2.5)
-│   ├── signals.py      Signal, TimeSeries - add new signal-shaped concepts here
-│   ├── parameters.py   ParameterResult - add new computed-metric concepts here
-│   ├── quality.py      QualityFlag
-│   ├── linked_breath.py  LinkedBreath (cross-modality breath matching)
-│   ├── processing.py   ProcessingStep / ProcessingHistory
-│   └── collections.py  SignalCollection / ParameterResultCollection / QualityReport
+├── data/                               Layer 1: runtime scientific objects (Milestone 2.1/2.2/2.5)
+│   ├── signals.py                      Signal, TimeSeries - add new signal-shaped concepts here
+│   ├── parameters.py                   ParameterResult - add new computed-metric concepts here
+│   ├── quality.py                      QualityFlag
+│   ├── linked_breath.py                LinkedBreath (cross-modality breath matching)
+│   ├── processing.py                   ProcessingStep / ProcessingHistory
+│   └── collections.py                  SignalCollection / ParameterResultCollection / QualityReport
 │
-├── datamodel/       Layer 2: persisted/audit entities (main_v0.3.tex's model)
-│   ├── entities.py     Case, RecordingSession, SignalStream, DataFile, ...
-│   ├── store.py        DataModelStore (in-memory, FK-checked tables)
-│   ├── recorder.py     DataModelRecorder - the Layer 1 -> Layer 2 boundary
-│   ├── validation.py    validate_store() - reference + completeness checks (doc Sec 10)
-│   └── export.py       export_store() - one JSON file per table
+├── datamodel/                          Layer 2: persisted/audit entities (main_v0.3.tex's model)
+│   ├── entities.py                     Case, RecordingSession, SignalStream, DataFile, ...
+│   ├── store.py                        DataModelStore (in-memory, FK-checked tables)
+│   ├── recorder.py                     DataModelRecorder - the Layer 1 -> Layer 2 boundary
+│   ├── validation.py                   validate_store() - reference + completeness checks (doc Sec 10)
+│   └── export.py                       export_store() - one JSON file per table
 │
-├── adapters/        Conversion boundary to the legacy packages - see adapters.md
-│   ├── eitprocessing_adapter.py  load/preprocess + to_signals/to_parameters/
-│   │                             to_quality_flags (Milestone 2.3)
-│   └── resurfemg_adapter/        same shape, for resurfemg (split by
-│                                  responsibility: core/ecg/baseline/quality/defaults)
+├── adapters/                           Conversion boundary to the legacy packages - see adapters.md
+│   ├── eitprocessing_adapter.py        load/preprocess + to_signals/to_parameters/
+│   │                                       to_quality_flags (Milestone 2.3)
+│   └── resurfemg_adapter/              same shape, for resurfemg (split by
+│                                           responsibility: core/ecg/baseline/quality/defaults)
 │
-├── synchronization/ Alignment, resampling, breath linking, multimodal
-│   │                parameters (Milestone 2.5, see concepts/synchronization.md)
-│   ├── alignment.py    manual-offset + timestamp-derived offsets
-│   ├── offset_estimation.py  manual-offset passthrough (no robust automatic
-│   │                sync method; protocol-specific estimators live in
-│   │                tools/visualization_tools/utils/, not in the package)
-│   ├── timebase.py     Timebase - common time-axis representation
-│   ├── resampling.py   resample_signal - common time base
-│   ├── linking.py      link_breaths_by_time - nearest-neighbor breath linking
-│   ├── cropping.py     raw-modality offset resolution + in-place cropping,
-│   │                   used by M3Session.synchronize_raw_modalities
-│   ├── ventilator.py   ventilator breath-detection normalization into BreathEvents
-│   └── multimodal_parameters.py  compute_timing_delay / compute_event_agreement /
-│                        compute_breath_duration_difference / compute_multimodal_parameters
+├── synchronization/                    Alignment, resampling, breath linking, multimodal
+│   │                                       parameters (Milestone 2.5, see concepts/synchronization.md)
+│   ├── alignment.py                    manual-offset + timestamp-derived offsets
+│   ├── offset_estimation.py            manual-offset passthrough (no robust automatic
+│   │                                       sync method; protocol-specific estimators live in
+│   │                                       tools/visualization_tools/utils/, not in the package)
+│   ├── timebase.py                     Timebase - common time-axis representation
+│   ├── resampling.py                   resample_signal - common time base
+│   ├── linking.py                      link_breaths_by_time - nearest-neighbor breath linking
+│   ├── cropping.py                     raw-modality offset resolution + in-place cropping,
+│   │                                       used by M3Session.synchronize_raw_modalities
+│   ├── ventilator.py                   ventilator breath-detection normalization into BreathEvents
+│   └── multimodal_parameters.py        compute_timing_delay / compute_event_agreement /
+│                                           compute_breath_duration_difference /
+│                                           compute_multimodal_parameters
 │
-├── workflows/       Stage 1's declarative step-registry engine (YAML/JSON specs)
-│   └── steps/          add a new @register_step here for a custom, composable step
-│       ├── eit/         eit.* steps, split by pipeline stage (filtering/pixel/roi/loading/signals)
-│       └── emg/         emg.* steps, split by pipeline stage (baseline/ecg_*/features/quality_*/...)
+├── workflows/                          Stage 1's declarative step-registry engine (YAML/JSON specs)
+│   └── steps/                          add a new @register_step here for a custom, composable step
+│       ├── eit/                        eit.* steps, split by pipeline stage
+│       │                                   (filtering/pixel/roi/loading/signals)
+│       └── emg/                        emg.* steps, split by pipeline stage
+│                                           (baseline/ecg_*/features/quality_*/...)
 │
-├── presets/         Named, built-in Pipeline presets (Milestone 2.4) - see
-│   │                developer/pipeline-contracts.md; NOT the same thing as
-│   │                workflows/ above; see presets/base.py
+├── presets/                            Named, built-in Pipeline presets (Milestone 2.4) - see
+│   │                                       developer/pipeline-contracts.md; NOT the same thing as
+│   │                                       workflows/ above; see presets/base.py
 │   ├── eit.py, emg.py, multimodal.py   add a new preset here
-│   └── registry.py     register_pipeline(name, cls)
+│   └── registry.py                     register_pipeline(name, cls)
 │
-├── modalities/      Top-level load helpers (load_eit, load_emg)
-├── export/          session_export.py (Stage 1 + Milestone 2.6 structured export),
-│                    tables.py (row-shaping helpers)
-├── visualization/   Session overview and synchronization plots
-└── synthetic/       Synthetic data generators for tests/examples
-```
+├── modalities/                         Top-level load helpers (load_eit, load_emg)
+├── export/                             session_export.py (Stage 1 + Milestone 2.6 structured export),
+│                                           tables.py (row-shaping helpers)
+├── visualization/                      Session overview and synchronization plots
+└── synthetic/                          Synthetic data generators for tests/examples
 
 Rule of thumb for "where does my new EIT/EMG/multimodal functionality go":
 
