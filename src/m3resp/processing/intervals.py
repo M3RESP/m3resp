@@ -202,7 +202,7 @@ def onoff_from_slope(
                 valid_starts[peak_number] = False
 
         if len(max_downslope_indices[max_downslope_indices > peak_index]) >= 1:
-            previous_downslope = derivative[max_downslope_index]
+            previous_downslope = derivative[max_downslope_index]  # type: ignore
 
     valid_peaks = [
         detection[0] and detection[1]

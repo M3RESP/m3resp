@@ -22,3 +22,7 @@ docs/generated/
 
 # agentics
 AGENTS.md
+
+#vscode
+.vscode/
+*.code-workspace

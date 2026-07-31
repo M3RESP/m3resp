@@ -319,25 +319,30 @@ def rolling_rms_ci(
 
     stats = _scipy_stats()
     squared = pd.Series(np.power(values, 2))
-    mean_square = (
+    mean_square = np.asarray(
         squared.rolling(
             window=window_length,
             min_periods=min_periods,
             center=center,
         )
         .mean()
-        .values
+        .to_numpy(dtype=float)
     )
-    sem = (
+    sem = np.asarray(
         squared.rolling(
             window=window_length,
             min_periods=min_periods,
             center=center,
         )
         .sem()
-        .values
+        .to_numpy(dtype=float)
     )
-    ci = stats.t.interval(1 - alpha, window_length - 1, mean_square, sem)
+    ci = stats.t.interval(
+        1 - alpha,
+        window_length - 1,
+        loc=mean_square,
+        scale=sem,
+    )
     return np.sqrt(ci[0]), np.sqrt(ci[1])
 
 
@@ -367,16 +372,16 @@ def rolling_arv_ci(
 
     stats = _scipy_stats()
     absolute = pd.Series(np.abs(values))
-    arv = (
+    arv = np.asarray(
         absolute.rolling(
             window=window_length,
             min_periods=min_periods,
             center=center,
         )
         .mean()
-        .values
+        .to_numpy(dtype=float)
     )
-    sem = (
+    sem = np.asarray(
         pd.Series(values)
         .rolling(
             window=window_length,
@@ -384,9 +389,10 @@ def rolling_arv_ci(
             center=center,
         )
         .sem()
-        .values
+        .to_numpy(dtype=float)
     )
-    return stats.t.interval(1 - alpha, window_length - 1, arv, sem)
+    lower, upper = stats.t.interval(1 - alpha, window_length - 1, loc=arv, scale=sem)
+    return np.asarray(lower, dtype=float), np.asarray(upper, dtype=float)
 
 
 def _normalize_odd_window_size(window_size: int) -> int:
