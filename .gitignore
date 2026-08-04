@@ -12,6 +12,7 @@ docs/*
 # !.github/**
 graphify-out/
 tools/visualization_tools/
+tools/
 
 # agentics
 AGENTS.md
