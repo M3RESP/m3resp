@@ -1,0 +1,137 @@
+{
+  "experiment": {
+    "mode": "mode",
+    "run_identifier": "test-run",
+    "selection": "selected",
+    "subject_id": "subject",
+    "timepoint": null
+  },
+  "inputs": {
+    "eit_file": "/home/mahyart/Desktop/M3Resp/EIT_EMG/ajM3resp_02_001_01.bin",
+    "vendor": "draeger"
+  },
+  "name": "rotarc-breath-duration",
+  "outputs": {
+    "dir": "output/rotarc-breath-duration",
+    "event_csvs": true,
+    "figures": true,
+    "mode": "explicit",
+    "parameters_csv": false,
+    "postprocessing": true,
+    "structured_export": false,
+    "summary_json": true,
+    "timestamped": true
+  },
+  "schema_version": 1,
+  "steps": [
+    {
+      "id": "load",
+      "in": {},
+      "out": {},
+      "uses": "eit.load",
+      "with": {
+        "file": "@eit_file",
+        "vendor": "@vendor"
+      }
+    },
+    {
+      "id": "slice_raw",
+      "in": {
+        "signal": "raw_eit"
+      },
+      "out": {
+        "result": "selected_eit"
+      },
+      "uses": "eit.slice",
+      "with": {
+        "end": 1550,
+        "mode": "index",
+        "start": 0
+      }
+    },
+    {
+      "id": "detect_rates",
+      "in": {
+        "signal": "selected_eit"
+      },
+      "out": {},
+      "uses": "eit.detect_rates",
+      "with": {
+        "subject_type": "adult"
+      }
+    },
+    {
+      "id": "mdn_filter",
+      "in": {
+        "signal": "raw_eit"
+      },
+      "out": {},
+      "uses": "eit.mdn_filter",
+      "with": {}
+    },
+    {
+      "id": "global_impedance",
+      "in": {
+        "signal": "filtered_eit"
+      },
+      "out": {},
+      "uses": "eit.global_impedance",
+      "with": {}
+    },
+    {
+      "id": "slice_global_impedance",
+      "in": {
+        "signal": "global_impedance"
+      },
+      "out": {
+        "result": "detection_signal"
+      },
+      "uses": "eit.slice",
+      "with": {
+        "end": 1550,
+        "mode": "index",
+        "start": 0
+      }
+    },
+    {
+      "id": "detect_breaths",
+      "in": {
+        "signal": "detection_signal"
+      },
+      "out": {},
+      "uses": "eit.detect_breaths",
+      "with": {
+        "min_duration_s": 0.6666666667
+      }
+    },
+    {
+      "id": "normalize_breaths",
+      "in": {},
+      "out": {},
+      "uses": "eit.normalize_breaths",
+      "with": {}
+    },
+    {
+      "id": "breath_duration_cv",
+      "in": {
+        "intervals": "breath_intervals"
+      },
+      "out": {
+        "cv": "breath_duration_cv"
+      },
+      "uses": "metric.interval_cv",
+      "with": {}
+    },
+    {
+      "id": "rotarc_result",
+      "in": {
+        "value": "breath_duration_cv"
+      },
+      "out": {},
+      "uses": "export.rotarc_result",
+      "with": {
+        "precision": 8
+      }
+    }
+  ]
+}
