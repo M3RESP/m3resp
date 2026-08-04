@@ -36,7 +36,7 @@ def test_detection_alignment_and_export(tmp_path):
         return [BreathEvent("eit", 1.0, 2.0, peak_time=1.5)]
 
     session.detect_eit_breaths(detector=detector)
-    synchronized = session.align_modalities(offset_seconds=0.5)
+    synchronized = session.synchronize_multimodal_breaths(offset_seconds=0.5)
     output_dir = session.export_summary(tmp_path)
 
     assert synchronized["eit_breaths"][0].start_time == 1.0
@@ -78,7 +78,7 @@ def test_session_normalizes_ventilator_breaths_after_emg_postprocessing():
     )
 
     breaths = session.events["ventilator_breaths"]
-    assert [breath.modality for breath in breaths] == ["vent", "vent"]
+    assert [breath.modality for breath in breaths] == ["ventilator", "ventilator"]
     assert breaths[0].peak_time == 1.0
     assert breaths[0].start_time == 0.8
     assert breaths[0].end_time == 1.2
@@ -86,6 +86,9 @@ def test_session_normalizes_ventilator_breaths_after_emg_postprocessing():
 
 
 def test_session_aligns_eit_emg_and_ventilator_events_with_offset_map():
+    # Deliberately uses the legacy "vent" spelling for both the event modality
+    # and the offset key: it must keep aligning correctly, even though the
+    # recorded offsets are normalized to the canonical "ventilator".
     session = M3Session()
     eit_events = [BreathEvent("eit", 1.0, 2.0, peak_time=1.5)]
     emg_events = [BreathEvent("emg", 1.0, 2.0, peak_time=1.5)]
@@ -94,7 +97,7 @@ def test_session_aligns_eit_emg_and_ventilator_events_with_offset_map():
     session.add_events("emg_breaths", emg_events)
     session.add_events("ventilator_breaths", vent_events)
 
-    synchronized = session.align_modalities(
+    synchronized = session.synchronize_multimodal_breaths(
         offset_seconds={"eit": -0.1, "emg": 0.25, "vent": 0.0}
     )
 
@@ -102,14 +105,14 @@ def test_session_aligns_eit_emg_and_ventilator_events_with_offset_map():
     assert synchronized["emg_breaths"][0].start_time == 1.25
     assert synchronized["ventilator_breaths"][0].start_time == 1.0
     assert session.events["emg_breaths"][0].start_time == 1.0
-    assert session.parameters["alignment"]["reference_modality"] == "vent"
+    assert session.parameters["alignment"]["reference_modality"] == "ventilator"
     assert session.parameters["alignment"]["fallback_reference_modality"] is None
     assert session.parameters["alignment"]["offset_seconds"] == {
         "eit": -0.1,
         "emg": 0.25,
-        "vent": 0.0,
+        "ventilator": 0.0,
     }
-    assert session.provenance[-1].action == "align_modalities"
+    assert session.provenance[-1].action == "synchronize_multimodal_breaths"
 
 
 def test_session_scalar_alignment_offsets_emg_only_and_rejects_unknown_method():
@@ -118,7 +121,7 @@ def test_session_scalar_alignment_offsets_emg_only_and_rejects_unknown_method():
     session.add_events("emg_breaths", [BreathEvent("emg", 1.0, 2.0)])
     session.add_events("ventilator_breaths", [BreathEvent("vent", 1.0, 2.0)])
 
-    synchronized = session.align_modalities(offset_seconds=0.5)
+    synchronized = session.synchronize_multimodal_breaths(offset_seconds=0.5)
 
     assert synchronized["eit_breaths"][0].start_time == 1.0
     assert synchronized["emg_breaths"][0].start_time == 1.5

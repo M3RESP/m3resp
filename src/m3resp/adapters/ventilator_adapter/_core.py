@@ -1,0 +1,154 @@
+"""Load/preprocess/detect orchestration and Layer 1 conversions."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any, cast
+
+import numpy as np
+
+from m3resp.core.events import BreathEvent
+from m3resp.core.exceptions import UnsupportedWorkflowError
+from m3resp.data import ParameterResult, QualityFlag, Signal
+from m3resp.data.signals import ProcessingState
+from m3resp.synchronization.ventilator import (
+    iter_ventilator_detections,
+    normalize_ventilator_breath,
+)
+
+from ._channels import CHANNEL_CATEGORIES
+from ._protocols import _DefaultsProtocol
+
+_CHANNEL_NAMES = ("pressure", "flow", "volume")
+
+
+class _CoreMixin:
+    def __init__(self, loader: Callable[..., Any] | None = None):
+        self._loader = loader
+
+    def load(self, path: str, **kwargs: Any) -> Any:
+        """Load a ventilator recording.
+
+        Ventilator channels usually arrive in the same multi-channel file as the
+        sEMG, so without an injected loader this delegates to
+        :class:`~m3resp.adapters.resurfemg_adapter.ReSurfEMGAdapter`, which
+        already handles those formats (including Biopac text exports).
+        """
+
+        if self._loader is not None:
+            return self._loader(path, **kwargs)
+
+        from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
+
+        return ReSurfEMGAdapter().load(path, **kwargs)
+
+    def preprocess(self, recording: Any, **kwargs: Any) -> Any:
+        """Split into channels and filter, or defer to a provided callable."""
+
+        preprocess = kwargs.pop("preprocess", None)
+        if preprocess is not None:
+            return preprocess(recording, **kwargs)
+
+        return cast(_DefaultsProtocol, self)._preprocess_default(recording, **kwargs)
+
+    def detect_breaths(self, processed: Any, **kwargs: Any) -> list[BreathEvent]:
+        """Detect ventilator breaths and normalize them into `BreathEvent`s."""
+
+        detector = kwargs.pop("detector", None)
+        breath_width_seconds = kwargs.pop("breath_width_seconds", 0.5)
+        if detector is not None:
+            detections = detector(processed, **kwargs)
+            sample_frequency = _sample_frequency(processed)
+        else:
+            detections = cast(_DefaultsProtocol, self)._detect_breaths_default(
+                processed, breath_width_seconds=breath_width_seconds, **kwargs
+            )
+            sample_frequency = _sample_frequency(processed)
+
+        return [
+            normalize_ventilator_breath(
+                detection,
+                fs=sample_frequency,
+                width_seconds=breath_width_seconds,
+            )
+            for detection in iter_ventilator_detections(detections)
+        ]
+
+    def to_signals(self, processed_ventilator: Any) -> list[Signal]:
+        """Convert a preprocessed ventilator bundle into `Signal` objects.
+
+        One signal per channel per processing state: the unfiltered channel as
+        ``"raw"`` and the filtered one as ``"processed"``. Each carries
+        ``modality="ventilator"`` with the channel's physical quantity in
+        ``category``, so a ventilator's pressure, flow and volume stay
+        distinguishable instead of collapsing into one tag.
+        """
+
+        if (
+            not isinstance(processed_ventilator, dict)
+            or "fs" not in processed_ventilator
+        ):
+            raise UnsupportedWorkflowError(
+                "to_signals expects the bundle from preprocess_ventilator()."
+            )
+
+        sample_frequency = float(processed_ventilator["fs"])
+        units = processed_ventilator.get("units") or {}
+        raw = processed_ventilator.get("raw") or {}
+        filtered = processed_ventilator.get("filtered") or {}
+        cutoff = (processed_ventilator.get("filter") or {}).get("lowpass_hz")
+        method = (
+            f"m3resp.processing.filters.lowpass_filter(cutoff_frequency={cutoff})"
+            if cutoff is not None
+            else None
+        )
+
+        signals: list[Signal] = []
+        for name in _CHANNEL_NAMES:
+            category = CHANNEL_CATEGORIES[name]
+            channel_sources: tuple[tuple[Any, ProcessingState], ...] = (
+                (raw.get(name), "raw"),
+                (filtered.get(name), "processed"),
+            )
+            for values, processing_state in channel_sources:
+                if values is None:
+                    continue
+                values = np.asarray(values, dtype=float)
+                signals.append(
+                    Signal(
+                        values=values,
+                        time=np.arange(values.shape[0], dtype=float) / sample_frequency,
+                        sample_frequency=sample_frequency,
+                        unit=units.get(name),
+                        name=f"ventilator_{name}",
+                        modality="ventilator",
+                        category=category,
+                        channel=name,
+                        source="m3resp",
+                        processing_state=processing_state,
+                        method=method if processing_state == "processed" else None,
+                    )
+                )
+        return signals
+
+    def to_parameters(self, processed_ventilator: Any) -> list[ParameterResult]:
+        """No parameters are computed during ventilator preprocessing.
+
+        Ventilator-derived metrics (Pocc time products, breath timing) come from
+        the dedicated detection/quality steps, not from preprocessing. Present
+        so the adapter surface matches the EIT and EMG adapters.
+        """
+
+        return []
+
+    def to_quality_flags(self, processed_ventilator: Any) -> list[QualityFlag]:
+        """No quality checks run during ventilator preprocessing (see
+        `to_parameters`)."""
+
+        return []
+
+
+def _sample_frequency(processed: Any) -> float | None:
+    if isinstance(processed, dict) and processed.get("fs") is not None:
+        return float(processed["fs"])
+    return None
