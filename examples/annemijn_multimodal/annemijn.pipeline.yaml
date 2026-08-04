@@ -1,0 +1,143 @@
+# Multimodal (EIT + diaphragm sEMG + airway pressure) pipeline for the
+# eit_emg_annemijn dataset -- the same data used by the marimo multimodal
+# viewer (tools/visualization_tools/2_annemijn_multimodal_vis.py).
+#
+# Dataset:
+#   * EIT    -- Draeger, 50 Hz frame rate. Registration 03 is the one recorded
+#               simultaneously with the Biopac sEMG (ajM3resp_03_001_01.bin).
+#   * Biopac -- 2000 Hz, one tab-delimited .txt with 3 channels:
+#               0 = Paw (airway pressure via mouthpiece), 1 = diaphragm sEMG,
+#               2 = empty/ignore. The EIT device injects an interference comb
+#               into the sEMG while it records; the last ~2 min is EIT-off.
+# There is no mechanical ventilator in this recording. Paw channel 0 is used as
+# the ventilation reference for synchronization and visualization; ventilator-
+# only processing (flow/volume, occlusions, ventilator breaths) remains omitted.
+#
+# This is a dataset-specific multimodal example (the eit_emg_annemijn
+# recording has no ventilator and needs a bespoke sync method); for the
+# canonical, fully-general EIT+EMG+ventilator chain see
+# `examples/multimodal_full/multimodal-full.pipeline.yaml`.
+#
+# Run from the repo root with:
+#   python -m m3resp run examples/annemijn_multimodal/annemijn.pipeline.yaml
+# Path-typed `with:`/`inputs:` values (like the *_file entries below) are
+# resolved relative to this spec file's own directory, same as `outputs.dir`,
+# not the process working directory.
+
+name: annemijn_multimodal
+
+outputs:
+  dir: ../../output/annemijn-multimodal-summary
+  timestamped: true
+  summary_json: true
+  event_csvs: true
+  parameters_csv: true
+  postprocessing: true
+  figures: true
+
+inputs:
+  eit_file: ../../data/source/eit_emg_annemijn/ajM3resp_03_001_01.bin
+  emg_file: ../../data/source/eit_emg_annemijn/Paw_EMG_ajM3Resp_test.txt
+
+steps:
+  # Load
+  - uses: eit.load
+    with: { file: "@eit_file", vendor: draeger }
+
+  - uses: emg.load
+    with: { file: "@emg_file" }
+
+  # There is no robust general-purpose automatic sync method, so the offset is
+  # supplied manually. This value was found interactively with the marimo
+  # multimodal viewer's protocol-specific estimators (interference-artifact
+  # anchor + cross-correlation refinement) - see
+  # docs/developer/offset-estimation.md for how it was
+  # derived and tools/visualization_tools/2_annemijn_multimodal_vis.py to
+  # re-derive it if the dataset changes.
+  - uses: sync.estimate_offset
+    with:
+      method: manual
+      manual_offset_seconds: 1050.62
+
+  # Apply the estimated offset before modality-specific preprocessing. Paw and
+  # diaphragm sEMG share the same Biopac clock and are cropped together.
+  - uses: sync.apply_estimated_offset
+    in: { offset_seconds: estimated_offset_seconds }
+    with:
+      target_modality: eit
+      source_modalities: [emg]
+
+  # EIT processing
+  - uses: eit.detect_rates
+    in:  { signal: raw_eit }
+    with: { subject_type: adult, welch_window_seconds: 30.0, capture: true }
+
+  - uses: eit.mdn_filter
+    in:  { signal: raw_eit }
+    with: { label: mdn_filtered }
+
+  - uses: eit.global_impedance
+    in:  { signal: filtered_eit }
+
+  - uses: eit.detect_breaths
+    in:  { signal: global_impedance }
+    with: { min_duration_s: 0.6666666667 }
+
+  - uses: eit.normalize_breaths
+
+  - uses: eit.continuous_tiv
+    in:  { signal: global_impedance }
+
+  - uses: eit.eeli
+    in:  { signal: global_impedance }
+
+  - uses: eit.pixel_tiv
+    in:  { signal: global_impedance, filtered_eit: filtered_eit }
+
+  # EMG processing
+  # Biopac channels: 0 = Paw (airway pressure), 1 = diaphragm sEMG,
+  # 2 = empty/ignore. Preprocess the diaphragm sEMG (channel 1).
+  # `notch_base_frequency: 50` suppresses both mains hum and the EIT frame-rate
+  # interference comb (50 Hz + harmonics) that contaminates the sEMG whenever
+  # the EIT device records simultaneously.
+  - uses: emg.preprocess
+    with: {
+      channel: 1,
+      high_pass_hz: 80,
+      envelope_window_seconds: 0.5,
+      notch_base_frequency: 50.0,
+      notch_quality_factor: 30.0
+      }
+    out: { processed_emg: processed_emg_before_ecg }
+
+  # This is surface EMG over the diaphragm, so it also picks up the heart's
+  # own electrical activity (cardiac/ECG contamination) - detect and gate it
+  # out before breath detection, same as the other EMG examples. There is no
+  # separate reference ECG channel in this recording, so peaks are detected
+  # directly from the band-passed/notch-filtered EMG channel itself
+  # (source="filtered").
+  - uses: emg.ecg_detect_peaks
+    in: { processed_emg: processed_emg_before_ecg }
+    with: { source: filtered }
+
+  - uses: emg.ecg_gating
+    in: { processed_emg: processed_emg_before_ecg }
+    with: { source: filtered, fill_method: 1 }
+    out: { processed_emg_after_ecg: processed_emg }
+
+  - uses: emg.detect_breaths
+    with: { min_breath_width_seconds: 1.0, half_window_seconds: 0.5 }
+
+  - uses: emg.peak_indices
+
+  - uses: emg.slopesum_baseline
+    with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
+
+  - uses: emg.onoffpeak_baseline_crossing
+
+  - uses: emg.snr_pseudo
+
+  - uses: emg.percentage_under_baseline
+
+  # No explicit export step needed — the `outputs:` section above handles
+  # creating the timestamped directory and calling export_session_summary.
