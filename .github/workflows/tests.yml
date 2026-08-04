@@ -33,3 +33,41 @@ jobs:
 
       - name: Run tests
         run: python -m pytest
+
+  optional-deps:
+    name: Optional deps (${{ matrix.extra || 'base' }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        extra: ["", "eit", "emg", "all"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        env:
+          EXTRA: ${{ matrix.extra }}
+        run: |
+          python -m pip install --upgrade pip
+          if [ -n "$EXTRA" ]; then
+            python -m pip install -e ".[$EXTRA]"
+          else
+            python -m pip install -e .
+          fi
+
+      - name: CLI import/discovery smoke test
+        run: python -m m3resp steps
+
+      - name: Capability-state smoke test
+        env:
+          EXTRA: ${{ matrix.extra }}
+        run: python scripts/check_optional_dependency_isolation.py "${EXTRA:-base}"

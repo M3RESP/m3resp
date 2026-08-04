@@ -1,6 +1,6 @@
 """Synthetic respiratory data generation utilities."""
 
-from m3resp.synthetic.unified_generator import (
+from m3resp.synthetic.config import (
     DriftConfig,
     EITGeneratorConfig,
     EITWaveformConfig,
@@ -16,25 +16,31 @@ from m3resp.synthetic.unified_generator import (
     SyntheticRecord,
     TimingDriftConfig,
     VentilatorGeneratorConfig,
-    detect_min_max_flags,
+    load_synthetic_generator_config,
+    synthetic_generator_config_from_dict,
+)
+from m3resp.synthetic.drift import (
     generate_drift,
+    is_timing_drift_enabled,
+    shift_array_in_time,
+    shift_signal_in_time_cropped,
+)
+from m3resp.synthetic.generator import (
     generate_eit_record,
     generate_emg_record,
-    generate_event_series,
-    generate_medibus_data,
-    generate_realistic_eit_signal,
     generate_synthetic_dataset,
     generate_synthetic_draeger_data,
     generate_ventilator_record,
-    is_timing_drift_enabled,
-    load_synthetic_generator_config,
-    make_lung_template,
     pack_draeger_frame,
     save_draeger_bin,
-    shift_array_in_time,
-    shift_signal_in_time_cropped,
+)
+from m3resp.synthetic.waveforms import (
+    detect_min_max_flags,
+    generate_event_series,
+    generate_medibus_data,
+    generate_realistic_eit_signal,
+    make_lung_template,
     signal_to_pixel_impedance,
-    synthetic_generator_config_from_dict,
 )
 
 __all__ = [

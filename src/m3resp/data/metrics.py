@@ -162,7 +162,7 @@ def load_metric_aliases(path: str | Path, *, replace: bool = False) -> dict[str,
     if raw is None:
         raw = {}
     if not isinstance(raw, dict):
-        raise ValueError(
+        raise TypeError(
             f"Metric alias file {resolved} must be a mapping of "
             f"alias -> canonical metric type, got {type(raw).__name__}."
         )

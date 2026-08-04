@@ -1,20 +1,14 @@
 # M3Resp Stage 1
 
-Stage 1 establishes `m3resp` as the integration layer for multimodal respiratory
-workflows. It gives users one place to run, summarize, and export EIT and EMG
-analyses, while the scientific processing code stays in the upstream packages.
+Stage 1 establishes `m3resp` as the integration layer for multimodal respiratory workflows. It gives users one place to run, summarize, and export EIT and EMG analyses, while the scientific processing code stays in the upstream packages.
 
 ## What m3resp does
 
 `m3resp` provides:
 
-- A `M3Session` object that holds raw and processed signals, events, and
-  parameters for a single recording session.
-- Adapters around `eitprocessing` and `resurfemg` so those packages can be
-  swapped or upgraded without touching user code.
-- A declarative pipeline engine: describe your workflow in a YAML spec, run it
-  with `m3resp run pipeline.yaml`, and get structured outputs without writing
-  custom Python.
+- A `M3Session` object that holds raw and processed signals, events, and parameters for a single recording session.
+- Adapters around `eitprocessing` and `resurfemg` so those packages can be swapped or upgraded without touching user code.
+- A declarative pipeline engine: describe your workflow in a YAML spec, run it with `m3resp run pipeline.yaml`, and get structured outputs without writing custom Python.
 - Common event dataclasses (`BreathEvent`, `Event`) shared across modalities.
 - Manual raw-signal synchronization before processing.
 - CSV, JSON, and figure export helpers.
@@ -56,8 +50,7 @@ src/m3resp/
 
 ## Optional dependencies
 
-The adapters import optional packages lazily, so the base install works without
-the modality packages:
+The adapters import optional packages lazily, so the base install works without the modality packages:
 
 ```bash
 pip install m3resp          # core + pipeline only
@@ -66,8 +59,7 @@ pip install "m3resp[emg]"   # adds resurfemg
 pip install "m3resp[all]"   # both modality integrations
 ```
 
-For local development, the modality packages are installed from the M3Resp
-organization forks:
+For local development, the modality packages are installed from the M3Resp organization forks:
 
 ```text
 eitprocessing @ git+https://github.com/M3RESP/eitprocessing.git@m3resp-integration
@@ -108,8 +100,7 @@ result = run_spec("pipeline.yaml")
 print(result.outputs)
 ```
 
-See [pipelines.md](pipelines.md) for the full spec format and how to write
-your own steps.
+See [pipelines.md](pipelines.md) for the full spec format and how to write your own steps.
 
 ## Tests
 
@@ -119,9 +110,7 @@ Run the test suite with:
 pytest
 ```
 
-Tests cover the pipeline engine, EIT and EMG session operations, adapters,
-synchronization, visualization, and export. Tests that require sample data files
-or optional modality packages are skipped automatically when those are not present.
+Tests cover the pipeline engine, EIT and EMG session operations, adapters, synchronization, visualization, and export. Tests that require sample data files or optional modality packages are skipped automatically when those are not present.
 
 ## Out of scope
 

@@ -70,6 +70,62 @@ def test_custom_emg_detector_normalization_still_works():
     ]
 
 
+def test_custom_emg_preprocess_callable_still_works():
+    adapter = ReSurfEMGAdapter()
+
+    processed = adapter.preprocess(
+        {"recording": True},
+        preprocess=lambda signal, *, gain: {"signal": signal, "gain": gain},
+        gain=2.0,
+    )
+
+    assert processed == {"signal": {"recording": True}, "gain": 2.0}
+
+
+def test_custom_emg_compute_callable_still_works():
+    adapter = ReSurfEMGAdapter()
+    events = [BreathEvent("emg", 0.0, 1.0, peak_time=0.5)]
+
+    features = adapter.compute_features(
+        {"processed": True},
+        events,
+        compute=lambda signal, detected_events, *, scale: {
+            "signal": signal,
+            "events": detected_events,
+            "scale": scale,
+        },
+        scale=3.0,
+    )
+
+    assert features == {
+        "signal": {"processed": True},
+        "events": events,
+        "scale": 3.0,
+    }
+
+
+def test_custom_emg_postprocess_callable_still_works():
+    adapter = ReSurfEMGAdapter()
+    events = [BreathEvent("emg", 0.0, 1.0, peak_time=0.5)]
+
+    result = adapter.postprocess(
+        {"processed": True},
+        events=events,
+        postprocess=lambda processed, *, events, label: {
+            "processed": processed,
+            "events": events,
+            "label": label,
+        },
+        label="custom",
+    )
+
+    assert result == {
+        "processed": {"processed": True},
+        "events": events,
+        "label": "custom",
+    }
+
+
 def test_default_preprocess_updates_emg_recording_with_fake_signal():
     pytest.importorskip("resurfemg")
     np = pytest.importorskip("numpy")
@@ -121,6 +177,42 @@ def test_emg_overview_y_axis_labels_include_amplitude_and_units():
         plt.close(fig)
 
 
+def test_emg_overview_uses_the_preprocessed_channel_label_and_unit():
+    plt = pytest.importorskip("matplotlib.pyplot")
+    session = M3Session()
+    session.processed["emg"] = {
+        "channel": 1,
+        "fs": 1000.0,
+        "metadata": {
+            "labels": ["unused", "diaphragm"],
+            "units": ["mV", "uV"],
+        },
+        "envelope": [0.0, 0.25, 0.0],
+    }
+
+    fig = plot_session_overview(session, max_seconds=None)
+
+    try:
+        assert fig.axes[0].get_title() == "EMG envelope (diaphragm)"
+        assert fig.axes[0].get_ylabel() == "EMG amplitude (uV)"
+    finally:
+        plt.close(fig)
+
+
+def test_emg_overview_rejects_a_channel_that_was_not_preprocessed():
+    pytest.importorskip("matplotlib.pyplot")
+    session = M3Session()
+    session.processed["emg"] = {
+        "channel": 0,
+        "fs": 1000.0,
+        "metadata": {"labels": ["diaphragm", "intercostal"], "units": ["uV"]},
+        "envelope": [0.0, 0.25, 0.0],
+    }
+
+    with pytest.raises(ValueError, match="available processed data is for channel 0"):
+        plot_session_overview(session, emg_channel=1)
+
+
 def test_synchronization_comparison_shifts_signal_time_by_alignment_offset():
     plt = pytest.importorskip("matplotlib.pyplot")
     session = M3Session()
@@ -134,7 +226,7 @@ def test_synchronization_comparison_shifts_signal_time_by_alignment_offset():
         "emg_breaths",
         [BreathEvent("emg", 0.002, 0.004, peak_time=0.003)],
     )
-    session.align_modalities(offset_seconds={"emg": -0.002})
+    session.synchronize_multimodal_breaths(offset_seconds={"emg": -0.002})
 
     fig = plot_synchronization_comparison(session, max_seconds=None)
 
@@ -260,6 +352,10 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
     session.parameters["raw_alignment"] = {
         "offset_seconds": {"eit": 0.0, "emg": -0.002, "vent": 0.0}
     }
+    session.add_events(
+        "emg_breaths",
+        [BreathEvent("emg", 0.002, 0.004, peak_time=0.003)],
+    )
 
     fig = plot_synchronization_comparison(session, max_seconds=None)
 
@@ -276,6 +372,7 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
         ) = fig.axes
         assert list(emg_before_ax.lines[0].get_ydata()) == [0.0, 0.0, 1.0, 2.0]
         assert list(emg_after_ax.lines[0].get_ydata()) == [1.0, 2.0]
+        assert list(emg_after_ax.lines[1].get_xdata()) == [0.001, 0.001]
         assert emg_before_ax.get_title() == "EMG raw (EMG) before synchronization"
         assert emg_after_ax.get_title() == "EMG raw (EMG) after synchronization"
         assert list(pressure_before_ax.lines[0].get_ydata()) == [8.0, 9.0, 10.0]
@@ -307,11 +404,21 @@ def test_emg_real_data_pipeline_uses_committed_poly5_sample():
 
     repo_root = Path(__file__).resolve().parents[1]
     emg_path = os.path.join(
-        repo_root, "data", "source", "emg_data_synth_quiet_breathing.Poly5"
+        repo_root,
+        "data",
+        "source",
+        "data_from_repo",
+        "emg_data_synth_quiet_breathing.Poly5",
     )
     vent_path = os.path.join(
-        repo_root, "data", "source", "vent_data_synth_quiet_breathing.Poly5"
+        repo_root,
+        "data",
+        "source",
+        "data_from_repo",
+        "vent_data_synth_quiet_breathing.Poly5",
     )
+    assert os.path.isfile(emg_path), f"missing fixture: {emg_path}"
+    assert os.path.isfile(vent_path), f"missing fixture: {vent_path}"
     session = M3Session()
 
     session.load_emg(emg_path, verbose=False)

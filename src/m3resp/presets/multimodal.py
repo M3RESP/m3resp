@@ -11,11 +11,11 @@ if TYPE_CHECKING:
 
 
 class MultimodalPipeline(Pipeline):
-    """Synchronize raw signals and align detected events across modalities.
+    """Synchronize raw signals and align detected breath events across modalities.
 
     Equivalent to calling ``session.synchronize_raw_modalities()`` then
-    ``session.align_modalities()`` directly; run after the per-modality
-    pipelines so their breath events already exist.
+    ``session.synchronize_multimodal_breaths()`` directly; run after the
+    per-modality pipelines so their breath events already exist.
     """
 
     name = "multimodal"
@@ -26,5 +26,5 @@ class MultimodalPipeline(Pipeline):
         session.synchronize_raw_modalities(
             **self._kwargs_for(config, "synchronize_raw")
         )
-        session.align_modalities(**self._kwargs_for(config, "align"))
+        session.synchronize_multimodal_breaths(**self._kwargs_for(config, "align"))
         return session

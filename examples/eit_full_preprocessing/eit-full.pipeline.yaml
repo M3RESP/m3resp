@@ -1,0 +1,110 @@
+# Full EIT preprocessing pipeline (Stage 2 EIT gap migration, Phase 6).
+#
+# Exercises every EIT operation the gap migration closed onto
+# `EITProcessingAdapter`: loading, rate detection, MDN filtering, global
+# breath detection, continuous TIV/EELI, pixel-breath timing, pixel TIV, and
+# the four ROI lung-space steps. Run with:
+#
+#   m3resp run examples/eit_full_preprocessing/eit-full.pipeline.yaml
+#
+# from the repository root - path-typed `with:`/`inputs:` values (like
+# `inputs.eit_file` below) resolve relative to this spec file's own
+# directory, same as `outputs.dir`, not the process working directory.
+#
+# `schema_version: 1` (Stage 2 pipeline-structure Phase 2/9) enables strict
+# parsing: unknown keys and non-boolean flags are hard errors instead of a
+# permissive/deprecated coercion. Every step below has an explicit `id:` so
+# GUI/provenance references to a specific step survive reordering.
+#
+#   experiment:  study metadata; unused here (no export.rotarc_result step)
+#   outputs:     where to write results and which artifacts to produce
+#   inputs:      data paths (referenced in steps with @name)
+
+schema_version: 1
+name: eit-full-preprocessing
+
+outputs:
+  dir: ../../output/eit-full-preprocessing
+  mode: automatic
+  timestamped: true
+  summary_json: true
+  event_csvs: true
+  parameters_csv: false
+  structured_export: true
+  figures: true
+
+inputs:
+  eit_file: ../../data/source/data_from_repo/draeger_synthetic_draeger_20Hz.bin
+  vendor: draeger
+
+steps:
+  - id: load
+    uses: eit.load
+    with: { file: "@eit_file", vendor: "@vendor" }
+
+  - id: detect_rates
+    uses: eit.detect_rates
+    in:  { signal: raw_eit }
+    with: { subject_type: adult, capture: true }
+
+  - id: mdn_filter
+    uses: eit.mdn_filter
+    in:  { signal: raw_eit }
+    with: { label: mdn_filtered }
+
+  - id: global_impedance
+    uses: eit.global_impedance
+    in:  { signal: filtered_eit }
+
+  - id: detect_breaths
+    uses: eit.detect_breaths
+    in:  { signal: global_impedance }
+    with: { min_duration_s: 0.6666666667 }
+
+  - id: normalize_breaths
+    uses: eit.normalize_breaths
+
+  - id: continuous_tiv
+    uses: eit.continuous_tiv
+
+  - id: eeli
+    uses: eit.eeli
+
+  # Pixel-breath timing (per-pixel start/middle/end of in-/deflation);
+  # NaN marks the always-unavailable first/last global breath and any
+  # pixel whose breath couldn't be determined.
+  - id: pixel_breaths
+    uses: eit.pixel_breaths
+    with: { phase_correction_mode: "negative amplitude" }
+
+  - id: pixel_tiv
+    uses: eit.pixel_tiv
+    with: { tiv_timing: continuous }
+
+  - id: roi_tiv_lungspace
+    uses: eit.roi_tiv_lungspace
+    with: { threshold: 0.15 }
+
+  # Standalone step, included only to exercise the operation - its output is
+  # not consumed by eit.roi_watershed below. eit.roi_watershed computes its
+  # own internal TIV/amplitude lung-space masks via upstream's
+  # WatershedLungspace and needs no other ROI step run first. See
+  # docs/pipelines.md for upstream's warning against using amplitude alone
+  # as a general-purpose functional lung-space definition.
+  - id: roi_amplitude_lungspace
+    uses: eit.roi_amplitude_lungspace
+    with: { threshold: 0.15 }
+
+  # Self-contained - internally derives its own TIV and amplitude lung-space
+  # masks from filtered_eit/global_impedance; does not depend on the
+  # roi_tiv_lungspace or roi_amplitude_lungspace steps above.
+  - id: roi_watershed
+    uses: eit.roi_watershed
+    with: { threshold_fraction: 0.15 }
+
+  # Bound explicitly to the watershed mask rather than relying on an
+  # ambiguous default - eit.roi_filter_by_size.mask has no default binding.
+  - id: roi_filter_by_size
+    uses: eit.roi_filter_by_size
+    in:  { mask: watershed_lungspace_mask }
+    with: { min_region_size: 10, connectivity: 1 }

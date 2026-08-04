@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
 from m3resp import (
     BreathEvent,
     Event,
@@ -21,7 +23,7 @@ class UpstreamBreath:
     middle_time = 1.5
     end_time = 2.0
     confidence = 0.9
-    metadata = {"upstream": True}
+    metadata: ClassVar = {"upstream": True}
 
 
 def test_event_and_breath_defaults_are_isolated():

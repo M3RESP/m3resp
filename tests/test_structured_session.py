@@ -95,7 +95,7 @@ def test_preprocess_emg_populates_signals_on_default_adapter_path():
 
     assert len(session.signals) == 3
     processing_states = {s.processing_state for s in session.signals}
-    assert processing_states == {"raw", "filtered", "processed"}
+    assert processing_states == {"raw", "intermediate", "processed"}
     assert all(s.modality == "emg" for s in session.signals)
 
 
@@ -123,9 +123,17 @@ def test_postprocess_emg_populates_parameter_results_and_quality():
     assert parameters[0].name == "amplitude"
 
     quality_by_name = {flag.name: flag for flag in session.quality}
-    assert quality_by_name["snr_pseudo"].passed is True
+    # snr_pseudo is a measurement, not a criterion - no upstream threshold
+    # was configured, so it is not evaluated as a pass, but it is also not a
+    # failed clinical check (see quality_flag_from_result's docstring).
+    assert quality_by_name["snr_pseudo"].passed is False
+    assert quality_by_name["snr_pseudo"].metadata["measurement_only"] is True
     assert quality_by_name["pocc_quality"].passed is False
-    assert [flag.name for flag in session.quality.failed()] == ["pocc_quality"]
+    assert "measurement_only" not in quality_by_name["pocc_quality"].metadata
+    assert sorted(flag.name for flag in session.quality.failed()) == [
+        "pocc_quality",
+        "snr_pseudo",
+    ]
 
 
 def test_session_stores_eit_and_emg_signals_in_the_same_collection():

@@ -5,7 +5,7 @@ version: "0.1.0"
 date-released: "2026-06-08"
 authors:
   - name: "M3Resp contributors"
-license: "MIT"
+license: "Apache-2.0"
 repository-code: "https://github.com/M3RESP/m3resp"
 abstract: "Multimodal respiratory processing for EIT, EMG, and ventilator signals."
 references:
