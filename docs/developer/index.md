@@ -13,4 +13,5 @@ adapters
 pipeline-contracts
 testing
 coding_guidelines
+offset-estimation
 ```

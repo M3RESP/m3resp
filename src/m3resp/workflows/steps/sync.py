@@ -34,7 +34,7 @@ from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
         "Return a manually supplied constant time offset. There is no "
         "robust, general-purpose automatic sync method in this package; "
         "find the offset interactively (see "
-        "tools/visualization_tools/utils/offset_estimation.md) and hardcode "
+        "docs/developer/offset-estimation.md) and hardcode "
         "it as manual_offset_seconds. Run after the '*.load' steps but "
         "before 'session.sync_raw'/'sync.apply_estimated_offset'."
     ),

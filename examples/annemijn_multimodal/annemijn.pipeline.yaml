@@ -51,7 +51,7 @@ steps:
   # supplied manually. This value was found interactively with the marimo
   # multimodal viewer's protocol-specific estimators (interference-artifact
   # anchor + cross-correlation refinement) - see
-  # tools/visualization_tools/utils/offset_estimation.md for how it was
+  # docs/developer/offset-estimation.md for how it was
   # derived and tools/visualization_tools/2_annemijn_multimodal_vis.py to
   # re-derive it if the dataset changes.
   - uses: sync.estimate_offset
