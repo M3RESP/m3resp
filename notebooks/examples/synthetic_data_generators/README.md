@@ -2,8 +2,8 @@
 
 The maintained synthetic data generator now lives in the M3Resp package:
 
-- `src/m3resp/synthetic/unified_generator.py`: reusable module for generating
-  EIT, EMG, and ventilator synthetic recordings.
+- `src/m3resp/synthetic/`: reusable package for generating EIT, EMG, and
+  ventilator synthetic recordings.
 - `src/m3resp/synthetic/synthetic_generator_config.yaml`: editable YAML
   configuration for the generator.
 - `unified_synthetic_data_generation.ipynb`: notebook showing the same workflow
@@ -100,7 +100,7 @@ to choose EIT, EMG, ventilator, or any combination.
 From the repository root:
 
 ```bash
-python -m m3resp.synthetic.unified_generator
+python -m m3resp.synthetic.generator
 ```
 
 This loads `src/m3resp/synthetic/synthetic_generator_config.yaml` and writes
@@ -109,7 +109,7 @@ outputs using the values in that file.
 You can also pass a different YAML file:
 
 ```bash
-python -m m3resp.synthetic.unified_generator path/to/custom_config.yaml
+python -m m3resp.synthetic.generator path/to/custom_config.yaml
 ```
 
 For the same YAML-driven run from Python:
@@ -117,7 +117,7 @@ For the same YAML-driven run from Python:
 ```python
 import os
 
-from m3resp.synthetic.unified_generator import (
+from m3resp.synthetic import (
     generate_synthetic_dataset,
     load_synthetic_generator_config,
 )
