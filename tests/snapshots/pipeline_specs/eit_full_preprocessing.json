@@ -1,0 +1,159 @@
+{
+  "experiment": {
+    "mode": null,
+    "run_identifier": null,
+    "selection": "selected",
+    "subject_id": null,
+    "timepoint": null
+  },
+  "inputs": {
+    "eit_file": "../../data/source/data_from_repo/draeger_synthetic_draeger_20Hz.bin",
+    "vendor": "draeger"
+  },
+  "name": "eit-full-preprocessing",
+  "outputs": {
+    "dir": "output/eit-full-preprocessing",
+    "event_csvs": true,
+    "figures": true,
+    "mode": "automatic",
+    "parameters_csv": false,
+    "postprocessing": false,
+    "structured_export": true,
+    "summary_json": true,
+    "timestamped": true
+  },
+  "schema_version": 1,
+  "steps": [
+    {
+      "id": "load",
+      "in": {},
+      "out": {},
+      "uses": "eit.load",
+      "with": {
+        "file": "@eit_file",
+        "vendor": "@vendor"
+      }
+    },
+    {
+      "id": "detect_rates",
+      "in": {
+        "signal": "raw_eit"
+      },
+      "out": {},
+      "uses": "eit.detect_rates",
+      "with": {
+        "capture": true,
+        "subject_type": "adult"
+      }
+    },
+    {
+      "id": "mdn_filter",
+      "in": {
+        "signal": "raw_eit"
+      },
+      "out": {},
+      "uses": "eit.mdn_filter",
+      "with": {
+        "label": "mdn_filtered"
+      }
+    },
+    {
+      "id": "global_impedance",
+      "in": {
+        "signal": "filtered_eit"
+      },
+      "out": {},
+      "uses": "eit.global_impedance",
+      "with": {}
+    },
+    {
+      "id": "detect_breaths",
+      "in": {
+        "signal": "global_impedance"
+      },
+      "out": {},
+      "uses": "eit.detect_breaths",
+      "with": {
+        "min_duration_s": 0.6666666667
+      }
+    },
+    {
+      "id": "normalize_breaths",
+      "in": {},
+      "out": {},
+      "uses": "eit.normalize_breaths",
+      "with": {}
+    },
+    {
+      "id": "continuous_tiv",
+      "in": {},
+      "out": {},
+      "uses": "eit.continuous_tiv",
+      "with": {}
+    },
+    {
+      "id": "eeli",
+      "in": {},
+      "out": {},
+      "uses": "eit.eeli",
+      "with": {}
+    },
+    {
+      "id": "pixel_breaths",
+      "in": {},
+      "out": {},
+      "uses": "eit.pixel_breaths",
+      "with": {
+        "phase_correction_mode": "negative amplitude"
+      }
+    },
+    {
+      "id": "pixel_tiv",
+      "in": {},
+      "out": {},
+      "uses": "eit.pixel_tiv",
+      "with": {
+        "tiv_timing": "continuous"
+      }
+    },
+    {
+      "id": "roi_tiv_lungspace",
+      "in": {},
+      "out": {},
+      "uses": "eit.roi_tiv_lungspace",
+      "with": {
+        "threshold": 0.15
+      }
+    },
+    {
+      "id": "roi_amplitude_lungspace",
+      "in": {},
+      "out": {},
+      "uses": "eit.roi_amplitude_lungspace",
+      "with": {
+        "threshold": 0.15
+      }
+    },
+    {
+      "id": "roi_watershed",
+      "in": {},
+      "out": {},
+      "uses": "eit.roi_watershed",
+      "with": {
+        "threshold_fraction": 0.15
+      }
+    },
+    {
+      "id": "roi_filter_by_size",
+      "in": {
+        "mask": "watershed_lungspace_mask"
+      },
+      "out": {},
+      "uses": "eit.roi_filter_by_size",
+      "with": {
+        "connectivity": 1,
+        "min_region_size": 10
+      }
+    }
+  ]
+}

@@ -1,18 +1,42 @@
-"""Adapter boundary for the upstream `eitprocessing` package."""
+"""Adapter boundary for the upstream `eitprocessing` package.
+
+This package mirrors the former single ``eitprocessing_adapter.py`` module,
+with standalone helper functions factored out into ``_shared.py`` for
+readability; ``EITProcessingAdapter`` itself is unchanged. ``add_to_collection``,
+``continuous_data_to_signal``, and ``_sparse_data_to_parameters`` are
+re-exported here so ``from m3resp.adapters.eitprocessing_adapter import
+<name>`` keeps working unchanged.
+"""
 
 from __future__ import annotations
 
 import copy
+import math
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal, cast
 
 import numpy as np
 
-from m3resp.core.events import BreathEvent
-from m3resp.core.events import coerce_breath_events
+from m3resp.core.events import BreathEvent, coerce_breath_events
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
 from m3resp.data import ParameterResult, QualityFlag, Signal
-from m3resp.data.signals import Modality, ProcessingState
+from m3resp.processing.filters import butterworth_filter
+
+from ._shared import (
+    _breath_intervals_to_dicts,
+    _lazy_import,
+    _require_eit_sequence,
+    _sparse_data_to_parameters,
+    add_to_collection,
+    continuous_data_to_signal,
+)
+
+__all__ = [
+    "EITProcessingAdapter",
+    "_sparse_data_to_parameters",
+    "add_to_collection",
+    "continuous_data_to_signal",
+]
 
 
 class EITProcessingAdapter:
@@ -31,13 +55,19 @@ class EITProcessingAdapter:
         if self._loader is not None:
             return self._loader(path, vendor=vendor, **kwargs)
 
-        try:
-            from eitprocessing.datahandling.loading import load_eit_data
-        except ImportError as exc:
-            raise OptionalDependencyError(
+        if vendor is None:
+            raise ValueError(
+                "EIT loading requires an explicit vendor (e.g. 'draeger', "
+                "'sentec', or 'timpel') when no loader is injected."
+            )
+
+        (load_eit_data,) = _lazy_import(
+            "eitprocessing.datahandling.loading.load_eit_data",
+            error=lambda: OptionalDependencyError(
                 "EIT support requires the optional dependency `eitprocessing`. "
                 'Install with `pip install "m3resp[eit]"` or inject a loader.'
-            ) from exc
+            ),
+        )
 
         return load_eit_data(path, vendor=vendor, **kwargs)
 
@@ -59,14 +89,250 @@ class EITProcessingAdapter:
             name=f"Global impedance ({label})",
             description="Global impedance calculated from EIT pixel data.",
         )
-        _add_to_collection(sequence.continuous_data, global_impedance)
+        add_to_collection(sequence.continuous_data, global_impedance)
         return global_impedance
+
+    # -- Phase 1: reusable adapter operations ----------------------------------
+    #
+    # Small public methods, each wrapping exactly one `eitprocessing` operation.
+    # `preprocess()` and the granular workflow steps in
+    # `m3resp.workflows.steps.eit` both call these so the two paths cannot
+    # drift. Upstream imports stay local to each method so `m3resp` installs
+    # without the optional `eitprocessing` dependency.
+
+    def detect_rates(
+        self,
+        signal: Any,
+        *,
+        subject_type: Literal["adult", "neonate"] = "adult",
+        welch_window_seconds: float | None = None,
+        capture: bool = False,
+    ) -> dict[str, Any]:
+        """Estimate respiratory and heart rate from an EIT (or continuous) signal."""
+
+        (RateDetection,) = _lazy_import(
+            "eitprocessing.features.rate_detection.RateDetection"
+        )
+
+        detector = (
+            RateDetection(subject_type)
+            if welch_window_seconds is None
+            else RateDetection(subject_type, welch_window=welch_window_seconds)
+        )
+        captures: dict[str, Any] = {}
+        if capture:
+            respiratory_rate_hz, heart_rate_hz = detector.apply(
+                signal,
+                captures=captures,
+                suppress_length_warnings=True,
+                suppress_edge_case_warning=True,
+            )
+        else:
+            respiratory_rate_hz, heart_rate_hz = detector.apply(signal)
+        return {
+            "respiratory_rate_hz": float(respiratory_rate_hz),
+            "heart_rate_hz": float(heart_rate_hz),
+            "rate_detector": detector,
+            "rate_captures": captures,
+        }
+
+    def apply_mdn(
+        self,
+        signal: Any,
+        *,
+        respiratory_rate_hz: float,
+        heart_rate_hz: float,
+        label: str = "filtered",
+        name: str | None = None,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        """Apply an MDN heart-rate-removal filter to EIT pixel data."""
+
+        (MDNFilter,) = _lazy_import("eitprocessing.filters.mdn.MDNFilter")
+
+        for rate_name, rate in (
+            ("respiratory_rate_hz", respiratory_rate_hz),
+            ("heart_rate_hz", heart_rate_hz),
+        ):
+            if not math.isfinite(rate) or rate <= 0:
+                raise ValueError(
+                    f"{rate_name} must be a finite, positive value in Hz, got {rate!r}."
+                )
+
+        apply_kwargs: dict[str, Any] = {"label": label}
+        if name is not None:
+            apply_kwargs["name"] = name
+        if description is not None:
+            apply_kwargs["description"] = description
+
+        captures: dict[str, Any] = {}
+        filtered_eit = MDNFilter(
+            respiratory_rate=respiratory_rate_hz,
+            heart_rate=heart_rate_hz,
+        ).apply(signal, captures=captures, **apply_kwargs)
+        return {"filtered_eit": filtered_eit, "filter_captures": captures}
+
+    def find_pixel_breaths(
+        self,
+        eit_data: Any,
+        timing_data: Any,
+        *,
+        sequence: Any | None = None,
+        phase_correction_mode: Literal["negative amplitude", "phase shift", "none"]
+        | None = "negative amplitude",
+        minimum_duration_seconds: float = 2 / 3,
+        result_label: str = "pixel_breaths",
+    ) -> Any:
+        """Detect per-pixel breath timing (start/middle/end of in-/deflation)."""
+
+        BreathDetection, PixelBreath = _lazy_import(
+            "eitprocessing.features.breath_detection.BreathDetection",
+            "eitprocessing.features.pixel_breath.PixelBreath",
+        )
+
+        breath_detector = BreathDetection(minimum_duration=minimum_duration_seconds)
+        result = PixelBreath(
+            breath_detection=breath_detector,
+            phase_correction_mode=phase_correction_mode,
+        ).find_pixel_breaths(
+            eit_data,
+            timing_data,
+            sequence=sequence,
+            store=False,
+            result_label=result_label,
+        )
+        if sequence is not None:
+            add_to_collection(sequence.interval_data, result)
+        return result
+
+    def compute_eeli(
+        self,
+        timing_data: Any,
+        *,
+        sequence: Any,
+        breath_detector: Any,
+        result_label: str = "continuous_eelis",
+    ) -> Any:
+        """Compute end-expiratory lung impedance (EELI) per breath."""
+
+        (EELI,) = _lazy_import("eitprocessing.parameters.eeli.EELI")
+
+        result = EELI(breath_detection=breath_detector).compute_parameter(
+            timing_data,
+            sequence=sequence,
+            store=False,
+            result_label=result_label,
+        )
+        add_to_collection(sequence.sparse_data, result)
+        return result
+
+    def compute_pixel_tiv(
+        self,
+        eit_data: Any,
+        timing_data: Any,
+        *,
+        sequence: Any,
+        breath_detector: Any,
+        tiv_timing: Literal["pixel", "continuous"] = "continuous",
+        result_label: str = "pixel_tivs",
+    ) -> Any:
+        """Compute per-pixel tidal impedance variation (TIV)."""
+
+        (TIV,) = _lazy_import("eitprocessing.parameters.tidal_impedance_variation.TIV")
+
+        result: Any = TIV(breath_detection=breath_detector).compute_parameter(
+            eit_data,
+            timing_data,
+            sequence,
+            tiv_timing=tiv_timing,
+            store=False,
+            result_label=result_label,
+        )
+        add_to_collection(sequence.sparse_data, result)
+        return result
+
+    def compute_tiv_lungspace(
+        self,
+        eit_data: Any,
+        *,
+        timing_data: Any | None = None,
+        threshold: float = 0.15,
+    ) -> dict[str, Any]:
+        """Threshold mean pixel TIV into a functional lung-space mask."""
+
+        (TIVLungspace,) = _lazy_import("eitprocessing.roi.tiv.TIVLungspace")
+
+        captures: dict[str, Any] = {}
+        mask = TIVLungspace(threshold=threshold).apply(
+            eit_data, timing_data=timing_data, captures=captures
+        )
+        return {"mask": mask, "captures": captures}
+
+    def compute_amplitude_lungspace(
+        self,
+        eit_data: Any,
+        *,
+        timing_data: Any | None = None,
+        threshold: float = 0.15,
+    ) -> dict[str, Any]:
+        """Threshold mean pixel amplitude into a lung-space mask.
+
+        Upstream does not recommend amplitude alone as a general-purpose
+        functional lung-space definition; it exists primarily to support
+        `compute_watershed_lungspace()`.
+        """
+
+        (AmplitudeLungspace,) = _lazy_import(
+            "eitprocessing.roi.amplitude.AmplitudeLungspace"
+        )
+
+        captures: dict[str, Any] = {}
+        mask = AmplitudeLungspace(threshold=threshold).apply(
+            eit_data, timing_data=timing_data, captures=captures
+        )
+        return {"mask": mask, "captures": captures}
+
+    def compute_watershed_lungspace(
+        self,
+        eit_data: Any,
+        *,
+        timing_data: Any | None = None,
+        threshold_fraction: float = 0.15,
+    ) -> dict[str, Any]:
+        """Derive a lung-space mask with the watershed method (pendelluft-aware)."""
+
+        (WatershedLungspace,) = _lazy_import(
+            "eitprocessing.roi.watershed.WatershedLungspace"
+        )
+
+        captures: dict[str, Any] = {}
+        mask = WatershedLungspace(threshold_fraction=threshold_fraction).apply(
+            eit_data, timing_data=timing_data, captures=captures
+        )
+        return {"mask": mask, "captures": captures}
+
+    def filter_roi_by_size(
+        self,
+        mask: Any,
+        *,
+        min_region_size: int = 10,
+        connectivity: Literal[1, 2] | np.ndarray = 1,
+    ) -> Any:
+        """Keep only connected mask regions at or above `min_region_size`."""
+
+        (FilterROIBySize,) = _lazy_import(
+            "eitprocessing.roi.filter_by_size.FilterROIBySize"
+        )
+
+        return FilterROIBySize(
+            min_region_size=min_region_size, connectivity=connectivity
+        ).apply(mask)
 
     def preprocess(
         self,
         sequence: Any,
         *,
-        subject_type: str = "adult",
+        subject_type: Literal["adult", "neonate"] = "adult",
         welch_window_seconds: float = 30.0,
         filter_mode: str = "mdn",
         filter_enabled: bool = True,
@@ -84,19 +350,14 @@ class EITProcessingAdapter:
     ) -> dict[str, Any]:
         """Run the Stage 1 EIT preprocessing pipeline through `eitprocessing`."""
 
-        try:
-            import numpy as np
-            from eitprocessing.features.breath_detection import BreathDetection
-            from eitprocessing.features.rate_detection import RateDetection
-            from eitprocessing.filters.butterworth_filters import ButterworthFilter
-            from eitprocessing.filters.mdn import MDNFilter
-            from eitprocessing.parameters.eeli import EELI
-            from eitprocessing.parameters.tidal_impedance_variation import TIV
-        except ImportError as exc:
-            raise OptionalDependencyError(
+        BreathDetection, TIV = _lazy_import(
+            "eitprocessing.features.breath_detection.BreathDetection",
+            "eitprocessing.parameters.tidal_impedance_variation.TIV",
+            error=lambda: OptionalDependencyError(
                 "EIT preprocessing requires the optional dependency "
                 '`eitprocessing`. Install with `pip install "m3resp[eit]"`.'
-            ) from exc
+            ),
+        )
 
         _require_eit_sequence(sequence)
 
@@ -126,46 +387,49 @@ class EITProcessingAdapter:
         heart_rate_hz = None
         rates_required = compute_rates or normalized_filter_mode == "mdn"
         if rates_required:
-            rate_detector = RateDetection(
-                subject_type, welch_window=welch_window_seconds
-            )
-            respiratory_rate_hz, heart_rate_hz = rate_detector.apply(
+            rates = self.detect_rates(
                 raw_eit,
-                captures=rate_captures,
-                suppress_length_warnings=True,
-                suppress_edge_case_warning=True,
+                subject_type=subject_type,
+                welch_window_seconds=welch_window_seconds,
+                capture=True,
             )
+            rate_detector = rates["rate_detector"]
+            rate_captures = rates["rate_captures"]
+            respiratory_rate_hz = rates["respiratory_rate_hz"]
+            heart_rate_hz = rates["heart_rate_hz"]
 
         filter_captures: dict[str, Any] = {}
         filtered_eit = raw_eit
         filtered_global_impedance = raw_global_impedance
 
         if normalized_filter_mode == "mdn":
-            eit_filter = MDNFilter(
-                respiratory_rate=respiratory_rate_hz,
-                heart_rate=heart_rate_hz,
-            )
-            filtered_eit = eit_filter.apply(
+            assert respiratory_rate_hz is not None
+            assert heart_rate_hz is not None
+            mdn_result = self.apply_mdn(
                 raw_eit,
-                captures=filter_captures,
+                respiratory_rate_hz=respiratory_rate_hz,
+                heart_rate_hz=heart_rate_hz,
                 label="mdn_filtered",
                 name="MDN-filtered EIT data",
                 description="EIT data filtered with MDN heart-rate noise removal.",
             )
+            filtered_eit = mdn_result["filtered_eit"]
+            filter_captures = mdn_result["filter_captures"]
         elif normalized_filter_mode in {"lowpass", "bandpass"}:
+            butterworth_filter_type = cast(
+                Literal["lowpass", "bandpass"], normalized_filter_mode
+            )
             cutoff_frequency = (
                 lowpass_hz
-                if normalized_filter_mode == "lowpass"
+                if butterworth_filter_type == "lowpass"
                 else (highpass_hz, lowpass_hz)
             )
-            eit_filter = ButterworthFilter(
-                filter_type=normalized_filter_mode,
-                cutoff_frequency=cutoff_frequency,
-                order=filter_order,
-                sample_frequency=raw_eit.sample_frequency,
-            )
-            filtered_pixels = eit_filter.apply(
+            filtered_pixels = butterworth_filter(
                 np.nan_to_num(raw_eit.pixel_impedance),
+                filter_type=butterworth_filter_type,
+                cutoff_frequency=cutoff_frequency,
+                sample_frequency=raw_eit.sample_frequency,
+                order=filter_order,
                 axis=0,
                 captures=filter_captures,
             )
@@ -178,18 +442,18 @@ class EITProcessingAdapter:
             filtered_eit.pixel_impedance = filtered_pixels
 
         if filtered_eit is not raw_eit:
-            _add_to_collection(sequence.eit_data, filtered_eit)
+            add_to_collection(sequence.eit_data, filtered_eit)
             if include_global_impedance:
                 filtered_global_impedance = filtered_eit.get_summed_impedance(
                     return_label=f"global_impedance_({filtered_eit.label})",
                     name=f"Global impedance ({filtered_eit.label})",
                     description="Global impedance calculated from filtered EIT data.",
                 )
-                _add_to_collection(sequence.continuous_data, filtered_global_impedance)
+                add_to_collection(sequence.continuous_data, filtered_global_impedance)
 
         breath_detector = None
         breath_intervals = None
-        continuous_tiv = None
+        continuous_tiv: Any = None
         eeli = None
         if compute_breath_intervals:
             if filtered_global_impedance is None:
@@ -204,9 +468,15 @@ class EITProcessingAdapter:
                 result_label="eit_breaths",
                 store=False,
             )
-            _add_to_collection(sequence.interval_data, breath_intervals)
+            add_to_collection(sequence.interval_data, breath_intervals)
 
+        # `compute_breath_intervals` is guaranteed True here (validated above
+        # whenever any of these three outputs is requested), so
+        # `breath_detector`/`filtered_global_impedance` are always populated;
+        # the asserts only narrow the type for mypy.
         if compute_continuous_tiv:
+            assert breath_detector is not None
+            assert filtered_global_impedance is not None
             tiv_calculator = TIV(breath_detection=breath_detector)
             continuous_tiv = tiv_calculator.compute_parameter(
                 filtered_global_impedance,
@@ -214,29 +484,30 @@ class EITProcessingAdapter:
                 store=False,
                 result_label="continuous_tivs",
             )
-            _add_to_collection(sequence.sparse_data, continuous_tiv)
+            add_to_collection(sequence.sparse_data, continuous_tiv)
 
         if compute_eeli:
-            eeli = EELI(breath_detection=breath_detector).compute_parameter(
+            assert breath_detector is not None
+            assert filtered_global_impedance is not None
+            eeli = self.compute_eeli(
                 filtered_global_impedance,
                 sequence=sequence,
-                store=False,
+                breath_detector=breath_detector,
                 result_label="continuous_eelis",
             )
-            _add_to_collection(sequence.sparse_data, eeli)
 
-        pixel_tiv = None
+        pixel_tiv: Any = None
         if compute_pixel_tiv:
-            tiv_calculator = TIV(breath_detection=breath_detector)
-            pixel_tiv = tiv_calculator.compute_parameter(
+            assert breath_detector is not None
+            assert filtered_global_impedance is not None
+            pixel_tiv = self.compute_pixel_tiv(
                 filtered_eit,
                 filtered_global_impedance,
-                sequence,
+                sequence=sequence,
+                breath_detector=breath_detector,
                 tiv_timing="continuous",
-                store=False,
                 result_label="pixel_tivs",
             )
-            _add_to_collection(sequence.sparse_data, pixel_tiv)
 
         return {
             "sequence": sequence,
@@ -303,7 +574,7 @@ class EITProcessingAdapter:
         raw_gi = preprocessed.get("raw_global_impedance")
         if raw_gi is not None:
             signals.append(
-                _continuous_data_to_signal(
+                continuous_data_to_signal(
                     raw_gi,
                     modality="eit",
                     channel="global_impedance",
@@ -314,12 +585,14 @@ class EITProcessingAdapter:
         filtered_gi = preprocessed.get("filtered_global_impedance")
         if filtered_gi is not None and filtered_gi is not raw_gi:
             signals.append(
-                _continuous_data_to_signal(
+                continuous_data_to_signal(
                     filtered_gi,
                     modality="eit",
                     channel="global_impedance",
-                    processing_state="filtered",
-                    method=preprocessed.get("filter_mode"),
+                    processing_state="intermediate",
+                    method=f"eitprocessing.{preprocessed.get('filter_mode')}_filter",
+                    name=getattr(filtered_gi, "name", None)
+                    or getattr(filtered_gi, "label", None),
                 )
             )
         return signals
@@ -388,83 +661,3 @@ class EITProcessingAdapter:
                 modality="eit",
             ),
         ]
-
-
-def _require_eit_sequence(sequence: Any) -> None:
-    if not hasattr(sequence, "eit_data") or not hasattr(sequence, "continuous_data"):
-        raise TypeError("EIT preprocessing expects an eitprocessing Sequence.")
-    if "raw" not in sequence.eit_data:
-        raise KeyError("EIT preprocessing requires sequence.eit_data['raw'].")
-
-
-def _add_to_collection(collection: Any, value: Any) -> None:
-    try:
-        collection.add(value, overwrite=True)
-    except TypeError:
-        collection.add(value)
-
-
-def _breath_intervals_to_dicts(breath_intervals: Any) -> list[dict[str, Any]]:
-    return [
-        {
-            "start_time": breath.start_time,
-            "end_time": breath.end_time,
-            "peak_time": getattr(breath, "middle_time", None),
-            "source": "eitprocessing.BreathDetection",
-        }
-        for breath in breath_intervals.values
-    ]
-
-
-def _continuous_data_to_signal(
-    obj: Any,
-    *,
-    modality: Modality,
-    channel: str | None,
-    processing_state: ProcessingState,
-    method: str | None = None,
-) -> Signal:
-    """Convert an `eitprocessing.ContinuousData`-shaped object to a `Signal`."""
-
-    return Signal(
-        values=obj.values,
-        time=obj.time,
-        sample_frequency=getattr(obj, "sample_frequency", None),
-        unit=getattr(obj, "unit", None),
-        name=getattr(obj, "name", None) or getattr(obj, "label", None),
-        modality=modality,
-        channel=channel,
-        processing_state=processing_state,
-        method=method,
-    )
-
-
-def _sparse_data_to_parameters(
-    obj: Any, *, modality: str, method: str
-) -> list[ParameterResult]:
-    """Convert an `eitprocessing.SparseData`-shaped object (one value per
-    breath) into one `ParameterResult` per non-NaN sample.
-    """
-
-    values = np.asarray(obj.values)
-    times = np.asarray(obj.time)
-    name = getattr(obj, "name", None) or getattr(obj, "label", None) or "parameter"
-    unit = getattr(obj, "unit", None)
-
-    results: list[ParameterResult] = []
-    for index, value in enumerate(values):
-        if np.ndim(value) == 0 and np.isnan(value):
-            continue
-        metadata = {"time": float(times[index])} if index < len(times) else {}
-        results.append(
-            ParameterResult(
-                name=name,
-                value=value,
-                modality=modality,
-                unit=unit,
-                breath_id=str(index),
-                method=method,
-                metadata=metadata,
-            )
-        )
-    return results
