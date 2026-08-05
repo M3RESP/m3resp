@@ -7,7 +7,8 @@ name = "m3resp"
 description = "Multimodal respiratory processing for EIT, EMG, and ventilator signals"
 readme = "README.md"
 requires-python = ">=3.12"
-license = "MIT"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [
   { name = "M3Resp contributors" },
 ]
@@ -15,7 +16,6 @@ keywords = ["respiration", "EIT", "EMG", "multimodal", "biomedical"]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "Intended Audience :: Science/Research",
-  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
@@ -27,6 +27,7 @@ dependencies = [
   "pandas",
   "pydantic>=2",
   "PyYAML",
+  "scipy",
 ]
 dynamic = ["version"]
 
@@ -47,9 +48,19 @@ dev = [
   "pre-commit",
   "pytest",
   "pytest-cov",
-  "ruff",
+  "ruff>=0.16,<0.17",
   "mypy",
   "types-PyYAML",
+  "pandas-stubs",
+  "scipy-stubs",
+]
+docs = [
+  "Sphinx>=8.2",
+  "myst-parser>=4",
+  "pydata-sphinx-theme>=0.16",
+  "sphinx-design>=0.6",
+  "sphinx-gallery>=0.19",
+  "matplotlib>=3.9",
 ]
 
 [project.scripts]
@@ -75,9 +86,25 @@ packages = ["src/m3resp"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.marimo.runtime]
+# Raise the cell-output size cap (marimo default 8 MB) so the multimodal viewer
+# can render lower-downsample / wider-window traces. A full-resolution 180 s
+# Biopac window is ~18 MB of Plotly JSON; 50 MB leaves headroom while still
+# guarding against runaway outputs. Note: Scattergl speeds up *rendering* but
+# does not shrink this serialized payload, and the figure is re-sent over the
+# WebSocket on every slider drag -- keep downsample moderate for smooth interaction.
+output_max_bytes = 50_000_000
+
 [tool.ruff]
 line-length = 88
 target-version = "py312"
+
+[tool.ruff.lint.per-file-ignores]
+# marimo stores notebooks as plain Python: every cell is a function that ends in
+# a bare expression (its output) and a `return` of the variables other cells
+# consume. Both are load-bearing in that format, not dead code.
+"notebooks/**/*.py" = ["B018", "PLR1711"]
+"tools/visualization_tools/**/*.py" = ["B018", "PLR1711"]
 
 [tool.mypy]
 python_version = "3.12"
