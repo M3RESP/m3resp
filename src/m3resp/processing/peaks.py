@@ -49,10 +49,9 @@ def detect_peaks(
 ) -> np.ndarray:
     """Detect peaks using SciPy, optionally after inverting the signal.
 
-    Always returns just the peak indices, not a shape that varies with a
-    flag. Pass a dict via `captures` to also get SciPy's peak `properties`
-    (heights/widths/prominences/...) under `captures["properties"]` -
-    same pattern as `m3resp.processing.filters`.
+    Returns only the peak indices. Pass a dict via `captures` to also
+    receive SciPy's peak `properties` (heights/widths/prominences/...)
+    under `captures["properties"]`.
     """
 
     signal = _scipy_signal()
