@@ -15,7 +15,6 @@ from m3resp.synthetic.config import (
 DEFAULT_ZERO = 0.0
 DEFAULT_ONE = 1.0
 DEFAULT_TWO = 2.0
-DEFAULT_FLOAT32_DTYPE = np.float32
 DEFAULT_FIRST_AXIS = 0
 DEFAULT_SECOND_AXIS = 1
 
@@ -91,9 +90,7 @@ def shift_array_in_time(
 
     if shifted_time is None:
         shifted_time = np.asarray(time_seconds[:0], dtype=float)
-    shifted = np.stack(shifted_columns, axis=DEFAULT_SECOND_AXIS).astype(
-        DEFAULT_FLOAT32_DTYPE
-    )
+    shifted = np.stack(shifted_columns, axis=DEFAULT_SECOND_AXIS)
     shifted = shifted.reshape((len(shifted_time), *moved.shape[1:]))
     return shifted_time, np.moveaxis(
         shifted,
