@@ -22,7 +22,11 @@ DEFAULT_NATIVE_EXTENSION = ".Poly5"
 
 @dataclass
 class DriftConfig:
-    """Optional low-frequency baseline drift configuration."""
+    """Optional low-frequency baseline drift configuration.
+
+    A ``slope_per_second`` of ``None`` means "work it out from amplitude",
+    while ``0.0`` means "no slope".
+    """
 
     enabled: bool = False
     amplitude: float = 0.0
@@ -30,7 +34,7 @@ class DriftConfig:
     frequency_hz: float = 0.008
     secondary_frequency_hz: float = 0.003
     phase_radians: float = 1.2
-    slope_per_second: float = 0.0
+    slope_per_second: float | None = None
     primary_weight: float = 0.6
     secondary_weight: float = 0.4
 

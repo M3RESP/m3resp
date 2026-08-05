@@ -37,10 +37,13 @@ def generate_drift(time_seconds: np.ndarray, config: DriftConfig) -> np.ndarray:
         )
     if config.kind == "linear":
         centered_time = time_seconds - float(time_seconds[0])
-        slope = config.slope_per_second or config.amplitude / max(
-            float(time_seconds[-1] - time_seconds[0]),
-            DEFAULT_ONE,
-        )
+        if config.slope_per_second is not None:
+            slope = config.slope_per_second
+        else:
+            slope = config.amplitude / max(
+                float(time_seconds[-1] - time_seconds[0]),
+                DEFAULT_ONE,
+            )
         return slope * centered_time
     if config.kind == "constant":
         return np.full_like(time_seconds, config.amplitude, dtype=float)
