@@ -44,7 +44,7 @@ The base package supports ventilator data, the shared data model, and the workfl
 ```bash
 git clone https://github.com/M3RESP/m3resp.git
 cd m3resp
-python -m pip install -e .
+python -m pip install -e .  # or `uv sync`
 ```
 
 ### Optional modality support
