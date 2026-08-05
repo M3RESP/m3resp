@@ -52,9 +52,9 @@ python -m pip install -e .  # or `uv sync`
 Install only the integrations needed for your recordings:
 
 ```bash
-python -m pip install -e ".[eit]"  # add eitprocessing
-python -m pip install -e ".[emg]"  # add resurfemg
-python -m pip install -e ".[all]"  # add both modalities
+python -m pip install -e ".[eit]"  # or `uv sync --extra eit`, add eitprocessing
+python -m pip install -e ".[emg]"  # or `uv synx --extra emg`, add resurfemg
+python -m pip install -e ".[all]"  # or `uv synx --extra all`, add both modalities
 ```
 
 The modality extras currently use the M3Resp integration branches of the upstream packages. See [pyproject.toml](pyproject.toml) for the exact versions.
