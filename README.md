@@ -66,7 +66,7 @@ For tests, linting, formatting, and type checking:
 ```bash
 git clone https://github.com/M3RESP/m3resp.git
 cd m3resp
-python -m pip install -e ".[all,dev]"
+python -m pip install -e ".[all,dev]"  # or `uv sync --extra all --extra dev`
 pre-commit install
 ```
 
