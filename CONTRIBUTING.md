@@ -41,6 +41,13 @@ python -m pip install -e ".[docs]"
 python -m sphinx -W --keep-going -b html docs docs/_build/html
 ```
 
+or 
+
+```bash
+uv sync --extra docs
+uv run python -m sphinx -W --keep-going -b html docs docs/_build/html
+```
+
 Open `docs/_build/html/index.html` to preview the result. The documentation
 workflow runs the same strict build for every pull request, so broken links,
 invalid cross-references, and rendering warnings must be fixed before merging.
