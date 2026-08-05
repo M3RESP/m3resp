@@ -96,7 +96,18 @@ def detect_emg_breath_peaks(
     min_peak_width_samples: int | None = None,
     min_peak_width_s: int | None = None,
 ) -> np.ndarray:
-    """Detect EMG breath peaks with ReSurfEMG-compatible defaults."""
+    """Detect breath peaks in an EMG envelope, with ReSurfEMG-compatible defaults.
+
+    Peaks are detected on `envelope` using a prominence threshold derived from
+    the signal above `baseline`: `prominence_factor * (P75 + P50)` of
+    `envelope - baseline`. When no `baseline` is given, a zero baseline is used.
+
+    Peak widths are in **samples**, not seconds. `min_peak_width_s` is a
+    back-compat alias for `min_peak_width_samples` - ReSurfEMG spells this
+    samples-valued parameter `_s`, and the name is preserved for compatibility.
+    Set at most one of the two; both default to `None`, giving an effective
+    width of 1 sample.
+    """
 
     if min_peak_width_samples is not None and min_peak_width_s is not None:
         raise ValueError(
