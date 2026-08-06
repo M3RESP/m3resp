@@ -1,0 +1,82 @@
+/* ---- EIT analysis workspace (images + stacked ROI plots, Dräger-style layout) ---- */
+.eit-workspace{display:flex;gap:20px;align-items:flex-start;}
+.eit-images{flex:0 0 258px;display:flex;flex-direction:column;gap:14px;}
+.eit-img-block{display:flex;flex-direction:column;gap:6px;}
+.eit-img-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-faint);}
+.eit-img-row{display:flex;gap:8px;align-items:stretch;}
+.eit-colorbar{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:8.5px;font-family:var(--mono);color:var(--text-faint);}
+.eit-colorbar .cb-scale{
+  flex:1;width:11px;border-radius:3px;border:1px solid var(--border);
+  background:linear-gradient(to top,#0b1430 0%,#173a8f 28%,#3f6fdb 58%,#a9c4f4 82%,#ffffff 100%);
+}
+.eit-img{
+  flex:1;aspect-ratio:1/1;background:#05070a;border:1px solid var(--border);border-radius:7px;overflow:hidden;
+}
+.eit-img svg{width:100%;height:100%;display:block;}
+.eit-controls{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+.eit-btn{
+  font-size:11px;font-weight:600;padding:7px 6px;border-radius:6px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);
+}
+.eit-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+.eit-plots{flex:1;min-width:0;display:flex;flex-direction:column;}
+.eit-plots-title{margin-bottom:6px;}
+.eit-plot-stack{position:relative;display:flex;flex-direction:column;gap:5px;}
+.eit-panel{
+  position:relative;background:var(--surface-2);border:1px solid var(--border);
+  border-left:3px solid var(--eit);border-radius:7px;overflow:hidden;
+}
+.eit-panel.is-global{border-left-color:var(--accent);}
+.eit-panel svg{width:100%;height:100%;display:block;}
+.eit-panel-head{
+  position:absolute;top:4px;left:9px;right:9px;display:flex;align-items:baseline;gap:10px;
+  font-size:10.5px;pointer-events:none;z-index:1;
+}
+.eit-panel-head .nm{font-weight:700;color:var(--text);}
+.eit-panel-head .mtv{color:var(--text-dim);font-family:var(--mono);font-size:10px;}
+.eit-panel-head .mx{margin-left:auto;color:var(--text-faint);font-family:var(--mono);font-size:9.5px;}
+.eit-cursor{
+  position:absolute;top:0;bottom:0;width:0;border-left:2px solid var(--accent-strong);
+  z-index:3;pointer-events:none;
+}
+.eit-cursor::after{
+  content:"";position:absolute;top:-3px;left:-4px;width:6px;height:6px;border-radius:50%;
+  background:var(--accent-strong);
+}
+.eit-time-axis{display:flex;justify-content:space-between;margin-top:5px;font-size:10px;font-family:var(--mono);color:var(--text-faint);}
+.eit-readout{display:flex;align-items:center;gap:16px;margin-top:12px;flex-wrap:wrap;}
+.eit-transport{display:flex;gap:4px;}
+.eit-tbtn{
+  font-size:10.5px;min-width:32px;padding:5px 7px;border-radius:6px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);
+}
+.eit-tbtn:hover{border-color:var(--accent);color:var(--accent);}
+.eit-tbtn.play.on{background:var(--accent);border-color:var(--accent);color:#06201f;}
+.eit-readout-spacer{flex:1;}
+.eit-readout-field{display:flex;align-items:baseline;gap:7px;}
+.eit-readout-field .k{font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-faint);font-weight:700;}
+.eit-readout-field .v{font-family:var(--mono);font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;}
+
+/* ---- shared zoom / range-select controls ---- */
+.zoom-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.zoom-btn{
+  font-size:11px;font-weight:600;padding:5px 10px;border-radius:6px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);white-space:nowrap;
+}
+.zoom-btn:hover{border-color:var(--accent);color:var(--accent);}
+.zoom-btn:disabled{opacity:0.4;cursor:default;}
+.zoom-btn:disabled:hover{border-color:var(--border);color:var(--text-dim);}
+.zoom-readout{
+  font-family:var(--mono);font-size:11px;color:var(--text-dim);
+  background:var(--accent-soft);border:1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius:6px;padding:5px 10px;white-space:nowrap;
+}
+.zoom-stack{position:relative;cursor:crosshair;}
+.zoom-band{
+  position:absolute;top:0;bottom:0;z-index:4;pointer-events:none;display:none;
+  background:color-mix(in srgb, var(--accent) 18%, transparent);
+  border-left:1px solid var(--accent-strong);border-right:1px solid var(--accent-strong);
+}
+.zoom-band.on{display:block;}
+

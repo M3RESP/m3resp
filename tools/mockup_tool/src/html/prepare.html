@@ -1,0 +1,276 @@
+<!-- ============ 1. PREPARE ============ -->
+<div class="view active" id="view-prepare">
+
+  <div class="prep-sidebar">
+    <div class="prep-sidebar-head">
+      <h3>Modalities</h3>
+      <div class="count" id="modCount">3 loaded · 3 available</div>
+    </div>
+    <div class="mod-list" id="modList">
+      <div class="mod-list-row" id="modRow-eit" data-mod="eit">
+        <div class="swatch eit"></div>
+        <div class="info"><div class="nm">EIT</div><div class="st on">loaded</div></div>
+        <button class="remove" data-action="remove" data-mod="eit">Remove</button>
+      </div>
+      <div class="mod-list-row" id="modRow-emg" data-mod="emg">
+        <div class="swatch emg"></div>
+        <div class="info"><div class="nm">EMG</div><div class="st on">loaded</div></div>
+        <button class="remove" data-action="remove" data-mod="emg">Remove</button>
+      </div>
+      <div class="mod-list-row" id="modRow-vent" data-mod="vent">
+        <div class="swatch vent"></div>
+        <div class="info"><div class="nm">Ventilator</div><div class="st on">loaded</div></div>
+        <button class="remove" data-action="remove" data-mod="vent">Remove</button>
+      </div>
+    </div>
+    <div class="add-modality">
+      <h4>Add custom modality</h4>
+      <div class="af">
+        <input type="text" id="customModName" placeholder="Name, e.g. Capnography">
+        <input type="text" id="customModVendor" placeholder="File / vendor, e.g. custom.csv">
+        <button id="addCustomModBtn">+ Add modality</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="prep-main" id="prepMain">
+
+  <div class="card summary-bar">
+    <div class="summary-item"><span class="k">Subject type</span><span class="v">adult</span></div>
+    <div class="summary-item"><span class="k">Vendor</span><span class="v">draeger</span></div>
+    <div class="summary-item"><span class="k">Recording length</span><span class="v">60.0 s</span></div>
+    <div class="summary-item"><span class="k">Source</span><span class="v">m3resp_multimodal_1_*</span></div>
+  </div>
+
+  <!-- EIT -->
+  <div class="card mod-card" id="cardEit">
+    <div class="card-head">
+      <div class="mod-head-left">
+        <div class="mod-swatch eit"></div>
+        <div class="modal-info">
+          <div class="name">EIT — Dräger PulmoVista</div>
+          <div class="meta">m3resp_multimodal_1_eit_draeger.bin · 60.0 s · 20 Hz</div>
+        </div>
+      </div>
+      <div class="mod-head-right">
+        <button class="load-file-btn" data-mod="eit" title="Browse for a .bin/.stp recording to load into this modality">📁 Load file…</button>
+        <input type="file" class="load-file-input" data-mod="eit" accept=".bin,.stp,.zip" style="display:none;">
+        <span class="pill ok">loaded</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="eit-workspace">
+
+        <!-- left: images + controls -->
+        <div class="eit-images">
+          <div class="eit-img-block">
+            <div class="eit-img-title">Dynamic image</div>
+            <div class="eit-img-row">
+              <div class="eit-colorbar"><span class="cb-hi">+23.9</span><div class="cb-scale"></div><span class="cb-lo">−23.9</span></div>
+              <div class="eit-img" id="eitDynamicImg"></div>
+            </div>
+          </div>
+          <div class="eit-img-block">
+            <div class="eit-img-title">Minute image</div>
+            <div class="eit-img-row">
+              <div class="eit-colorbar"><span class="cb-hi">+23.9</span><div class="cb-scale"></div><span class="cb-lo">−23.9</span></div>
+              <div class="eit-img" id="eitMinuteImg"></div>
+            </div>
+          </div>
+          <div class="eit-controls">
+            <button class="eit-btn">Set ROI…</button>
+            <button class="eit-btn">Auto rescale</button>
+            <button class="eit-btn">y-Scales…</button>
+            <button class="eit-btn">Baseline…</button>
+          </div>
+        </div>
+
+        <!-- right: stacked ROI plots on one shared time axis -->
+        <div class="eit-plots" id="eitPlots">
+          <div class="zoom-toolbar" data-zoom-toolbar="eit">
+            <span class="vent-toolbar-label">View</span>
+            <button class="zoom-btn" data-z="out">− Zoom out</button>
+            <button class="zoom-btn" data-z="in">+ Zoom in</button>
+            <button class="zoom-btn" data-z="reset">Reset</button>
+            <span class="zoom-readout" data-zoom-readout="eit">—</span>
+            <div class="tb-spacer"></div>
+            <span class="hint" style="font-size:11px;color:var(--text-faint);">drag to select · click to place cursor · scroll to zoom</span>
+          </div>
+          <div class="eit-img-title eit-plots-title" style="margin-top:14px;">Impedance signal</div>
+          <div class="eit-plot-stack zoom-stack" id="eitPlotStack" data-zoom="eit">
+            <div class="eit-cursor" id="eitCursor"></div>
+          </div>
+          <div class="eit-time-axis" data-zoom-axis="eit"></div>
+          <div class="eit-readout">
+            <div class="eit-transport">
+              <button class="eit-tbtn" data-t="start" title="Jump to start">|◀</button>
+              <button class="eit-tbtn" data-t="back" title="Step back">◀</button>
+              <button class="eit-tbtn play" data-t="play" title="Play / pause">▶</button>
+              <button class="eit-tbtn" data-t="fwd" title="Step forward">▶</button>
+              <button class="eit-tbtn" data-t="end" title="Jump to end">▶|</button>
+            </div>
+            <div class="eit-readout-spacer"></div>
+            <div class="eit-readout-field"><span class="k">Cursor time</span><span class="v" id="eitCursorTime">00:00.000</span></div>
+            <div class="eit-readout-field"><span class="k">Image No.</span><span class="v" id="eitImageNo">1</span></div>
+            <div class="eit-readout-field"><span class="k">Rate</span><span class="v" id="eitRate">— br/min</span></div>
+          </div>
+          <p class="slice-note" style="margin-top:12px;">Curves, pixel image and MTV shares are computed from the real reconstruction in <code>m3resp_multimodal_1_eit_draeger.bin</code> (32×32 GREIT-style pixel grid, loaded via <code>eitprocessing.datahandling.loading.load_eit_data</code>) — ROI bands are ventral→dorsal quartiles of the masked chest region, and MTV is the mean tidal variation over the <span id="eitBreaths">—</span> real breaths detected by <code>eit.detect_breaths</code> on this file. Drag across the plots to scrub; the dynamic image re-renders per frame.</p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <!-- EMG -->
+  <div class="card mod-card" id="cardEmg">
+    <div class="card-head">
+      <div class="mod-head-left">
+        <div class="mod-swatch emg"></div>
+        <div class="modal-info">
+          <div class="name">EMG — surface array (Poly5)</div>
+          <div class="meta">m3resp_multimodal_1_emg.Poly5 · 60.0 s · 2000 Hz</div>
+        </div>
+      </div>
+      <div class="mod-head-right">
+        <button class="load-file-btn" data-mod="emg" title="Browse for a .Poly5 recording to load into this modality">📁 Load file…</button>
+        <input type="file" class="load-file-input" data-mod="emg" accept=".Poly5,.poly5" style="display:none;">
+        <span class="pill ok">loaded</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="zoom-toolbar" data-zoom-toolbar="emg">
+        <span class="vent-toolbar-label">View</span>
+        <button class="zoom-btn" data-z="out">− Zoom out</button>
+        <button class="zoom-btn" data-z="in">+ Zoom in</button>
+        <button class="zoom-btn" data-z="reset">Reset</button>
+        <span class="zoom-readout" data-zoom-readout="emg">—</span>
+        <div class="tb-spacer"></div>
+        <span class="hint" style="font-size:11px;color:var(--text-faint);">drag to select a range · scroll to zoom</span>
+      </div>
+
+      <div class="eit-img-title eit-plots-title" style="margin-top:14px;">EMGdi — diaphragm sEMG</div>
+      <div class="vent-stack zoom-stack" id="emgStack" data-zoom="emg"></div>
+      <div class="eit-time-axis" data-zoom-axis="emg"></div>
+      <p class="slice-note">Channel 1 (<code>EMGdi</code>) is the diaphragm sEMG channel, the one <code>emg.preprocess</code> and <code>emg.ecg_gating</code> operate on. The raw trace still carries ECG — that contamination is what <code>emg.ecg_gating</code> removes before <code>emg.detect_breaths</code> runs.</p>
+    </div>
+  </div>
+  <!-- Ventilator -->
+  <div class="card mod-card" id="cardVent">
+    <div class="card-head">
+      <div class="mod-head-left">
+        <div class="mod-swatch vent"></div>
+        <div class="modal-info">
+          <div class="name">Ventilator — Poly5 export</div>
+          <div class="meta">m3resp_multimodal_1_ventilator.Poly5 · 60.0 s · 200 Hz</div>
+        </div>
+      </div>
+      <div class="mod-head-right">
+        <button class="load-file-btn" data-mod="vent" title="Browse for a .Poly5 recording to load into this modality">📁 Load file…</button>
+        <input type="file" class="load-file-input" data-mod="vent" accept=".Poly5,.poly5" style="display:none;">
+        <span class="pill ok">loaded</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="vent-toolbar zoom-toolbar" data-zoom-toolbar="vent">
+        <span class="vent-toolbar-label">Channels</span>
+        <div class="vent-checks" id="ventChecks"></div>
+        <div class="tb-spacer"></div>
+        <button class="zoom-btn" data-z="out">− Zoom out</button>
+        <button class="zoom-btn" data-z="in">+ Zoom in</button>
+        <button class="zoom-btn" data-z="reset">Reset</button>
+        <span class="zoom-readout" data-zoom-readout="vent">—</span>
+      </div>
+
+      <div class="eit-img-title eit-plots-title" style="margin-top:14px;">Ventilator signals</div>
+      <div class="vent-stack zoom-stack" id="ventStack" data-zoom="vent"></div>
+      <div class="eit-time-axis" data-zoom-axis="vent"></div>
+      <p class="slice-note">Channel indices come from <code>ventilator.channels</code> (<code>pressure_channel</code>, <code>flow_channel</code>, <code>volume_channel</code>); each trace is labelled with its canonical category from <code>m3resp.data.categories</code>. Esophageal, gastric and transpulmonary pressure are known categories the taxonomy already supports — tick them to show the extra derived traces a Pes-instrumented recording would carry.</p>
+    </div>
+  </div>
+
+  <div id="customModalityCards"></div>
+
+  <!-- Sync -->
+  <div class="card">
+    <div class="card-head"><h3>Raw synchronization</h3><span class="hint">session.sync_raw</span></div>
+    <div class="card-body">
+      <div class="field-grid" style="margin-bottom:14px;max-width:520px;">
+        <div class="field"><label>Method</label><select><option>manual_offset</option><option>estimate_offset (cross-correlation)</option></select></div>
+        <div class="field"><label>Reference modality</label><select><option>ventilator</option><option>eit</option><option>emg</option></select></div>
+      </div>
+      <div class="sync-strip">
+        <div class="sync-row">
+          <span class="sync-name">Ventilator</span>
+          <input class="sync-offset" type="number" step="0.1" placeholder="0.0" disabled title="reference modality — offset fixed at 0.0 s">
+          <div class="sync-track"><div class="sync-bar" id="syncBarVent" style="left:0;width:100%;background:var(--vent);">offset 0.0 s (reference)</div></div>
+        </div>
+        <div class="sync-row">
+          <span class="sync-name">EIT</span>
+          <input class="sync-offset" type="number" step="0.1" placeholder="0.0" id="syncOffsetEit">
+          <div class="sync-track"><div class="sync-bar" id="syncBarEit" style="left:0;width:100%;background:var(--eit);">offset 0.0 s</div></div>
+        </div>
+        <div class="sync-row">
+          <span class="sync-name">EMG</span>
+          <input class="sync-offset" type="number" step="0.1" placeholder="e.g. −2.0" id="syncOffsetEmg">
+          <div class="sync-track"><div class="sync-bar" id="syncBarEmg" style="left:4.2%;width:95.8%;background:var(--emg);">offset −2.0 s</div></div>
+        </div>
+      </div>
+      <p class="slice-note" style="margin-top:10px;">Offsets are estimated from <code>sync.estimate_offset</code> and pre-filled as placeholders; type a value to override before <code>session.sync_raw</code> applies it.</p>
+    </div>
+  </div>
+
+  <!-- Working-window slicer -->
+  <div class="card">
+    <div class="card-head"><h3>Working window</h3><span class="hint">eit.slice — crop the analysis window before pipeline design</span></div>
+    <div class="card-body">
+      <div class="slice-toolbar">
+        <div class="slice-field"><label>Mode</label>
+          <div class="seg" style="width:150px;" id="sliceMode">
+            <button class="on" data-mode="time">time</button>
+            <button data-mode="index">index</button>
+          </div>
+        </div>
+        <div class="slice-field"><label id="sliceStartLabel">Start (s)</label><input type="number" id="sliceStartInput" step="0.1"></div>
+        <div class="slice-field"><label id="sliceEndLabel">End (s)</label><input type="number" id="sliceEndInput" step="0.1"></div>
+        <span class="slice-active-hint" id="sliceActiveHint"></span>
+        <div class="tb-spacer"></div>
+        <div class="slice-duration" id="sliceDuration"></div>
+        <button class="tb-btn" id="addWindowBtn">+ Add window</button>
+      </div>
+
+      <div class="slice-track" id="sliceTrack"></div>
+      <div class="slice-axis" id="sliceAxis"></div>
+
+      <div class="windows-panel">
+        <div class="windows-panel-head">
+          <h4>Selected windows</h4>
+          <span class="hint" id="windowsCount"></span>
+        </div>
+        <div id="windowsList"></div>
+      </div>
+
+      <div class="save-seq-bar">
+        <div class="slice-field"><label>Sequence name</label><input type="text" id="sequenceNameInput" placeholder="e.g. clean_breaths_1"></div>
+        <div class="tb-spacer"></div>
+        <button class="tb-btn primary" id="saveSequenceBtn">Save as new sequence</button>
+      </div>
+      <div class="save-summary hidden" id="saveSummary"></div>
+
+      <p class="slice-note">Each lane is a min/max overview of the same signal shown in that modality's section above — the ventilator lanes follow whichever channels are ticked there. Drag a handle to resize a window, drag its band to move it, or click <b>+ Add window</b> to select another range — click a window (on the canvas or in the list) to edit it with the Start/End fields above. <b>Save as new sequence</b> concatenates every window above, in time order, into one named sequence — the same effect as chaining <code>eit.slice</code> + <code>Sequence.concatenate()</code> — and adds it to the persistent <b>Saved sequences</b> library below.</p>
+    </div>
+  </div>
+
+  <!-- Saved sequences library — independent of the working-window slicer above, so it
+       is never reset by loading a different dataset or re-slicing new windows. -->
+  <div class="card">
+    <div class="card-head"><h3>Saved sequences</h3><span class="hint" id="savedSequencesCount"></span></div>
+    <div class="card-body">
+      <div class="windows-panel" id="savedSequencesPanel">
+        <div id="savedSequencesList"></div>
+      </div>
+      <p class="slice-note" style="margin-top:12px;">This library persists across datasets — load different data above, slice a fresh set of windows, and save again; every sequence you've named stays here and keeps showing up under <b>Available data</b> on <b>2 · Design</b>.</p>
+    </div>
+  </div>
+
+  </div>
+</div>
+

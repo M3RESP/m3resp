@@ -1,0 +1,100 @@
+<!-- ============ 2. DESIGN (node editor) ============ -->
+<div class="view" id="view-design">
+  <div class="design-grid">
+    <div class="palette" id="palettePanel">
+      <div class="side-panel-topbar">
+        <span class="side-panel-topbar-label">Palette</span>
+        <button class="side-collapse-btn" id="paletteCollapseBtn" title="Collapse this panel">◀</button>
+      </div>
+      <div class="pal-tabs" id="palTabs">
+        <button class="pal-tab active" data-paltab="data">Available data</button>
+        <button class="pal-tab" data-paltab="ops">Operations</button>
+        <button class="pal-tab" data-paltab="blocks">Workflows</button>
+      </div>
+
+      <div class="pal-tab-panel active" data-paltab="data">
+        <div class="pal-tab-infobar">
+          <span class="info-dot" tabindex="0">ⓘ<span class="info-pop info-pop-end">Sequences saved in <b>1 · Prepare</b>, plus context keys produced by nodes already on the canvas — everything a new operation can actually be wired to right now.</span></span>
+        </div>
+        <div class="palette-scroll" id="dataTab"></div>
+      </div>
+
+      <div class="pal-tab-panel" data-paltab="ops">
+        <div class="palette-search"><input placeholder="Search 60 operations…" id="paletteSearchInput" /></div>
+        <div class="palette-scroll" id="palette"></div>
+      </div>
+
+      <div class="pal-tab-panel" data-paltab="blocks">
+        <div class="pal-tab-infobar">
+          <span class="info-dot" tabindex="0">ⓘ<span class="info-pop info-pop-end">Predefined chains of real steps — click one to drop it on the canvas, auto-wired to any matching data already there.</span></span>
+        </div>
+        <div class="palette-scroll" id="blocksTab"></div>
+      </div>
+    </div>
+
+    <div class="canvas-wrap" id="canvasWrap">
+      <div class="canvas-toolbar">
+        <span class="info-dot" tabindex="0">ⓘ<span class="info-pop">Click a palette operation to add it · <b>drag a node</b> to move it · hover a node for <b>×</b> to remove it · click a solid edge to delete it · drag between ports to connect · <b>Shift/Ctrl-click</b> or <b>drag a box</b> over empty canvas to select multiple nodes, then <b>Delete selected</b> or press <b>Delete</b> · <b>Zoom in/out</b> or <b>Fit to view</b> to see the whole graph at once, or scroll-wheel while holding <b>Ctrl</b> to zoom under the cursor</span></span>
+        <span class="info-dot" tabindex="0">ⓘ<span class="info-pop info-pop-legend">
+          <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--type-signal)" stroke-width="2.5"/></svg>signal</span>
+          <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--type-index)" stroke-width="2.5"/></svg>index / event</span>
+          <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--type-mask)" stroke-width="2.5"/></svg>mask / ROI</span>
+          <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--type-result)" stroke-width="2.5"/></svg>result / scalar</span>
+          <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--generic)" stroke-width="2.5"/></svg>path / plumbing</span>
+          <span class="legend-item">— edge colour = artifact type, <b>not</b> modality (node border colour is modality)</span>
+          <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--generic)" stroke-width="2.5" stroke-dasharray="4 3"/></svg>session edge — implicit via shared <code>M3Session</code> state, not a drawn binding · can't be deleted here</span>
+        </span></span>
+        <div class="tb-sep"></div>
+        <button class="tb-btn" id="autoLayoutBtn" title="Reset the canvas back to the default multimodal-full starting graph — replaces whatever is on the canvas now.">↺ Auto layout</button>
+        <button class="tb-btn" id="clearBoardBtn" title="Remove every node and connection from the canvas. Does not affect saved sequences or anything already run.">🗑 Clear board</button>
+        <button class="tb-btn" id="deleteSelectedBtn" disabled title="Remove every currently-selected node (and its connections) from the canvas. Shift/Ctrl-click nodes or drag a box over them to select more than one.">🗑 Delete selected</button>
+        <div class="tb-sep"></div>
+        <button class="tb-btn" title="Check the graph for missing bindings, artifact-type mismatches, and session-ordering issues without running it — validate_pipeline(). Every problem found appears in the Problems tab below, pinned to the node that caused it.">Validate</button>
+        <button class="tb-btn" title="Resolve the graph into the ordered, executable step list the engine will actually run — compile_pipeline(). Fails with the same diagnostics as Validate if the graph isn't runnable yet.">Compile</button>
+        <div class="tb-sep"></div>
+        <button class="tb-btn primary" title="Compile, then execute the pipeline against the current session and stream live per-step progress into the Run log tab — run_pipeline().">▶ Run pipeline</button>
+        <div class="tb-spacer"></div>
+        <span class="zoom-pill" id="stepCountPill">15 / 45 steps shown · multimodal-full.pipeline.yaml</span>
+        <button class="tb-btn" id="canvasZoomOutBtn" title="Zoom the canvas out">− Zoom out</button>
+        <button class="tb-btn" id="canvasZoomFitBtn" title="Fit every node currently on the canvas into view">⛶ Fit to view</button>
+        <button class="tb-btn" id="canvasZoomInBtn" title="Zoom the canvas in">+ Zoom in</button>
+        <span class="zoom-pill" id="canvasZoomPill">100%</span>
+      </div>
+      <div class="canvas-scroll" id="canvasScroll">
+        <div class="canvas-inner" id="canvasInner">
+          <div class="session-rail"><span class="session-rail-label" title="39 of the 60 registered operations read or write the shared M3Session object rather than only named inputs/outputs. Any node in this lane is one of them. The dotted lines you see are the implicit dependencies that follow from that — e.g. sync_raw reads the session that load_eit already wrote into, even though nothing was explicitly passed between them.">session state — 39/60 steps ⓘ</span></div>
+          <svg class="edges" id="edgesSvg"></svg>
+          <!-- nodes injected by JS -->
+        </div>
+      </div>
+      <div class="dock">
+        <div class="dock-tabs">
+          <div class="dock-tab active" data-dock="problems">Problems <span class="n">1</span></div>
+          <div class="dock-tab" data-dock="log">Run log <span class="n">—</span></div>
+        </div>
+        <div class="dock-body" id="dockProblems" data-dock="problems">
+          <div class="diag-row">
+            <div class="sev-stripe warn"></div>
+            <div><b>emg_ecg_gating</b><div class="msg">session_dependency_reordered (warning) — reads <code>session.processed.emg</code>; confirm this runs after <b>emg_preprocess</b> writes it.</div></div>
+          </div>
+        </div>
+        <div class="dock-body hidden" id="dockLog" data-dock="log">
+          <div class="log-line"><span class="t">12:04:01</span>load_eit → raw_eit (eit_pixel_signal)</div>
+          <div class="log-line"><span class="t">12:04:01</span>load_emg → emg_recording (emg_recording)</div>
+          <div class="log-line"><span class="t">12:04:01</span>load_ventilator → ventilator_raw (ventilator_recording)</div>
+          <div class="log-line"><span class="t">12:04:02</span>sync_raw → offsets applied (eit 0.0s, emg −2.0s, vent 0.0s)</div>
+          <div class="log-line ok"><span class="t">12:04:07</span>16/16 steps completed — awaiting run</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="inspector" id="inspector">
+      <div class="side-panel-topbar">
+        <button class="side-collapse-btn" id="inspectorCollapseBtn" title="Collapse this panel">▶</button>
+        <span class="side-panel-topbar-label">Inspector</span>
+      </div>
+      <div class="insp-body" id="inspectorBody"></div>
+    </div>
+  </div>
+</div>
+
