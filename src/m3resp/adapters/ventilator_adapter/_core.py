@@ -18,6 +18,7 @@ from m3resp.synchronization.ventilator import (
 
 from ._channels import CHANNEL_CATEGORIES
 from ._eit_source import DEFAULT_EIT_CHANNELS, ventilator_payload_from_sequence
+from ._loaders import registered_ventilator_loader
 from ._protocols import _DefaultsProtocol
 
 #: File suffixes whose ventilator waveforms live inside an EIT recording.
@@ -30,22 +31,32 @@ def resolve_ventilator_source(path: Any, source: str | None = None) -> str:
     ``"eit"`` or ``"emg"`` when the ventilator waveforms are carried inside
     that modality's own file, which means they share its clock: aligning that
     modality aligns the ventilator channels with it, and they must not also be
-    shifted by a ventilator offset of their own. ``"emg"`` is the default
-    because the multi-channel export shared with the sEMG is the common case.
+    shifted by a ventilator offset of their own.
 
-    A standalone ventilator or monitor export has no such host and is aligned
-    on its own, which is what `M3Session.synchronize_raw_modalities`'
+    Resolution order: an explicit `source` always wins; otherwise a loader
+    registered for the path's extension via `register_ventilator_loader`
+    decides it; otherwise ``"eit"`` for a `.bin` suffix, ``"emg"`` for
+    anything else, since the multi-channel export shared with the sEMG is the
+    common case.
+
+    A standalone ventilator or monitor export has no host modality and is
+    aligned on its own, which is what `M3Session.synchronize_raw_modalities`'
     ventilator offset is for.
     """
 
-    if source is None:
-        return "eit" if str(path).lower().endswith(_EIT_SUFFIXES) else "emg"
-    if source not in {"eit", "emg", "ventilator"}:
-        raise ValueError(
-            f"Ventilator load `source` must be 'eit', 'emg' or 'ventilator', "
-            f"got {source!r}."
-        )
-    return source
+    if source is not None:
+        if source not in {"eit", "emg", "ventilator"}:
+            raise ValueError(
+                f"Ventilator load `source` must be 'eit', 'emg' or "
+                f"'ventilator', got {source!r}."
+            )
+        return source
+
+    registered = registered_ventilator_loader(path)
+    if registered is not None:
+        return registered[1]
+
+    return "eit" if str(path).lower().endswith(_EIT_SUFFIXES) else "emg"
 
 
 class _CoreMixin:
@@ -59,10 +70,9 @@ class _CoreMixin:
         self._eit_loader = eit_loader
 
     def load(self, path: str, **kwargs: Any) -> Any:
-        """Load a ventilator recording from either of its two sources.
+        """Load a ventilator recording, from any of three sources.
 
-        Ventilator data reaches m3resp two ways, and which one applies is a
-        property of the file, not of the caller:
+        Ventilator data can reach m3resp three ways:
 
         * a multi-channel file shared with the sEMG (Biopac exports and
           friends), read by
@@ -70,27 +80,46 @@ class _CoreMixin:
         * an EIT ``*.bin``, where the device stores ventilator waveforms
           beside the impedance frames (Draeger Medibus fields, Timpel columns),
           read through :class:`~m3resp.adapters.eitprocessing_adapter.EITProcessingAdapter`
-          and unpacked by :mod:`._eit_source`.
+          and unpacked by :mod:`._eit_source`;
+        * a third-party format neither of the above knows about, read by a
+          reader registered via :func:`~._loaders.register_ventilator_loader`.
 
-        Dispatch is by suffix. Pass ``source="eit"`` or ``source="emg"`` to
-        force one - useful for a file whose extension does not match its
-        contents. ``ventilator_channels=`` selects which channels to pull from
-        an EIT recording (default pressure/flow/volume; a Draeger pressure pod
-        additionally offers esophageal, transpulmonary, and gastric pressure).
+        Which source applies is a property of the file, not of the caller,
+        and dispatch follows that: an explicit ``source="eit"``/``"emg"``/
+        ``"ventilator"`` always wins, otherwise a loader registered for the
+        path's extension is used, otherwise it is by suffix - ``.bin`` is
+        EIT, everything else is the sEMG path. See
+        :func:`resolve_ventilator_source`. ``ventilator_channels=`` selects
+        which channels to pull from an EIT recording (default
+        pressure/flow/volume; a Draeger pressure pod additionally offers
+        esophageal, transpulmonary, and gastric pressure).
 
-        Either source can be replaced with an injected callable: ``loader=``
-        for the sEMG-file path, ``eit_loader=`` for the EIT one. Both return
-        the same ``{"array", "metadata"}`` payload, so nothing downstream of
-        loading needs to know which source a recording came from - except
-        synchronization, which does: waveforms read out of the EIT or sEMG file
-        share that modality's clock. See :func:`resolve_ventilator_source`.
-
-        ``source="ventilator"`` marks a standalone ventilator/monitor export
-        that happens to be readable by the sEMG loader but carries its own
-        clock, so it is aligned on its own.
+        The two built-in sources can be replaced per instance with an
+        injected callable: ``loader=`` for the sEMG-file path, ``eit_loader=``
+        for the EIT one. A registered third-party loader is not per instance -
+        it is used automatically wherever its extension is loaded. All three
+        return the same ``{"array", "metadata"}`` payload (or, for the EIT
+        source, an object `_eit_source` can unpack into one), so nothing
+        downstream of loading needs to know which source a recording came
+        from - except synchronization, which does: waveforms read out of the
+        EIT or sEMG file share that modality's clock, which is what `source`
+        records.
         """
 
-        source = resolve_ventilator_source(path, kwargs.pop("source", None))
+        explicit_source = kwargs.pop("source", None)
+        if explicit_source is None:
+            registered = registered_ventilator_loader(path)
+            if registered is not None:
+                loader, source = registered
+                if source == "eit":
+                    reader_kwargs = dict(kwargs)
+                    reader_kwargs.pop("ventilator_channels", None)
+                    reader_kwargs.pop("fs", None)
+                    sequence = loader(str(path), **reader_kwargs)
+                    return self._eit_payload(sequence, **kwargs)
+                return loader(str(path), **kwargs)
+
+        source = resolve_ventilator_source(path, explicit_source)
 
         if source == "eit":
             return self._load_from_eit(path, **kwargs)
@@ -105,16 +134,24 @@ class _CoreMixin:
     def _load_from_eit(self, path: str, **kwargs: Any) -> dict[str, Any]:
         """Load ventilator channels out of an EIT recording."""
 
-        channels = kwargs.pop("ventilator_channels", DEFAULT_EIT_CHANNELS)
-        fs = kwargs.pop("fs", None)
+        eit_kwargs = dict(kwargs)
+        eit_kwargs.pop("ventilator_channels", None)
+        eit_kwargs.pop("fs", None)
 
         if self._eit_loader is not None:
-            sequence = self._eit_loader(path, **kwargs)
+            sequence = self._eit_loader(path, **eit_kwargs)
         else:
             from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
 
-            sequence = EITProcessingAdapter().load(str(path), **kwargs)
+            sequence = EITProcessingAdapter().load(str(path), **eit_kwargs)
 
+        return self._eit_payload(sequence, **kwargs)
+
+    def _eit_payload(self, sequence: Any, **kwargs: Any) -> dict[str, Any]:
+        """Unpack an already-loaded EIT sequence into a ventilator payload."""
+
+        channels = kwargs.get("ventilator_channels", DEFAULT_EIT_CHANNELS)
+        fs = kwargs.get("fs")
         return ventilator_payload_from_sequence(sequence, channels=channels, fs=fs)
 
     def preprocess(self, recording: Any, **kwargs: Any) -> Any:

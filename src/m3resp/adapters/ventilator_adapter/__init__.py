@@ -7,12 +7,16 @@ ventilator data reached a session only as a passenger of the EMG path. Its
 defaults are native, built on `m3resp.processing.filters` and
 `m3resp.processing.peaks`.
 
-Loading is the one exception, and it has two sources rather than one:
-ventilator channels either arrive in the multi-channel file shared with the
-sEMG - where `load` delegates to `ReSurfEMGAdapter` - or inside the EIT `*.bin`
-itself, where the device stores them beside the impedance frames and `load`
-goes through `EITProcessingAdapter` (see `_eit_source`). Dispatch is by file
-suffix; either side can be replaced with an injected loader.
+Loading is the one exception, and it has three sources rather than one:
+ventilator channels arrive in the multi-channel file shared with the sEMG -
+where `load` delegates to `ReSurfEMGAdapter` - inside the EIT `*.bin` itself,
+where the device stores them beside the impedance frames and `load` goes
+through `EITProcessingAdapter` (see `_eit_source`) - or in a third-party format
+neither of those knows about, read by a function registered via
+`register_ventilator_loader` (see `_loaders`), so a new format does not need a
+code change here. Dispatch is by file suffix for the first two; either can be
+replaced with an injected loader per instance, or a registered extension takes
+over automatically for every instance.
 
 Composed from mixins split by responsibility, matching the layout of
 `m3resp.adapters.resurfemg_adapter`.
@@ -46,6 +50,12 @@ from ._eit_source import (
     available_ventilator_channels,
     ventilator_payload_from_sequence,
 )
+from ._loaders import (
+    register_ventilator_loader,
+    reset_ventilator_loaders,
+    unregister_ventilator_loader,
+    ventilator_loaders,
+)
 
 
 class VentilatorAdapter(_CoreMixin, _DefaultsMixin):
@@ -70,11 +80,15 @@ __all__ = [
     "primary_channel",
     "recording_payload",
     "register_channel_alias",
+    "register_ventilator_loader",
     "reset_channel_aliases",
+    "reset_ventilator_loaders",
     "resolve_channel_name",
     "resolve_channels",
     "resolve_ventilator_source",
     "save_channel_aliases",
     "split_channels",
+    "unregister_ventilator_loader",
+    "ventilator_loaders",
     "ventilator_payload_from_sequence",
 ]
