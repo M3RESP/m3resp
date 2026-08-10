@@ -1,7 +1,7 @@
 // ================= Prepare tab: signal previews + working-window slicer =================
 // Session length matches this EIT card's real recording: 60.0 s (draeger .bin).
 // The crop strip spans exactly this, so each lane is the same trace its
-// modality section shows above - not a separate low-resolution stand-in.
+// modality card shows — not a separate low-resolution stand-in.
 const REC_SECONDS = 60.0;
 
 function waveformPoints(w, h, {freqHz, amp, baseline, noise, wobble, rectify, seed}){
@@ -35,8 +35,8 @@ function buildSignalSvg(svgEl, {stroke, freqHz, amp, baseline, noise, wobble, re
 
 
 // ---- working-window overview lanes ----
-// Each lane is the SAME generator its modality section uses above, plotted
-// over the same 31 s session - not a separate, lower-fidelity stand-in.
+// Each lane is the SAME generator its modality card uses, plotted over the
+// full session — not a separate, lower-fidelity stand-in.
 function overviewLaneSvg(fn, color, W, H){
   const N=1100, PAD=6;
   const vals=[];
@@ -59,8 +59,8 @@ function overviewLaneSvg(fn, color, W, H){
 // EIT global impedance over the session (the detail panel shows the real
 // EIT excerpt; this overview spans the full session length)
 const EIT_FULL = {"q":"4W6C7T8G8UcQfPivmJv5AZDjHgHbItJeJHJVKQKwJgIhFJDnzIxTvTvjsErPohk0hkfVdUcActaz9X5w543U4j3P78bfcsj0m0sLsDyLDcGIHfF4EPFRCOz6zKzQynxevosupJlwmvkeldhkfCd4929D5u4P7C6M676M5u4J487Mc0jbq6uWxuCOEzIQOcPjP2R0OSMhLSJIGMKBH5JQDwCSxNuUqIoEodn6mAiLfEdkc87N5G7O5v6E4E4F3Y3I6K8Ae7gbnsqwtKx4BMHvNWRzTmVLWHVDVJUHUlV0W6StQ9PHN6JyHNEvGfEmAhxdvNr6mel6lHjbfSe9bD9W6W4U7y6J4s4l4d67588MdHk2qSvqBwG1KyOYQ1T2ZvYTZZXJWATOQMQRO5NKMdJUEXB7xkugrCpOplmXjrigd08v7e6f5l6q7J3S4i5j6Da7eKljqtv6znDRJkLiPtRASKVGSxP9TaPZOMOkOUO6KEKQFCD8A0zpAzwov6snpNkTibhCghgEfVdfb58O5L3f4m5L7k5B4F5N7a8CbWllsfxxCVKOLvQ5OUNkQ9S3R4PqOfJQI7CcAZzMyFwZs0oQlQi5evd3bkfn887J5a503u344Y689Zd5g2lNpPuCwzELLVOtSLWBW2XeYSY5ZvZ3VqUWRnPbNbJhKpJ7HhDWB3wBuhrmqfozl1jYfkeZ9L8a7R6A8E7Q6a5Q2s4p2T7odQfrj7lKr6tPwNAkFSL0LmNVR1QoP0MxN0MbN7OjKaI1EeBjzXwryTx1rVqdokjgfOepeIdGd1aD7e8g2h373t2q89738yekfVkmq3tWEBGgKHPuRhS7PkQXTcSOQzPcNTLmF3DsDHD0BZwau7pUkBhQg8gudoao9E9j7P4g2U2l5T9BdNiFn7tLz2EZLaPARtPvMJN9LHIPHoF6AVx1xFskr9nCijgxfhbJ9za86O5f1V3T317w8WaIbifjjfnUryyOD3FFHnM6OeOTRkVkU9V1UKUCSSQNNxNhNhO9KdH8FVCxwIvisgrCp4lxjXfudMaIadb2aR8z7o5z3o1t2Y8dbie1iam3pDvawFCaFFMNOqOpNeKwIwJFJqHjIkHsEeC3AfwJtNsMqhqRpSmZj2fXamaOcgaSaQ8U7r6y42001Q506OcVd2gEmnr2wjF2K0P4S9SoVvUlUeTEVLSwQiO5LHHBDdBcyDwStuqKnylhhVcxbQb49u7g6Y5n4W4r5e7B","n":620,"lo":3.8503276592471475e-17,"hi":183.02750559232663,"dur":60.0};
-let EIT_FULL_Q=null;   // decoded lazily: decodeB62() is defined lower in this file
-// real reconstructed global impedance, sampled anywhere in the 31 s recording
+let EIT_FULL_Q=null;   // decoded lazily; decodeB62() lives in js/prepare/eit-workspace.js
+// real reconstructed global impedance, sampled anywhere in the recording
 function eitOverviewAt(t){
   if(!EIT_FULL_Q) EIT_FULL_Q = decodeB62(EIT_FULL.q, EIT_FULL.n, 0);   // 0..1 fractions
   const x=Math.max(0, Math.min(EIT_FULL.n-1, (t/REC_SECONDS)*(EIT_FULL.n-1)));
@@ -101,5 +101,8 @@ function renderSliceLanes(){
 // ---- working-window state ----
 let sliceMode = 'time';
 const EIT_HZ = 50;
-const WINDOW_COLORS = ['#0f8b8d','#3f7fd6','#c98a2c','#8a67c9','#3f9e6e','#b2453c'];
+// window colour coding: blue (--win-neutral, CSS) is the plain/base band,
+// green = kept, red = removed
+const NEUTRAL_COLOR = '#3f7fd6';
+const KEEP_COLOR = '#3f9e6e';
 

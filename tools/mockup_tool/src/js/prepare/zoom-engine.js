@@ -57,7 +57,11 @@ function makeZoomView(name, fullDur, render, {minSpan=0.2, onCursorClick=null}={
     });
   }
 
+  // Ctrl/Cmd-scroll zooms under the cursor; a plain wheel is left to the page so
+  // scrolling past a tall signal stack doesn't silently rescale it. Same gesture
+  // as the design canvas.
   stackEl.addEventListener('wheel', e=>{
+    if(!(e.ctrlKey || e.metaKey)) return;
     e.preventDefault();
     const r=stackEl.getBoundingClientRect();
     zoomBy(e.deltaY>0?1.25:0.8, (e.clientX-r.left)/r.width);
@@ -105,7 +109,7 @@ makeZoomView('eit',  EIT.dur,      renderEitWindow,  {minSpan:0.4, onCursorClick
 makeZoomView('vent', VENT_DUR,     renderVentWindow, {minSpan:0.5});
 makeZoomView('emg',  EMG_FULL_DUR, renderEmgWindow,  {minSpan:1.0});
 
-// crop-strip lanes last: they read VENT_CHANNELS, declared above
+// crop-strip lanes last: they read VENT_CHANNELS from js/prepare/vent-stack.js
 renderSliceLanes();
 
 

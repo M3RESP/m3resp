@@ -8,6 +8,14 @@
 }
 .slice-duration{font-family:var(--mono);font-size:12px;color:var(--text-dim);background:var(--accent-soft);border:1px solid color-mix(in srgb, var(--accent) 35%, var(--border));border-radius:6px;padding:7px 12px;}
 .slice-toolbar .tb-spacer{flex:1;}
+/* one shared control height so the mode switch, the number fields, the duration
+   pill and the buttons all line up in the working-window bars */
+.slice-toolbar, .save-seq-bar{--ctl-h:32px;}
+.slice-toolbar .slice-field input, .save-seq-bar .slice-field input{height:var(--ctl-h);padding:0 9px;}
+.slice-toolbar .seg{height:var(--ctl-h);}
+.slice-toolbar .seg button{padding:0;}
+.slice-toolbar .slice-duration{height:var(--ctl-h);display:flex;align-items:center;padding:0 12px;}
+.slice-toolbar .tb-btn, .save-seq-bar .tb-btn{height:var(--ctl-h);}
 .slice-track{
   position:relative;display:flex;flex-direction:column;gap:6px;overflow:visible;
 }
@@ -24,12 +32,15 @@
 }
 .slice-lane{position:absolute;inset:0;opacity:0.95;}
 .slice-lane svg{width:100%;height:100%;display:block;}
+/* colour coding: --win-neutral (blue) is the plain band, green marks a kept
+   window, red a removed one — set per element as --win-color from JS */
+.slice-track, .windows-panel{--win-neutral:#3f7fd6;--win-keep:#3f9e6e;}
 .slice-select{
-  position:absolute;top:0;bottom:0;background:color-mix(in srgb, var(--win-color, var(--accent)) 18%, transparent);
-  border-left:2px solid var(--win-color, var(--accent));border-right:2px solid var(--win-color, var(--accent));
+  position:absolute;top:0;bottom:0;background:color-mix(in srgb, var(--win-color, var(--win-neutral)) 18%, transparent);
+  border-left:2px solid var(--win-color, var(--win-neutral));border-right:2px solid var(--win-color, var(--win-neutral));
   z-index:2;pointer-events:auto;cursor:grab;
 }
-.slice-select.active{background:color-mix(in srgb, var(--win-color, var(--accent)) 30%, transparent);}
+.slice-select.active{background:color-mix(in srgb, var(--win-color, var(--win-neutral)) 30%, transparent);}
 .slice-select.dragging{cursor:grabbing;}
 .slice-handle{
   position:absolute;top:0;bottom:0;width:12px;margin-left:-6px;cursor:ew-resize;z-index:3;
@@ -37,11 +48,11 @@
 }
 .slice-handle[data-h="left"]{left:0%;}
 .slice-handle[data-h="right"]{left:100%;}
-.slice-handle::after{content:"";width:4px;height:100%;border-radius:3px;background:var(--win-color, var(--accent-strong));box-shadow:var(--shadow);}
+.slice-handle::after{content:"";width:4px;height:100%;border-radius:3px;background:var(--win-color, var(--win-neutral));box-shadow:var(--shadow);}
 .slice-handle:hover::after, .slice-handle.dragging::after{background:var(--text);}
 .slice-select-badge{
   position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:5px;z-index:4;
-  background:var(--win-color, var(--accent));color:#fff;font-size:10px;font-weight:700;
+  background:var(--win-color, var(--win-neutral));color:#fff;font-size:10px;font-weight:700;
   display:flex;align-items:center;justify-content:center;pointer-events:none;
 }
 .slice-select-remove{
@@ -53,7 +64,29 @@
 .slice-select:hover .slice-select-remove{opacity:1;}
 .slice-select-remove:hover{background:var(--crit);color:#fff;box-shadow:0 0 0 1px var(--crit);}
 
-.slice-active-hint{font-size:11px;color:var(--text-faint);align-self:center;}
+/* "remove" windows are the inverse selection — the spans cut OUT of whatever is
+   kept. Hatched so they never read as a normal (keep) window. */
+.slice-select.cut{
+  background:repeating-linear-gradient(45deg,
+    color-mix(in srgb, var(--crit) 26%, transparent) 0 5px, transparent 5px 10px);
+}
+.slice-select.cut.active{
+  background:repeating-linear-gradient(45deg,
+    color-mix(in srgb, var(--crit) 42%, transparent) 0 5px, transparent 5px 10px);
+}
+.window-row.cut .range{text-decoration:line-through;text-decoration-color:color-mix(in srgb, var(--crit) 70%, transparent);}
+.win-kind{
+  font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;flex:none;
+  padding:2px 7px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);
+  color:var(--text-faint);cursor:pointer;
+}
+.window-row.cut .win-kind{color:var(--crit);border-color:color-mix(in srgb, var(--crit) 45%, var(--border));background:color-mix(in srgb, var(--crit) 10%, var(--surface));}
+.window-row:not(.cut) .win-kind{color:var(--win-keep);border-color:color-mix(in srgb, var(--win-keep) 45%, var(--border));background:color-mix(in srgb, var(--win-keep) 10%, var(--surface));}
+.window-row button.win-kind:hover{filter:brightness(0.94);}
+.window-row.cut button.win-kind:hover{color:var(--crit);}
+.window-row:not(.cut) button.win-kind:hover{color:var(--win-keep);border-color:color-mix(in srgb, var(--win-keep) 45%, var(--border));}
+
+.slice-active-hint{font-size:11px;color:var(--text-faint);align-self:flex-end;display:flex;align-items:center;height:var(--ctl-h,32px);}
 .windows-panel{margin-top:14px;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
 .windows-panel-head{
   display:flex;align-items:center;justify-content:space-between;padding:8px 12px;

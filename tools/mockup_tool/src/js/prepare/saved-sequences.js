@@ -1,4 +1,5 @@
-// ---- saved sequences (declared at the top of this script — see there for why) ----
+// ---- saved sequences (SAVED_SEQUENCES itself lives in js/core/tabs.js, which
+// loads first — see the note there for why) ----
 
 function defaultSequenceName(){
   return 'sequence_'+(SAVED_SEQUENCES.length+1);
@@ -37,7 +38,9 @@ function renderSavedSequences(){
 renderSavedSequences();
 
 document.getElementById('saveSequenceBtn').addEventListener('click', ()=>{
-  const sorted = sortedWindows();
+  // what gets saved is the resolved selection: kept spans minus removed spans
+  const sorted = resolvedSegments();
+  const cutCount = sortedCuts().length;
   const summary = document.getElementById('saveSummary');
   if(sorted.length===0){ summary.classList.add('hidden'); return; }
   const nameInput = document.getElementById('sequenceNameInput');
@@ -63,7 +66,7 @@ document.getElementById('saveSequenceBtn').addEventListener('click', ()=>{
   ).join(' &nbsp;·&nbsp; ');
   summary.innerHTML = `
     <div class="ok-pill">✓ Saved as "<b>${name}</b>"</div>
-    <div><b>${sorted.length}</b> window${sorted.length===1?'':'s'}, <b>${fmtDuration(total)}</b> combined — concatenated in time order via <code>Sequence.concatenate()</code>. Now listed under <b>Available data</b> on <b>2 · Design</b>, alongside any other sequences you save:</div>
+    <div><b>${sorted.length}</b> segment${sorted.length===1?'':'s'}, <b>${fmtDuration(total)}</b> combined${cutCount?` — after cutting out <b>${cutCount}</b> removed span${cutCount===1?'':'s'}`:''} — concatenated in time order via <code>Sequence.concatenate()</code>. Now listed under <b>Available data</b> on <b>2 · Design</b>, alongside any other sequences you save:</div>
     <div style="margin-top:8px;">${rows}</div>`;
   summary.classList.remove('hidden');
 

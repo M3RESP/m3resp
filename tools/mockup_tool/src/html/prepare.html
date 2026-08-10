@@ -94,7 +94,7 @@
             <button class="zoom-btn" data-z="reset">Reset</button>
             <span class="zoom-readout" data-zoom-readout="eit">—</span>
             <div class="tb-spacer"></div>
-            <span class="hint" style="font-size:11px;color:var(--text-faint);">drag to select · click to place cursor · scroll to zoom</span>
+            <span class="hint" style="font-size:11px;color:var(--text-faint);">drag to select · click to place cursor · Ctrl-scroll to zoom</span>
           </div>
           <div class="eit-img-title eit-plots-title" style="margin-top:14px;">Impedance signal</div>
           <div class="eit-plot-stack zoom-stack" id="eitPlotStack" data-zoom="eit">
@@ -144,7 +144,7 @@
         <button class="zoom-btn" data-z="reset">Reset</button>
         <span class="zoom-readout" data-zoom-readout="emg">—</span>
         <div class="tb-spacer"></div>
-        <span class="hint" style="font-size:11px;color:var(--text-faint);">drag to select a range · scroll to zoom</span>
+        <span class="hint" style="font-size:11px;color:var(--text-faint);">drag to select a range · Ctrl-scroll to zoom</span>
       </div>
 
       <div class="eit-img-title eit-plots-title" style="margin-top:14px;">EMGdi — diaphragm sEMG</div>
@@ -234,7 +234,9 @@
         <span class="slice-active-hint" id="sliceActiveHint"></span>
         <div class="tb-spacer"></div>
         <div class="slice-duration" id="sliceDuration"></div>
-        <button class="tb-btn" id="addWindowBtn">+ Add window</button>
+        <button class="tb-btn" id="fullWindowBtn" title="Keep the whole signal — one keep window spanning the entire recording. Any remove windows stay, so this means &quot;everything except the removed spans&quot;.">⤢ Whole signal</button>
+        <button class="tb-btn" id="addWindowBtn" title="Select a span to KEEP. With no keep windows at all, everything outside the remove windows is kept.">+ Keep window</button>
+        <button class="tb-btn" id="addCutWindowBtn" title="Select a span to REMOVE — an inverse window. Everything else is saved; the removed spans are cut out and the remainder concatenated.">− Remove window</button>
       </div>
 
       <div class="slice-track" id="sliceTrack"></div>
@@ -255,7 +257,7 @@
       </div>
       <div class="save-summary hidden" id="saveSummary"></div>
 
-      <p class="slice-note">Each lane is a min/max overview of the same signal shown in that modality's section above — the ventilator lanes follow whichever channels are ticked there. Drag a handle to resize a window, drag its band to move it, or click <b>+ Add window</b> to select another range — click a window (on the canvas or in the list) to edit it with the Start/End fields above. <b>Save as new sequence</b> concatenates every window above, in time order, into one named sequence — the same effect as chaining <code>eit.slice</code> + <code>Sequence.concatenate()</code> — and adds it to the persistent <b>Saved sequences</b> library below.</p>
+      <p class="slice-note">Each lane is a min/max overview of the same signal shown in that modality's section above — the ventilator lanes follow whichever channels are ticked there. Drag a handle to resize a window, drag its band to move it, or click <b>+ Keep window</b> to select another range — click a window (on the canvas or in the list) to edit it with the Start/End fields above. <b>⤢ Whole signal</b> stretches the keep window across the entire recording (collapsing any others into it), for when you want all of it — on its own that saves the recording unchanged, and combined with remove windows it means "everything except those spans". <b>− Remove window</b> adds an <b>inverse</b> (hatched red) span: that stretch is cut out and everything around it is kept — use it to drop a coughing artefact or a disconnect out of the middle of a recording. With only removed spans and no keep windows, the whole recording minus those spans is saved. Any row's <b>keep</b>/<b>remove</b> chip flips it between the two. <b>Save as new sequence</b> concatenates the resulting segments, in time order, into one named sequence — the same effect as chaining <code>eit.slice</code> + <code>Sequence.concatenate()</code> — and adds it to the persistent <b>Saved sequences</b> library below.</p>
     </div>
   </div>
 
