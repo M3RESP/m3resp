@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+import pytest
+
 from m3resp import BreathEvent, M3Session
 from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
 
@@ -113,6 +115,36 @@ def test_session_aligns_eit_emg_and_ventilator_events_with_offset_map():
         "ventilator": 0.0,
     }
     assert session.provenance[-1].action == "synchronize_multimodal_breaths"
+
+
+def test_session_alignment_offsets_are_relative_to_the_reference_modality():
+    # Every other test in this module resolves a reference modality whose own
+    # configured offset happens to be 0, which cannot distinguish "applied
+    # raw" from "applied relative to the reference" - both give the same
+    # answer. This one gives the reference modality a nonzero offset, which
+    # only the relative computation gets right: a modality's events must not
+    # move relative to themselves just because they were named the reference.
+    session = M3Session()
+    session.add_events("eit_breaths", [BreathEvent("eit", 1.0, 2.0)])
+    session.add_events("emg_breaths", [BreathEvent("emg", 1.0, 2.0)])
+    session.add_events("ventilator_breaths", [BreathEvent("vent", 1.0, 2.0)])
+
+    synchronized = session.synchronize_multimodal_breaths(
+        offset_seconds={"eit": 0.2, "emg": 0.7, "ventilator": 0.2},
+        reference_modality="eit",
+    )
+
+    assert synchronized["eit_breaths"][0].start_time == pytest.approx(1.0)
+    assert synchronized["emg_breaths"][0].start_time == pytest.approx(1.5)
+    assert synchronized["ventilator_breaths"][0].start_time == pytest.approx(1.0)
+    assert session.parameters["alignment"]["offset_seconds"] == pytest.approx(
+        {"eit": 0.0, "emg": 0.5, "ventilator": 0.0}
+    )
+    assert session.parameters["alignment"]["configured_offset_seconds"] == {
+        "eit": 0.2,
+        "emg": 0.7,
+        "ventilator": 0.2,
+    }
 
 
 def test_session_scalar_alignment_offsets_emg_only_and_rejects_unknown_method():

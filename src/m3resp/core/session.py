@@ -599,16 +599,33 @@ class M3Session:
         signals in time before processing, this one shifts already-detected
         breath events (`ALIGNMENT_EVENT_LISTS`) in time after detection.
         Previously named `align_modalities`, kept below as an alias.
+
+        Offsets are resolved relative to `reference_modality` (or the
+        auto-detected one - see `_resolve_alignment_reference`) before being
+        applied, so the reference modality's own events are shifted by zero and
+        every other modality moves by its offset *relative to* the reference,
+        matching `synchronize_raw_modalities`. `self.parameters["alignment"]`
+        keeps both: `offset_seconds` (relative, what was actually applied) and
+        `configured_offset_seconds` (the raw per-modality values passed in).
         """
 
         if method != "manual_offset":
             raise ValueError("Stage 1 supports only method='manual_offset'")
 
-        offsets = resolve_alignment_offsets(offset_seconds)
+        configured_offsets = resolve_alignment_offsets(offset_seconds)
         requested_reference = reference_modality
         resolved_reference, fallback_reference = self._resolve_alignment_reference(
             reference_modality
         )
+        # `configured_offsets` are each modality's raw, independently-configured
+        # offset. Applying those directly (as this used to) shifts every
+        # modality including the reference one by its own offset, so the
+        # reference's events move too - the opposite of what naming a reference
+        # modality means. Relativizing first, as `synchronize_raw_modalities`
+        # already does, is what makes the reference modality's own events stay
+        # put (offset 0) and every other modality move by its offset *relative
+        # to* the reference.
+        offsets = offsets_relative_to_reference(configured_offsets, resolved_reference)
         synchronized: dict[str, Any] = {}
         aligned_event_lists: list[str] = []
         missing_event_lists: list[str] = []
@@ -629,6 +646,7 @@ class M3Session:
             "requested_reference_modality": requested_reference,
             "fallback_reference_modality": fallback_reference,
             "offset_seconds": offsets,
+            "configured_offset_seconds": configured_offsets,
             "aligned_event_lists": aligned_event_lists,
             "missing_event_lists": missing_event_lists,
         }
