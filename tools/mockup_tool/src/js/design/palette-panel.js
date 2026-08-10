@@ -51,9 +51,17 @@ function renderDataTab(){
   const producing = NODES.filter(n=>n.outs.length>0);
   let html='';
 
+  // the explainer only makes sense once there is something to explain — keep it
+  // hidden while the tab is still empty
+  const infobar = document.getElementById('dataTabInfobar');
+  if(infobar) infobar.classList.toggle('hidden', sequences.length===0 && producing.length===0);
+
+  const chevronSvgData = '<svg class="chevron" width="8" height="8" viewBox="0 0 8 8"><path d="M2 1l4 3-4 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
   if(sequences.length){
     html += `<div class="data-node-group">
-      <div class="data-node-head"><span class="dot" style="background:var(--accent)"></span>From 1 · Prepare<span class="op">saved sequences</span></div>`;
+      <div class="data-node-head">${chevronSvgData}<span class="dot" style="background:var(--accent)"></span>From 1 · Prepare<span class="op">saved sequences</span></div>
+      <div class="data-node-body hidden">`;
     sequences.forEach(seq=>{
       const onCanvas = !!nodeById(seq.name);
       html += `<div class="data-row seq-data-row" data-seq="${seq.id}" title="${onCanvas?'Already on canvas — click to jump to it':'Click to load \''+seq.name+'\' as a source node'}">
@@ -63,7 +71,7 @@ function renderDataTab(){
         <button class="seq-preview-btn" data-preview-seq="${seq.id}" title="Visualize this sequence">👁</button>
       </div>`;
     });
-    html += `</div>`;
+    html += `</div></div>`;
   }
 
   if(producing.length===0 && sequences.length===0){
@@ -72,13 +80,21 @@ function renderDataTab(){
   }
   producing.forEach(n=>{
     html += `<div class="data-node-group">
-      <div class="data-node-head"><span class="dot" style="background:var(--${n.mod})"></span>${n.id}<span class="op">${n.op}</span></div>`;
+      <div class="data-node-head">${chevronSvgData}<span class="dot" style="background:var(--${n.mod})"></span>${n.id}<span class="op">${n.op}</span></div>
+      <div class="data-node-body hidden">`;
     n.outs.forEach(([name,type])=>{
       html += `<div class="data-row" data-key="${name}" data-type="${type}" data-node="${n.id}" data-op="${n.op}" title="Click to visualize ${name} (${type})"><span class="type-dot" style="background:${tc(type)}"></span><span class="key">${name}</span><span class="type">${type}</span><span class="viz-hint">👁</span></div>`;
     });
-    html += `</div>`;
+    html += `</div></div>`;
   });
   el.innerHTML = html;
+  el.querySelectorAll('.data-node-head').forEach(head=>{
+    head.addEventListener('click', ()=>{
+      const body = head.nextElementSibling;
+      body.classList.toggle('hidden');
+      head.classList.toggle('open', !body.classList.contains('hidden'));
+    });
+  });
   el.querySelectorAll('.seq-data-row').forEach(row=>{
     row.addEventListener('click', e=>{
       if(e.target.closest('.seq-preview-btn')) return;

@@ -73,13 +73,22 @@ function insertBlock(blockId){
   });
   let wired = 0;
   added.forEach(n=> wired += autoWireNode(n)); // in order, so later steps see earlier ones too
+  // the inserted steps stay one addressable unit — collapsed to a single box
+  // that exposes only the ports crossing its boundary; click it to open it up
+  const group = {
+    id: nextSlugId(block.id.replace(/-/g,'_')),
+    name: block.name, mod: block.mod,
+    members: added.map(n=>n.id),
+    collapsed: true, x, y: baseY, status:'pending',
+  };
+  GROUPS.push(group);
   renderAllNodes();
   drawEdges();
-  selectNode(added[0].id);
-  const el = inner.querySelector(`.node[data-id="${added[0].id}"]`);
+  const el = inner.querySelector(`.node[data-id="${group.id}"]`);
   if(el){
     el.scrollIntoView({behavior:'smooth', block:'center', inline:'center'});
-    showEdgeNote(el, `Added "${block.name}" — ${added.length} steps, ${wired} input${wired===1?'':'s'} auto-wired to existing data.`);
+    const {ins, outs} = computeGroupPorts(group);
+    showEdgeNote(el, `Added "${block.name}" as one box — ${added.length} steps, ${ins.length} inputs / ${outs.length} outputs on its boundary, ${wired} auto-wired. Click the box to see inside.`);
   }
 }
 

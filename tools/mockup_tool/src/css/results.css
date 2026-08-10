@@ -72,7 +72,8 @@ table.ptable tr.pfiltered{display:none;}
 .viz-card-body{padding:12px 14px 16px;}
 .viz-config{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
 .viz-config .lbl{font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.04em;font-weight:700;}
-.viz-img{width:100%;border-radius:6px;border:1px solid var(--border);display:block;transition:max-width .15s;}
+/* "fit" is the default size; the Size control switches max-width to none for "large" */
+.viz-img{width:100%;max-width:640px;border-radius:6px;border:1px solid var(--border);display:block;transition:max-width .15s;}
 
 .review-top{display:flex;gap:18px;}
 .metric-card{

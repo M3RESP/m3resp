@@ -115,20 +115,23 @@ const EDGES = [
   // destination port names differ per the real step registry, but the type
   // matches — eit_pixel_signal / emg_recording / ventilator_recording — so
   // this is a real drawn wire, not an implicit session dependency).
+  // `key` is always the *destination* input port and `srcKey` the source output
+  // port; where they differ, both have to be spelled out or the edge has no dot
+  // to attach to at one end.
   {src:'load_eit', dst:'mdn_filter', key:'signal', srcKey:'raw_eit'},
-  {src:'mdn_filter', dst:'global_impedance', key:'filtered_eit'},
-  {src:'global_impedance', dst:'detect_breaths_eit', key:'global_impedance'},
-  {src:'detect_breaths_eit', dst:'continuous_tiv', key:'breath_intervals'},
+  {src:'mdn_filter', dst:'global_impedance', key:'signal', srcKey:'filtered_eit'},
+  {src:'global_impedance', dst:'detect_breaths_eit', key:'signal', srcKey:'global_impedance'},
+  {src:'detect_breaths_eit', dst:'continuous_tiv', key:'signal', srcKey:'breath_intervals'},
   {src:'load_emg', dst:'emg_preprocess', key:'session', srcKey:'emg_recording'},
-  {src:'emg_preprocess', dst:'emg_ecg_gating', key:'processed_emg'},
-  {src:'emg_ecg_gating', dst:'emg_detect_breaths', key:'ecg_gated_emg', session:true},
-  {src:'emg_detect_breaths', dst:'emg_time_product', key:'emg_breath_events'},
-  {src:'load_ventilator', dst:'vent_channels', key:'ventilator_raw'},
-  {src:'vent_channels', dst:'vent_detect_breaths', key:'ventilator_signals'},
-  {src:'vent_detect_breaths', dst:'vent_respiratory_rate', key:'ventilator_breath_indices'},
-  {src:'continuous_tiv', dst:'export_session_summary', key:'session', session:true},
-  {src:'emg_time_product', dst:'export_session_summary', key:'session', session:true},
-  {src:'vent_respiratory_rate', dst:'export_session_summary', key:'session', session:true},
+  {src:'emg_preprocess', dst:'emg_ecg_gating', key:'processed_emg', srcKey:'processed_emg'},
+  {src:'emg_ecg_gating', dst:'emg_detect_breaths', key:'session', srcKey:'ecg_gated_emg', session:true},
+  {src:'emg_detect_breaths', dst:'emg_time_product', key:'processed_emg', srcKey:'emg_breath_events'},
+  {src:'load_ventilator', dst:'vent_channels', key:'ventilator_raw', srcKey:'ventilator_raw'},
+  {src:'vent_channels', dst:'vent_detect_breaths', key:'ventilator_signals', srcKey:'ventilator_signals'},
+  {src:'vent_detect_breaths', dst:'vent_respiratory_rate', key:'ventilator_breath_indices', srcKey:'ventilator_breath_indices'},
+  {src:'continuous_tiv', dst:'export_session_summary', key:'session', srcKey:'continuous_tiv', session:true},
+  {src:'emg_time_product', dst:'export_session_summary', key:'session', srcKey:'time_product', session:true},
+  {src:'vent_respiratory_rate', dst:'export_session_summary', key:'session', srcKey:'ventilator_respiratory_rate', session:true},
 ];
 
 // Snapshot of the starting graph, taken before anything on the canvas can be
@@ -137,22 +140,112 @@ const EDGES = [
 const DEFAULT_NODES = JSON.parse(JSON.stringify(NODES));
 const DEFAULT_EDGES = JSON.parse(JSON.stringify(EDGES));
 
-const NODE_W = 208, PORT_H = 18, HEAD_H = 44;
-function nodeById(id){ return NODES.find(n=>n.id===id); }
-function nodeHeight(n){ return HEAD_H + Math.max(n.ins.length, n.outs.length, 1) * PORT_H + 10; }
+// Geometry mirrored from the .node rules in css/popover.css, so every port
+// position is a pure function of node.x / node.y. Nothing here reads the DOM:
+// an edge drawn before the canvas has ever been laid out (the design tab starts
+// hidden) is just as correct as one drawn mid-drag, and moving a node only
+// needs drawEdges().
+const NODE_W = 208, PORT_H = 18, HEAD_H = 48;
+const NODE_BORDER = 1;              // .node border-width, inside the border-box
+const PORTS_PAD_TOP = 6, PORTS_PAD_BOT = 8;   // .node-ports padding
+const ARROW_LEN = 9, ARROW_W = 4.5; // direction marker drawn at the input port
+const PORT_R = 6;                   // port dots straddle the node border, radius incl. ring
+// ---- workflow groups -------------------------------------------------------
+// A block inserted from the Workflows tab stays addressable as one unit: the
+// member steps are ordinary NODES, and a GROUP records which ones belong
+// together. Collapsed, the group draws as a single box exposing only the ports
+// that cross its boundary (its inputs and outputs); expanded, the members are
+// drawn normally inside a transparent frame. Nothing about the underlying graph
+// changes — collapsing is purely a view over the same nodes and edges.
+const GROUPS = [];
+function groupOfNode(id){ return GROUPS.find(g=>g.members.includes(id)); }
+function collapsedGroupOf(id){ const g = groupOfNode(id); return g && g.collapsed ? g : null; }
+function groupById(id){ return GROUPS.find(g=>g.id===id); }
+function isInternalEdge(g, e){ return g.members.includes(e.src) && g.members.includes(e.dst); }
+
+// Ports that cross the group boundary: every member input not fed from inside,
+// and every member output not consumed inside.
+function computeGroupPorts(g){
+  const internal = EDGES.filter(e=>isInternalEdge(g,e));
+  const ins = [], outs = [];
+  g.inMap = {}; g.outMap = {};
+  const label = (map, port, nodeId)=> map[port]===undefined ? port : `${nodeId}.${port}`;
+  g.members.forEach(id=>{
+    const n = NODES.find(x=>x.id===id);
+    if(!n) return;
+    n.ins.forEach(([port,type])=>{
+      if(internal.some(e=>e.dst===id && e.key===port)) return;
+      const lb = label(g.inMap, port, id);
+      g.inMap[lb] = {node:id, port};
+      ins.push([lb, type]);
+    });
+    n.outs.forEach(([port,type])=>{
+      if(internal.some(e=>e.src===id && (e.srcKey||e.key)===port && g.members.includes(e.dst))) return;
+      const lb = label(g.outMap, port, id);
+      g.outMap[lb] = {node:id, port};
+      outs.push([lb, type]);
+    });
+  });
+  return {ins, outs};
+}
+// the stand-in node drawn while a group is collapsed
+function groupVirtualNode(g){
+  const {ins, outs} = computeGroupPorts(g);
+  return {
+    id: g.id, op: `workflow · ${g.members.length} steps`, mod: g.mod,
+    x: g.x, y: g.y, ins, outs, status: g.status || 'pending',
+    isGroup: true, group: g, label: g.name,
+  };
+}
+// port lookup has to see collapsed groups too, or edges can't find their ends
+function nodeById(id){
+  const n = NODES.find(x=>x.id===id);
+  if(n) return n;
+  const g = groupById(id);
+  return g && g.collapsed ? groupVirtualNode(g) : undefined;
+}
+// map a member endpoint onto the collapsed group's boundary port
+function edgeEndpoint(nodeId, side, portName){
+  const g = collapsedGroupOf(nodeId);
+  if(!g) return {id:nodeId, port:portName};
+  computeGroupPorts(g);
+  const map = side==='in' ? g.inMap : g.outMap;
+  const lb = Object.keys(map).find(k=> map[k].node===nodeId && map[k].port===portName);
+  return {id:g.id, port:lb||null, group:g};
+}
+function nodeHeight(n){
+  const rows = Math.max(n.ins.length, n.outs.length, 1);
+  return NODE_BORDER*2 + HEAD_H + PORTS_PAD_TOP + rows*PORT_H + PORTS_PAD_BOT;
+}
+// centre of the port dot on row `idx`, in canvas coordinates
 function portY(n, idx){
-  const rowsStart = HEAD_H + 8;
-  return n.y + rowsStart + idx*PORT_H + PORT_H/2;
+  return n.y + NODE_BORDER + HEAD_H + PORTS_PAD_TOP + idx*PORT_H + PORT_H/2;
+}
+// Entry dots straddle the left border, exit dots the right one, so an edge that
+// lands on node.x / node.x+NODE_W lands on the centre of its circle.
+function portPoint(nodeId, side, portName, idx){
+  const n = nodeById(nodeId);
+  if(!n) return null;
+  return {
+    x: side==='out' ? n.x+NODE_W : n.x,
+    // idx<0 only for a port that no longer exists on the node — aim at the head
+    // so the edge is still attached to something visible rather than to (0,0)
+    y: idx>=0 ? portY(n, idx) : n.y + NODE_BORDER + HEAD_H/2,
+  };
 }
 function updateStepCountPill(){
   const pill=document.getElementById('stepCountPill');
-  if(pill) pill.textContent = `${NODES.length} / 45 steps shown · multimodal-full.pipeline.yaml`;
+  if(pill){
+    pill.textContent = `${NODES.length}/45`;
+    pill.title = `${NODES.length} of 45 steps shown · multimodal-full.pipeline.yaml`;
+  }
 }
 function updateCanvasSize(){
   const maxX = Math.max(...NODES.map(n=>n.x+NODE_W), 900);
   const maxY = Math.max(...NODES.map(n=>n.y+nodeHeight(n)), 480);
   inner.style.width = (maxX+60)+'px';
   inner.style.height = (maxY+40)+'px';
+  syncCanvasFootprint();
 }
 
 const inner = document.getElementById('canvasInner');

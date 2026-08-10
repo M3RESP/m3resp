@@ -3,8 +3,11 @@
   <div class="design-grid">
     <div class="palette" id="palettePanel">
       <div class="side-panel-topbar">
-        <span class="side-panel-topbar-label">Palette</span>
-        <button class="side-collapse-btn" id="paletteCollapseBtn" title="Collapse this panel">◀</button>
+        <span class="side-panel-topbar-title">
+          <span class="side-panel-topbar-label">Palette</span>
+          <span class="info-dot bare" tabindex="0">ⓘ<span class="info-pop">Click a palette operation to add it · <b>drag a node</b> to move it · hover a node for <b>×</b> to remove it · click a solid edge to delete it · drag between ports to connect · <b>Shift/Ctrl-click</b> or <b>drag a box</b> over empty canvas to select multiple nodes, then <b>drag any one of them to move the whole selection together</b>, or <b>Delete selected</b> / press <b>Delete</b> to remove them · <b>Zoom in/out</b> or <b>Fit to view</b> to see the whole graph at once, or scroll-wheel while holding <b>Ctrl</b> to zoom under the cursor</span></span>
+        </span>
+        <button class="side-collapse-btn" id="paletteCollapseBtn" title="Collapse this panel"></button>
       </div>
       <div class="pal-tabs" id="palTabs">
         <button class="pal-tab active" data-paltab="data">Available data</button>
@@ -13,8 +16,8 @@
       </div>
 
       <div class="pal-tab-panel active" data-paltab="data">
-        <div class="pal-tab-infobar">
-          <span class="info-dot" tabindex="0">ⓘ<span class="info-pop info-pop-end">Sequences saved in <b>1 · Prepare</b>, plus context keys produced by nodes already on the canvas — everything a new operation can actually be wired to right now.</span></span>
+        <div class="pal-tab-infobar hidden" id="dataTabInfobar">
+          <span class="info-dot bare" tabindex="0">ⓘ<span class="info-pop info-pop-side">Sequences saved in <b>1 · Prepare</b>, plus context keys produced by nodes already on the canvas — everything a new operation can actually be wired to right now.</span></span>
         </div>
         <div class="palette-scroll" id="dataTab"></div>
       </div>
@@ -26,7 +29,7 @@
 
       <div class="pal-tab-panel" data-paltab="blocks">
         <div class="pal-tab-infobar">
-          <span class="info-dot" tabindex="0">ⓘ<span class="info-pop info-pop-end">Predefined chains of real steps — click one to drop it on the canvas, auto-wired to any matching data already there.</span></span>
+          <span class="info-dot bare" tabindex="0">ⓘ<span class="info-pop info-pop-side">Predefined chains of real steps — click one to drop it on the canvas, auto-wired to any matching data already there. It arrives as a single translucent box showing only the inputs it needs and the outputs it produces; click the box to open it and see the steps inside, and <b>▾</b> on the frame to fold it back up.</span></span>
         </div>
         <div class="palette-scroll" id="blocksTab"></div>
       </div>
@@ -34,17 +37,6 @@
 
     <div class="canvas-wrap" id="canvasWrap">
       <div class="canvas-toolbar">
-        <span class="info-dot" tabindex="0">ⓘ<span class="info-pop">Click a palette operation to add it · <b>drag a node</b> to move it · hover a node for <b>×</b> to remove it · click a solid edge to delete it · drag between ports to connect · <b>Shift/Ctrl-click</b> or <b>drag a box</b> over empty canvas to select multiple nodes, then <b>Delete selected</b> or press <b>Delete</b> · <b>Zoom in/out</b> or <b>Fit to view</b> to see the whole graph at once, or scroll-wheel while holding <b>Ctrl</b> to zoom under the cursor</span></span>
-        <span class="info-dot" tabindex="0">ⓘ<span class="info-pop info-pop-legend">
-          <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--type-signal)" stroke-width="2.5"/></svg>signal</span>
-          <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--type-index)" stroke-width="2.5"/></svg>index / event</span>
-          <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--type-mask)" stroke-width="2.5"/></svg>mask / ROI</span>
-          <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--type-result)" stroke-width="2.5"/></svg>result / scalar</span>
-          <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--generic)" stroke-width="2.5"/></svg>path / plumbing</span>
-          <span class="legend-item">— edge colour = artifact type, <b>not</b> modality (node border colour is modality)</span>
-          <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--generic)" stroke-width="2.5" stroke-dasharray="4 3"/></svg>session edge — implicit via shared <code>M3Session</code> state, not a drawn binding · can't be deleted here</span>
-        </span></span>
-        <div class="tb-sep"></div>
         <button class="tb-btn" id="autoLayoutBtn" title="Reset the canvas back to the default multimodal-full starting graph — replaces whatever is on the canvas now.">↺ Auto layout</button>
         <button class="tb-btn" id="clearBoardBtn" title="Remove every node and connection from the canvas. Does not affect saved sequences or anything already run.">🗑 Clear board</button>
         <button class="tb-btn" id="deleteSelectedBtn" disabled title="Remove every currently-selected node (and its connections) from the canvas. Shift/Ctrl-click nodes or drag a box over them to select more than one.">🗑 Delete selected</button>
@@ -53,12 +45,14 @@
         <button class="tb-btn" title="Resolve the graph into the ordered, executable step list the engine will actually run — compile_pipeline(). Fails with the same diagnostics as Validate if the graph isn't runnable yet.">Compile</button>
         <div class="tb-sep"></div>
         <button class="tb-btn primary" title="Compile, then execute the pipeline against the current session and stream live per-step progress into the Run log tab — run_pipeline().">▶ Run pipeline</button>
-        <div class="tb-spacer"></div>
-        <span class="zoom-pill" id="stepCountPill">15 / 45 steps shown · multimodal-full.pipeline.yaml</span>
-        <button class="tb-btn" id="canvasZoomOutBtn" title="Zoom the canvas out">− Zoom out</button>
-        <button class="tb-btn" id="canvasZoomFitBtn" title="Fit every node currently on the canvas into view">⛶ Fit to view</button>
-        <button class="tb-btn" id="canvasZoomInBtn" title="Zoom the canvas in">+ Zoom in</button>
-        <span class="zoom-pill" id="canvasZoomPill">100%</span>
+      </div>
+      <div class="canvas-hud">
+        <span class="hud-val" id="stepCountPill" title="15 of 45 steps shown · multimodal-full.pipeline.yaml">15/45</span>
+        <span class="hud-sep"></span>
+        <button id="canvasZoomOutBtn" title="Zoom out">−</button>
+        <span class="hud-val" id="canvasZoomPill" title="Current zoom level">100%</span>
+        <button id="canvasZoomInBtn" title="Zoom in">+</button>
+        <button id="canvasZoomFitBtn" title="Fit to view">⛶</button>
       </div>
       <div class="canvas-scroll" id="canvasScroll">
         <div class="canvas-inner" id="canvasInner">
@@ -69,8 +63,21 @@
       </div>
       <div class="dock">
         <div class="dock-tabs">
+          <div class="dock-tab" data-dock="legend">Edge legend</div>
           <div class="dock-tab active" data-dock="problems">Problems <span class="n">1</span></div>
           <div class="dock-tab" data-dock="log">Run log <span class="n">—</span></div>
+        </div>
+        <div class="dock-body hidden" id="dockLegend" data-dock="legend">
+          <div class="legend-dock">
+            <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--type-signal)" stroke-width="2.5"/></svg>signal</span>
+            <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--type-index)" stroke-width="2.5"/></svg>index / event</span>
+            <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--type-mask)" stroke-width="2.5"/></svg>mask / ROI</span>
+            <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--type-result)" stroke-width="2.5"/></svg>result / scalar</span>
+            <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--generic)" stroke-width="2.5"/></svg>path / plumbing</span>
+            <span class="legend-item">— edge colour = artifact type, <b>not</b> modality (node border colour is modality)</span>
+            <span class="legend-item"><svg width="18" height="10"><circle cx="4" cy="5" r="3.2" fill="var(--type-signal)"/><circle cx="14" cy="5" r="3.2" fill="var(--surface)" stroke="var(--type-signal)" stroke-width="2"/></svg>exit point (filled, right edge) → entry point (hollow, left edge); the arrowhead marks the input a binding feeds</span>
+            <span class="legend-item"><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--generic)" stroke-width="2.5" stroke-dasharray="4 3"/></svg>session edge — implicit via shared <code>M3Session</code> state, not a drawn binding · can't be deleted here</span>
+          </div>
         </div>
         <div class="dock-body" id="dockProblems" data-dock="problems">
           <div class="diag-row">
@@ -90,7 +97,7 @@
 
     <div class="inspector" id="inspector">
       <div class="side-panel-topbar">
-        <button class="side-collapse-btn" id="inspectorCollapseBtn" title="Collapse this panel">▶</button>
+        <button class="side-collapse-btn" id="inspectorCollapseBtn" title="Collapse this panel"></button>
         <span class="side-panel-topbar-label">Inspector</span>
       </div>
       <div class="insp-body" id="inspectorBody"></div>
