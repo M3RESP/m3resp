@@ -22,15 +22,27 @@ from __future__ import annotations
 
 from ._channels import (
     CHANNEL_CATEGORIES,
+    DEFAULT_CHANNEL_POSITIONS,
     DEFAULT_CHANNEL_UNITS,
+    DEFAULT_CHANNELS,
+    ChannelSpec,
+    channel_aliases,
+    load_channel_aliases,
+    normalize_channel_label,
+    primary_channel,
     recording_payload,
+    register_channel_alias,
+    reset_channel_aliases,
+    resolve_channel_name,
+    resolve_channels,
+    save_channel_aliases,
     split_channels,
 )
-from ._core import _CoreMixin
+from ._core import _CoreMixin, resolve_ventilator_source
 from ._defaults import DEFAULT_FILTER_ORDER, DEFAULT_LOWPASS_HZ, _DefaultsMixin
 from ._eit_source import (
     DEFAULT_EIT_CHANNELS,
-    VENTILATOR_CHANNEL_ALIASES,
+    EIT_ORIGIN,
     available_ventilator_channels,
     ventilator_payload_from_sequence,
 )
@@ -42,14 +54,27 @@ class VentilatorAdapter(_CoreMixin, _DefaultsMixin):
 
 __all__ = [
     "CHANNEL_CATEGORIES",
+    "DEFAULT_CHANNELS",
+    "DEFAULT_CHANNEL_POSITIONS",
     "DEFAULT_CHANNEL_UNITS",
     "DEFAULT_EIT_CHANNELS",
     "DEFAULT_FILTER_ORDER",
     "DEFAULT_LOWPASS_HZ",
-    "VENTILATOR_CHANNEL_ALIASES",
+    "EIT_ORIGIN",
+    "ChannelSpec",
     "VentilatorAdapter",
     "available_ventilator_channels",
+    "channel_aliases",
+    "load_channel_aliases",
+    "normalize_channel_label",
+    "primary_channel",
     "recording_payload",
+    "register_channel_alias",
+    "reset_channel_aliases",
+    "resolve_channel_name",
+    "resolve_channels",
+    "resolve_ventilator_source",
+    "save_channel_aliases",
     "split_channels",
     "ventilator_payload_from_sequence",
 ]

@@ -296,8 +296,15 @@ class TestLoadDispatch:
         assert adapter.load("recording.bin", source="emg") is payload
 
     def test_an_unknown_source_is_an_error(self):
-        with pytest.raises(ValueError, match="'eit' or 'emg'"):
-            VentilatorAdapter().load("recording.bin", source="ventilator")
+        with pytest.raises(ValueError, match="must be 'eit', 'emg' or 'ventilator'"):
+            VentilatorAdapter().load("recording.bin", source="impedance")
+
+    def test_a_standalone_export_can_be_marked_as_its_own_source(self):
+        # A ventilator/monitor export readable by the sEMG loader but carrying
+        # its own clock, so synchronization aligns it separately.
+        payload = {"array": np.vstack([_wave()] * 3), "metadata": {"fs": FS}}
+        adapter = VentilatorAdapter(loader=lambda path, **kwargs: payload)
+        assert adapter.load("monitor.txt", source="ventilator") is payload
 
     def test_channel_selection_reaches_the_payload(self):
         sequence = _draeger(

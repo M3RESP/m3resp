@@ -20,10 +20,32 @@ from ._channels import CHANNEL_CATEGORIES
 from ._eit_source import DEFAULT_EIT_CHANNELS, ventilator_payload_from_sequence
 from ._protocols import _DefaultsProtocol
 
-_CHANNEL_NAMES = ("pressure", "flow", "volume")
-
 #: File suffixes whose ventilator waveforms live inside an EIT recording.
 _EIT_SUFFIXES = (".bin",)
+
+
+def resolve_ventilator_source(path: Any, source: str | None = None) -> str:
+    """Which modality's file a ventilator recording arrives in.
+
+    ``"eit"`` or ``"emg"`` when the ventilator waveforms are carried inside
+    that modality's own file, which means they share its clock: aligning that
+    modality aligns the ventilator channels with it, and they must not also be
+    shifted by a ventilator offset of their own. ``"emg"`` is the default
+    because the multi-channel export shared with the sEMG is the common case.
+
+    A standalone ventilator or monitor export has no such host and is aligned
+    on its own, which is what `M3Session.synchronize_raw_modalities`'
+    ventilator offset is for.
+    """
+
+    if source is None:
+        return "eit" if str(path).lower().endswith(_EIT_SUFFIXES) else "emg"
+    if source not in {"eit", "emg", "ventilator"}:
+        raise ValueError(
+            f"Ventilator load `source` must be 'eit', 'emg' or 'ventilator', "
+            f"got {source!r}."
+        )
+    return source
 
 
 class _CoreMixin:
@@ -59,16 +81,16 @@ class _CoreMixin:
         Either source can be replaced with an injected callable: ``loader=``
         for the sEMG-file path, ``eit_loader=`` for the EIT one. Both return
         the same ``{"array", "metadata"}`` payload, so nothing downstream of
-        loading needs to know which source a recording came from.
+        loading needs to know which source a recording came from - except
+        synchronization, which does: waveforms read out of the EIT or sEMG file
+        share that modality's clock. See :func:`resolve_ventilator_source`.
+
+        ``source="ventilator"`` marks a standalone ventilator/monitor export
+        that happens to be readable by the sEMG loader but carries its own
+        clock, so it is aligned on its own.
         """
 
-        source = kwargs.pop("source", None)
-        if source is None:
-            source = "eit" if str(path).lower().endswith(_EIT_SUFFIXES) else "emg"
-        elif source not in {"eit", "emg"}:
-            raise ValueError(
-                f"Ventilator load `source` must be 'eit' or 'emg', got {source!r}."
-            )
+        source = resolve_ventilator_source(path, kwargs.pop("source", None))
 
         if source == "eit":
             return self._load_from_eit(path, **kwargs)
@@ -130,11 +152,21 @@ class _CoreMixin:
     def to_signals(self, processed_ventilator: Any) -> list[Signal]:
         """Convert a preprocessed ventilator bundle into `Signal` objects.
 
-        One signal per channel per processing state: the unfiltered channel as
-        ``"raw"`` and the filtered one as ``"processed"``. Each carries
-        ``modality="ventilator"`` with the channel's physical quantity in
-        ``category``, so a ventilator's pressure, flow and volume stay
-        distinguishable instead of collapsing into one tag.
+        One signal per resolved channel per processing state: the unfiltered
+        channel as ``"raw"`` and the filtered one as ``"processed"``. Each
+        carries ``modality="ventilator"``, the channel's physical quantity in
+        ``category``, its unique key in ``channel``, and the instrument it came
+        from in ``source``.
+
+        Those three axes are what let one session hold several pressures at
+        once, including two airway pressures measured by different devices:
+        they share a ``category`` and differ in ``channel``/``source``, so
+        `SignalCollection.for_category("airway_pressure")` returns both instead
+        of one overwriting the other.
+
+        Units are passed through exactly as the vendor reported them and are
+        never converted, so comparing two channels of one quantity has to
+        account for their units (Draeger reports volume in mL, Timpel in L).
         """
 
         if (
@@ -156,12 +188,22 @@ class _CoreMixin:
             else None
         )
 
+        specs = processed_ventilator.get("specs") or {}
+        # Every channel the recording actually yielded, not a fixed three, so
+        # an esophageal or a second airway pressure reaches `session.signals`.
+        keys = list(processed_ventilator.get("channels") or raw or filtered)
+
         signals: list[Signal] = []
-        for name in _CHANNEL_NAMES:
-            category = CHANNEL_CATEGORIES[name]
+        for key in keys:
+            spec = specs.get(key)
+            category = (
+                spec.category
+                if spec is not None
+                else CHANNEL_CATEGORIES.get(key.split("__", 1)[0])
+            )
             channel_sources: tuple[tuple[Any, ProcessingState], ...] = (
-                (raw.get(name), "raw"),
-                (filtered.get(name), "processed"),
+                (raw.get(key), "raw"),
+                (filtered.get(key), "processed"),
             )
             for values, processing_state in channel_sources:
                 if values is None:
@@ -172,12 +214,12 @@ class _CoreMixin:
                         values=values,
                         time=np.arange(values.shape[0], dtype=float) / sample_frequency,
                         sample_frequency=sample_frequency,
-                        unit=units.get(name),
-                        name=f"ventilator_{name}",
+                        unit=units.get(key),
+                        name=f"ventilator_{key}",
                         modality="ventilator",
                         category=category,
-                        channel=name,
-                        source="m3resp",
+                        channel=key,
+                        source=(spec.origin if spec is not None else None) or "m3resp",
                         processing_state=processing_state,
                         method=method if processing_state == "processed" else None,
                     )

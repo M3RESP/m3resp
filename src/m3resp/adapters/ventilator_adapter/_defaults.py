@@ -18,7 +18,7 @@ from m3resp.core.exceptions import UnsupportedWorkflowError
 from m3resp.processing.filters import lowpass_filter
 from m3resp.processing.peaks import detect_ventilator_breath_peaks
 
-from ._channels import split_channels
+from ._channels import DEFAULT_CHANNELS, primary_channel, split_channels
 
 #: Default low-pass cutoff applied to each ventilator channel, in Hz.
 #:
@@ -33,28 +33,34 @@ DEFAULT_LOWPASS_HZ = 20.0
 #: Butterworth order for the channel low-pass.
 DEFAULT_FILTER_ORDER = 4
 
-_CHANNEL_NAMES = ("pressure", "flow", "volume")
-
 
 class _DefaultsMixin:
     def _preprocess_default(
         self,
         recording: Any,
         *,
-        pressure_channel: int = 0,
-        flow_channel: int = 1,
-        volume_channel: int = 2,
+        channels: Any = DEFAULT_CHANNELS,
+        pressure_channel: int | None = None,
+        flow_channel: int | None = None,
+        volume_channel: int | None = None,
+        channel_indices: dict[str, int] | None = None,
+        origin: str | None = None,
+        qualify: bool = False,
         fs: float | None = None,
         lowpass_hz: float | None = DEFAULT_LOWPASS_HZ,
         filter_order: int = DEFAULT_FILTER_ORDER,
     ) -> dict[str, Any]:
         """Split a ventilator recording into channels and low-pass each one.
 
+        Every channel `split_channels` resolved is filtered, not a fixed three,
+        so a recording carrying esophageal or transpulmonary pressure keeps
+        them through preprocessing.
+
         The returned bundle keeps the unfiltered arrays under ``"raw"`` and
-        exposes the filtered ones under the plain ``"pressure"``/``"flow"``/
-        ``"volume"`` keys, so downstream consumers get the processed signal by
-        default while the originals stay available - the same arrangement as
-        the EMG bundle's ``raw_channel``/``filtered``/``envelope``.
+        exposes the filtered ones under each channel's own key, so downstream
+        consumers get the processed signal by default while the originals stay
+        available - the same arrangement as the EMG bundle's
+        ``raw_channel``/``filtered``/``envelope``.
 
         ``lowpass_hz=None`` skips filtering, in which case the filtered and raw
         arrays are the same values and ``processing_state`` stays ``"raw"``.
@@ -62,13 +68,17 @@ class _DefaultsMixin:
 
         bundle = split_channels(
             recording,
+            channels=channels,
             pressure_channel=pressure_channel,
             flow_channel=flow_channel,
             volume_channel=volume_channel,
+            channel_indices=channel_indices,
+            origin=origin,
+            qualify=qualify,
             fs=fs,
         )
         sample_frequency = float(bundle["fs"])
-        raw = {name: bundle[name] for name in _CHANNEL_NAMES}
+        raw = dict(bundle["channels"])
 
         cutoff = _resolve_cutoff(lowpass_hz, sample_frequency)
         if cutoff is None:
@@ -87,6 +97,9 @@ class _DefaultsMixin:
         return {
             **bundle,
             **processed,
+            # `channels` tracks the top-level keys, which expose the processed
+            # arrays; the unfiltered ones stay reachable under `raw`.
+            "channels": processed,
             "raw": raw,
             "filtered": processed,
             "filter": {
@@ -101,21 +114,34 @@ class _DefaultsMixin:
         processed_ventilator: Any,
         *,
         breath_width_seconds: float = 0.5,
+        channel: str | None = None,
         **kwargs: Any,
     ) -> np.ndarray:
-        """Detect ventilator breath peaks on the volume channel."""
+        """Detect ventilator breath peaks on the volume channel.
 
-        if (
-            not isinstance(processed_ventilator, dict)
-            or "volume" not in processed_ventilator
-        ):
+        Which channel that is comes from the bundle's ``primary`` map, so a
+        recording carrying more than one volume trace detects on a defined one
+        rather than whichever happened to be stored last. Pass ``channel=`` to
+        detect on a specific one.
+        """
+
+        if not isinstance(processed_ventilator, dict):
             raise UnsupportedWorkflowError(
                 "Default ventilator breath detection expects the bundle from "
                 "`preprocess_ventilator()`. Pass `detector=callable` to "
                 "normalize custom detections."
             )
 
-        volume = np.asarray(processed_ventilator["volume"], dtype=float)
+        key = channel or primary_channel(processed_ventilator, "volume")
+        if key is None or key not in processed_ventilator:
+            raise UnsupportedWorkflowError(
+                "Default ventilator breath detection needs a volume channel; "
+                f"this bundle has {sorted(processed_ventilator.get('channels', {}))}. "
+                "Pass `channel=` to detect on a different one, or "
+                "`detector=callable` to normalize custom detections."
+            )
+
+        volume = np.asarray(processed_ventilator[key], dtype=float)
         sample_frequency = float(processed_ventilator["fs"])
         width_samples = max(1, int(breath_width_seconds * sample_frequency))
         return detect_ventilator_breath_peaks(
