@@ -77,6 +77,14 @@ DEFAULT_CHANNEL_UNITS: dict[str, str] = {
     "tidal_volume": "mL",
 }
 
+#: Frozen snapshots of the two dicts above, taken before anything can mutate
+#: them. `register_channel_alias` can define a channel that was not one of the
+#: seven built-ins; `reset_channel_aliases` uses these to undo that alongside
+#: resetting the alias map itself, so a channel registered in one process/test
+#: does not outlive `reset_channel_aliases()`.
+_DEFAULT_CHANNEL_CATEGORIES: dict[str, str] = dict(CHANNEL_CATEGORIES)
+_DEFAULT_CHANNEL_UNIT_DEFAULTS: dict[str, str] = dict(DEFAULT_CHANNEL_UNITS)
+
 #: The channels read unless the caller asks for others, in the array order the
 #: positional fallback below assumes.
 DEFAULT_CHANNELS: tuple[str, ...] = ("pressure", "flow", "volume")
@@ -173,19 +181,47 @@ def resolve_channel_name(label: Any) -> str | None:
     return _CHANNEL_ALIASES.get(normalize_channel_label(label))
 
 
-def register_channel_alias(alias: str, channel: str) -> None:
-    """Register a new ``label -> channel`` mapping.
+def register_channel_alias(
+    alias: str,
+    channel: str,
+    *,
+    category: str | None = None,
+    unit: str | None = None,
+) -> None:
+    """Register a new ``label -> channel`` mapping, or a wholly new channel.
 
-    For a ventilator export whose naming is not already known here, rather
-    than editing this module. The registration lasts for the current process;
-    use `save_channel_aliases` to persist it.
+    For a vendor's naming of an *existing* channel (pressure, flow, ...), this
+    is only ever a label mapping: pass just `alias`/`channel`.
+
+    `channel` does not need to already be one of the seven built-ins. A
+    physical quantity this vocabulary has no name for yet - a new instrument,
+    say - can be registered directly, the same way an unrecognized string
+    passed to `m3resp.data.categories.normalize_category` is kept as a custom
+    label rather than rejected: `category` defaults to `channel` itself when
+    not given, so the channel is always resolvable even with no category
+    supplied. `unit` is optional and has no default for a new channel.
+
+    Passing `category=`/`unit=` for an *already-known* channel updates its
+    stored category/unit rather than defining a new one.
+
+    The registration lasts for the current process; use `save_channel_aliases`
+    to persist the alias mapping (channel/category/unit metadata for a newly
+    registered channel is not currently persisted - pass them again on reload,
+    or extend `save_channel_aliases` if that becomes a common need).
     """
 
     if channel not in CHANNEL_CATEGORIES:
-        raise ValueError(
-            f"Unknown ventilator channel {channel!r}. Known channels: "
-            f"{sorted(CHANNEL_CATEGORIES)}."
+        CHANNEL_CATEGORIES[channel] = (
+            normalize_category(category) or category or channel
         )
+        if unit is not None:
+            DEFAULT_CHANNEL_UNITS[channel] = unit
+    else:
+        if category is not None:
+            CHANNEL_CATEGORIES[channel] = normalize_category(category) or category
+        if unit is not None:
+            DEFAULT_CHANNEL_UNITS[channel] = unit
+
     _CHANNEL_ALIASES[normalize_channel_label(alias)] = channel
 
 
@@ -196,10 +232,19 @@ def channel_aliases() -> dict[str, str]:
 
 
 def reset_channel_aliases() -> None:
-    """Restore the active map to the built-in defaults."""
+    """Restore the active state to the built-in defaults.
+
+    Undoes every `register_channel_alias` call since import or the last reset:
+    the alias map, and any channel/category/unit it defined that was not one
+    of the seven built-ins.
+    """
 
     _CHANNEL_ALIASES.clear()
     _CHANNEL_ALIASES.update(_DEFAULT_CHANNEL_ALIASES)
+    CHANNEL_CATEGORIES.clear()
+    CHANNEL_CATEGORIES.update(_DEFAULT_CHANNEL_CATEGORIES)
+    DEFAULT_CHANNEL_UNITS.clear()
+    DEFAULT_CHANNEL_UNITS.update(_DEFAULT_CHANNEL_UNIT_DEFAULTS)
 
 
 def save_channel_aliases(path: str | Path, *, only_custom: bool = True) -> Path:

@@ -15,6 +15,7 @@ import pytest
 
 from m3resp.adapters.ventilator_adapter import (
     CHANNEL_CATEGORIES,
+    DEFAULT_CHANNEL_UNITS,
     VentilatorAdapter,
     channel_aliases,
     normalize_channel_label,
@@ -101,9 +102,48 @@ class TestAliasRegistry:
         register_channel_alias("Pmus_proximal", "pressure")
         assert resolve_channel_name("pmus proximal") == "pressure"
 
-    def test_registering_an_unknown_channel_is_an_error(self):
-        with pytest.raises(ValueError, match="Unknown ventilator channel"):
-            register_channel_alias("whatever", "not_a_channel")
+    def test_registering_a_new_channel_defines_it(self):
+        # A physical quantity not among the seven built-ins - a new
+        # instrument's channel - can be registered directly rather than
+        # requiring a code change to this module first.
+        register_channel_alias("Whatever", "co2_waveform")
+        assert CHANNEL_CATEGORIES["co2_waveform"] == "co2_waveform"
+        assert resolve_channel_name("whatever") == "co2_waveform"
+
+    def test_a_new_channel_without_a_category_defaults_to_its_own_name(self):
+        register_channel_alias("Whatever", "co2_waveform")
+        assert CHANNEL_CATEGORIES["co2_waveform"] == "co2_waveform"
+
+    def test_a_new_channel_can_be_given_an_explicit_category(self):
+        register_channel_alias("Whatever", "co2_waveform", category="co2")
+        assert CHANNEL_CATEGORIES["co2_waveform"] == "co2"
+
+    def test_a_new_channel_can_be_given_a_unit(self):
+        register_channel_alias("Whatever", "co2_waveform", unit="%")
+        assert DEFAULT_CHANNEL_UNITS["co2_waveform"] == "%"
+
+    def test_a_new_channel_has_no_default_unit_unless_given_one(self):
+        register_channel_alias("Whatever", "co2_waveform")
+        assert "co2_waveform" not in DEFAULT_CHANNEL_UNITS
+
+    def test_a_newly_registered_channel_can_be_requested(self):
+        register_channel_alias("Whatever", "co2_waveform")
+        bundle = split_channels(
+            _payload(["Paw", "Flow", "Volume", "Whatever"]),
+            channels=("pressure", "co2_waveform"),
+        )
+        assert "co2_waveform" in bundle["channels"]
+
+    def test_category_and_unit_on_an_existing_channel_update_it(self):
+        register_channel_alias("Ptrach", "pressure", category="airway_pressure")
+        assert CHANNEL_CATEGORIES["pressure"] == "airway_pressure"
+
+    def test_reset_undoes_a_newly_registered_channel(self):
+        register_channel_alias("Whatever", "co2_waveform", unit="%")
+        reset_channel_aliases()
+        assert "co2_waveform" not in CHANNEL_CATEGORIES
+        assert "co2_waveform" not in DEFAULT_CHANNEL_UNITS
+        assert resolve_channel_name("whatever") is None
 
     def test_reset_restores_the_defaults(self):
         register_channel_alias("Pmus_proximal", "pressure")
