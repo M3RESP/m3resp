@@ -136,7 +136,9 @@ def coerce_event(
             **kwargs,
         )
 
-    event_name, event_modality, time, *rest = value
+    event_name, event_modality, time, *rest = _coerce_positional_sequence(
+        value, min_length=3, max_length=4, target="Event"
+    )
     sample_index = rest[0] if rest else None
     return Event(
         name=_required_str(name if name is not None else event_name, "name"),
@@ -208,7 +210,9 @@ def coerce_breath_event(
             **kwargs,
         )
 
-    start_time, end_time, *rest = value
+    start_time, end_time, *rest = _coerce_positional_sequence(
+        value, min_length=2, max_length=3, target="BreathEvent"
+    )
     peak_time = rest[0] if rest else None
     return BreathEvent(
         modality=_required_str(modality, "modality"),
@@ -258,3 +262,34 @@ def _required_str(value: Any, field_name: str) -> str:
     if value is None:
         raise ValueError(f"{field_name} is required")
     return str(value)
+
+
+def _coerce_positional_sequence(
+    value: Any, *, min_length: int, max_length: int, target: str
+) -> tuple[Any, ...]:
+    """Validate the positional fallback `coerce_event`/`coerce_breath_event` use
+    for a `detector=callable` that returns a bare sequence rather than a dict
+    or one of our own types.
+
+    A string/bytes value or anything without a length is rejected outright -
+    without this, a short string would silently iterate character by
+    character. Anything else is checked against ``min_length``/``max_length``
+    before being unpacked, so a same-length-but-different-meaning sequence
+    (e.g. a ``(confidence, snr)`` pair reaching `coerce_breath_event`) raises
+    immediately naming what was expected, rather than silently becoming a
+    plausible but wrong `Event`/`BreathEvent`.
+    """
+
+    if isinstance(value, (str, bytes)) or not hasattr(value, "__len__"):
+        raise TypeError(
+            f"Cannot coerce {value!r} into a {target}: expected a mapping, an "
+            f"object with the right attributes, or a sequence of "
+            f"{min_length} to {max_length} values."
+        )
+    length = len(value)
+    if not min_length <= length <= max_length:
+        raise ValueError(
+            f"Cannot coerce a length-{length} sequence into a {target}: "
+            f"expected {min_length} to {max_length} values, got {tuple(value)!r}."
+        )
+    return tuple(value)
