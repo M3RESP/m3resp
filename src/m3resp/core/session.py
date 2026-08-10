@@ -87,12 +87,15 @@ class M3Session:
         self.eit_adapter = eit_adapter or EITProcessingAdapter()
         self.emg_adapter = emg_adapter or ReSurfEMGAdapter()
         # Ventilator processing is native (`VentilatorAdapter` wraps no upstream
-        # library), but *loading* goes through the EMG adapter by default: the
-        # ventilator channels usually arrive in the same multi-channel file as
-        # the sEMG, so an injected EMG loader covers both without a second
-        # injection. Pass `ventilator_adapter=` to separate them entirely.
+        # library), but *loading* borrows whichever adapter owns the file the
+        # ventilator channels arrived in: the sEMG's multi-channel export, or
+        # the EIT `*.bin` that stores ventilator waveforms beside its impedance
+        # frames. Wiring both through this session's own adapters means a
+        # loader injected for EMG or EIT covers the ventilator path too, with
+        # no second injection. Pass `ventilator_adapter=` to separate them.
         self.ventilator_adapter = ventilator_adapter or VentilatorAdapter(
-            loader=lambda path, **kwargs: self.emg_adapter.load(path, **kwargs)
+            loader=lambda path, **kwargs: self.emg_adapter.load(path, **kwargs),
+            eit_loader=lambda path, **kwargs: self.eit_adapter.load(path, **kwargs),
         )
 
         self.eit: EITRecording | None = None
@@ -173,6 +176,13 @@ class M3Session:
 
         Mirrors `load_eit`/`load_emg`. The recording is additionally stored
         under the legacy `raw["vent"]` key, pointing at the same object.
+
+        `path` may be either file ventilator data arrives in: the multi-channel
+        export shared with the sEMG, or an EIT ``*.bin`` carrying ventilator
+        waveforms beside its impedance frames. `VentilatorAdapter` picks by
+        suffix; pass ``source="eit"``/``"emg"`` to force one, and
+        ``ventilator_channels=`` to select which channels to read from a
+        ``*.bin`` (see `m3resp.adapters.ventilator_adapter`).
         """
 
         recording = load_ventilator_recording(

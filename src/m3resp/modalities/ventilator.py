@@ -37,14 +37,17 @@ def load(
 ) -> VentilatorRecording:
     """Load a ventilator recording through the Stage 1 adapter.
 
-    ``adapter`` defaults to :class:`~m3resp.adapters.resurfemg_adapter.ReSurfEMGAdapter`
-    because ventilator channels usually arrive in the same multi-channel file as
-    the sEMG (e.g. a Biopac export), so one loader reads both.
+    ``adapter`` defaults to
+    :class:`~m3resp.adapters.ventilator_adapter.VentilatorAdapter`, which reads
+    both sources ventilator data arrives from and picks between them by file
+    suffix: the multi-channel file shared with the sEMG (e.g. a Biopac export,
+    delegated to `ReSurfEMGAdapter`), and the EIT ``*.bin``, which stores
+    ventilator waveforms beside its impedance frames.
     """
 
-    from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
+    from m3resp.adapters.ventilator_adapter import VentilatorAdapter
 
-    ventilator_adapter = adapter or ReSurfEMGAdapter()
+    ventilator_adapter = adapter or VentilatorAdapter()
     recording = ventilator_adapter.load(str(path), **kwargs)
     is_dict = isinstance(recording, dict)
     metadata = recording.get("metadata") if is_dict else None

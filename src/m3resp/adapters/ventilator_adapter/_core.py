@@ -17,23 +17,61 @@ from m3resp.synchronization.ventilator import (
 )
 
 from ._channels import CHANNEL_CATEGORIES
+from ._eit_source import DEFAULT_EIT_CHANNELS, ventilator_payload_from_sequence
 from ._protocols import _DefaultsProtocol
 
 _CHANNEL_NAMES = ("pressure", "flow", "volume")
 
+#: File suffixes whose ventilator waveforms live inside an EIT recording.
+_EIT_SUFFIXES = (".bin",)
+
 
 class _CoreMixin:
-    def __init__(self, loader: Callable[..., Any] | None = None):
+    def __init__(
+        self,
+        loader: Callable[..., Any] | None = None,
+        *,
+        eit_loader: Callable[..., Any] | None = None,
+    ):
         self._loader = loader
+        self._eit_loader = eit_loader
 
     def load(self, path: str, **kwargs: Any) -> Any:
-        """Load a ventilator recording.
+        """Load a ventilator recording from either of its two sources.
 
-        Ventilator channels usually arrive in the same multi-channel file as the
-        sEMG, so without an injected loader this delegates to
-        :class:`~m3resp.adapters.resurfemg_adapter.ReSurfEMGAdapter`, which
-        already handles those formats (including Biopac text exports).
+        Ventilator data reaches m3resp two ways, and which one applies is a
+        property of the file, not of the caller:
+
+        * a multi-channel file shared with the sEMG (Biopac exports and
+          friends), read by
+          :class:`~m3resp.adapters.resurfemg_adapter.ReSurfEMGAdapter`;
+        * an EIT ``*.bin``, where the device stores ventilator waveforms
+          beside the impedance frames (Draeger Medibus fields, Timpel columns),
+          read through :class:`~m3resp.adapters.eitprocessing_adapter.EITProcessingAdapter`
+          and unpacked by :mod:`._eit_source`.
+
+        Dispatch is by suffix. Pass ``source="eit"`` or ``source="emg"`` to
+        force one - useful for a file whose extension does not match its
+        contents. ``ventilator_channels=`` selects which channels to pull from
+        an EIT recording (default pressure/flow/volume; a Draeger pressure pod
+        additionally offers esophageal, transpulmonary, and gastric pressure).
+
+        Either source can be replaced with an injected callable: ``loader=``
+        for the sEMG-file path, ``eit_loader=`` for the EIT one. Both return
+        the same ``{"array", "metadata"}`` payload, so nothing downstream of
+        loading needs to know which source a recording came from.
         """
+
+        source = kwargs.pop("source", None)
+        if source is None:
+            source = "eit" if str(path).lower().endswith(_EIT_SUFFIXES) else "emg"
+        elif source not in {"eit", "emg"}:
+            raise ValueError(
+                f"Ventilator load `source` must be 'eit' or 'emg', got {source!r}."
+            )
+
+        if source == "eit":
+            return self._load_from_eit(path, **kwargs)
 
         if self._loader is not None:
             return self._loader(path, **kwargs)
@@ -41,6 +79,21 @@ class _CoreMixin:
         from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
 
         return ReSurfEMGAdapter().load(path, **kwargs)
+
+    def _load_from_eit(self, path: str, **kwargs: Any) -> dict[str, Any]:
+        """Load ventilator channels out of an EIT recording."""
+
+        channels = kwargs.pop("ventilator_channels", DEFAULT_EIT_CHANNELS)
+        fs = kwargs.pop("fs", None)
+
+        if self._eit_loader is not None:
+            sequence = self._eit_loader(path, **kwargs)
+        else:
+            from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
+
+            sequence = EITProcessingAdapter().load(str(path), **kwargs)
+
+        return ventilator_payload_from_sequence(sequence, channels=channels, fs=fs)
 
     def preprocess(self, recording: Any, **kwargs: Any) -> Any:
         """Split into channels and filter, or defer to a provided callable."""
