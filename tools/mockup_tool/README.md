@@ -1,10 +1,9 @@
 # Stage 3 GUI mockup
 
-A single self-contained HTML file that mocks up the Stage 3 desktop GUI —
-Prepare / Design / Check / Results — for demoing the intended workflow before
-the real GUI is built. No backend: `stage3_gui_mockup.html` is fully
-self-contained and needs no server, and all state is in-memory only (a page
-reload resets it).
+A static HTML mockup of the Stage 3 desktop GUI — Prepare / Design / Check /
+Results — for demoing the intended workflow before the real GUI is built. No
+backend and no server: it opens straight from disk over `file://`, and all
+state is in-memory only (a page reload resets it).
 
 ## Open it
 
@@ -14,6 +13,11 @@ xdg-open tools/mockup_tool/stage3_gui_mockup.html    # Linux
 ```
 
 Or just double-click it — no server required.
+
+`stage3_gui_mockup.html` is a thin shell that links the real content from
+`src/`, so the mockup travels as a **folder**, not a single file. To hand it to
+someone, send `tools/mockup_tool/` (or a zip of it) — the HTML file on its own
+will render blank.
 
 ## What's real vs. illustrative
 
@@ -51,41 +55,62 @@ wherever possible, and says so wherever it isn't:
 
 ## Developing
 
-`stage3_gui_mockup.html` is generated — don't hand-edit it. The real source
-lives under `src/`, split into files under ~300 lines each:
+**`stage3_gui_mockup.html` is generated — don't hand-edit it.** Edits made
+there are silently lost the next time anyone runs the build. It is a thin shell
+of `<link>`/`<script src>` tags anyway; all the real content lives under
+`src/`, split into files under ~300 lines each:
 
 ```
 src/
-  data/   *.json      — the two large embedded blobs (EIT frame/mask data,
-                         Results-tab figure PNGs as base64), pulled out of
-                         the JS since they're inert data, not code
   css/    *.css        — one file per section of the original stylesheet
   html/   *.html       — one file per tab (shell, prepare, design, check,
                          results)
-  js/     core/, design/, prepare/, results/
+  js/     data/        — the two large embedded blobs (EIT frame/mask data,
+                         Results-tab figure PNGs as base64) as plain .js
+                         declaring `EIT` / `REVIEW`; inert data, not code
+          core/, design/, prepare/, results/
                         — one file per section of the original script,
                          grouped by the tab/feature they belong to
 ```
 
-Edit the files under `src/`, then regenerate the distributable file:
+Because CSS and JS are linked rather than inlined, **editing them needs no
+build step** — change a file under `src/css/` or `src/js/` and reload the
+browser. Re-run the build only after editing `src/html/**`, or after
+adding/removing/reordering a source file:
 
 ```bash
 node build.js
 ```
 
-`build.js` has no dependencies (Node built-ins only) and works by
-concatenating the `src/` files back together **in the same order they
-appeared in the original single file** — this matters because a few pieces
-of state are declared early precisely so later-defined code can read them
-(e.g. `ZOOM`, `savedSequences`). If you add a new source file, insert it
-into `build.js`'s ordered file list at the point that preserves that
-ordering, not just alphabetically.
+`build.js` has no dependencies (Node built-ins only). It emits the `<link>` and
+`<script src>` tags from one ordered file list, and inlines `src/html/**` (there
+is no way to link an HTML fragment over `file://`). That ordering **is** the
+module system here: there are no imports, just top-level declarations that
+later files read (`EIT`, `REVIEW`, `ZOOM`, `savedSequences`), so a new source
+file must be inserted where declaration-before-use still holds, not just
+alphabetically.
 
-The two big data blobs are injected via a `/*__INJECT_DATA__:filename__*/`
-marker comment in the JS source (see `src/js/prepare/eit-workspace.js` and
-`src/js/results/plots.js`) — `build.js` replaces the marker with the raw
-contents of the matching file in `src/data/`.
+Nothing needs a server: the page uses classic scripts and never calls
+`fetch()`, so it works over `file://`. That is also why the data blobs are
+`.js` declaring a global rather than `.json` loaded at runtime — fetching JSON
+from `file://` is CORS-blocked. It is likewise why there are no ES modules:
+`type="module"` is CORS-blocked over `file://` too.
 
-The generated `stage3_gui_mockup.html` stays committed to the repo and
-remains a single, double-click-openable file with no build step required
-to *view* it — the build step is only needed after editing the source.
+The generated `stage3_gui_mockup.html` stays committed, so viewing the mockup
+never requires a build step.
+
+### Verifying a change
+
+The mockup has no test suite; the practical check is that the page still
+renders the same DOM it did before, with no console errors:
+
+```bash
+node build.js
+google-chrome --headless=new --disable-gpu --dump-dom \
+  "file://$PWD/stage3_gui_mockup.html" > /tmp/after.html
+```
+
+Diff that against the same dump taken before your change. Strip `<script>`,
+`<style>`, `<link>` and comment nodes from both sides first, so the comparison
+is about rendered content rather than how it got loaded. An unchanged post-JS
+DOM is the signal that a refactor was behaviour-preserving.

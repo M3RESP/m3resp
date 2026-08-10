@@ -1,5 +1,6 @@
 // ================= Review outputs: Plots section (real pipeline outputs) =================
-const REVIEW = /*__INJECT_DATA__:review-figures.json__*/;
+// REVIEW (the figure-PNG blob) is declared in js/data/review-figures.js, which
+// the build orders ahead of this file.
 
 const PLOTS = [
   {id:'global_impedance', name:'Global impedance — breaths, TIV & EELI', mod:'eit',

@@ -1,10 +1,10 @@
 // ================= "Available data" preview pop-up =================
 // Clicking any row visualizes it. The mockup has no backend to fetch real
 // values from, so each preview picks the most honest representation for that
-// artifact TYPE: a real waveform generator where one already exists elsewhere
-// in this file (reused, not reinvented), a clearly-labelled illustrative
-// preview for detection/result/mask types with no natural signal shape, and a
-// plain explanation for plumbing types that were never meant to be plotted.
+// artifact TYPE: the Prepare tab's own waveform generators where the type has
+// a natural shape, a clearly-labelled illustrative preview for
+// detection/result/mask types that don't, and a plain explanation for plumbing
+// types that were never meant to be plotted.
 let dataVizOverlay = null;
 function ensureDataVizOverlay(){
   if(dataVizOverlay) return dataVizOverlay;
@@ -35,9 +35,9 @@ function seededRand(seedStr){
   return ()=>{ s=(s*1103515245+12345)>>>0; return (s>>>8)/0x1000000; };
 }
 
-// pick a real generator this file already uses elsewhere, based on the
-// producing op's modality — so the preview is a genuine representative shape,
-// not a fabricated one drawn just for this popup
+// pick one of the Prepare tab's generators based on the producing op's
+// modality, so the preview is a genuine representative shape rather than one
+// fabricated for this popup
 function signalGeneratorFor(op, seed){
   const prefix = (op||'').split('.')[0];
   if(prefix==='eit') return t=>eitOverviewAt(t % REC_SECONDS);

@@ -1,7 +1,8 @@
 // ================= EIT analysis workspace (real .bin reconstruction, via eitprocessing) =================
 // shared zoom-view registry, declared up front because the EIT cursor reads it
 const ZOOM = {};
-const EIT = /*__INJECT_DATA__:eit-frame-data.json__*/;
+// EIT (the frame/mask blob) is declared in js/data/eit-frame-data.js, which the
+// build orders ahead of this file.
 
 const B62="0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const B62IDX={}; for(let i=0;i<B62.length;i++) B62IDX[B62[i]]=i;

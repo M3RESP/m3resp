@@ -1,9 +1,9 @@
 // ---- saved sequences: each is a named, concatenated snapshot of the Prepare
 // working-window selection, kept around so several distinct sequences can
 // exist at once and show up as loadable data on 2 · Design's "Available data"
-// tab. Declared first, before anything else in this script, because the
-// Design-tab code below runs its first render before the Prepare-tab code
-// (further down this same script) would otherwise define these.
+// tab. Declared here because this file loads first (see build.js): the
+// Design-tab code renders once on load, before js/prepare/saved-sequences.js
+// — which owns the rest of this feature — has run.
 let SAVED_SEQUENCES = [];
 let seqSaveSeq = 0;
 
