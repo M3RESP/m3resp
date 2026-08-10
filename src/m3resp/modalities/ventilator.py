@@ -27,6 +27,13 @@ class VentilatorRecording:
     pressure: Any = None
     flow: Any = None
     volume: Any = None
+    #: Which modality's file these waveforms arrived in, and therefore whose
+    #: clock they share: ``"eit"`` or ``"emg"`` when they were carried inside
+    #: that recording, ``"ventilator"`` for a standalone export. Aligning the
+    #: host modality aligns these channels with it, so synchronization must not
+    #: also shift them by a ventilator offset - see
+    #: `m3resp.synchronization.cropping.ventilator_clock`.
+    source_modality: str = "ventilator"
 
 
 def load(
@@ -45,9 +52,13 @@ def load(
     ventilator waveforms beside its impedance frames.
     """
 
-    from m3resp.adapters.ventilator_adapter import VentilatorAdapter
+    from m3resp.adapters.ventilator_adapter import (
+        VentilatorAdapter,
+        resolve_ventilator_source,
+    )
 
     ventilator_adapter = adapter or VentilatorAdapter()
+    source_modality = resolve_ventilator_source(path, kwargs.get("source"))
     recording = ventilator_adapter.load(str(path), **kwargs)
     is_dict = isinstance(recording, dict)
     metadata = recording.get("metadata") if is_dict else None
@@ -59,4 +70,5 @@ def load(
         dataframe=recording.get("dataframe") if is_dict else None,
         metadata=metadata,
         fs=float(sample_frequency) if sample_frequency is not None else None,
+        source_modality=source_modality,
     )

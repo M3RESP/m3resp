@@ -97,16 +97,90 @@ def ventilator_payload(recording: Any) -> dict[str, Any] | None:
     return None
 
 
+def ventilator_clock(recording: Any) -> str:
+    """Which modality's clock a ventilator recording shares.
+
+    Ventilator waveforms carried inside the EIT ``*.bin`` or the multi-channel
+    sEMG export are samples of that recording's own time base, so aligning that
+    modality aligns them too. They are read into a separate array rather than a
+    view onto the host, so they must be cropped alongside it - and must *not*
+    also be shifted by a ventilator offset, which would move them twice.
+
+    Only a standalone ventilator or monitor export has a clock of its own; that
+    is what the ventilator offset in `M3Session.synchronize_raw_modalities` is
+    for. Returns ``"eit"``, ``"emg"`` or :data:`VENTILATOR`.
+    """
+
+    source = getattr(recording, "source_modality", None)
+    if source is None:
+        payload = ventilator_payload(recording)
+        metadata = (payload or {}).get("metadata") or {}
+        source = metadata.get("source")
+    if source is None:
+        return VENTILATOR
+    normalized = normalize_modality(source)
+    return normalized if normalized in {"eit", "emg"} else VENTILATOR
+
+
+def ventilator_recordings(session: M3Session) -> list[Any]:
+    """Every loaded ventilator recording, however it was stored.
+
+    Prefers `session.ventilators` (which can hold several instruments' data at
+    once) and falls back to `session.raw`, so a caller that assigned
+    ``session.raw["vent"]`` directly is still covered.
+    """
+
+    recordings = list(getattr(session, "ventilators", {}).values())
+    if recordings:
+        return recordings
+    recording = ventilator_raw(session)
+    return [recording] if recording is not None else []
+
+
+def _crop_ventilators_on_clock(
+    session: M3Session, clock: str, offset: float
+) -> list[Any]:
+    """Crop the ventilator recordings that share `clock`'s time base."""
+
+    cropped = []
+    for recording in ventilator_recordings(session):
+        if ventilator_clock(recording) == clock:
+            _crop_ventilator_recording(recording, offset)
+            cropped.append(recording)
+    return cropped
+
+
 def crop_loaded_modality(session: M3Session, modality: str, offset: float) -> int:
+    """Crop one modality's raw recording by `offset` seconds, in place.
+
+    Cropping EIT or EMG also crops any ventilator recording that arrived inside
+    that modality's file, since those channels share its clock. Cropping the
+    ventilator modality touches only standalone ventilator/monitor exports, for
+    the same reason: the others have already moved with their host.
+    """
+
     if offset == 0.0:
         return 0
-    if modality == "emg" and session.emg is not None:
-        return _crop_emg_recording(session.emg, offset)
     if modality == VENTILATOR:
-        return _crop_ventilator_recording(ventilator_raw(session), offset)
-    if modality == "eit" and session.eit is not None:
-        return _crop_eit_recording(session.eit, offset)
-    return 0
+        return sum(
+            _crop_ventilator_recording(recording, offset)
+            for recording in ventilator_recordings(session)
+            if ventilator_clock(recording) == VENTILATOR
+        )
+
+    cropped = 0
+    if modality == "emg" and session.emg is not None:
+        cropped = _crop_emg_recording(session.emg, offset)
+    elif modality == "eit" and session.eit is not None:
+        cropped = _crop_eit_recording(session.eit, offset)
+
+    if modality in {"eit", "emg"}:
+        # Independent of whether that modality's own recording was loaded: a
+        # study may take only the ventilator channels out of the EIT file and
+        # never load the impedance frames, and those channels still move on
+        # the EIT clock.
+        _crop_ventilators_on_clock(session, modality, offset)
+    return cropped
 
 
 def raw_synchronization_traces(session: M3Session, modality: str) -> dict[str, Any]:
