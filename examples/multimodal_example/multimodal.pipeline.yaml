@@ -1,6 +1,13 @@
-# Full multimodal (EIT + EMG + ventilator) pipeline.
+# Smaller, introductory multimodal (EIT + EMG + ventilator) pipeline - a
+# shorter chain than the full example, easier to read end-to-end. For the
+# complete EIT+EMG+ventilator chain (every operation, `schema_version: 1`,
+# stable step ids), see
+# `examples/multimodal_full/multimodal-full.pipeline.yaml`.
 #
-# Run with: python -m m3resp run multimodal.pipeline.yaml
+# Run with: m3resp run examples/multimodal_example/multimodal.pipeline.yaml
+# from the repository root - path-typed `with:`/`inputs:` values (like the
+# *_file entries below) resolve relative to this spec file's own directory,
+# same as `outputs.dir`, not the process working directory.
 
 name: multimodal
 
@@ -11,12 +18,12 @@ outputs:
   event_csvs: true
   parameters_csv: true
   postprocessing: true
-  figures: false
+  figures: true
 
 inputs:
-  eit_file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_eit_draeger.bin
-  emg_file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_emg.Poly5
-  vent_file: data/source/synthetic/20260610_153009/m3resp_multimodal_1_ventilator.Poly5
+  eit_file: ../../data/source/synthetic/20260610_153009/m3resp_multimodal_1_eit_draeger.bin
+  emg_file: ../../data/source/synthetic/20260610_153009/m3resp_multimodal_1_emg.Poly5
+  vent_file: ../../data/source/synthetic/20260610_153009/m3resp_multimodal_1_ventilator.Poly5
 
 steps:
   # Load
@@ -26,7 +33,7 @@ steps:
   - uses: emg.load
     with: { file: "@emg_file" }
 
-  - uses: emg.load_ventilator
+  - uses: ventilator.load
     with: { file: "@vent_file" }
 
   # Synchronize raw signals before processing
@@ -64,15 +71,34 @@ steps:
     in:  { signal: global_impedance, filtered_eit: filtered_eit }
 
   # EMG processing
+  # This channel's synthetic EMG has ECG mixed directly into it (no separate
+  # reference ECG channel here, unlike the data_from_repo fixture), so ECG
+  # detection reads it from processed_emg (source="raw_channel", the
+  # default) rather than a raw ecg_channel index.
   - uses: emg.preprocess
     with: { channel: 0, high_pass_hz: 80, envelope_window_seconds: 0.5 }
+    out: { processed_emg: processed_emg_before_ecg }
 
+  - uses: emg.ecg_detect_peaks
+    in: { processed_emg: processed_emg_before_ecg }
+
+  - uses: emg.ecg_gating
+    in: { processed_emg: processed_emg_before_ecg }
+    with: { fill_method: 1 }
+    out: { processed_emg_after_ecg: processed_emg }
+
+  # min_breath_width_seconds/prominence_factor are tuned down from their
+  # defaults (1.0 s / 0.5): this fixture's synthetic envelope bursts are
+  # narrower and lower-contrast than those defaults assume, and the tuned
+  # values recover exactly the configured 14 breaths/min (respiratory_rate_bpm
+  # in the generator config) - see docs/pipelines.md "Channel selection and
+  # time-base rules".
   - uses: emg.detect_breaths
-    with: { min_breath_width_seconds: 1.0, half_window_seconds: 0.5 }
+    with: { min_breath_width_seconds: 0.5, half_window_seconds: 0.5, prominence_factor: 0.05 }
 
   - uses: emg.peak_indices
 
-  - uses: emg.ventilator_channels
+  - uses: ventilator.channels
     with:
       pressure_channel: 0
       flow_channel: 1
@@ -81,14 +107,20 @@ steps:
   - uses: emg.slopesum_baseline
     with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
 
-  - uses: emg.find_occluded_breaths
+  - uses: ventilator.find_occluded_breaths
 
-  - uses: emg.detect_ventilator_breath
+  - uses: ventilator.pocc_intervals
+
+  - uses: ventilator.pocc_time_product
+
+  - uses: ventilator.pocc_quality
+
+  - uses: ventilator.detect_breaths
     with: { breath_width_seconds: 0.5 }
 
-  - uses: emg.detect_non_consecutive_manoeuvres
+  - uses: ventilator.detect_non_consecutive_manoeuvres
 
-  - uses: emg.normalize_ventilator_breaths
+  - uses: ventilator.normalize_breaths
     with: { breath_width_seconds: 0.5 }
 
   # No explicit export step needed — the `outputs:` section above handles
