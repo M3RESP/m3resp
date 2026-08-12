@@ -1,0 +1,286 @@
+{
+  "experiment": {
+    "mode": null,
+    "run_identifier": null,
+    "selection": "selected",
+    "subject_id": null,
+    "timepoint": null
+  },
+  "inputs": {
+    "emg_file": "../../data/source/data_from_repo/emg_data_synth_quiet_breathing.Poly5",
+    "vent_file": "../../data/source/data_from_repo/vent_data_synth_quiet_breathing.Poly5"
+  },
+  "name": "emg-full-preprocessing",
+  "outputs": {
+    "dir": "output/emg-full-preprocessing",
+    "event_csvs": true,
+    "figures": false,
+    "mode": "automatic",
+    "parameters_csv": false,
+    "postprocessing": false,
+    "structured_export": true,
+    "summary_json": true,
+    "timestamped": true
+  },
+  "schema_version": 1,
+  "steps": [
+    {
+      "id": "load",
+      "in": {},
+      "out": {},
+      "uses": "emg.load",
+      "with": {
+        "file": "@emg_file"
+      }
+    },
+    {
+      "id": "load_ventilator",
+      "in": {},
+      "out": {},
+      "uses": "ventilator.load",
+      "with": {
+        "file": "@vent_file"
+      }
+    },
+    {
+      "id": "ventilator_channels",
+      "in": {},
+      "out": {},
+      "uses": "ventilator.channels",
+      "with": {
+        "flow_channel": 1,
+        "pressure_channel": 0,
+        "volume_channel": 2
+      }
+    },
+    {
+      "id": "preprocess",
+      "in": {},
+      "out": {
+        "processed_emg": "processed_emg_before_ecg"
+      },
+      "uses": "emg.preprocess",
+      "with": {
+        "channel": 1,
+        "envelope_window_seconds": 0.5
+      }
+    },
+    {
+      "id": "ecg_detect_peaks",
+      "in": {
+        "processed_emg": "processed_emg_before_ecg"
+      },
+      "out": {},
+      "uses": "emg.ecg_detect_peaks",
+      "with": {
+        "ecg_channel": 0
+      }
+    },
+    {
+      "id": "ecg_gating",
+      "in": {
+        "processed_emg": "processed_emg_before_ecg"
+      },
+      "out": {
+        "processed_emg_after_ecg": "processed_emg"
+      },
+      "uses": "emg.ecg_gating",
+      "with": {
+        "fill_method": 1
+      }
+    },
+    {
+      "id": "detect_breaths",
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_breaths",
+      "with": {
+        "half_window_seconds": 0.5,
+        "min_breath_width_seconds": 0.5
+      }
+    },
+    {
+      "id": "peak_indices",
+      "in": {},
+      "out": {},
+      "uses": "emg.peak_indices",
+      "with": {}
+    },
+    {
+      "id": "moving_baseline",
+      "in": {},
+      "out": {},
+      "uses": "emg.moving_baseline",
+      "with": {
+        "percentile": 33.0,
+        "step_seconds": 1.0,
+        "window_seconds": 30.0
+      }
+    },
+    {
+      "id": "onoffpeak_baseline_crossing",
+      "in": {},
+      "out": {},
+      "uses": "emg.onoffpeak_baseline_crossing",
+      "with": {}
+    },
+    {
+      "id": "time_to_peak",
+      "in": {},
+      "out": {},
+      "uses": "emg.time_to_peak",
+      "with": {}
+    },
+    {
+      "id": "pseudo_slope",
+      "in": {},
+      "out": {},
+      "uses": "emg.pseudo_slope",
+      "with": {}
+    },
+    {
+      "id": "amplitude",
+      "in": {},
+      "out": {},
+      "uses": "emg.amplitude",
+      "with": {}
+    },
+    {
+      "id": "time_product",
+      "in": {},
+      "out": {},
+      "uses": "emg.time_product",
+      "with": {}
+    },
+    {
+      "id": "area_under_baseline",
+      "in": {},
+      "out": {},
+      "uses": "emg.area_under_baseline",
+      "with": {}
+    },
+    {
+      "id": "respiratory_rate",
+      "in": {},
+      "out": {},
+      "uses": "emg.respiratory_rate",
+      "with": {}
+    },
+    {
+      "id": "detect_ventilator_breath",
+      "in": {},
+      "out": {},
+      "uses": "ventilator.detect_breaths",
+      "with": {
+        "breath_width_seconds": 0.5
+      }
+    },
+    {
+      "id": "find_occluded_breaths",
+      "in": {},
+      "out": {},
+      "uses": "ventilator.find_occluded_breaths",
+      "with": {}
+    },
+    {
+      "id": "ventilator_respiratory_rate",
+      "in": {},
+      "out": {},
+      "uses": "ventilator.respiratory_rate",
+      "with": {}
+    },
+    {
+      "id": "pocc_intervals",
+      "in": {},
+      "out": {},
+      "uses": "ventilator.pocc_intervals",
+      "with": {}
+    },
+    {
+      "id": "pocc_time_product",
+      "in": {},
+      "out": {},
+      "uses": "ventilator.pocc_time_product",
+      "with": {}
+    },
+    {
+      "id": "normalize_ventilator_breaths",
+      "in": {},
+      "out": {},
+      "uses": "ventilator.normalize_breaths",
+      "with": {
+        "breath_width_seconds": 0.5
+      }
+    },
+    {
+      "id": "snr_pseudo",
+      "in": {},
+      "out": {},
+      "uses": "emg.snr_pseudo",
+      "with": {}
+    },
+    {
+      "id": "percentage_under_baseline",
+      "in": {},
+      "out": {},
+      "uses": "emg.percentage_under_baseline",
+      "with": {}
+    },
+    {
+      "id": "detect_local_high_aub",
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_local_high_aub",
+      "with": {}
+    },
+    {
+      "id": "detect_extreme_time_products",
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_extreme_time_products",
+      "with": {}
+    },
+    {
+      "id": "detect_non_consecutive_manoeuvres",
+      "in": {},
+      "out": {},
+      "uses": "ventilator.detect_non_consecutive_manoeuvres",
+      "with": {}
+    },
+    {
+      "id": "evaluate_bell_curve_error",
+      "in": {},
+      "out": {},
+      "uses": "emg.evaluate_bell_curve_error",
+      "with": {}
+    },
+    {
+      "id": "evaluate_event_timing",
+      "in": {},
+      "out": {},
+      "uses": "emg.evaluate_event_timing",
+      "with": {}
+    },
+    {
+      "id": "evaluate_respiratory_rates",
+      "in": {},
+      "out": {},
+      "uses": "emg.evaluate_respiratory_rates",
+      "with": {}
+    },
+    {
+      "id": "pocc_quality",
+      "in": {},
+      "out": {},
+      "uses": "ventilator.pocc_quality",
+      "with": {}
+    },
+    {
+      "id": "interpeak_dist",
+      "in": {},
+      "out": {},
+      "uses": "emg.interpeak_dist",
+      "with": {}
+    }
+  ]
+}
