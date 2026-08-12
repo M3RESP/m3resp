@@ -182,7 +182,8 @@ def harmonic_notch_filter(
     nyquist = sample_frequency / 2
     stop_frequency = min(max_frequency or nyquist, nyquist)
     filtered = np.asarray(values)
-    harmonic = base_frequency
+    harmonic_i = 1
+    harmonic = harmonic_i * base_frequency
     while harmonic < stop_frequency:
         if distance is None:
             filtered = notch_filter(
@@ -204,7 +205,8 @@ def harmonic_notch_filter(
                     axis=axis,
                     captures=captures,
                 )
-        harmonic += base_frequency
+        harmonic_i += 1
+        harmonic = harmonic_i * base_frequency
     return filtered
 
 
