@@ -1,16 +1,15 @@
 """Milestone 2.7 - EIT regression tests (plan_stage2.md Sec 25).
 
-`EITProcessingAdapter` is a thin wrapper (Stage 1): filtering is delegated
-straight to `eitprocessing.filters.butterworth_filters.ButterworthFilter`,
-with no transformation of the array before/after. This test drives that
-Butterworth path through the adapter's public `preprocess()` on synthetic
-data (no private/clinical recordings needed, per plan_stage2.md Sec 26) and
-checks it reproduces calling `ButterworthFilter` directly on the same raw
-array, to a documented tolerance.
+`EITProcessingAdapter` preserves upstream behavior at its public boundary.
+The lowpass/bandpass path now uses `m3resp.processing.filters`, so this test
+drives that path through the adapter's public `preprocess()` on synthetic data
+(no private/clinical recordings needed, per plan_stage2.md Sec 26) and checks
+it reproduces calling `eitprocessing.ButterworthFilter` directly on the same
+raw array, to a documented tolerance.
 
-Tolerance: exact equality (`atol=0, rtol=0`) - the adapter passes the same
-array into the same filter with the same parameters, so any divergence means
-the wrapper is doing something other than a pure pass-through.
+Tolerance: exact equality (`atol=0, rtol=0`) - the shared primitive uses the
+same SciPy SOS Butterworth implementation and parameters as the upstream
+filter, so any divergence means the native path has drifted.
 
 The heavier default path (rate detection + MDN filtering + breath-interval
 dependent TIV/EELI/pixel-TIV) is exercised end-to-end against a *real*
