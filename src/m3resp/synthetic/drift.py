@@ -15,7 +15,6 @@ from m3resp.synthetic.config import (
 DEFAULT_ZERO = 0.0
 DEFAULT_ONE = 1.0
 DEFAULT_TWO = 2.0
-DEFAULT_FLOAT32_DTYPE = np.float32
 DEFAULT_FIRST_AXIS = 0
 DEFAULT_SECOND_AXIS = 1
 
@@ -37,10 +36,13 @@ def generate_drift(time_seconds: np.ndarray, config: DriftConfig) -> np.ndarray:
         )
     if config.kind == "linear":
         centered_time = time_seconds - float(time_seconds[0])
-        slope = config.slope_per_second or config.amplitude / max(
-            float(time_seconds[-1] - time_seconds[0]),
-            DEFAULT_ONE,
-        )
+        if config.slope_per_second is not None:
+            slope = config.slope_per_second
+        else:
+            slope = config.amplitude / max(
+                float(time_seconds[-1] - time_seconds[0]),
+                DEFAULT_ONE,
+            )
         return slope * centered_time
     if config.kind == "constant":
         return np.full_like(time_seconds, config.amplitude, dtype=float)
@@ -88,9 +90,7 @@ def shift_array_in_time(
 
     if shifted_time is None:
         shifted_time = np.asarray(time_seconds[:0], dtype=float)
-    shifted = np.stack(shifted_columns, axis=DEFAULT_SECOND_AXIS).astype(
-        DEFAULT_FLOAT32_DTYPE
-    )
+    shifted = np.stack(shifted_columns, axis=DEFAULT_SECOND_AXIS)
     shifted = shifted.reshape((len(shifted_time), *moved.shape[1:]))
     return shifted_time, np.moveaxis(
         shifted,

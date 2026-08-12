@@ -30,7 +30,7 @@ eit:
     frequency_hz: 0.008
     secondary_frequency_hz: 0.003
     phase_radians: 1.2
-    slope_per_second: 0.0
+    slope_per_second: null  # null: work it out from amplitude. 0.0: no slope.
   timing_drift:
     enabled: false
     time_shift_seconds: 0.0

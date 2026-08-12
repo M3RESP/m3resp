@@ -44,7 +44,7 @@ The base package supports ventilator data, the shared data model, and the workfl
 ```bash
 git clone https://github.com/M3RESP/m3resp.git
 cd m3resp
-python -m pip install -e .
+python -m pip install -e .  # or `uv sync`
 ```
 
 ### Optional modality support
@@ -52,9 +52,9 @@ python -m pip install -e .
 Install only the integrations needed for your recordings:
 
 ```bash
-python -m pip install -e ".[eit]"  # add eitprocessing
-python -m pip install -e ".[emg]"  # add resurfemg
-python -m pip install -e ".[all]"  # add both modalities
+python -m pip install -e ".[eit]"  # or `uv sync --extra eit`, add eitprocessing
+python -m pip install -e ".[emg]"  # or `uv synx --extra emg`, add resurfemg
+python -m pip install -e ".[all]"  # or `uv synx --extra all`, add both modalities
 ```
 
 The modality extras currently use the M3Resp integration branches of the upstream packages. See [pyproject.toml](pyproject.toml) for the exact versions.
@@ -66,7 +66,7 @@ For tests, linting, formatting, and type checking:
 ```bash
 git clone https://github.com/M3RESP/m3resp.git
 cd m3resp
-python -m pip install -e ".[all,dev]"
+python -m pip install -e ".[all,dev]"  # or `uv sync --extra all --extra dev`
 pre-commit install
 ```
 
