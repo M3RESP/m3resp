@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field, is_dataclass
 from typing import TYPE_CHECKING, Any, cast
@@ -12,12 +13,30 @@ if TYPE_CHECKING:
 
 @dataclass
 class Event:
-    """A timestamped event from one modality."""
+    """A timestamped event from one modality.
+
+    ``id`` is a per-process, in-memory identifier (not persisted or globally
+    unique like Layer 2's ids) that lets other Layer 1 objects - notably
+    ``ParameterResult.event_id`` - reference this specific event, e.g. a
+    blood-gas draw or an intervention timepoint. It is excluded from
+    equality (``compare=False``) so two structurally identical events - the
+    common case in tests and deduplication - still compare equal.
+
+    ``sample_index`` is only meaningful together with ``signal_name``/
+    ``sample_frequency``, which identify which signal and time axis it is
+    relative to - a modality can have multiple signals at different sampling
+    rates, so ``sample_index`` alone is ambiguous. Mirrors the same fields on
+    :class:`BreathEvent`. All three are optional and ``None`` when the event
+    wasn't derived from indexing into a specific signal.
+    """
 
     name: str
     modality: str
     time: float
+    id: str = field(default_factory=lambda: uuid.uuid4().hex, compare=False)
     sample_index: int | None = None
+    signal_name: str | None = None
+    sample_frequency: float | None = None
     label: str | None = None
     confidence: float | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -45,6 +64,7 @@ class BreathEvent:
     modality: str
     start_time: float
     end_time: float
+    id: str = field(default_factory=lambda: uuid.uuid4().hex, compare=False)
     peak_time: float | None = None
     start_index: int | None = None
     peak_index: int | None = None
@@ -82,28 +102,43 @@ def coerce_event(
         return value
 
     if isinstance(value, Mapping):
+        kwargs: dict[str, Any] = {}
+        if "id" in value:
+            kwargs["id"] = str(value["id"])
         return Event(
             name=_required_str(value.get("name", name), "name"),
             modality=_required_str(value.get("modality", modality), "modality"),
             time=float(value["time"]),
             sample_index=value.get("sample_index"),
+            signal_name=value.get("signal_name"),
+            sample_frequency=value.get("sample_frequency"),
             label=value.get("label", label),
             confidence=value.get("confidence"),
             metadata=dict(value.get("metadata", {})),
+            **kwargs,
         )
 
     if hasattr(value, "time"):
+        kwargs = {}
+        value_id = getattr(value, "id", None)
+        if value_id is not None:
+            kwargs["id"] = str(value_id)
         return Event(
             name=_required_str(getattr(value, "name", name), "name"),
             modality=_required_str(getattr(value, "modality", modality), "modality"),
-            time=float(getattr(value, "time")),
+            time=float(value.time),
             sample_index=getattr(value, "sample_index", None),
+            signal_name=getattr(value, "signal_name", None),
+            sample_frequency=getattr(value, "sample_frequency", None),
             label=getattr(value, "label", label),
             confidence=getattr(value, "confidence", None),
             metadata=dict(getattr(value, "metadata", {}) or {}),
+            **kwargs,
         )
 
-    event_name, event_modality, time, *rest = value
+    event_name, event_modality, time, *rest = _coerce_positional_sequence(
+        value, min_length=3, max_length=4, target="Event"
+    )
     sample_index = rest[0] if rest else None
     return Event(
         name=_required_str(name if name is not None else event_name, "name"),
@@ -129,6 +164,9 @@ def coerce_breath_event(
         return value
 
     if isinstance(value, Mapping):
+        kwargs: dict[str, Any] = {}
+        if "id" in value:
+            kwargs["id"] = str(value["id"])
         return BreathEvent(
             modality=_required_str(value.get("modality", modality), "modality"),
             start_time=float(value["start_time"]),
@@ -142,19 +180,24 @@ def coerce_breath_event(
             source=value.get("source", source),
             confidence=value.get("confidence"),
             metadata=dict(value.get("metadata", {})),
+            **kwargs,
         )
 
     if hasattr(value, "start_time") and hasattr(value, "end_time"):
         peak_time = getattr(value, "peak_time", None)
         if peak_time is None:
             peak_time = getattr(value, "middle_time", None)
+        kwargs = {}
+        value_id = getattr(value, "id", None)
+        if value_id is not None:
+            kwargs["id"] = str(value_id)
         return BreathEvent(
             modality=_required_str(
                 getattr(value, "modality", modality),
                 "modality",
             ),
-            start_time=float(getattr(value, "start_time")),
-            end_time=float(getattr(value, "end_time")),
+            start_time=float(value.start_time),
+            end_time=float(value.end_time),
             peak_time=_optional_float(peak_time),
             start_index=getattr(value, "start_index", None),
             peak_index=getattr(value, "peak_index", None),
@@ -164,9 +207,12 @@ def coerce_breath_event(
             source=getattr(value, "source", source),
             confidence=getattr(value, "confidence", None),
             metadata=dict(getattr(value, "metadata", {}) or {}),
+            **kwargs,
         )
 
-    start_time, end_time, *rest = value
+    start_time, end_time, *rest = _coerce_positional_sequence(
+        value, min_length=2, max_length=3, target="BreathEvent"
+    )
     peak_time = rest[0] if rest else None
     return BreathEvent(
         modality=_required_str(modality, "modality"),
@@ -216,3 +262,34 @@ def _required_str(value: Any, field_name: str) -> str:
     if value is None:
         raise ValueError(f"{field_name} is required")
     return str(value)
+
+
+def _coerce_positional_sequence(
+    value: Any, *, min_length: int, max_length: int, target: str
+) -> tuple[Any, ...]:
+    """Validate the positional fallback `coerce_event`/`coerce_breath_event` use
+    for a `detector=callable` that returns a bare sequence rather than a dict
+    or one of our own types.
+
+    A string/bytes value or anything without a length is rejected outright -
+    without this, a short string would silently iterate character by
+    character. Anything else is checked against ``min_length``/``max_length``
+    before being unpacked, so a same-length-but-different-meaning sequence
+    (e.g. a ``(confidence, snr)`` pair reaching `coerce_breath_event`) raises
+    immediately naming what was expected, rather than silently becoming a
+    plausible but wrong `Event`/`BreathEvent`.
+    """
+
+    if isinstance(value, (str, bytes)) or not hasattr(value, "__len__"):
+        raise TypeError(
+            f"Cannot coerce {value!r} into a {target}: expected a mapping, an "
+            f"object with the right attributes, or a sequence of "
+            f"{min_length} to {max_length} values."
+        )
+    length = len(value)
+    if not min_length <= length <= max_length:
+        raise ValueError(
+            f"Cannot coerce a length-{length} sequence into a {target}: "
+            f"expected {min_length} to {max_length} values, got {tuple(value)!r}."
+        )
+    return tuple(value)
