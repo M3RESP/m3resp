@@ -40,7 +40,7 @@ def resolve_output_dir(
 def default_run_timestamp() -> str:
     """The default timestamp format used for timestamped output directories."""
 
-    return datetime.now().strftime("%Y%m%d_%H%M%S")
+    return datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
 
 
 def slice_by_index(data: Any, *, start: int, end: int) -> Any:
@@ -54,8 +54,8 @@ def slice_by_time(data: Any, *, start: float, end: float) -> Any:
 def slice_signal_by_mode(
     data: Any,
     *,
-    start: int | float,
-    end: int | float,
+    start: float,
+    end: float,
     slicing_mode: str,
 ) -> Any:
     """Slice a signal by sample index or time selector."""
