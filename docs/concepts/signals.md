@@ -12,9 +12,9 @@ holds a fixed set of fields):
 - `time`, the timestamp for each value, so you know when each number was
   recorded.
 - `sample_frequency`, how many measurements were taken per second.
-- `unit`, what the numbers mean physically (for example `"uV"` for
+- `unit`, what the numbers mean physically (for example `"µV"` for
   microvolts). This gets normalized (converted to one consistent spelling)
-  so `"uV"` from one device and `"uV"` written differently by another both
+  so `"uV"` from one device and `"µV"` written differently by another both
   end up as the same thing, and can safely be compared.
 
 `values` does not have to be a simple list of numbers. It can be 1D (one
