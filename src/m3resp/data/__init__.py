@@ -16,6 +16,13 @@ from __future__ import annotations
 
 from m3resp.core.events import BreathEvent as Breath
 from m3resp.core.events import Event
+from m3resp.data.categories import (
+    KNOWN_CATEGORIES,
+    Category,
+    load_category_aliases,
+    normalize_category,
+    register_category_alias,
+)
 from m3resp.data.collections import (
     ParameterResultCollection,
     QualityReport,
@@ -29,7 +36,9 @@ from m3resp.data.signals import Signal
 from m3resp.data.timeseries import TimeSeries
 
 __all__ = [
+    "KNOWN_CATEGORIES",
     "Breath",
+    "Category",
     "Event",
     "LinkedBreath",
     "ParameterResult",
@@ -41,4 +50,7 @@ __all__ = [
     "Signal",
     "SignalCollection",
     "TimeSeries",
+    "load_category_aliases",
+    "normalize_category",
+    "register_category_alias",
 ]

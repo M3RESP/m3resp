@@ -70,6 +70,23 @@ class TimeSeries:
                 stacklevel=2,
             )
 
+    def __eq__(self, other: object) -> bool:
+        # The dataclass-generated __eq__ compares fields with plain `==`,
+        # which raises ValueError ("truth value of an array with more than
+        # one element is ambiguous") the moment `values`/`time` hold more
+        # than one element - np.array_equal compares element-wise and
+        # collapses to a single bool instead.
+        if type(other) is not type(self):
+            return NotImplemented
+        return (
+            np.array_equal(self.values, other.values)
+            and np.array_equal(self.time, other.time)
+            and self.sample_frequency == other.sample_frequency
+            and self.unit == other.unit
+            and self.name == other.name
+            and self.metadata == other.metadata
+        )
+
     @property
     def n_samples(self) -> int:
         """Number of samples along the time axis."""
