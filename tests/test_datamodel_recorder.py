@@ -129,6 +129,22 @@ def test_record_parameter_and_quality_flag_link_to_recorded_signal():
     assert annotation.quality_label == "valid"
 
 
+def test_record_parameter_converts_a_numpy_scalar_to_float():
+    import numpy as np
+
+    session = M3Session()
+    store = DataModelStore()
+    recorder = DataModelRecorder(session, store)
+    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+
+    feature = recorder.record_parameter(
+        ParameterResult(name="sample_count", value=np.int64(12), modality="eit"),
+        processing_run_id=run.processing_run_id,
+    )
+
+    assert feature.value == 12.0
+
+
 def test_record_quality_flag_falls_back_to_session_target_without_a_signal():
     session = M3Session()
     store = DataModelStore()
@@ -158,6 +174,62 @@ def test_record_processing_step_resolves_input_file_ids_from_recorded_signals():
 
     expected_file_id = store.files_for_signal(stream.signal_id)[0].file_id
     assert run.input_file_ids == [expected_file_id]
+
+
+def test_record_processing_step_converts_bare_numpy_scalar_parameters():
+    import numpy as np
+
+    session = M3Session()
+    store = DataModelStore()
+    recorder = DataModelRecorder(session, store)
+
+    run = recorder.record_processing_step(
+        ProcessingStep(
+            name="detect_breaths",
+            parameters={
+                "minimum_samples": np.int64(12),
+                "threshold": np.float32(0.25),
+                "nested": {"sample_index": np.int32(4)},
+            },
+        )
+    )
+
+    assert run.parameters == {
+        "minimum_samples": 12,
+        "threshold": pytest.approx(0.25),
+        "nested": {"sample_index": 4},
+    }
+
+
+def test_pipeline_result_records_bare_numpy_integer_outputs():
+    import numpy as np
+
+    from m3resp.workflows.registry import STEP_REGISTRY
+
+    @register_step("t.numpy_integer", writes=("sample_count",))
+    def _numpy_integer(**kwargs: Any) -> dict[str, Any]:
+        return {"sample_count": np.int64(12)}
+
+    try:
+        session = M3Session()
+        store = DataModelStore()
+        session.datamodel = DataModelRecorder(session, store)
+
+        result = run_pipeline(
+            {"name": "numpy-scalar", "steps": [{"uses": "t.numpy_integer"}]},
+            session=session,
+        )
+
+        features = [
+            feature
+            for feature in store.derived_features.values()
+            if feature.processing_run_id == result.processing_run_id
+        ]
+        assert [(feature.feature_name, feature.value) for feature in features] == [
+            ("sample_count", 12.0)
+        ]
+    finally:
+        STEP_REGISTRY.pop("t.numpy_integer", None)
 
 
 def test_pipeline_result_prefers_layer1_objects_over_bare_scalars():
@@ -229,6 +301,86 @@ def test_record_signal_skips_signal_with_unrecordable_modality():
     assert store.signal_streams == {}
 
 
+def test_pipeline_result_records_output_provenance_for_array_valued_results():
+    """Phase 5.2/7: `record_pipeline_result` stores an output-provenance
+    mapping on the run for every native result, and an array-valued
+    `ParameterResult` still gets a `DerivedFeature` (with a null value, since
+    the array itself lives in the parameter artifact, not the store)."""
+
+    import numpy as np
+
+    from m3resp.workflows.registry import STEP_REGISTRY
+
+    @register_step("t.array_result", writes=("mask_result",))
+    def _array_result(**kwargs: Any) -> dict[str, Any]:
+        return {
+            "mask_result": ParameterResult(
+                name="mask",
+                value=np.array([1.0, float("nan")]),
+                modality="eit",
+                unit=None,
+                method="eitprocessing.TIVLungspace",
+                metadata={"operation": "eit.roi_tiv_lungspace", "shape": [2]},
+            )
+        }
+
+    try:
+        session = M3Session()
+        store = DataModelStore()
+        session.datamodel = DataModelRecorder(session, store)
+
+        result = run_pipeline(
+            {"name": "demo", "steps": [{"uses": "t.array_result"}]}, session=session
+        )
+
+        run = store.processing_runs[result.processing_run_id]
+        outputs = run.parameters["outputs"]
+        assert outputs["mask_result"]["method"] == "eitprocessing.TIVLungspace"
+        assert outputs["mask_result"]["is_scalar"] is False
+        assert (
+            outputs["mask_result"]["metadata"]["operation"] == "eit.roi_tiv_lungspace"
+        )
+
+        features = [
+            f for f in store.derived_features.values() if f.feature_name == "mask"
+        ]
+        assert len(features) == 1
+        assert features[0].value is None
+        assert features[0].processing_run_id == result.processing_run_id
+    finally:
+        STEP_REGISTRY.pop("t.array_result", None)
+
+
+def test_record_parameter_file_links_data_file_onto_processing_run(tmp_path):
+    """Phase 5.3/7: the array archive becomes a `DataFile` with role
+    'parameter', linked onto the `ProcessingRun.parameter_file_id`."""
+
+    session = M3Session()
+    store = DataModelStore()
+    session.datamodel = DataModelRecorder(session, store)
+    session.parameter_results.add(
+        ParameterResult(name="mask", value=[1.0, 2.0], modality="eit")
+    )
+    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+
+    output_dir = session.export_summary(
+        tmp_path, processing_run_id=run.processing_run_id
+    )
+
+    stored_run = store.processing_runs[run.processing_run_id]
+    assert stored_run.parameter_file_id is not None
+
+    data_file = store.data_files[stored_run.parameter_file_id]
+    assert data_file.file_role == "parameter"
+    assert data_file.file_format == "other"
+    assert data_file.file_path == str(output_dir / "parameter_result_arrays.npz")
+    assert data_file.checksum_sha256 is not None
+    assert (
+        data_file.file_size_bytes
+        == (output_dir / "parameter_result_arrays.npz").stat().st_size
+    )
+
+
 def test_export_store_survives_array_valued_parameters(tmp_path):
     import json
 
@@ -243,7 +395,15 @@ def test_export_store_survives_array_valued_parameters(tmp_path):
     # A ventilator array passed as a postprocessing argument would otherwise
     # land unserializable in ProcessingRun.parameters and break export.
     session.datamodel.record_provenance(
-        record("postprocess_emg", "emg", ventilator=np.arange(5.0), peep=5.0)
+        record(
+            "postprocess_emg",
+            "emg",
+            ventilator=np.arange(5.0),
+            peep=5.0,
+            minimum_samples=np.int64(12),
+            threshold=np.float32(0.25),
+            nested={"sample_index": np.int32(4)},
+        )
     )
 
     written = export_store(store, tmp_path)  # must not raise
@@ -254,3 +414,6 @@ def test_export_store_survives_array_valued_parameters(tmp_path):
     )
     assert params["peep"] == 5.0
     assert params["ventilator"].startswith("<array shape=(5,)")
+    assert params["minimum_samples"] == 12
+    assert params["threshold"] == pytest.approx(0.25)
+    assert params["nested"] == {"sample_index": 4}

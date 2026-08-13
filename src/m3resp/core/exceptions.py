@@ -21,6 +21,16 @@ class UnsupportedWorkflowError(M3RespError):
     """Raised when an adapter cannot infer the requested workflow operation."""
 
 
+class UnresolvedChannelError(M3RespError, LookupError):
+    """Raised when a requested channel is not present in a recording.
+
+    Distinct from `MissingModalityDataError`: the modality was loaded, but the
+    recording does not carry that particular channel - a ventilator export
+    without an esophageal pressure, or one whose vendor naming is not yet
+    registered.
+    """
+
+
 class PipelineError(M3RespError):
     """Base exception for declarative pipeline errors."""
 
@@ -31,6 +41,10 @@ class UnknownStepError(PipelineError):
 
 class PipelineSpecError(PipelineError):
     """Raised when a pipeline spec is malformed or fails static validation."""
+
+
+class StepMetadataError(PipelineError):
+    """Raised when a step's registered GUI/discovery metadata is inconsistent."""
 
 
 class UnknownPipelineError(PipelineError):
