@@ -29,7 +29,7 @@ def resample_signal(signal: Signal, target_frequency_hz: float) -> Signal:
     if end_time <= start_time:
         return replace(signal, sample_frequency=target_frequency_hz)
 
-    sample_count = int(round((end_time - start_time) * target_frequency_hz)) + 1
+    sample_count = round((end_time - start_time) * target_frequency_hz) + 1
     new_time = start_time + np.arange(sample_count) / target_frequency_hz
     new_values = np.interp(new_time, signal.time, signal.values)
 
