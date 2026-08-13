@@ -9,16 +9,20 @@ optional ``resurfemg`` dependency.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from m3resp.adapters.resurfemg_adapter import (
     _peak_indices_from_events,
     _ventilator_signals,
 )
-from m3resp.core.session import (
-    M3Session,
-    _iter_ventilator_detections,
-    _normalize_ventilator_breath,
+from m3resp.adapters.ventilator_adapter import DEFAULT_CHANNELS
+from m3resp.core.session import M3Session
+from m3resp.synchronization.ventilator import (
+    iter_ventilator_detections as _iter_ventilator_detections,
+)
+from m3resp.synchronization.ventilator import (
+    normalize_ventilator_breath as _normalize_ventilator_breath,
 )
 from m3resp.workflows.registry import register_step
 
@@ -52,18 +56,30 @@ def load_ventilator(session: M3Session, *, file: str) -> dict[str, Any]:
     "emg.ventilator_channels",
     reads={"ventilator_raw": "ventilator_raw"},
     writes=("ventilator_signals",),
-    summary="Split a raw ventilator recording into pressure/flow/volume channels.",
+    summary="Split a raw ventilator recording into its named channels.",
 )
 def ventilator_channels(
     ventilator_raw: Any,
     *,
-    pressure_channel: int = 0,
-    flow_channel: int = 1,
-    volume_channel: int = 2,
+    channels: Sequence[str] = DEFAULT_CHANNELS,
+    pressure_channel: int | None = None,
+    flow_channel: int | None = None,
+    volume_channel: int | None = None,
     fs: float | None = None,
 ) -> dict[str, Any]:
+    """Split a ventilator recording into channels found by name.
+
+    `channels` selects which quantities to extract - the three standard ones
+    by default, but a recording from a pressure pod can also be asked for
+    ``esophageal_pressure``, ``transpulmonary_pressure`` or
+    ``gastric_pressure``. The per-channel index parameters override the name
+    match with an explicit column, and remain the way to read an unlabelled
+    recording whose columns are not in the default order.
+    """
+
     signals = _ventilator_signals(
         ventilator_raw,
+        channels=tuple(channels),
         pressure_channel=pressure_channel,
         flow_channel=flow_channel,
         volume_channel=volume_channel,

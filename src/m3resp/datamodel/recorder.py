@@ -28,6 +28,8 @@ first.
 
 from __future__ import annotations
 
+import hashlib
+import os
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
@@ -43,9 +45,9 @@ from m3resp.data.signals import Signal
 from m3resp.datamodel.entities import (
     Case,
     DataFile,
+    DerivedFeature,
     Device,
     DeviceType,
-    DerivedFeature,
     FileFormat,
     FileRole,
     ProcessingRun,
@@ -65,17 +67,38 @@ if TYPE_CHECKING:
 #: Provenance actions that correspond to loading a modality's raw data.
 _LOAD_ACTIONS = {"load_eit": "eit", "load_emg": "emg"}
 
-#: Maps both Stage 1 session modality keys ("vent") and Layer 1
-#: ``Signal.modality`` values ("ventilator", "pressure", "flow") onto the
-#: persisted ``Device.device_type`` vocabulary.
+#: Maps Stage 1 session modality keys ("vent") and Layer 1 ``Signal.modality``
+#: values onto the persisted ``Device.device_type`` vocabulary. Since
+#: ``modality`` is now purely the device axis (physical quantities moved to
+#: ``Signal.category``), this is close to an identity map.
+#:
+#: ``"pressure"``/``"flow"`` are retained only as legacy aliases, for signals
+#: produced before the split or by third-party code still using the old
+#: combined vocabulary. They assume a ventilator, which is exactly the wrong
+#: guess for esophageal or gastric pressure - tag those ``modality="monitor"``
+#: (or the actual device) with ``category="esophageal_pressure"`` instead.
 _MODALITY_DEVICE_TYPE: dict[str, DeviceType] = {
     "eit": "eit",
     "emg": "emg",
     "vent": "ventilator",
     "ventilator": "ventilator",
+    "monitor": "monitor",
     "pressure": "ventilator",
     "flow": "ventilator",
 }
+
+
+def _stream_key(modality: str | None, category: str | None) -> str:
+    """Cache key identifying one recorded ``SignalStream``.
+
+    Both axes are needed: one device emits several streams. Falls back to the
+    bare modality when no category is set, so EIT/EMG signals (which have one
+    stream per modality) keep the keys they had before categories existed.
+    """
+
+    resolved = modality or "unknown"
+    return f"{resolved}:{category}" if category else resolved
+
 
 #: Fallback signal type for the provenance-inference path (Milestone 1),
 #: keyed by Stage 1 session modality.
@@ -123,6 +146,11 @@ class DataModelRecorder:
         )
 
         self._devices: dict[str, str] = {}
+        # Keyed by `_stream_key(modality, category)`. One device now emits
+        # several streams (a ventilator produces pressure, flow and volume), so
+        # modality alone no longer identifies a stream - keying by it would let
+        # each ventilator channel overwrite the previous one and misattribute
+        # every derived feature to whichever was recorded last.
         self._signals: dict[str, str] = {}
         self._files: dict[str, str] = {}
 
@@ -147,10 +175,12 @@ class DataModelRecorder:
         signal_type = _signal_type_for(signal)
         if signal_type is None:
             logger.warning(
-                "Skipping signal with modality {!r}: no data model stream type "
-                "for it. Tag the signal's modality (eit/emg/ventilator/...) to "
-                "record it.",
+                "Skipping signal with modality={!r} category={!r}: no data "
+                "model stream type for that pair. Tag the signal's modality "
+                "(eit/emg/ventilator/...) and, for a device that emits several "
+                "quantities, its category (airway_pressure/airflow/volume).",
                 signal.modality,
+                signal.category,
             )
             return None
 
@@ -165,7 +195,8 @@ class DataModelRecorder:
                 sample_count=signal.n_samples,
             )
         )
-        self._signals[signal.modality] = stream.signal_id
+        stream_key = _stream_key(signal.modality, signal.category)
+        self._signals[stream_key] = stream.signal_id
 
         if file_path is not None:
             data_file = self.store.add_data_file(
@@ -177,15 +208,39 @@ class DataModelRecorder:
                     file_role=file_role,
                 )
             )
-            self._files[signal.modality] = data_file.file_id
+            self._files[stream_key] = data_file.file_id
         return stream
+
+    def _lookup_signal_id(
+        self, modality: str | None, category: str | None
+    ) -> str | None:
+        """Find the recorded stream a parameter/flag belongs to.
+
+        Prefers an exact ``(modality, category)`` match. A result that names
+        only its modality falls back to that modality's first recorded stream,
+        which is what everything did before categories existed.
+        """
+
+        if modality is None:
+            return None
+        signal_id = self._signals.get(_stream_key(modality, category))
+        if signal_id is not None:
+            return signal_id
+        signal_id = self._signals.get(modality)
+        if signal_id is not None:
+            return signal_id
+        prefix = f"{modality}:"
+        for stored_key, stored_id in self._signals.items():
+            if stored_key.startswith(prefix):
+                return stored_id
+        return None
 
     def record_parameter(
         self, parameter: ParameterResult, *, processing_run_id: str
     ) -> DerivedFeature:
         """Materialize a ``ParameterResult`` as a ``DerivedFeature``."""
 
-        signal_id = self._signals.get(parameter.modality)
+        signal_id = self._lookup_signal_id(parameter.modality, parameter.category)
         return self.store.add_derived_feature(
             DerivedFeature(
                 source_signal_ids=[signal_id] if signal_id is not None else [],
@@ -213,7 +268,7 @@ class DataModelRecorder:
         resolved_type: TargetType = target_type or "signal"
         resolved_id = target_id
         if resolved_id is None and flag.modality is not None:
-            resolved_id = self._signals.get(flag.modality)
+            resolved_id = self._lookup_signal_id(flag.modality, flag.category)
         if resolved_id is None:
             resolved_type = "session"
             resolved_id = self.recording_session.session_id
@@ -317,49 +372,183 @@ class DataModelRecorder:
         Named context artifacts that are already ``ParameterResult``/
         ``QualityFlag``/``Signal`` objects are materialized directly; bare
         numeric outputs (Milestone 1 pipelines that have not adopted Layer 1
-        objects yet) still become a ``DerivedFeature`` with just a value.
+        objects yet) still become a ``DerivedFeature`` with just a value. The
+        run's ``parameters["outputs"]`` also records a JSON-safe provenance
+        summary (method/unit/metadata) for every native result, keyed by its
+        context name, so the run's full output provenance survives even for
+        array-valued results whose ``DerivedFeature.value`` stays ``None``.
+
+        A ``list``/``tuple``/``dict`` of native results, at any nesting depth
+        (e.g. one ``ParameterResult`` per breath - see ``plan/stage2/
+        2_resurfemg_gap_migration_implementation_plan.md`` Phase 6.1 - or a
+        mapping of named sub-results), is recorded as one store entity per
+        leaf item, keeping each item's breath/sample identity, rather than
+        being skipped or collapsed into a single annotation (Phase 5.2 of
+        ``plan/stage2/3_pipeline_structure_implementation_plan.md``).
+
+        Every ``DataFile`` this recorder has resolved so far (from earlier
+        ``record_signal``/``record_provenance`` calls, and from any raw
+        ``Signal`` this same run produces) is linked onto
+        ``run.input_file_ids`` (Phase 5.3) - precise for the common one
+        pipeline per session case; a session that runs more than one
+        pipeline will over-attribute earlier files to a later run's inputs.
         """
 
         run = self.store.add_processing_run(
             ProcessingRun(pipeline_name=result.name, parameters={})
         )
+        output_provenance: dict[str, Any] = {}
         for name, value in result.outputs.items():
-            if isinstance(value, ParameterResult):
-                self.record_parameter(value, processing_run_id=run.processing_run_id)
-            elif isinstance(value, QualityFlag):
-                self.record_quality_flag(value)
-            elif isinstance(value, Signal):
-                self.record_signal(value)
-            elif isinstance(value, bool):
-                continue
-            elif isinstance(value, (int, float)):
-                self.store.add_derived_feature(
-                    DerivedFeature(
-                        processing_run_id=run.processing_run_id,
-                        feature_name=name,
-                        value=float(value),
-                    )
-                )
+            entry = self._record_output_value(name, value, run)
+            if entry is not None:
+                output_provenance[name] = entry
+        run.parameters["outputs"] = output_provenance
+        run.input_file_ids = sorted(set(self._files.values()))
         return run
+
+    def _record_output_value(self, name: str, value: Any, run: ProcessingRun) -> Any:
+        """Recursively record one pipeline-output value, at any nesting
+        depth of list/tuple/dict, returning a provenance entry mirroring
+        the input's shape (or ``None`` if it had none)."""
+
+        if isinstance(value, list | tuple):
+            entries = [self._record_output_value(name, item, run) for item in value]
+            entries = [entry for entry in entries if entry is not None]
+            return entries or None
+        if isinstance(value, dict):
+            mapped = {
+                str(key): self._record_output_value(f"{name}.{key}", item, run)
+                for key, item in value.items()
+            }
+            mapped = {key: entry for key, entry in mapped.items() if entry is not None}
+            return mapped or None
+        return self._record_output_item(name, value, run)
+
+    def _record_output_item(
+        self, name: str, value: Any, run: ProcessingRun
+    ) -> dict[str, Any] | None:
+        """Record one pipeline-output value (not a list/tuple/dict of them)
+        and return its provenance entry, or ``None`` for a value that has no
+        provenance entry of its own (a `QualityFlag`, or an unrecognized
+        type). `name` is the output's context key, used as the
+        `DerivedFeature.feature_name` for a bare numeric output."""
+
+        if isinstance(value, ParameterResult):
+            self.record_parameter(value, processing_run_id=run.processing_run_id)
+            return _output_provenance_entry(value)
+        if isinstance(value, QualityFlag):
+            self.record_quality_flag(value)
+            return None
+        if isinstance(value, Signal):
+            self.record_signal(value)
+            return _output_provenance_entry(value)
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float, np.integer, np.floating)):
+            self.store.add_derived_feature(
+                DerivedFeature(
+                    processing_run_id=run.processing_run_id,
+                    feature_name=name,
+                    value=float(value),
+                )
+            )
+            return None
+        return None
+
+    def record_parameter_file(
+        self, path: str | Path, *, processing_run_id: str
+    ) -> DataFile:
+        """Record a structured-export parameter artifact (e.g. the
+        ``parameter_result_arrays.npz`` archive) as a ``DataFile`` with role
+        ``"parameter"``, and link it onto the ``ProcessingRun`` that produced
+        it via ``ProcessingRun.parameter_file_id``.
+
+        Does not create a new entity type for array-valued results (per
+        ``plan/stage2/1_eit_gap_migration_implementation_plan.md`` Phase 5.3):
+        the existing ``DataFile``/``ProcessingRun`` link is reused.
+        """
+
+        data_file = self.store.add_data_file(
+            DataFile(
+                session_id=self.recording_session.session_id,
+                file_path=str(path),
+                file_format="other",
+                file_role="parameter",
+                checksum_sha256=_sha256_file(path),
+                file_size_bytes=os.path.getsize(path),
+            )
+        )
+        run = self.store.processing_runs[processing_run_id]
+        run.parameter_file_id = data_file.file_id
+        return data_file
+
+
+#: ``(modality, category) -> SignalType``. Layer 2 keys streams by a name that
+#: fuses device and quantity, so both Layer 1 axes are needed to resolve one.
+#: Before ``Signal.category`` existed this had to be guessed from ``modality``
+#: alone, which meant every ventilator signal was recorded as
+#: ``ventilator_pressure`` and ``ventilator_volume`` was unreachable.
+_SIGNAL_TYPE_BY_MODALITY_CATEGORY: dict[tuple[str, str], SignalType] = {
+    ("eit", "impedance"): "eit_waveform",
+    ("ventilator", "airway_pressure"): "ventilator_pressure",
+    ("ventilator", "airflow"): "ventilator_flow",
+    ("ventilator", "volume"): "ventilator_volume",
+    ("ventilator", "tidal_volume"): "ventilator_volume",
+}
+
+#: Fallback ``modality -> SignalType`` for signals with no ``category`` set,
+#: used only where the modality alone is unambiguous. ``"ventilator"`` is
+#: deliberately absent: without a category there is no way to tell pressure
+#: from flow from volume, and guessing is what produced wrong audit records.
+_SIGNAL_TYPE_BY_MODALITY: dict[str, SignalType] = {
+    "eit": "eit_waveform",
+}
 
 
 def _signal_type_for(signal: Signal) -> SignalType | None:
-    """Map a runtime signal's modality to a stored stream type.
+    """Map a runtime signal's ``(modality, category)`` to a stored stream type.
 
-    Returns ``None`` for a modality the data model has no stream type for (for
-    example the default ``"unknown"``), so the caller can skip it instead of
-    failing.
+    Returns ``None`` when the pair does not identify a stream type - either an
+    untagged modality (the default ``"unknown"``), or a modality that needs a
+    category to be resolvable (``"ventilator"``) and doesn't have one. The
+    caller skips those with a warning instead of failing.
     """
 
-    if signal.modality == "eit":
-        return "eit_waveform"
-    if signal.modality == "emg":
+    modality = signal.modality
+    category = signal.category
+
+    # EMG's split is by processing stage, not by physical quantity: raw trace
+    # and envelope are both electrical potentials.
+    if modality == "emg":
         return "emg_envelope" if signal.processing_state == "processed" else "emg_raw"
-    if signal.modality in ("ventilator", "pressure"):
-        return "ventilator_pressure"
-    if signal.modality == "flow":
-        return "ventilator_flow"
-    return None
+
+    if category is not None:
+        signal_type = _SIGNAL_TYPE_BY_MODALITY_CATEGORY.get((modality, category))
+        if signal_type is not None:
+            return signal_type
+
+    return _SIGNAL_TYPE_BY_MODALITY.get(modality)
+
+
+def _output_provenance_entry(value: ParameterResult | Signal) -> dict[str, Any]:
+    """Build a JSON-safe provenance summary for one pipeline-output result,
+    for ``ProcessingRun.parameters["outputs"]``."""
+
+    entry: dict[str, Any] = {
+        "type": type(value).__name__,
+        "method": getattr(value, "method", None),
+        "modality": value.modality,
+        "unit": value.unit,
+        "metadata": _json_safe_parameters(value.metadata),
+    }
+    if isinstance(value, ParameterResult):
+        entry["is_scalar"] = value.is_scalar
+        entry["breath_id"] = value.breath_id
+        entry["channel"] = value.channel
+    else:
+        entry["channel"] = value.channel
+        entry["processing_state"] = value.processing_state
+    return entry
 
 
 def _json_safe_parameters(parameters: Mapping[str, Any]) -> dict[str, Any]:
@@ -401,6 +590,14 @@ def _scalar_value(value: float | np.ndarray) -> float | None:
 def _infer_file_format(path: Path | str) -> FileFormat | None:
     suffix = Path(path).suffix.lower()
     return _FILE_FORMAT_BY_SUFFIX.get(suffix)
+
+
+def _sha256_file(path: str | Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _parse_timestamp(value: str) -> float:

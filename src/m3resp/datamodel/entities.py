@@ -17,7 +17,7 @@ execution/async state without a schema break.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -28,7 +28,7 @@ from m3resp.datamodel.ids import new_id
 def _utc_now_ts() -> float:
     """Current time as a Unix timestamp (seconds since epoch, UTC)."""
 
-    return datetime.now(timezone.utc).timestamp()
+    return datetime.now(UTC).timestamp()
 
 
 class Entity(BaseModel):
