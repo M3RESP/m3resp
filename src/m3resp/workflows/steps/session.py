@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from m3resp.core.session import M3Session
-from m3resp.workflows.registry import register_step
+from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 
 
 @register_step(
@@ -18,6 +18,63 @@ from m3resp.workflows.registry import register_step
     reads={"session": "session"},
     writes=("sync_summary",),
     summary="Crop raw modality signals by a manual time offset before processing.",
+    description=(
+        "Direct cross-modality session operation: crops each loaded raw "
+        "modality signal so they share a common start time, using a fixed "
+        "manual offset per modality. Run before per-modality preprocessing."
+    ),
+    category="synchronization",
+    session_reads=("session.raw",),
+    session_writes=("session.raw", "session.parameters.raw_alignment"),
+    input_artifacts=(
+        StepArtifact(
+            name="session",
+            artifact_type="m3session",
+            default_context_key="session",
+            description="Backing M3Session whose raw modality signals are cropped in place.",
+            public=False,
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="method",
+            value_type="choice",
+            default="manual_offset",
+            choices=("manual_offset",),
+            description=(
+                "Synchronization method. Only 'manual_offset' is currently "
+                "supported; other values raise ValueError."
+            ),
+        ),
+        StepParameter(
+            name="offset_seconds",
+            value_type="number",
+            default=0.0,
+            unit="s",
+            description=(
+                "Offset applied to each modality, relative to "
+                "'reference_modality'. Also accepts a mapping of "
+                "{modality: offset_seconds} for per-modality offsets."
+            ),
+        ),
+        StepParameter(
+            name="reference_modality",
+            value_type="string",
+            required=False,
+            default=None,
+            description=(
+                "Modality whose offset is held at zero; others shift relative "
+                "to it. Defaults to the adapter's own resolution rule when unset."
+            ),
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="sync_summary",
+            artifact_type="sync_summary",
+            description="Per-modality applied offset and before/after trace summary.",
+        ),
+    ),
 )
 def sync_raw(
     session: M3Session,

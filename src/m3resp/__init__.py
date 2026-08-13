@@ -1,5 +1,6 @@
 """M3Resp public API."""
 
+from m3resp import io
 from m3resp.core.events import (
     BreathEvent,
     Event,
@@ -36,15 +37,6 @@ from m3resp.datamodel import (
     export_store,
     validate_store,
 )
-from m3resp import io
-from m3resp.workflows import (
-    PipelineResult,
-    available_steps,
-    load_spec,
-    register_step,
-    run_pipeline,
-    run_spec,
-)
 from m3resp.presets import (
     EITPipeline,
     EMGPipeline,
@@ -58,6 +50,14 @@ from m3resp.synchronization import (
     compute_offsets_from_timestamps,
     link_breaths_by_time,
     resample_signal,
+)
+from m3resp.workflows import (
+    PipelineResult,
+    available_steps,
+    load_spec,
+    register_step,
+    run_pipeline,
+    run_spec,
 )
 
 __version__ = "0.1.0"
