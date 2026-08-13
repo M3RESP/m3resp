@@ -2,36 +2,48 @@
 
 ## Plain-language overview
 
-There are three layers of "what produced this result," each heavier and
-more structured than the last:
+There are three records of "what produced this result," each heavier and
+more structured than the last. You do not choose between the first two:
+both are written for you, by different parts of the software, and you read
+whichever answers your question. The third you switch on when you need it.
 
-1. `ProvenanceRecord`, the lightest layer: one entry per `M3Session` method
-   call (action name, modality, parameters, timestamp), appended to
-   `session.provenance`.
+1. `ProvenanceRecord`, the lightest record: one entry per `M3Session`
+   method call (action name, modality, parameters, timestamp), appended to
+   `session.provenance`. Written whenever you call a session method,
+   including by hand, outside any pipeline. Read it to see what was asked
+   for.
 
 2. `ProcessingStep`/`ProcessingHistory`, a step up in detail. Instead of
    just "an action happened," it records exactly which `input_keys` and
    `output_keys` (the dictionary/context keys the step read from and wrote
    to) were touched, plus a `status` (`"succeeded"`, `"failed"`, or
-   `"cancelled"`). This is filled in automatically by the declarative
-   workflow engine (the system that runs pipelines described by YAML spec
-   files) whenever a step runs through it, without any step function
-   needing to remember to log anything itself. It does not replace
-   `ProvenanceRecord`, both exist side by side, tracking slightly
-   different things.
+   `"cancelled"`) and the installed version of each optional upstream
+   package (`resurfemg`, `eitprocessing`) the step depends on. This is
+   filled in automatically by the declarative workflow engine (the system
+   that runs pipelines described by YAML spec files) whenever a step runs
+   through it, without any step function needing to remember to log
+   anything itself. Read it to see what a pipeline actually did, and to
+   reproduce a step: the package versions are recorded nowhere else, and
+   the same operation with the same parameters can give a different answer
+   after an upstream upgrade. Only the engine writes this, so a session
+   method called by hand appears in `session.provenance` and not here.
 
-3. Layer 2, `m3resp.datamodel`, an opt-in (only active if explicitly
-   attached) heavier layer. If you set
-   `session.datamodel = DataModelRecorder(session)`, the session
-   additionally builds up a set of validated, database-style records
-   (`Case`, `RecordingSession`, `ProcessingRun`, `DerivedFeature`,
+3. `m3resp.datamodel`, an opt-in (only active if explicitly attached)
+   heavier layer - "Layer 2" in the architecture diagram, where "Layer 1"
+   is the runtime objects in `m3resp.data` (see
+   [../stage2.md](../stage2.md)); that numbering is unrelated to this
+   list. If you set `session.datamodel = DataModelRecorder(session)`, the
+   session additionally builds up a set of validated, database-style
+   records (`Case`, `RecordingSession`, `ProcessingRun`, `DerivedFeature`,
    `QualityAnnotation`, and more) inside a `DataModelStore`. This is meant
    for a proper audit trail (a complete, checkable record suitable for
    compliance/reproducibility purposes) and for a future GUI or backend
-   service to query. It is a different shape of bookkeeping than
-   `ProcessingHistory`: for example, there is exactly one `ProcessingRun`
-   record per full pipeline run, versus one `ProcessingStep` per individual
-   step inside that run.
+   service to query. Attach it when you intend to export a finished,
+   checkable dataset; the first two records stay in memory on the session
+   and are not validated. It is also a different shape of bookkeeping than
+   `ProcessingHistory`: a full pipeline run becomes one `ProcessingRun`,
+   and so does each individual session method call, versus one
+   `ProcessingStep` per step inside a pipeline.
 
 There is also a `validate_store(store, require_complete=True)` option that
 checks the deeper layer has all the descriptive detail a finished dataset
@@ -39,9 +51,6 @@ needs (units, sampling rates, file checksums); a store built while a
 session is still mid-run usually will not pass that check yet, since some
 of those details (like a file's checksum) only exist once the file is
 actually written to disk.
-
-Three complementary layers record "what produced this result," from
-lightest to heaviest.
 
 ## `ProvenanceRecord` (`m3resp.core.provenance`)
 
@@ -103,8 +112,9 @@ record a validated, queryable audit trail (`Case`, `RecordingSession`,
 architecture diagram (see [../developer/architecture.md](../developer/architecture.md)):
 a validated record of what happened, built for later consumption by an
 audit trail, export, or a future backend/GUI service layer - separate in
-cardinality from `session.processing_history` (one `ProcessingRun` per
-pipeline run, vs. one `ProcessingStep` per step).
+cardinality from `session.processing_history`: one `ProcessingRun` per
+pipeline run and one per session method call, vs. one `ProcessingStep` per
+step inside a pipeline.
 
 ```python
 from m3resp.datamodel.recorder import DataModelRecorder
