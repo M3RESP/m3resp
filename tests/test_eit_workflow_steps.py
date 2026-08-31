@@ -395,6 +395,42 @@ def test_pixel_tiv_step_preserves_shape_and_valid_breath_metadata():
     assert pixel_tiv_result.metadata["axes"] == ["breath", "row", "column"]
 
 
+def test_pixel_tiv_accepts_unfiltered_pixel_data():
+    """The input is any pixel signal; filtering is the default, not a demand."""
+
+    session = _session_with_fake_adapter()
+    raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float), label="raw")
+    sequence = _FakeSequence(raw)
+
+    result = pixel_tiv(raw, raw, sequence, breath_detector=object(), session=session)
+
+    assert result["pixel_tiv_result"].value.shape == (2, 2, 2)
+    definition = get_step("eit.pixel_tiv")
+    assert "eit_data" in definition.reads
+    assert "filtered_eit" not in definition.reads
+
+
+def test_pixel_breaths_accepts_the_empty_phase_correction_mode():
+    """`null` in a spec / `None` from Python is a real option, not a mistake."""
+
+    session = _session_with_fake_adapter()
+    raw = _FakeEITData(np.ones((3, 2, 2)), time=np.arange(3, dtype=float))
+    sequence = _FakeSequence(raw)
+
+    result = pixel_breaths(raw, raw, sequence, session, phase_correction_mode=None)
+
+    assert set(get_step("eit.pixel_breaths").writes) <= set(result)
+
+
+def test_pixel_breaths_rejects_an_unknown_phase_correction_mode():
+    session = _session_with_fake_adapter()
+    raw = _FakeEITData(np.ones((3, 2, 2)), time=np.arange(3, dtype=float))
+    sequence = _FakeSequence(raw)
+
+    with pytest.raises(ValueError, match="phase_correction_mode"):
+        pixel_breaths(raw, raw, sequence, session, phase_correction_mode="nope")
+
+
 def test_pixel_breaths_step_converts_object_array_to_landmark_array():
     session = _session_with_fake_adapter()
     raw = _FakeEITData(np.ones((3, 2, 2)), time=np.arange(3, dtype=float))

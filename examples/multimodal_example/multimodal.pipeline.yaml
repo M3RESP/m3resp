@@ -61,7 +61,7 @@ steps:
     in:  { signal: global_impedance }
 
   - uses: eit.pixel_tiv
-    in:  { signal: global_impedance, filtered_eit: filtered_eit }
+    in:  { signal: global_impedance, eit_data: filtered_eit }
 
   # EMG processing
   - uses: emg.preprocess

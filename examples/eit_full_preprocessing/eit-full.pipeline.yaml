@@ -102,7 +102,7 @@ steps:
 
   - id: pixel_tiv
     uses: eit.pixel_tiv
-    in:  { filtered_eit: filtered_eit, signal: global_impedance }
+    in:  { eit_data: filtered_eit, signal: global_impedance }
     with: { tiv_timing: continuous }
 
   - id: roi_tiv_lungspace
