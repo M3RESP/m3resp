@@ -326,7 +326,11 @@ def pixel_breaths(
     )
 
     landmarks = _pixel_breaths_to_landmark_array(result.values)
-    valid = ~np.isnan(landmarks[..., 0])
+    # A pixel breath counts as determined only when all three of its timings
+    # are present. Checking the start time alone would be enough for a breath
+    # this module built itself, which sets all three together or none, but it
+    # would silently pass a breath whose middle or end time came back missing.
+    valid = ~np.isnan(landmarks).any(axis=-1)
 
     metadata = _upstream_metadata(
         source_function=(

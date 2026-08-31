@@ -9,6 +9,7 @@ import numpy as np
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult
 from m3resp.workflows.registry import (
+    ANY_ARTIFACT_TYPE,
     StepArtifact,
     StepParameter,
     register_step,
@@ -383,9 +384,12 @@ def roi_watershed(
     input_artifacts=(
         StepArtifact(
             name="mask",
-            artifact_type="roi_mask",
-            description="Lung-space mask to filter, e.g. from 'eit.roi_watershed'.",
-            compatibility_only=True,
+            artifact_type=ANY_ARTIFACT_TYPE,
+            description=(
+                "Lung-space mask to filter. Either form works: the upstream "
+                "mask a mask step writes (e.g. 'watershed_lungspace_mask') or "
+                "its native counterpart (e.g. 'watershed_lungspace_result')."
+            ),
         ),
         _SESSION_ARTIFACT,
     ),

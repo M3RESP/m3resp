@@ -535,6 +535,59 @@ def test_roi_lungspace_steps_reject_out_of_range_threshold(bad_threshold):
         )
 
 
+def test_roi_filter_by_size_accepts_the_native_mask_result():
+    """Either form of a mask can be bound: upstream object or native result."""
+
+    pytest.importorskip("eitprocessing")
+    import numpy as np
+    from eitprocessing.roi import PixelMask
+
+    from m3resp.adapters import EITProcessingAdapter
+    from m3resp.data import ParameterResult
+
+    mask = np.full((4, 4), np.nan)
+    mask[1:3, 1:3] = 1.0
+    mask[0, 0] = 1.0
+
+    adapter = EITProcessingAdapter()
+    native = ParameterResult(
+        name="watershed_lungspace_mask", value=mask, modality="eit", method="test"
+    )
+
+    from_native = adapter.filter_roi_by_size(native, min_region_size=2)
+    from_upstream = adapter.filter_roi_by_size(PixelMask(mask), min_region_size=2)
+
+    np.testing.assert_array_equal(
+        np.nan_to_num(from_native.mask, nan=-1),
+        np.nan_to_num(from_upstream.mask, nan=-1),
+    )
+    assert np.isnan(from_native.mask[0, 0]), "isolated pixel should be dropped"
+
+
+def test_pixel_breath_needs_all_three_timings_to_count_as_valid():
+    """A breath missing its middle or end time is not a determined breath."""
+
+    import numpy as np
+
+    from m3resp.workflows.steps.eit.pixel import _pixel_breaths_to_landmark_array
+
+    class _PartialBreath:
+        start_time, middle_time, end_time = 0.0, float("nan"), 1.0
+
+    class _WholeBreath:
+        start_time, middle_time, end_time = 0.0, 0.5, 1.0
+
+    values = np.empty((1, 1, 2), dtype=object)
+    values[0, 0, 0] = _WholeBreath()
+    values[0, 0, 1] = _PartialBreath()
+
+    landmarks = _pixel_breaths_to_landmark_array(values)
+    valid = ~np.isnan(landmarks).any(axis=-1)
+
+    assert valid[0, 0, 0], "fully timed breath is valid"
+    assert not valid[0, 0, 1], "breath with a missing middle time is not valid"
+
+
 def test_roi_filter_by_size_rejects_non_positive_min_region_size():
     session = _session_with_fake_adapter()
     mask = _FakePixelMask(np.array([[1.0, np.nan], [np.nan, 1.0]]))

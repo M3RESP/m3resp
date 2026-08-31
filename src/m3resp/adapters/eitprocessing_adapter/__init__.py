@@ -320,7 +320,12 @@ class EITProcessingAdapter:
         min_region_size: int = 10,
         connectivity: Literal[1, 2] | np.ndarray = 1,
     ) -> Any:
-        """Keep only connected mask regions at or above `min_region_size`."""
+        """Keep only connected mask regions at or above `min_region_size`.
+
+        Accepts either an upstream `PixelMask` or the native array-valued
+        `ParameterResult` the mask steps produce, so a pipeline can bind
+        whichever form it has.
+        """
 
         (FilterROIBySize,) = _lazy_import(
             "eitprocessing.roi.filter_by_size.FilterROIBySize"
@@ -328,7 +333,29 @@ class EITProcessingAdapter:
 
         return FilterROIBySize(
             min_region_size=min_region_size, connectivity=connectivity
-        ).apply(mask)
+        ).apply(self.as_pixel_mask(mask))
+
+    def as_pixel_mask(self, mask: Any) -> Any:
+        """Return `mask` as an upstream `PixelMask`.
+
+        A `PixelMask` is passed through. A native `ParameterResult` holding a
+        2D mask is rebuilt into one: excluded pixels are NaN in both
+        representations, so nothing is reinterpreted on the way across.
+        """
+
+        if hasattr(mask, "mask"):
+            return mask
+
+        value = getattr(mask, "value", mask)
+        array = np.asarray(value, dtype=float)
+        if array.ndim != 2:
+            raise UnsupportedWorkflowError(
+                "An ROI mask must be a 2D (row, column) array of pixels; got "
+                f"shape {array.shape}."
+            )
+
+        (PixelMask,) = _lazy_import("eitprocessing.roi.PixelMask")
+        return PixelMask(array)
 
     def preprocess(
         self,
