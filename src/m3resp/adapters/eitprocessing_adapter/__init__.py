@@ -29,6 +29,7 @@ from ._shared import (
     _sparse_data_to_parameters,
     add_to_collection,
     continuous_data_to_signal,
+    filter_pixels_preserving_gaps,
 )
 
 __all__ = [
@@ -36,6 +37,7 @@ __all__ = [
     "_sparse_data_to_parameters",
     "add_to_collection",
     "continuous_data_to_signal",
+    "filter_pixels_preserving_gaps",
 ]
 
 
@@ -424,13 +426,18 @@ class EITProcessingAdapter:
                 if butterworth_filter_type == "lowpass"
                 else (highpass_hz, lowpass_hz)
             )
-            filtered_pixels = butterworth_filter(
-                np.nan_to_num(raw_eit.pixel_impedance),
-                filter_type=butterworth_filter_type,
-                cutoff_frequency=cutoff_frequency,
-                sample_frequency=raw_eit.sample_frequency,
-                order=filter_order,
-                axis=0,
+            filtered_pixels = filter_pixels_preserving_gaps(
+                raw_eit.pixel_impedance,
+                operation=f"preprocess(filter_mode={normalized_filter_mode!r})",
+                apply=lambda pixels: butterworth_filter(
+                    pixels,
+                    filter_type=butterworth_filter_type,
+                    cutoff_frequency=cutoff_frequency,
+                    sample_frequency=raw_eit.sample_frequency,
+                    order=filter_order,
+                    axis=0,
+                    captures=filter_captures,
+                ),
                 captures=filter_captures,
             )
             filtered_eit = copy.deepcopy(raw_eit)

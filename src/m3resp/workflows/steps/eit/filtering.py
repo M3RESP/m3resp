@@ -6,10 +6,9 @@ import copy
 import math
 from typing import Any, Literal, cast
 
-import numpy as np
-
 from m3resp.adapters.eitprocessing_adapter import (
     add_to_collection,
+    filter_pixels_preserving_gaps,
 )
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult, Signal
@@ -407,12 +406,18 @@ def butterworth_filter(
         lowpass_hz if mode == "lowpass" else (highpass_hz, lowpass_hz),
     )
     captures: dict[str, Any] = {}
-    filtered_pixels = ButterworthFilter(
+    butterworth = ButterworthFilter(
         filter_type=mode,
         cutoff_frequency=cutoff_frequency,
         order=order,
         sample_frequency=signal.sample_frequency,
-    ).apply(np.nan_to_num(signal.pixel_impedance), axis=0, captures=captures)
+    )
+    filtered_pixels = filter_pixels_preserving_gaps(
+        signal.pixel_impedance,
+        operation="eit.butterworth_filter",
+        apply=lambda pixels: butterworth.apply(pixels, axis=0, captures=captures),
+        captures=captures,
+    )
     filtered_eit = copy.deepcopy(signal)
     filtered_eit.label = label
     filtered_eit.name = f"{mode.title()}-filtered EIT data"
