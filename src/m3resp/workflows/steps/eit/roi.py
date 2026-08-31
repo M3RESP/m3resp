@@ -118,10 +118,10 @@ def _pixel_mask_to_parameter_result(
     ),
 )
 def roi_tiv_lungspace(
+    *,
     eit_data: Any,
     timing_data: Any,
     session: M3Session,
-    *,
     threshold: float = 0.15,
 ) -> dict[str, Any]:
     _validate_unit_threshold(threshold, step="eit.roi_tiv_lungspace", param="threshold")
@@ -226,10 +226,10 @@ def roi_tiv_lungspace(
     ),
 )
 def roi_amplitude_lungspace(
+    *,
     eit_data: Any,
     timing_data: Any,
     session: M3Session,
-    *,
     threshold: float = 0.15,
 ) -> dict[str, Any]:
     """Threshold mean pixel amplitude into a lung-space mask.
@@ -335,10 +335,10 @@ def roi_amplitude_lungspace(
     ),
 )
 def roi_watershed(
+    *,
     eit_data: Any,
     timing_data: Any,
     session: M3Session,
-    *,
     threshold_fraction: float = 0.15,
 ) -> dict[str, Any]:
     _validate_unit_threshold(
@@ -423,8 +423,8 @@ def roi_watershed(
 )
 def roi_filter_by_size(
     mask: Any,
-    session: M3Session,
     *,
+    session: M3Session,
     min_region_size: int = 10,
     connectivity: Literal[1, 2] = 1,
 ) -> dict[str, Any]:

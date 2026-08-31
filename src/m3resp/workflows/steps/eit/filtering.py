@@ -103,11 +103,11 @@ from ._shared import (
 )
 def mdn_filter(
     signal: Any,
+    *,
     respiratory_rate_hz: float,
     heart_rate_hz: float,
     eit_sequence: Any,
     session: M3Session,
-    *,
     label: str = "filtered",
 ) -> dict[str, Any]:
     result = session.eit_adapter.apply_mdn(
@@ -245,9 +245,9 @@ def mdn_filter(
 )
 def butterworth_filter(
     signal: Any,
+    *,
     eit_sequence: Any,
     session: M3Session,
-    *,
     mode: Literal["lowpass", "highpass", "bandpass", "bandstop"] = "lowpass",
     lowpass_hz: float = 1.0,
     highpass_hz: float = 0.05,

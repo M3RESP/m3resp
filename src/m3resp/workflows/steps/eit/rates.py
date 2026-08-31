@@ -118,8 +118,8 @@ from ._shared import (
 )
 def detect_rates(
     signal: Any,
-    session: M3Session,
     *,
+    session: M3Session,
     subject_type: Literal["adult", "neonate"] = "adult",
     welch_window_seconds: float | None = None,
     capture: bool = False,

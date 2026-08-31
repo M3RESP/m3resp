@@ -60,7 +60,11 @@ from ._shared import (
         ),
     ),
 )
-def global_impedance(signal: Any, eit_sequence: Any) -> dict[str, Any]:
+def global_impedance(
+    signal: Any,
+    *,
+    eit_sequence: Any,
+) -> dict[str, Any]:
     summed = signal.get_summed_impedance()
     add_to_collection(eit_sequence.continuous_data, summed)
     return {"global_impedance": summed}
@@ -142,7 +146,11 @@ def detect_breaths(signal: Any, *, min_duration_s: float = 2 / 3) -> dict[str, A
         _SESSION_ARTIFACT,
     ),
 )
-def normalize_breaths(breath_intervals: Any, session: M3Session) -> dict[str, Any]:
+def normalize_breaths(
+    breath_intervals: Any,
+    *,
+    session: M3Session,
+) -> dict[str, Any]:
     events = session.eit_adapter.detect_breaths({"breath_intervals": breath_intervals})
     session.add_events("eit_breaths", events)
     return {}
@@ -195,7 +203,10 @@ def normalize_breaths(breath_intervals: Any, session: M3Session) -> dict[str, An
     ),
 )
 def continuous_tiv(
-    signal: Any, eit_sequence: Any, breath_detector: Any
+    signal: Any,
+    *,
+    eit_sequence: Any,
+    breath_detector: Any,
 ) -> dict[str, Any]:
     from eitprocessing.parameters.tidal_impedance_variation import TIV
 
@@ -294,10 +305,10 @@ def _sparse_data_to_array_parameter(
 )
 def eeli(
     signal: Any,
+    *,
     eit_sequence: Any,
     breath_detector: Any,
     session: M3Session,
-    *,
     result_label: str = "continuous_eelis",
 ) -> dict[str, Any]:
     result = session.eit_adapter.compute_eeli(

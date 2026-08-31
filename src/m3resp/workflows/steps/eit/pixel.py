@@ -87,7 +87,12 @@ def _object_array_to_float(values: Any) -> np.ndarray:
             value_type="choice",
             default="continuous",
             choices=("pixel", "continuous"),
-            description="Whether breath timing is taken per-pixel or from the continuous (global) signal.",
+            description=(
+                "Whether breath timing is taken per-pixel, or from the "
+                "continuous waveform bound to 'signal'. That waveform is the "
+                "global impedance by default, but it can be a regional or "
+                "functional one instead."
+            ),
         ),
         StepParameter(
             name="result_label",
@@ -113,12 +118,12 @@ def _object_array_to_float(values: Any) -> np.ndarray:
     ),
 )
 def pixel_tiv(
+    *,
     eit_data: Any,
     signal: Any,
     eit_sequence: Any,
     breath_detector: Any,
     session: M3Session,
-    *,
     tiv_timing: Literal["pixel", "continuous"] = "continuous",
     result_label: str = "pixel_tivs",
 ) -> dict[str, Any]:
@@ -194,18 +199,16 @@ def _pixel_breaths_to_landmark_array(values: Any) -> np.ndarray:
     become NaN."""
 
     array = np.asarray(values, dtype=object)
-    n_breaths, n_rows, n_cols = array.shape
-    landmarks = np.full((n_breaths, n_rows, n_cols, 3), np.nan, dtype=float)
-    for breath_index in range(n_breaths):
-        for row in range(n_rows):
-            for col in range(n_cols):
-                breath = array[breath_index, row, col]
-                if breath is not None:
-                    landmarks[breath_index, row, col] = (
-                        breath.start_time,
-                        breath.middle_time,
-                        breath.end_time,
-                    )
+    landmarks = np.full((*array.shape, 3), np.nan, dtype=float)
+    for breath_index, row, col in np.ndindex(array.shape):
+        # Object-dtype element, so a `Breath | None`, not an array.
+        breath: Any = array[breath_index, row, col]
+        if breath is not None:
+            landmarks[breath_index, row, col] = (
+                breath.start_time,
+                breath.middle_time,
+                breath.end_time,
+            )
     return landmarks
 
 
@@ -294,11 +297,11 @@ def _pixel_breaths_to_landmark_array(values: Any) -> np.ndarray:
     ),
 )
 def pixel_breaths(
+    *,
     eit_data: Any,
     timing_data: Any,
     eit_sequence: Any,
     session: M3Session,
-    *,
     phase_correction_mode: PhaseCorrectionMode = "negative amplitude",
     minimum_duration_seconds: float = 2 / 3,
     result_label: str = "pixel_breaths",

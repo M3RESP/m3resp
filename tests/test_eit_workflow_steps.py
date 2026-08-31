@@ -287,7 +287,7 @@ def test_detect_rates_step_works_without_eitprocessing_and_matches_declared_writ
     session = _session_with_fake_adapter()
     raw = _FakeEITData(np.ones((4, 1, 1)), time=np.arange(4, dtype=float))
 
-    result = detect_rates(raw, session, subject_type="adult")
+    result = detect_rates(raw, session=session, subject_type="adult")
 
     assert set(get_step("eit.detect_rates").writes) <= set(result)
     assert result["respiratory_rate_hz"] == pytest.approx(0.3)
@@ -315,7 +315,7 @@ def test_detect_rates_rejects_non_positive_rate(rate_name, rate):
     raw = _FakeEITData(np.ones((4, 1, 1)), time=np.arange(4, dtype=float))
 
     with pytest.raises(ValueError, match="non-finite/non-positive"):
-        detect_rates(raw, session)
+        detect_rates(raw, session=session)
 
 
 def test_mdn_filter_step_works_without_eitprocessing_and_matches_declared_writes():
@@ -323,7 +323,14 @@ def test_mdn_filter_step_works_without_eitprocessing_and_matches_declared_writes
     raw = _FakeEITData(np.ones((4, 2, 2)), time=np.arange(4, dtype=float))
     sequence = _FakeSequence(raw)
 
-    result = mdn_filter(raw, 0.3, 1.2, sequence, session, label="mdn_filtered")
+    result = mdn_filter(
+        raw,
+        respiratory_rate_hz=0.3,
+        heart_rate_hz=1.2,
+        eit_sequence=sequence,
+        session=session,
+        label="mdn_filtered",
+    )
 
     assert set(get_step("eit.mdn_filter").writes) <= set(result)
     assert result["filtered_eit_signal"].channel == "pixel_impedance"
@@ -339,7 +346,12 @@ def test_butterworth_filter_step_supports_every_mode_and_matches_declared_writes
     sequence = _FakeSequence(raw)
 
     result = butterworth_filter(
-        raw, sequence, session, mode=mode, lowpass_hz=1.0, highpass_hz=0.05
+        raw,
+        eit_sequence=sequence,
+        session=session,
+        mode=mode,
+        lowpass_hz=1.0,
+        highpass_hz=0.05,
     )
 
     assert set(get_step("eit.butterworth_filter").writes) <= set(result)
@@ -358,9 +370,11 @@ def test_butterworth_filter_step_accepts_an_already_filtered_signal():
     raw.sample_frequency = 20.0
     sequence = _FakeSequence(raw)
 
-    once = butterworth_filter(raw, sequence, session, label="pass_one")
+    once = butterworth_filter(
+        raw, eit_sequence=sequence, session=session, label="pass_one"
+    )
     twice = butterworth_filter(
-        once["filtered_eit"], sequence, session, label="pass_two"
+        once["filtered_eit"], eit_sequence=sequence, session=session, label="pass_two"
     )
 
     assert twice["filtered_eit"].label == "pass_two"
@@ -372,7 +386,7 @@ def test_eeli_step_produces_single_array_parameter_result():
     raw = _FakeEITData(np.ones((3, 1, 1)), time=np.arange(3, dtype=float))
     sequence = _FakeSequence(raw)
 
-    result = eeli(raw, sequence, breath_detector=object(), session=session)
+    result = eeli(raw, eit_sequence=sequence, breath_detector=object(), session=session)
 
     assert set(get_step("eit.eeli").writes) <= set(result)
     eeli_result = result["eeli_result"]
@@ -386,7 +400,13 @@ def test_pixel_tiv_step_preserves_shape_and_valid_breath_metadata():
     raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float))
     sequence = _FakeSequence(raw)
 
-    result = pixel_tiv(raw, raw, sequence, breath_detector=object(), session=session)
+    result = pixel_tiv(
+        eit_data=raw,
+        signal=raw,
+        eit_sequence=sequence,
+        breath_detector=object(),
+        session=session,
+    )
 
     assert set(get_step("eit.pixel_tiv").writes) <= set(result)
     pixel_tiv_result = result["pixel_tiv_result"]
@@ -402,7 +422,13 @@ def test_pixel_tiv_accepts_unfiltered_pixel_data():
     raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float), label="raw")
     sequence = _FakeSequence(raw)
 
-    result = pixel_tiv(raw, raw, sequence, breath_detector=object(), session=session)
+    result = pixel_tiv(
+        eit_data=raw,
+        signal=raw,
+        eit_sequence=sequence,
+        breath_detector=object(),
+        session=session,
+    )
 
     assert result["pixel_tiv_result"].value.shape == (2, 2, 2)
     definition = get_step("eit.pixel_tiv")
@@ -417,7 +443,13 @@ def test_pixel_breaths_accepts_the_empty_phase_correction_mode():
     raw = _FakeEITData(np.ones((3, 2, 2)), time=np.arange(3, dtype=float))
     sequence = _FakeSequence(raw)
 
-    result = pixel_breaths(raw, raw, sequence, session, phase_correction_mode=None)
+    result = pixel_breaths(
+        eit_data=raw,
+        timing_data=raw,
+        eit_sequence=sequence,
+        session=session,
+        phase_correction_mode=None,
+    )
 
     assert set(get_step("eit.pixel_breaths").writes) <= set(result)
 
@@ -428,7 +460,13 @@ def test_pixel_breaths_rejects_an_unknown_phase_correction_mode():
     sequence = _FakeSequence(raw)
 
     with pytest.raises(ValueError, match="phase_correction_mode"):
-        pixel_breaths(raw, raw, sequence, session, phase_correction_mode="nope")
+        pixel_breaths(
+            eit_data=raw,
+            timing_data=raw,
+            eit_sequence=sequence,
+            session=session,
+            phase_correction_mode="nope",
+        )
 
 
 def test_pixel_breaths_step_converts_object_array_to_landmark_array():
@@ -436,7 +474,9 @@ def test_pixel_breaths_step_converts_object_array_to_landmark_array():
     raw = _FakeEITData(np.ones((3, 2, 2)), time=np.arange(3, dtype=float))
     sequence = _FakeSequence(raw)
 
-    result = pixel_breaths(raw, raw, sequence, session)
+    result = pixel_breaths(
+        eit_data=raw, timing_data=raw, eit_sequence=sequence, session=session
+    )
 
     assert set(get_step("eit.pixel_breaths").writes) <= set(result)
     value = result["pixel_breath_timing_result"].value
@@ -451,7 +491,13 @@ def test_pixel_breaths_rejects_unknown_phase_correction_mode():
     sequence = _FakeSequence(raw)
 
     with pytest.raises(ValueError):
-        pixel_breaths(raw, raw, sequence, session, phase_correction_mode="sideways")
+        pixel_breaths(
+            eit_data=raw,
+            timing_data=raw,
+            eit_sequence=sequence,
+            session=session,
+            phase_correction_mode="sideways",
+        )
 
 
 @pytest.mark.parametrize(
@@ -471,7 +517,7 @@ def test_roi_lungspace_steps_preserve_nan_as_excluded_pixels(step_func, step_nam
         if step_func is roi_watershed
         else {"threshold": 0.15}
     )
-    result = step_func(raw, raw, session, **kwargs)
+    result = step_func(eit_data=raw, timing_data=raw, session=session, **kwargs)
 
     assert set(get_step(step_name).writes) <= set(result)
     mask_key = next(k for k in result if k.endswith("_mask"))
@@ -484,7 +530,9 @@ def test_roi_lungspace_steps_reject_out_of_range_threshold(bad_threshold):
     raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float))
 
     with pytest.raises(ValueError):
-        roi_tiv_lungspace(raw, raw, session, threshold=bad_threshold)
+        roi_tiv_lungspace(
+            eit_data=raw, timing_data=raw, session=session, threshold=bad_threshold
+        )
 
 
 def test_roi_filter_by_size_rejects_non_positive_min_region_size():
@@ -492,14 +540,14 @@ def test_roi_filter_by_size_rejects_non_positive_min_region_size():
     mask = _FakePixelMask(np.array([[1.0, np.nan], [np.nan, 1.0]]))
 
     with pytest.raises(ValueError):
-        roi_filter_by_size(mask, session, min_region_size=0)
+        roi_filter_by_size(mask, session=session, min_region_size=0)
 
 
 def test_roi_filter_by_size_step_matches_declared_writes():
     session = _session_with_fake_adapter()
     mask = _FakePixelMask(np.array([[1.0, np.nan], [np.nan, 1.0]]))
 
-    result = roi_filter_by_size(mask, session, min_region_size=1)
+    result = roi_filter_by_size(mask, session=session, min_region_size=1)
 
     assert set(get_step("eit.roi_filter_by_size").writes) <= set(result)
 
