@@ -29,8 +29,8 @@ from m3resp.workflows.registry import register_step
     writes=(),
     summary="Load an EMG recording into the session.",
 )
-def load(session: M3Session, *, file: str) -> dict[str, Any]:
-    session.load_emg(file, verbose=False)
+def load(session: M3Session, *, file_path: str) -> dict[str, Any]:
+    session.load_emg(file_path, verbose=False)
     return {}
 
 
@@ -40,8 +40,8 @@ def load(session: M3Session, *, file: str) -> dict[str, Any]:
     writes=("ventilator_raw",),
     summary="Load a ventilator recording into the session.",
 )
-def load_ventilator(session: M3Session, *, file: str) -> dict[str, Any]:
-    recording = session.emg_adapter.load(str(file), verbose=False)
+def load_ventilator(session: M3Session, *, file_path: str) -> dict[str, Any]:
+    recording = session.emg_adapter.load(str(file_path), verbose=False)
     # Stored on the session too so `session.sync_raw` (which crops
     # `session.raw["vent"]` in place) keeps this same dict object in sync.
     session.raw["vent"] = recording

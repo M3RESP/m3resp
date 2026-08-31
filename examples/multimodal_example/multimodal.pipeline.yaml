@@ -21,13 +21,13 @@ inputs:
 steps:
   # Load
   - uses: eit.load
-    with: { file: "@eit_file", vendor: draeger }
+    with: { file_path: "@eit_file", vendor: draeger }
 
   - uses: emg.load
-    with: { file: "@emg_file" }
+    with: { file_path: "@emg_file" }
 
   - uses: emg.load_ventilator
-    with: { file: "@vent_file" }
+    with: { file_path: "@vent_file" }
 
   # Synchronize raw signals before processing
   - uses: session.sync_raw
