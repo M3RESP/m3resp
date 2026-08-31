@@ -1,4 +1,4 @@
-# Full EIT preprocessing pipeline (Stage 2 EIT gap migration, Phase 6).
+# Full EIT preprocessing pipeline.
 #
 # Exercises every EIT operation the gap migration closed onto
 # `EITProcessingAdapter`: loading, rate detection, MDN filtering, global
@@ -11,7 +11,7 @@
 # `inputs.eit_file` below) resolve relative to this spec file's own
 # directory, same as `outputs.dir`, not the process working directory.
 #
-# `schema_version: 1` (Stage 2 pipeline-structure Phase 2/9) enables strict
+# `schema_version: 1` enables strict
 # parsing: unknown keys and non-boolean flags are hard errors instead of a
 # permissive/deprecated coercion. Every step below has an explicit `id:` so
 # GUI/provenance references to a specific step survive reordering.
@@ -19,6 +19,21 @@
 #   experiment:  study metadata; unused here (no export.rotarc_result step)
 #   outputs:     where to write results and which artifacts to produce
 #   inputs:      data paths (referenced in steps with @name)
+#
+# Reading the wiring: the names under `in:` are outputs earlier steps
+# produced, never free-form labels. Every step below states which signal it
+# works on, so the flow can be traced top to bottom without consulting the
+# source. The two that matter are:
+#
+#   raw_eit          pixel impedance as loaded, before any filtering
+#   filtered_eit     the same pixel impedance after eit.mdn_filter
+#   global_impedance the summed impedance derived from filtered_eit
+#
+# Internal plumbing (the recording container, and the breath detector reused
+# between steps) is bound automatically and left out to keep the wiring
+# readable. To see everything a step reads and writes, including that
+# plumbing, run `m3resp describe <operation>` (e.g. `m3resp describe
+# eit.mdn_filter`), or `m3resp steps --details` for all of them at once.
 
 schema_version: 1
 name: eit-full-preprocessing
@@ -40,17 +55,21 @@ inputs:
 steps:
   - id: load
     uses: eit.load
-    with: { file: "@eit_file", vendor: "@vendor" }
+    with: { file_path: "@eit_file", vendor: "@vendor" }
 
   - id: detect_rates
     uses: eit.detect_rates
     in:  { signal: raw_eit }
     with: { subject_type: adult, capture: true }
 
+  # Removes the cardiac component from the raw pixel impedance, using the
+  # two rates found above. Writes `filtered_eit`, which most steps below
+  # read. (This step also takes an optional `label:`, which only names the
+  # filtered data inside the recording - it is not a pipeline name and
+  # nothing reads it, so it is left at its default here.)
   - id: mdn_filter
     uses: eit.mdn_filter
     in:  { signal: raw_eit }
-    with: { label: mdn_filtered }
 
   - id: global_impedance
     uses: eit.global_impedance
@@ -63,26 +82,32 @@ steps:
 
   - id: normalize_breaths
     uses: eit.normalize_breaths
+    in:  { breath_intervals: breath_intervals }
 
   - id: continuous_tiv
     uses: eit.continuous_tiv
+    in:  { signal: global_impedance }
 
   - id: eeli
     uses: eit.eeli
+    in:  { signal: global_impedance }
 
   # Pixel-breath timing (per-pixel start/middle/end of in-/deflation);
   # NaN marks the always-unavailable first/last global breath and any
   # pixel whose breath couldn't be determined.
   - id: pixel_breaths
     uses: eit.pixel_breaths
+    in:  { eit_data: filtered_eit, timing_data: global_impedance }
     with: { phase_correction_mode: "negative amplitude" }
 
   - id: pixel_tiv
     uses: eit.pixel_tiv
+    in:  { filtered_eit: filtered_eit, signal: global_impedance }
     with: { tiv_timing: continuous }
 
   - id: roi_tiv_lungspace
     uses: eit.roi_tiv_lungspace
+    in:  { eit_data: filtered_eit, timing_data: global_impedance }
     with: { threshold: 0.15 }
 
   # Standalone step, included only to exercise the operation - its output is
@@ -93,6 +118,7 @@ steps:
   # as a general-purpose functional lung-space definition.
   - id: roi_amplitude_lungspace
     uses: eit.roi_amplitude_lungspace
+    in:  { eit_data: filtered_eit, timing_data: global_impedance }
     with: { threshold: 0.15 }
 
   # Self-contained - internally derives its own TIV and amplitude lung-space
@@ -100,6 +126,7 @@ steps:
   # roi_tiv_lungspace or roi_amplitude_lungspace steps above.
   - id: roi_watershed
     uses: eit.roi_watershed
+    in:  { eit_data: filtered_eit, timing_data: global_impedance }
     with: { threshold_fraction: 0.15 }
 
   # Bound explicitly to the watershed mask rather than relying on an
