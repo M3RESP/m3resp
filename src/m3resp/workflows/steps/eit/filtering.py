@@ -137,6 +137,14 @@ def detect_rates(
         ("respiratory_rate_hz", respiratory_rate_hz),
         ("heart_rate_hz", heart_rate_hz),
     ):
+        # Checked against whichever rate detector `session.eit_adapter` wraps,
+        # not just eitprocessing's. With eitprocessing's own detector only the
+        # NaN case can occur - the rate is drawn from the search band and its
+        # parabolic refinement shifts it by less than half a frequency bin, so
+        # it cannot come back zero or negative, but a frequency bin in which no
+        # pixel was measured leaves NaN in the averaged pixel power spectrum
+        # and the refinement carries that through. A substituted or custom
+        # detector is under no such constraint, so both cases are rejected.
         if not math.isfinite(value) or value <= 0:
             raise ValueError(
                 f"eit.detect_rates produced a non-finite/non-positive {name}: "
