@@ -13,9 +13,10 @@ import <name>`` keeps working unchanged.
 
 from __future__ import annotations
 
-from .filtering import butterworth_filter, detect_rates, mdn_filter
-from .loading import load, slice_signal
+from .filtering import butterworth_filter, mdn_filter
+from .loading import load
 from .pixel import _ALLOWED_PIXEL_BREATH_PHASE_MODES, pixel_breaths, pixel_tiv
+from .rates import detect_rates
 from .roi import (
     roi_amplitude_lungspace,
     roi_filter_by_size,
@@ -29,6 +30,7 @@ from .signals import (
     global_impedance,
     normalize_breaths,
 )
+from .slicing import slice_signal
 
 __all__ = [
     "_ALLOWED_PIXEL_BREATH_PHASE_MODES",

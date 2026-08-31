@@ -6,7 +6,7 @@ import json
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from loguru import logger
 
@@ -56,7 +56,7 @@ def slice_signal_by_mode(
     *,
     start: float,
     end: float,
-    slicing_mode: str,
+    slicing_mode: Literal["index", "time"],
 ) -> Any:
     """Slice a signal by sample index or time selector."""
 
