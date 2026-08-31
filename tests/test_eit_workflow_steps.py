@@ -25,6 +25,7 @@ from m3resp.workflows import available_steps, run_pipeline
 from m3resp.workflows.registry import get_step
 from m3resp.workflows.spec import load_spec
 from m3resp.workflows.steps.eit import (
+    butterworth_filter,
     detect_rates,
     eeli,
     load,
@@ -133,6 +134,7 @@ class _FakeAdapter:
         self._sequence: _FakeSequence | None = None
 
     def load(self, path: str, vendor: str | None = None, **kwargs: Any) -> Any:
+        self.load_kwargs = dict(kwargs)
         pixel_impedance = np.ones((6, 2, 2))
         raw = _FakeEITData(pixel_impedance, time=np.arange(6, dtype=float))
         self._sequence = _FakeSequence(raw)
@@ -228,11 +230,57 @@ def _session_with_fake_adapter() -> M3Session:
 def test_load_step_works_without_eitprocessing_and_matches_declared_writes():
     session = _session_with_fake_adapter()
 
-    result = load(session, file="fake.bin", vendor="draeger")
+    result = load(session, file_path="fake.bin", vendor="draeger")
 
     assert set(get_step("eit.load").writes) <= set(result)
     assert result["raw_global_impedance_signal"].modality == "eit"
     assert session.signals.for_modality("eit")
+
+
+def test_load_step_forwards_the_declared_reading_parameters():
+    """sample_frequency/first_frame/max_frames are real parameters, not bag keys."""
+
+    session = _session_with_fake_adapter()
+
+    load(
+        session,
+        file_path="fake.bin",
+        vendor="draeger",
+        sample_frequency=20.0,
+        first_frame=5,
+        max_frames=100,
+    )
+
+    forwarded = session.eit_adapter.load_kwargs
+    assert forwarded["sample_frequency"] == 20.0
+    assert forwarded["first_frame"] == 5
+    assert forwarded["max_frames"] == 100
+
+
+def test_load_step_omits_unset_reading_parameters():
+    """Unset means 'let the vendor loader decide', not 'pass None'."""
+
+    session = _session_with_fake_adapter()
+
+    load(session, file_path="fake.bin", vendor="draeger")
+
+    forwarded = session.eit_adapter.load_kwargs
+    assert "sample_frequency" not in forwarded
+    assert "max_frames" not in forwarded
+    assert forwarded["first_frame"] == 0
+
+
+def test_load_step_rejects_reading_parameters_hidden_in_loader_options():
+    session = _session_with_fake_adapter()
+
+    with pytest.raises(ValueError, match="must be set directly"):
+        load(
+            session,
+            file_path="fake.bin",
+            vendor="draeger",
+            first_frame=0,
+            loader_options={"first_frame": 99},
+        )
 
 
 def test_detect_rates_step_works_without_eitprocessing_and_matches_declared_writes():
@@ -280,6 +328,43 @@ def test_mdn_filter_step_works_without_eitprocessing_and_matches_declared_writes
     assert set(get_step("eit.mdn_filter").writes) <= set(result)
     assert result["filtered_eit_signal"].channel == "pixel_impedance"
     assert sequence.eit_data["filtered"] is result["filtered_eit"]
+
+
+@pytest.mark.parametrize("mode", ["lowpass", "highpass", "bandpass", "bandstop"])
+def test_butterworth_filter_step_supports_every_mode_and_matches_declared_writes(mode):
+    pytest.importorskip("eitprocessing")
+    session = _session_with_fake_adapter()
+    raw = _FakeEITData(np.ones((40, 2, 2)), time=np.arange(40, dtype=float))
+    raw.sample_frequency = 20.0
+    sequence = _FakeSequence(raw)
+
+    result = butterworth_filter(
+        raw, sequence, session, mode=mode, lowpass_hz=1.0, highpass_hz=0.05
+    )
+
+    assert set(get_step("eit.butterworth_filter").writes) <= set(result)
+    # Same native signal and session bookkeeping the MDN filter produces.
+    assert result["filtered_eit_signal"].channel == "pixel_impedance"
+    assert session.signals.for_modality("eit")
+    assert sequence.eit_data["filtered"] is result["filtered_eit"]
+
+
+def test_butterworth_filter_step_accepts_an_already_filtered_signal():
+    """The signal to filter is bound explicitly, not pinned to raw_eit."""
+
+    pytest.importorskip("eitprocessing")
+    session = _session_with_fake_adapter()
+    raw = _FakeEITData(np.ones((40, 2, 2)), time=np.arange(40, dtype=float))
+    raw.sample_frequency = 20.0
+    sequence = _FakeSequence(raw)
+
+    once = butterworth_filter(raw, sequence, session, label="pass_one")
+    twice = butterworth_filter(
+        once["filtered_eit"], sequence, session, label="pass_two"
+    )
+
+    assert twice["filtered_eit"].label == "pass_two"
+    assert get_step("eit.butterworth_filter").reads["signal"] is None
 
 
 def test_eeli_step_produces_single_array_parameter_result():
@@ -390,7 +475,7 @@ def test_validation_rejects_mdn_filter_without_explicit_signal_binding():
     spec = {
         "name": "bad-spec",
         "steps": [
-            {"uses": "eit.load", "with": {"file": "x.bin", "vendor": "draeger"}},
+            {"uses": "eit.load", "with": {"file_path": "x.bin", "vendor": "draeger"}},
             {
                 "uses": "eit.mdn_filter",
                 # 'signal' has no default binding and is not bound here.
@@ -408,7 +493,7 @@ def test_validation_rejects_duplicate_context_writes():
     spec = {
         "name": "bad-spec",
         "steps": [
-            {"uses": "eit.load", "with": {"file": "x.bin", "vendor": "draeger"}},
+            {"uses": "eit.load", "with": {"file_path": "x.bin", "vendor": "draeger"}},
             {
                 "uses": "eit.mdn_filter",
                 "in": {"signal": "raw_eit"},
