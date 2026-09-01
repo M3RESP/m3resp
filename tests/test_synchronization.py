@@ -52,6 +52,17 @@ class TestResampleSignal:
         with pytest.raises(ValueError):
             resample_signal(signal, 0.0)
 
+    def test_warns_when_the_signal_spans_no_time(self):
+        # One sample: first and last timestamp coincide, so there is no span
+        # to interpolate across.
+        signal = Signal(values=[3.0], time=[7.0], modality="eit", sample_frequency=1.0)
+
+        with pytest.warns(UserWarning, match="spans no time"):
+            resampled = resample_signal(signal, 10.0)
+
+        np.testing.assert_allclose(resampled.values, [3.0])
+        assert resampled.sample_frequency == 10.0
+
     def test_handles_empty_signal(self):
         signal = Signal(values=[], time=[], modality="eit")
 
