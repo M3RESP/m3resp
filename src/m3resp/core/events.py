@@ -103,7 +103,7 @@ def coerce_event(
 
     if isinstance(value, Mapping):
         kwargs: dict[str, Any] = {}
-        if "id" in value:
+        if value.get("id") is not None:
             kwargs["id"] = str(value["id"])
         return Event(
             name=_required_str(value.get("name", name), "name"),
@@ -114,7 +114,7 @@ def coerce_event(
             sample_frequency=value.get("sample_frequency"),
             label=value.get("label", label),
             confidence=value.get("confidence"),
-            metadata=dict(value.get("metadata", {})),
+            metadata=dict(value.get("metadata") or {}),
             **kwargs,
         )
 
@@ -129,7 +129,7 @@ def coerce_event(
             time=float(value.time),
             sample_index=getattr(value, "sample_index", None),
             signal_name=getattr(value, "signal_name", None),
-            sample_frequency=getattr(value, "sample_frequency", None),
+            sample_frequency=_optional_float(getattr(value, "sample_frequency", None)),
             label=getattr(value, "label", label),
             confidence=getattr(value, "confidence", None),
             metadata=dict(getattr(value, "metadata", {}) or {}),
@@ -165,13 +165,16 @@ def coerce_breath_event(
 
     if isinstance(value, Mapping):
         kwargs: dict[str, Any] = {}
-        if "id" in value:
+        if value.get("id") is not None:
             kwargs["id"] = str(value["id"])
+        peak_time = value.get("peak_time")
+        if peak_time is None:
+            peak_time = value.get("middle_time")
         return BreathEvent(
             modality=_required_str(value.get("modality", modality), "modality"),
             start_time=float(value["start_time"]),
             end_time=float(value["end_time"]),
-            peak_time=_optional_float(value.get("peak_time")),
+            peak_time=_optional_float(peak_time),
             start_index=value.get("start_index"),
             peak_index=value.get("peak_index"),
             end_index=value.get("end_index"),
@@ -179,7 +182,7 @@ def coerce_breath_event(
             signal_name=value.get("signal_name"),
             source=value.get("source", source),
             confidence=value.get("confidence"),
-            metadata=dict(value.get("metadata", {})),
+            metadata=dict(value.get("metadata") or {}),
             **kwargs,
         )
 
