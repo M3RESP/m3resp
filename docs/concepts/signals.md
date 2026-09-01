@@ -21,7 +21,8 @@ holds a fixed set of fields):
 number per moment in time, like total lung impedance), 2D (one number per
 moment per channel, like one column per electrode), or higher-dimensional
 (an EIT frame is a 2D image at every moment in time, so it is 3D overall:
-time by rows by columns).
+time by rows by columns). Whatever the shape, the first axis is time: its
+length must match the length of the `time` axis.
 
 `Signal` builds on top of `TimeSeries` (in Python this is called
 subclassing: `Signal` gets everything `TimeSeries` has, plus extra fields)
