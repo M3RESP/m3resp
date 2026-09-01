@@ -77,12 +77,22 @@ def _sequence_channel_specs(
 def available_ventilator_channels(sequence: Any) -> dict[str, str]:
     """Map each resolvable channel key to the upstream label carrying it.
 
-    Useful on its own to see what a given ``*.bin`` actually contains before
-    asking for it: a Draeger file recorded without a pressure pod exposes only
-    ``pressure``/``flow``/``volume``, and one recorded without Medibus
-    connected may expose none. A file carrying both the ventilator's airway
-    pressure and a pod's reports them as two keys (``pressure`` and
-    ``pressure__pod``) rather than dropping one.
+    Useful on its own to see which keys a given recording resolves to before
+    asking for them. A file carrying both the ventilator's airway pressure and
+    a pod's reports them as two keys (``pressure`` and ``pressure__pod``)
+    rather than dropping one.
+
+    A listed channel is not a measured channel. A Draeger recording exposes its
+    channels whether or not the corresponding sensor was connected: an
+    unmeasured one is written as a large negative sentinel standing in for NaN,
+    not omitted. So a pod pressure appears here even when no pod was attached,
+    and the values have to be checked before they are used. m3resp does not yet
+    convert that sentinel to NaN.
+
+    Which channels a ``*.bin`` holds cannot be read from the file itself. Two
+    Draeger layouts are known (SW1.2 and SW1.3) and they can only be told apart
+    by inferring the frame size from the file size, or by reading an
+    accompanying ``*.asc`` file if one was saved.
     """
 
     specs, _, _ = _sequence_channel_specs(sequence)
