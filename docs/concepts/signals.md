@@ -30,7 +30,15 @@ by adding:
 - `modality`, which **device or technique** recorded this (`"eit"`, `"emg"`,
   `"ventilator"`, or any custom string).
 - `category`, what the numbers **physically are** (`"impedance"`,
-  `"airway_pressure"`, `"airflow"`, `"volume"`, ...).
+  `"airway_pressure"`, `"airflow"`, `"volume"`, ...). This is different from
+  `channel`: `category` groups signals by physical quantity regardless of
+  which device produced them, while `channel` tells apart individual
+  channels from the same device. This matters most when two different
+  devices measure the same quantity - for example, both a standalone
+  pressure monitor and a ventilator can report airway pressure. Both signals
+  get `category="airway_pressure"` (so a query like "give me all airway
+  pressure signals" finds both), but different `channel`/`source` values (so
+  you can still tell which one came from which device).
 - `processing_state`, where this signal sits in its journey from raw to
   usable: `"raw"` means straight off the device, untouched; `"intermediate"`
   means some pre-processing step has run (not necessarily filtering - e.g.
@@ -116,6 +124,16 @@ had to be tagged either `"ventilator"` (losing which quantity it was) or
 always kept the two apart - `Device.device_type` and `SignalStream.signal_type`
 - so a single Layer 1 string had to be split heuristically on the way in, and
 `"ventilator_volume"` was unreachable in practice.
+
+The same split answers a question that comes up with EIT devices: some EIT
+monitors also record pressure or flow (a Timpel device records flow and
+pressure alongside impedance; a Dräger device can record pressure). These
+channels are still tagged `modality="eit"` - that's the device that produced
+them - with `category="airway_pressure"` or `category="airflow"` identifying
+what they physically are. `for_modality("eit")` then returns everything that
+device produced, impedance included; `for_category("airway_pressure")`
+returns this channel alongside any airway pressure recorded by a ventilator
+or a standalone monitor, regardless of device.
 
 `modality`'s vocabulary lines up 1:1 with Layer 2's `Device.device_type`.
 `category`'s vocabulary is deliberately *modality-agnostic*, following the same
