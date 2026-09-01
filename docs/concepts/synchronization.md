@@ -8,7 +8,12 @@ compared on one shared time axis. Key pieces:
 
 - `session.synchronize_raw_modalities(...)` shifts the raw signals in time,
   before any processing, using a manual offset you supply (for example
-  "EMG started 5 seconds after EIT").
+  "EMG started 5 seconds after EIT"). The offset is a single number in
+  seconds that you provide; the package applies it but never measures it
+  (`estimate_sync_offset` only supports `method="manual"`). How you arrive
+  at that number is up to you, and filtered signals are fine for the job:
+  the shift is applied to the raw signals, so every processing step
+  downstream sees the same aligned timeline.
 - `session.synchronize_multimodal_breaths(...)` does the same thing but for
   already-detected events (breaths), not raw signals.
 - `resample_signal(...)` is a standalone utility that changes a signal's
