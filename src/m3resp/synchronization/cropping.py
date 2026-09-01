@@ -137,17 +137,17 @@ def ventilator_recordings(session: M3Session) -> list[Any]:
     return [recording] if recording is not None else []
 
 
-def _crop_ventilators_on_clock(
-    session: M3Session, clock: str, offset: float
-) -> list[Any]:
-    """Crop the ventilator recordings that share `clock`'s time base."""
+def _crop_ventilators_on_clock(session: M3Session, clock: str, offset: float) -> int:
+    """Crop the ventilator recordings that share `clock`'s time base.
 
-    cropped = []
-    for recording in ventilator_recordings(session):
-        if ventilator_clock(recording) == clock:
-            _crop_ventilator_recording(recording, offset)
-            cropped.append(recording)
-    return cropped
+    Returns the number of samples removed from those recordings.
+    """
+
+    return sum(
+        _crop_ventilator_recording(recording, offset)
+        for recording in ventilator_recordings(session)
+        if ventilator_clock(recording) == clock
+    )
 
 
 def crop_loaded_modality(session: M3Session, modality: str, offset: float) -> int:
@@ -157,6 +157,9 @@ def crop_loaded_modality(session: M3Session, modality: str, offset: float) -> in
     that modality's file, since those channels share its clock. Cropping the
     ventilator modality touches only standalone ventilator/monitor exports, for
     the same reason: the others have already moved with their host.
+
+    Returns the number of samples removed, which is zero only when nothing
+    moved at all.
     """
 
     if offset == 0.0:
@@ -179,7 +182,13 @@ def crop_loaded_modality(session: M3Session, modality: str, offset: float) -> in
         # study may take only the ventilator channels out of the EIT file and
         # never load the impedance frames, and those channels still move on
         # the EIT clock.
-        _crop_ventilators_on_clock(session, modality, offset)
+        on_clock = _crop_ventilators_on_clock(session, modality, offset)
+        # EIT frames and ventilator samples are counted at different rates, so
+        # the two totals cannot be added. Report this modality's own count when
+        # its recording was loaded, and otherwise the ventilator channels that
+        # moved on its clock, so a caller that only checks "did anything move"
+        # still sees the shift.
+        cropped = cropped or on_clock
     return cropped
 
 
