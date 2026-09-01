@@ -15,19 +15,38 @@ if TYPE_CHECKING:
 class Event:
     """A timestamped event from one modality.
 
-    ``id`` is a per-process, in-memory identifier (not persisted or globally
-    unique like Layer 2's ids) that lets other Layer 1 objects - notably
-    ``ParameterResult.event_id`` - reference this specific event, e.g. a
-    blood-gas draw or an intervention timepoint. It is excluded from
-    equality (``compare=False``) so two structurally identical events - the
-    common case in tests and deduplication - still compare equal.
+    Attributes:
+        name: What kind of event this is, e.g. ``'blood_gas_draw'`` or
+            ``'intervention'``.
+        modality: The device or technique the event came from, e.g.
+            ``'ventilator'`` or ``'eit'``.
+        time: Real-world time at which the event occurred.
+        id: Per-process, in-memory identifier (not persisted or globally
+            unique like Layer 2's ids) that lets other Layer 1 objects -
+            notably ``ParameterResult.event_id`` - reference this specific
+            event. Generated automatically, and excluded from equality
+            (``compare=False``) so two structurally identical events - the
+            common case in tests and deduplication - still compare equal.
+        sample_index: Position of this event in the signal it was detected
+            in. Only meaningful together with ``signal_name`` and
+            ``sample_frequency``, which say which signal and time axis it is
+            relative to - a modality can have multiple signals at different
+            sampling rates, so ``sample_index`` alone is ambiguous. ``None``
+            when the event wasn't derived from indexing into a signal.
+        signal_name: Which signal ``sample_index`` refers to. ``None`` when
+            the event wasn't derived from indexing into a signal.
+        sample_frequency: Sampling rate of that signal, in Hz. ``None`` when
+            the event wasn't derived from indexing into a signal.
+        label: Optional name for this particular occurrence, as opposed to
+            ``name``, which says what kind of event it is: an intervention
+            event carries ``name='intervention'`` and, say,
+            ``label='baydur_maneuver'``. Nothing in the library reads it
+            today; it is carried through for downstream use.
+        confidence: Optional measure of how sure the detector was.
+        metadata: Optional extra information about the event.
 
-    ``sample_index`` is only meaningful together with ``signal_name``/
-    ``sample_frequency``, which identify which signal and time axis it is
-    relative to - a modality can have multiple signals at different sampling
-    rates, so ``sample_index`` alone is ambiguous. Mirrors the same fields on
-    :class:`BreathEvent`. All three are optional and ``None`` when the event
-    wasn't derived from indexing into a specific signal.
+    The ``sample_index``/``signal_name``/``sample_frequency`` trio mirrors
+    the same fields on :class:`BreathEvent`, for the same reason.
     """
 
     name: str
@@ -48,17 +67,39 @@ class BreathEvent:
 
     Unlike :class:`Event`, which occurs at a single ``time``, a
     ``BreathEvent`` spans an interval (``start_time`` to ``end_time``) - one
-    breath, not an instant.
-    The sample-index fields and :attr:`duration` were added here rather than introducing a parallel
-    ``Breath`` dataclass, so EIT, EMG, and ventilator breath detectors keep
-    sharing one type.
+    breath, not an instant. The sample-index fields and :attr:`duration` were
+    added here rather than introducing a parallel ``Breath`` dataclass, so
+    EIT, EMG, and ventilator breath detectors keep sharing one type.
+
+    Attributes:
+        modality: The device or technique the breath was detected in, e.g.
+            ``'eit'`` or ``'emg'``.
+        start_time: Real-world time at which the breath starts.
+        end_time: Real-world time at which the breath ends.
+        id: Per-process, in-memory identifier, generated automatically and
+            excluded from equality. See :class:`Event` for the full
+            explanation.
+        peak_time: Real-world time of the turning point between inhalation
+            and exhalation. ``None`` when the detector didn't report one.
+        start_index: Position of ``start_time`` in the signal this breath was
+            detected in. ``None`` when the breath wasn't derived from
+            indexing into a signal.
+        peak_index: Position of ``peak_time`` in that signal, or ``None``.
+        end_index: Position of ``end_time`` in that signal, or ``None``.
+        sample_frequency: Sampling rate of that signal, in Hz. Together with
+            ``signal_name`` it says which time axis the ``*_index`` fields
+            are relative to, since different signals have different start
+            times, durations, and sampling rates.
+        signal_name: Which signal the ``*_index`` fields refer to.
+        source: Optional name of the detector that produced this breath.
+        confidence: Optional measure of how sure that detector was.
+        metadata: Optional extra information about the breath.
+
+    Raises:
+        ValueError: If ``end_time`` is before ``start_time``.
 
     ``start_time``/``end_time``/``peak_time`` are always the authoritative,
-    real-world times - they don't need to be recomputed from an index. The
-    ``*_index`` fields are optional sample-index positions into the signal
-    that produced this breath; ``sample_frequency`` and ``signal_name``
-    identify which time axis those indices are relative to, since different
-    signals have different start times, durations, and sampling rates.
+    real-world times - they don't need to be recomputed from an index.
     """
 
     modality: str
@@ -111,7 +152,7 @@ def coerce_event(
             time=float(value["time"]),
             sample_index=value.get("sample_index"),
             signal_name=value.get("signal_name"),
-            sample_frequency=value.get("sample_frequency"),
+            sample_frequency=_optional_float(value.get("sample_frequency")),
             label=value.get("label", label),
             confidence=value.get("confidence"),
             metadata=dict(value.get("metadata") or {}),
