@@ -2,10 +2,14 @@
 
 Unlike the EIT and EMG adapters, this one has no upstream library to wrap:
 neither `eitprocessing` nor `resurfemg` implements ventilator preprocessing, so
-there was nothing to borrow and ventilator channels went unfiltered. These
-defaults are therefore native from the start, built on
-:mod:`m3resp.processing.filters` and :mod:`m3resp.processing.peaks` - the
-direction Stage 3 takes for every operation.
+there was nothing to borrow. These defaults are therefore native from the
+start, built on :mod:`m3resp.processing.filters` and
+:mod:`m3resp.processing.peaks` - the direction Stage 3 takes for every
+operation.
+
+Preprocessing does not filter unless asked to. Low-passing pressure, flow and
+volume is not standard practice, so applying it by default would imply an
+endorsement this library does not make; pass ``lowpass_hz`` to opt in.
 """
 
 from __future__ import annotations
@@ -20,17 +24,18 @@ from m3resp.processing.peaks import detect_ventilator_breath_peaks
 
 from ._channels import DEFAULT_CHANNELS, primary_channel, split_channels
 
-#: Default low-pass cutoff applied to each ventilator channel, in Hz.
+#: A conservative low-pass cutoff for ventilator channels, in Hz, offered as a
+#: starting point for callers who want to denoise.
 #:
-#: Deliberately conservative and *not* a clinical parameter: respiratory
-#: waveform content sits below roughly 5 Hz, so a 20 Hz cutoff removes sensor
-#: and quantization noise while leaving breath morphology (including the sharp
-#: pressure upstroke that Pocc quality assessment measures) untouched. Raise or
-#: lower it per recording via ``lowpass_hz``, or pass ``lowpass_hz=None`` to
-#: skip filtering entirely.
-DEFAULT_LOWPASS_HZ = 20.0
+#: It is *not* applied unless requested and is *not* a clinical parameter:
+#: respiratory waveform content sits below roughly 5 Hz, so a 20 Hz cutoff
+#: removes sensor and quantization noise while leaving breath morphology
+#: (including the sharp pressure upstroke that Pocc quality assessment
+#: measures) untouched. Pass ``lowpass_hz=SUGGESTED_LOWPASS_HZ``, or any other
+#: cutoff, to use it.
+SUGGESTED_LOWPASS_HZ = 20.0
 
-#: Butterworth order for the channel low-pass.
+#: Butterworth order used when a low-pass cutoff is requested.
 DEFAULT_FILTER_ORDER = 4
 
 
@@ -47,23 +52,24 @@ class _DefaultsMixin:
         origin: str | None = None,
         qualify: bool = False,
         fs: float | None = None,
-        lowpass_hz: float | None = DEFAULT_LOWPASS_HZ,
+        lowpass_hz: float | None = None,
         filter_order: int = DEFAULT_FILTER_ORDER,
     ) -> dict[str, Any]:
-        """Split a ventilator recording into channels and low-pass each one.
+        """Split a ventilator recording into channels, filtering only if asked.
 
-        Every channel `split_channels` resolved is filtered, not a fixed three,
-        so a recording carrying esophageal or transpulmonary pressure keeps
-        them through preprocessing.
+        Every channel `split_channels` resolved is kept, not a fixed three, so
+        a recording carrying esophageal or transpulmonary pressure survives
+        preprocessing.
 
-        The returned bundle keeps the unfiltered arrays under ``"raw"`` and
-        exposes the filtered ones under each channel's own key, so downstream
-        consumers get the processed signal by default while the originals stay
-        available - the same arrangement as the EMG bundle's
-        ``raw_channel``/``filtered``/``envelope``.
+        No filter is applied unless ``lowpass_hz`` is given. Without it the
+        bundle holds the values exactly as the ventilator recorded them, under
+        both ``"raw"`` and each channel's own key, ``"filtered"`` is empty and
+        every signal stays ``"raw"``.
 
-        ``lowpass_hz=None`` skips filtering, in which case the filtered and raw
-        arrays are the same values and ``processing_state`` stays ``"raw"``.
+        With a cutoff, every resolved channel is low-passed: the filtered
+        arrays appear under each channel's own key and under ``"filtered"``,
+        the unfiltered ones stay under ``"raw"`` - the same arrangement as the
+        EMG bundle's ``raw_channel``/``filtered``/``envelope``.
         """
 
         bundle = split_channels(
@@ -82,9 +88,12 @@ class _DefaultsMixin:
 
         cutoff = _resolve_cutoff(lowpass_hz, sample_frequency)
         if cutoff is None:
-            processed = {name: values.copy() for name, values in raw.items()}
+            # Nothing was filtered, so there is no processed version to offer:
+            # `filtered` stays empty and every channel is emitted once, as raw.
+            channels = {name: values.copy() for name, values in raw.items()}
+            filtered: dict[str, Any] = {}
         else:
-            processed = {
+            channels = {
                 name: lowpass_filter(
                     values,
                     cutoff_frequency=cutoff,
@@ -93,15 +102,17 @@ class _DefaultsMixin:
                 )
                 for name, values in raw.items()
             }
+            filtered = channels
 
         return {
             **bundle,
-            **processed,
-            # `channels` tracks the top-level keys, which expose the processed
-            # arrays; the unfiltered ones stay reachable under `raw`.
-            "channels": processed,
+            **channels,
+            # `channels` tracks the top-level keys, which expose the filtered
+            # arrays when a cutoff was applied; the unfiltered ones are always
+            # reachable under `raw`.
+            "channels": channels,
             "raw": raw,
-            "filtered": processed,
+            "filtered": filtered,
             "filter": {
                 "requested_lowpass_hz": lowpass_hz,
                 "lowpass_hz": cutoff,
