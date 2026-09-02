@@ -88,16 +88,45 @@ _MODALITY_DEVICE_TYPE: dict[str, DeviceType] = {
 }
 
 
-def _stream_key(modality: str | None, category: str | None) -> str:
+def _stream_key(
+    modality: str | None, category: str | None, instrument: str | None = None
+) -> str:
     """Cache key identifying one recorded ``SignalStream``.
 
-    Both axes are needed: one device emits several streams. Falls back to the
-    bare modality when no category is set, so EIT/EMG signals (which have one
-    stream per modality) keep the keys they had before categories existed.
+    All three axes are needed. One device emits several streams (a ventilator
+    produces pressure, flow and volume), and one study can record the same
+    quantity on more than one instrument - a ventilator export and the EIT
+    file's own Medibus channels each carry an airway pressure. Keying on
+    modality and category alone made those two indistinguishable, so the
+    second overwrote the first and every derived feature and quality flag was
+    attributed to whichever was recorded last.
+
+    Falls back to the bare modality when no category is set, so EIT/EMG
+    signals (which have one stream per modality) keep the keys they had before
+    categories existed, and omits the instrument for the primary recording, so
+    a study with one instrument keeps the keys it had before this axis.
     """
 
     resolved = modality or "unknown"
-    return f"{resolved}:{category}" if category else resolved
+    key = f"{resolved}:{category}" if category else resolved
+    return f"{key}@{instrument}" if instrument else key
+
+
+def _instrument_of(signal: Signal) -> str | None:
+    """Which instrument recorded this signal, when more than one did.
+
+    When a study records the same quantity on two instruments, the
+    non-primary recording's channels are qualified with its name
+    (``pressure__pod`` rather than ``pressure``, see
+    ``M3Session.preprocess_ventilator``). That qualifier is the instrument.
+    The primary recording's channels are unqualified and return ``None``,
+    which keeps its keys and its ``Device`` record as they were.
+    """
+
+    channel = signal.channel
+    if channel and "__" in channel:
+        return channel.split("__", 1)[1]
+    return None
 
 
 #: Fallback signal type for the provenance-inference path (Milestone 1),
@@ -146,13 +175,17 @@ class DataModelRecorder:
         )
 
         self._devices: dict[str, str] = {}
-        # Keyed by `_stream_key(modality, category)`. One device now emits
-        # several streams (a ventilator produces pressure, flow and volume), so
-        # modality alone no longer identifies a stream - keying by it would let
-        # each ventilator channel overwrite the previous one and misattribute
-        # every derived feature to whichever was recorded last.
+        # Keyed by `_stream_key(modality, category, instrument)`. Every stream
+        # is filed under its own fully qualified key; the primary recording is
+        # additionally filed under the unqualified `modality:category` key, so
+        # a result that names no instrument still resolves to it.
         self._signals: dict[str, str] = {}
         self._files: dict[str, str] = {}
+        # Which instrument claimed each unqualified key. A later signal from
+        # that same instrument (its processed version, say) may replace it; one
+        # from a second instrument may not, or the two recordings' airway
+        # pressures would overwrite each other again.
+        self._stream_owners: dict[str, str | None] = {}
 
     # -- Layer 1 objects -> persisted entities (Milestone 2.3) ---------------
 
@@ -184,7 +217,8 @@ class DataModelRecorder:
             )
             return None
 
-        device_id = self._ensure_device(signal.modality)
+        instrument = _instrument_of(signal)
+        device_id = self._ensure_device(signal.modality, instrument)
         stream = self.store.add_signal_stream(
             SignalStream(
                 session_id=self.recording_session.session_id,
@@ -195,8 +229,11 @@ class DataModelRecorder:
                 sample_count=signal.n_samples,
             )
         )
-        stream_key = _stream_key(signal.modality, signal.category)
+        stream_key = _stream_key(signal.modality, signal.category, instrument)
         self._signals[stream_key] = stream.signal_id
+        shared_key = _stream_key(signal.modality, signal.category)
+        if self._stream_owners.setdefault(shared_key, instrument) == instrument:
+            self._signals[shared_key] = stream.signal_id
 
         if file_path is not None:
             data_file = self.store.add_data_file(
@@ -209,20 +246,30 @@ class DataModelRecorder:
                 )
             )
             self._files[stream_key] = data_file.file_id
+            if self._stream_owners.get(shared_key) == instrument:
+                self._files[shared_key] = data_file.file_id
         return stream
 
     def _lookup_signal_id(
-        self, modality: str | None, category: str | None
+        self,
+        modality: str | None,
+        category: str | None,
+        instrument: str | None = None,
     ) -> str | None:
         """Find the recorded stream a parameter/flag belongs to.
 
-        Prefers an exact ``(modality, category)`` match. A result that names
-        only its modality falls back to that modality's first recorded stream,
+        Prefers the exact instrument when one is named, then the primary
+        recording's ``(modality, category)`` stream. A result that names only
+        its modality falls back to that modality's first recorded stream,
         which is what everything did before categories existed.
         """
 
         if modality is None:
             return None
+        if instrument is not None:
+            signal_id = self._signals.get(_stream_key(modality, category, instrument))
+            if signal_id is not None:
+                return signal_id
         signal_id = self._signals.get(_stream_key(modality, category))
         if signal_id is not None:
             return signal_id
@@ -323,12 +370,20 @@ class DataModelRecorder:
         )
         return self.store.add_processing_run(run)
 
-    def _ensure_device(self, modality: str) -> str:
-        if modality in self._devices:
-            return self._devices[modality]
+    def _ensure_device(self, modality: str, instrument: str | None = None) -> str:
+        """The ``Device`` record for one instrument of one modality.
+
+        Two instruments recording the same modality are two devices, each with
+        its own manufacturer, model and serial number, so they cannot share a
+        record. The primary recording keeps the bare modality as its key.
+        """
+
+        key = f"{modality}@{instrument}" if instrument else modality
+        if key in self._devices:
+            return self._devices[key]
         device_type = _MODALITY_DEVICE_TYPE.get(modality, "monitor")
         device = self.store.add_device(Device(device_type=device_type))
-        self._devices[modality] = device.device_id
+        self._devices[key] = device.device_id
         return device.device_id
 
     def _record_load(self, modality: str) -> None:
