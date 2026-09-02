@@ -20,7 +20,9 @@ data_dir = "data/source/synthetic/20260610_153009"
 session.load_eit(f"{data_dir}/m3resp_multimodal_1_eit_draeger.bin", vendor="draeger")
 session.load_emg(f"{data_dir}/m3resp_multimodal_1_emg.Poly5")
 
-# Align raw signals onto a common time axis before per-modality processing.
+# Step 1 of 3: shift the raw signals onto a common time axis. This trims
+# samples off the start of a recording, so everything downstream - including
+# breath detection - works on the shifted signals.
 session.synchronize_raw_modalities(
     method="manual_offset",
     offset_seconds={"eit": 0.0, "emg": 0.0},
@@ -34,18 +36,38 @@ session.preprocess_emg()
 session.detect_emg_breaths()
 session.postprocess_emg()
 
-# Align the detected event lists (in case synchronize_raw_modalities alone
-# wasn't enough - e.g. a manually estimated offset changed after loading).
+# Step 2 of 3: shift the detected breath times by a further hand-entered
+# offset. This does not replace step 1 - the two offsets add up. Despite the
+# name it does not derive an offset from the breaths themselves; it applies
+# the offset you give it to the breath lists. Use it when the offset estimate
+# changed after loading, and leave it out otherwise.
 session.synchronize_multimodal_breaths(method="manual_offset", offset_seconds={"emg": 0.0})
 
-# Match breaths across modalities into LinkedBreath objects.
+# Step 3 of 3: match breaths across modalities into LinkedBreath objects.
+# Neither step above does this matching - an EIT breath and an EMG breath are
+# paired here, by how close their times are once both shifts have been applied.
 linked = session.link_breaths(time_tolerance=0.5)
 
-# Compute cross-modality timing parameters from the linked breaths.
+# Measure breath timing across modalities. These read only the breath
+# start/end times, never the signal values inside a breath.
 multimodal_parameters = session.compute_multimodal_parameters()
 
 session.export_summary("results/multimodal/")
 ```
+
+## The three timing steps
+
+The three steps above do different things and none replaces another:
+
+| Step | What it moves | When |
+|---|---|---|
+| `synchronize_raw_modalities` | The raw signals, by trimming samples off the start | Before processing |
+| `synchronize_multimodal_breaths` | The detected breath times, by a further offset that adds to the first | After detection, only if the offset estimate changed |
+| `link_breaths` | Nothing - it pairs EIT with EMG breaths by how close their times are | Last |
+
+Neither synchronization step pairs breaths across modalities, and neither
+works out an offset from the breaths themselves: both take a hand-entered
+offset (`method="manual_offset"` is currently the only method either accepts).
 
 ## What each new call adds
 
@@ -55,15 +77,27 @@ session.export_summary("results/multimodal/")
   match in another modality still appears, with only its own slot filled.
   See [../concepts/synchronization.md](../concepts/synchronization.md).
 - `session.compute_multimodal_parameters()` turns those links into
-  `ParameterResult`s: a per-breath `eit_to_emg_delay` (signed timing delay,
-  seconds), a per-breath `eit_emg_duration_difference` (breath duration
-  difference, seconds), and an aggregate `eit_emg_event_agreement` (fraction
-  of linked breaths where both modalities matched). If a ventilator breath
-  list was also linked, the same three parameters are produced for every
-  other observed modality pair (`eit`/`ventilator`, `emg`/`ventilator`).
-  Results are added to `session.parameter_results` alongside the
-  per-modality parameters, so they export to the same `parameter_results.csv`
-  - see [export-results.md](export-results.md).
+  `ParameterResult`s. All three are measures of breath *timing* - they use
+  only breath start/end times, never the signal values within a breath:
+  - `eit_to_emg_delay` (per breath, seconds, signed): the lag between the
+    two modalities' breaths - electromechanical coupling time when measured
+    between EMG effort and EIT volume change. A physiological quantity.
+  - `eit_emg_duration_difference` (per breath, seconds): how much longer one
+    modality's breath is than the other's.
+  - `eit_emg_event_agreement` (aggregate, fraction): how often both
+    modalities found a breath at all. A quality check on detection and
+    synchronization, not an outcome measure.
+
+  If a ventilator breath list was also linked, the same three are produced
+  for every other observed modality pair (`eit`/`ventilator`,
+  `emg`/`ventilator`). Results are added to `session.parameter_results`
+  alongside the per-modality parameters, so they export to the same
+  `parameter_results.csv` - see [export-results.md](export-results.md).
+
+  A cross-modality measure that reads signal *values* rather than breath
+  times - an EMG-effort-to-EIT-pendelluft coupling index, say - is a
+  separate computation, not an extension of this one. See
+  [../concepts/parameters.md](../concepts/parameters.md).
 
 ```python
 for p in multimodal_parameters:
