@@ -105,6 +105,96 @@ def test_record_signal_materializes_signal_stream_and_data_file():
     assert [f.file_path for f in files] == ["subject.eit"]
 
 
+def _airway_pressure(channel: str) -> Signal:
+    return Signal(
+        values=[1.0, 2.0, 3.0],
+        time=[0.0, 1.0, 2.0],
+        modality="ventilator",
+        category="airway_pressure",
+        channel=channel,
+        unit="cmH2O",
+        sample_frequency=1.0,
+    )
+
+
+def test_two_instruments_recording_one_quantity_stay_separate():
+    """A ventilator export and an EIT file's Medibus channels both carry an
+    airway pressure. They are two instruments, not two channels of one, so
+    they get their own device and their own stream rather than the second
+    overwriting the first."""
+
+    session = M3Session()
+    store = DataModelStore()
+    recorder = DataModelRecorder(session, store)
+
+    primary = recorder.record_signal(_airway_pressure("pressure"))
+    second = recorder.record_signal(_airway_pressure("pressure__pod"))
+
+    assert primary.signal_id != second.signal_id
+    assert primary.device_id != second.device_id
+    assert len(store.signal_streams) == 2
+    assert len(store.devices) == 2
+
+
+def test_a_result_naming_no_instrument_resolves_to_the_primary_recording():
+    session = M3Session()
+    store = DataModelStore()
+    recorder = DataModelRecorder(session, store)
+    primary = recorder.record_signal(_airway_pressure("pressure"))
+    recorder.record_signal(_airway_pressure("pressure__pod"))
+    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+
+    feature = recorder.record_parameter(
+        ParameterResult(
+            name="peak_pressure",
+            value=22.0,
+            modality="ventilator",
+            category="airway_pressure",
+            unit="cmH2O",
+        ),
+        processing_run_id=run.processing_run_id,
+    )
+
+    assert feature.source_signal_ids == [primary.signal_id]
+
+
+def test_the_second_instrument_is_reachable_by_name():
+    session = M3Session()
+    store = DataModelStore()
+    recorder = DataModelRecorder(session, store)
+    recorder.record_signal(_airway_pressure("pressure"))
+    second = recorder.record_signal(_airway_pressure("pressure__pod"))
+
+    resolved = recorder._lookup_signal_id("ventilator", "airway_pressure", "pod")
+    assert resolved == second.signal_id
+
+
+def test_reprocessing_one_instrument_replaces_its_own_stream():
+    """Recording the same channel again (its filtered version, say) still
+    replaces that instrument's entry, as it did before instruments were told
+    apart - only a *different* instrument is kept separate."""
+
+    session = M3Session()
+    store = DataModelStore()
+    recorder = DataModelRecorder(session, store)
+    recorder.record_signal(_airway_pressure("pressure"))
+    reprocessed = recorder.record_signal(_airway_pressure("pressure"))
+    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+
+    feature = recorder.record_parameter(
+        ParameterResult(
+            name="peak_pressure",
+            value=22.0,
+            modality="ventilator",
+            category="airway_pressure",
+            unit="cmH2O",
+        ),
+        processing_run_id=run.processing_run_id,
+    )
+
+    assert feature.source_signal_ids == [reprocessed.signal_id]
+
+
 def test_record_parameter_and_quality_flag_link_to_recorded_signal():
     session = M3Session()
     store = DataModelStore()
