@@ -343,11 +343,13 @@ class M3Session:
     ) -> Any:
         """Split and filter the ventilator channels through the adapter.
 
-        See `preprocess_eit` for what `variant`/`overwrite`/`allow_overwrite`
-        do - it persists this result under
-        `session.processed_variants["ventilator"][name]`, raising
-        `VariantAlreadyExistsError` if `name` is already populated, and mirrors
-        it onto `session.processed["ventilator"]` only when `name` is
+        Splits the recording into its pressure, flow and volume channels and
+        low-passes each one. See `preprocess_eit` for what
+        `variant`/`overwrite`/`allow_overwrite` do - the result persists under
+        `session.processed_variants["ventilator"][variant]`, an already
+        populated variant raises `VariantAlreadyExistsError` unless one of the
+        two overwrite flags is set, and the result is mirrored onto
+        `session.processed["ventilator"]` only when the variant is
         `"default"`.
 
         `name` selects which loaded recording to preprocess when a study
@@ -355,14 +357,17 @@ class M3Session:
         `load_ventilator`). A non-primary recording's channel keys are
         qualified with its name - ``pressure__pod`` rather than ``pressure`` -
         so its airway pressure does not collide with the primary recording's
-        in `session.signals`. The variant defaults to the recording's name, so
-        each recording lands in its own slot rather than overwriting.
+        in `session.signals`. `variant` defaults to `name`, so each recording
+        lands in its own slot rather than overwriting.
 
         Unlike its EIT/EMG siblings this runs native code rather than an
         upstream library: nothing in `eitprocessing`/`resurfemg` preprocesses
         ventilator data, which is why these channels used to be consumed
-        unfiltered. See `m3resp.adapters.ventilator_adapter` for the defaults
-        (a per-channel low-pass; pass `lowpass_hz=None` to skip filtering).
+        unfiltered. Remaining keyword arguments reach
+        `VentilatorAdapter.preprocess`: `lowpass_hz` sets the cut-off, with
+        `lowpass_hz=None` skipping the filter, and `preprocess` replaces the
+        whole step with a callable of your own. See
+        `m3resp.adapters.ventilator_adapter` for the defaults.
         """
 
         primary = self.primary_ventilator_name()
