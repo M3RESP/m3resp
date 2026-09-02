@@ -67,6 +67,34 @@ class TestPreprocessVentilator:
         assert session.processed["ventilator"] is result
         assert session.processed_variants["ventilator"]["default"] is result
 
+    def test_mirrors_the_primary_recording_reached_by_its_own_name(self):
+        """A recording loaded under a name is still the primary one.
+
+        Its result belongs in `session.processed` just as much as an unnamed
+        recording's, or `detect_ventilator_breaths` falls back to re-splitting
+        the raw recording with default settings and quietly discards whatever
+        filtering was set up here.
+        """
+
+        session = M3Session(
+            emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: _payload()),
+        )
+        session.load_ventilator("subject.txt", name="mdn")
+        result = session.preprocess_ventilator(name="mdn", lowpass_hz=5.0)
+
+        assert session.primary_ventilator_name() == "mdn"
+        assert session.processed["ventilator"] is result
+        assert session.processed_variants["ventilator"]["mdn"] is result
+
+    def test_a_second_recording_stays_out_of_processed(self):
+        session = _loaded_session()
+        session.load_ventilator("pod.txt", name="pod")
+        primary = session.preprocess_ventilator()
+        session.preprocess_ventilator(name="pod")
+
+        assert session.processed["ventilator"] is primary
+        assert set(session.processed_variants["ventilator"]) == {"default", "pod"}
+
     def test_records_provenance(self):
         session = _loaded_session()
         session.preprocess_ventilator()
