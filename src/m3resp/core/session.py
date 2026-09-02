@@ -398,15 +398,19 @@ class M3Session:
             target.flow = result.get(primary_channel(result, "flow") or "")
             target.volume = result.get(primary_channel(result, "volume") or "")
             target.fs = result.get("fs")
-        name = variant_name
         for signal in self.ventilator_adapter.to_signals(result):
             self.signals.add(signal)
         for parameter in self.ventilator_adapter.to_parameters(result):
             self.parameter_results.add(parameter)
         for flag in self.ventilator_adapter.to_quality_flags(result):
             self.quality.add(flag)
-        self.processed_variants[VENTILATOR][name] = result
-        if name == "default":
+        self.processed_variants[VENTILATOR][variant_name] = result
+        # `session.processed` means "the primary recording's result", so mirror
+        # it whether that recording was reached by default or asked for by its
+        # own name. Testing only for `"default"` missed the second case, and
+        # `detect_ventilator_breaths` then silently re-split the raw recording
+        # with default settings instead of using what was preprocessed here.
+        if variant_name in ("default", primary):
             self.processed[VENTILATOR] = result
         self._record("preprocess_ventilator", VENTILATOR, variant=variant, **kwargs)
         return result
