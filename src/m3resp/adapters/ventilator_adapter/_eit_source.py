@@ -33,6 +33,16 @@ DEFAULT_EIT_CHANNELS: tuple[str, ...] = ("pressure", "flow", "volume")
 #: What `Signal.source` records for a channel read out of an EIT recording.
 EIT_ORIGIN = "eit"
 
+#: Below this, a sample is a "not measured" marker rather than a reading.
+#:
+#: A Draeger recording writes every channel it can carry, connected sensor or
+#: not, and fills an unmeasured sample with a large negative number standing in
+#: for NaN. The exact number differs between software versions, so a cutoff is
+#: used instead of an equality test - no physiological pressure, flow or volume
+#: comes anywhere near it. Same threshold `eitprocessing` applies when it reads
+#: the impedance frames.
+SENTINEL_CUTOFF = -1e30
+
 
 def _continuous_data_items(sequence: Any) -> list[tuple[str, Any]]:
     """``(label, ContinuousData)`` pairs from a sequence, or a clear error."""
@@ -85,12 +95,13 @@ def available_ventilator_channels(sequence: Any) -> dict[str, str]:
     A listed channel is not a measured channel. A Draeger recording exposes its
     channels whether or not the corresponding sensor was connected: an
     unmeasured one is written as a large negative sentinel standing in for NaN,
-    not omitted. So a pod pressure appears here even when no pod was attached,
-    and the values have to be checked before they are used. m3resp does not yet
-    convert that sentinel to NaN.
+    not omitted. So a pod pressure appears here even when no pod was attached.
+    This function reports what the recording carries and does not read the
+    values; reading a channel replaces the sentinel with NaN, and a channel
+    with nothing but sentinel in it is refused as unmeasured.
 
     Which channels a ``*.bin`` holds cannot be read from the file itself. Two
-    Draeger layouts are known (SW1.2 and SW1.3) and they can only be told apart
+    Draeger layouts are supported (SW1.2 and SW1.3) and they can only be told apart
     by inferring the frame size from the file size, or by reading an
     accompanying ``*.asc`` file if one was saved.
     """
@@ -135,10 +146,14 @@ def ventilator_payload_from_sequence(
     could have offered, so a caller that got the default three can discover the
     pressure-pod channels without reloading).
 
+    Samples below `SENTINEL_CUTOFF` are the device's "not measured" marker and
+    become NaN on the way in, so ``nan_samples`` counts everything the file did
+    not actually record.
+
     Raises `UnsupportedWorkflowError` when a requested channel is absent or
-    present-but-empty. Draeger writes NaN for a Medibus field the ventilator
-    never populated, so an all-NaN channel means "not recorded" and is rejected
-    here rather than filtered downstream into an all-NaN result.
+    carries no measurement at all - a Medibus field the ventilator never
+    populated, or a pod channel recorded without a pod attached. Such a channel
+    is rejected here rather than filtered downstream into an all-NaN result.
     """
 
     requested = tuple(channels)
@@ -170,11 +185,17 @@ def ventilator_payload_from_sequence(
     rows: list[np.ndarray] = []
     for spec, data in zip(specs, resolved, strict=True):
         values = np.asarray(getattr(data, "values", data), dtype=float)
+        # A channel the device exposed but never measured is written as the
+        # negative sentinel, not omitted; turn it into NaN so the emptiness
+        # check below sees it and no downstream step mistakes it for a reading.
+        values = np.where(values < SENTINEL_CUTOFF, np.nan, values)
         if values.size == 0 or np.all(np.isnan(values)):
             raise UnsupportedWorkflowError(
                 f"Ventilator channel {spec.key!r} ({spec.label!r}) in this "
-                "EIT recording is empty. That usually means the ventilator "
-                "was not connected while recording."
+                "EIT recording holds no measurement. The device lists a "
+                "channel whether or not the matching sensor was recording, "
+                "so this usually means the ventilator was not connected, or "
+                "that no pressure pod was attached."
             )
         rows.append(values)
 

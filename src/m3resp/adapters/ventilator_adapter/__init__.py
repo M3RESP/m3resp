@@ -47,6 +47,7 @@ from ._defaults import DEFAULT_FILTER_ORDER, SUGGESTED_LOWPASS_HZ, _DefaultsMixi
 from ._eit_source import (
     DEFAULT_EIT_CHANNELS,
     EIT_ORIGIN,
+    SENTINEL_CUTOFF,
     available_ventilator_channels,
     ventilator_payload_from_sequence,
 )
@@ -70,6 +71,7 @@ __all__ = [
     "DEFAULT_EIT_CHANNELS",
     "DEFAULT_FILTER_ORDER",
     "EIT_ORIGIN",
+    "SENTINEL_CUTOFF",
     "SUGGESTED_LOWPASS_HZ",
     "ChannelSpec",
     "VentilatorAdapter",
