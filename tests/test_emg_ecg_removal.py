@@ -110,6 +110,58 @@ class TestEcgDetectPeaks:
             ecg_detect_peaks(session, _fake_processed_emg(), ecg_channel=99)
 
 
+class TestPreprocessEnvelopeSkipping:
+    """ECG gating recomputes the envelope from the gated signal, so an
+    envelope computed during preprocessing would be discarded."""
+
+    @staticmethod
+    def _preprocess(**kwargs):
+        from m3resp.adapters import ReSurfEMGAdapter
+
+        fs = 2048.0
+        rng = np.random.default_rng(0)
+        recording = {
+            "array": [rng.normal(size=8192)],
+            "metadata": {"fs": fs, "labels": ["EMGdi"], "units": ["uV"]},
+        }
+        return ReSurfEMGAdapter().preprocess(recording, **kwargs)
+
+    def test_envelope_is_computed_by_default(self):
+        processed = self._preprocess()
+
+        assert processed["envelope"] is not None
+
+    def test_skipping_leaves_no_envelope_but_keeps_the_band_passed_signal(self):
+        processed = self._preprocess(compute_envelope=False)
+
+        assert processed["envelope"] is None
+        assert processed["filtered"] is not None
+
+    def test_skipping_still_records_the_window_for_gating_to_reuse(self):
+        processed = self._preprocess(
+            compute_envelope=False,
+            envelope_window_seconds=0.25,
+            envelope_method="rms",
+        )
+
+        assert processed["filter"]["envelope_window_seconds"] == 0.25
+        assert processed["filter"]["envelope_method"] == "rms"
+
+    def test_gating_recomputes_the_envelope_from_the_gated_signal(self):
+        session = M3Session()
+        processed = self._preprocess(
+            compute_envelope=False, envelope_window_seconds=0.25
+        )
+        peaks = np.array([1000, 3000, 5000])
+
+        result = ecg_gating(session, processed, peaks)
+
+        after = result["processed_emg_after_ecg"]
+        assert after["envelope"] is not None
+        assert len(after["envelope"]) == len(processed["filtered"])
+        assert after["filter"]["envelope_window_seconds"] == 0.25
+
+
 class TestEcgGating:
     @pytest.mark.parametrize("gate_width_samples", [4, 7, 8, 204, 205])
     @pytest.mark.parametrize("fill_method", [0, 1, 2, 3])

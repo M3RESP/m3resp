@@ -61,9 +61,12 @@ steps:
   # Channel 1 ("EMGdi") is the diaphragm EMG channel in this fixture; channel
   # 0 ("ECG") is a dedicated reference ECG channel used for peak detection
   # below instead of the (also ECG-contaminated) EMG channel itself.
+  # ECG gating below recomputes the envelope from the gated signal, so one
+  # computed here would be discarded; envelope_window_seconds still sets the
+  # window that gating uses.
   - id: preprocess
     uses: emg.preprocess
-    with: { channel: 1, envelope_window_seconds: 0.25 }
+    with: { channel: 1, envelope_window_seconds: 0.25, compute_envelope: false }
     out: { processed_emg: processed_emg_before_ecg }
 
   - id: ecg_detect_peaks

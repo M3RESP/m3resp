@@ -50,6 +50,7 @@ class _DefaultsMixin:
         low_pass_hz: float | None = None,
         envelope_window_seconds: float = 0.25,
         envelope_method: str = "rms",
+        compute_envelope: bool = True,
         notch_base_frequency: float | None = None,
         notch_max_frequency: float | None = None,
         notch_quality_factor: float = 30.0,
@@ -70,6 +71,12 @@ class _DefaultsMixin:
         equivalent on real bursty sEMG. The choice is recorded in the returned
         ``"filter"`` mapping so a later envelope recomputation (e.g. after ECG
         gating) reuses the same method rather than silently switching.
+
+        ``compute_envelope=False`` skips the envelope. Use it when ECG gating
+        follows: gating replaces the band-passed signal and recomputes the
+        envelope from the gated trace, so one computed here would be thrown
+        away. The window and method are still recorded, so the gating step
+        reuses the settings requested here.
 
         ``notch_base_frequency`` opts into harmonic notch filtering (e.g.
         ``50.0`` for mains hum, or a co-recorded EIT device's frame rate, which
@@ -119,12 +126,19 @@ class _DefaultsMixin:
                 max_frequency=notch_max_frequency or (fs / 2),
                 quality_factor=notch_quality_factor,
             )
-        envelope_window_samples = max(1, int(envelope_window_seconds * fs))
-        envelope = rolling_envelope(
-            filtered,
-            window_length=envelope_window_samples,
-            method=envelope_method,
-        )
+        # ECG gating replaces the band-passed signal and recomputes the
+        # envelope from the gated trace, so an envelope computed here would be
+        # discarded. `compute_envelope=False` skips it; the window and method
+        # are still recorded below, so the gating step recomputes with the
+        # settings asked for here.
+        envelope = None
+        if compute_envelope:
+            envelope_window_samples = max(1, int(envelope_window_seconds * fs))
+            envelope = rolling_envelope(
+                filtered,
+                window_length=envelope_window_samples,
+                method=envelope_method,
+            )
 
         return {
             **recording,

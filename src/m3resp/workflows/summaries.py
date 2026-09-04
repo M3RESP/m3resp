@@ -38,7 +38,11 @@ def summarize_emg(session: M3Session) -> dict[str, Any]:
         "filter": emg["filter"],
         "n_raw_samples": len(emg["raw_channel"]),
         "n_filtered_samples": len(emg["filtered"]),
-        "n_envelope_samples": len(emg["envelope"]),
+        # None when preprocessing skipped the envelope because ECG gating
+        # recomputes it (`compute_envelope=False`).
+        "n_envelope_samples": (
+            None if emg.get("envelope") is None else len(emg["envelope"])
+        ),
         "n_ventilator_breaths": len(session.events.get("ventilator_breaths", [])),
     }
     if "emg_breaths" in session.events:
