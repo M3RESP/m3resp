@@ -111,12 +111,42 @@ class TestEcgDetectPeaks:
 
 
 class TestEcgGating:
-    def test_gate_mask_includes_the_symmetric_window_endpoints(self):
-        mask = _build_gate_mask(10, [5], gate_width_samples=4)
-        edge_mask = _build_gate_mask(10, [0], gate_width_samples=4)
+    @pytest.mark.parametrize("gate_width_samples", [4, 7, 8, 204, 205])
+    @pytest.mark.parametrize("fill_method", [0, 1, 2, 3])
+    def test_gate_mask_names_exactly_the_samples_gating_replaced(
+        self, gate_width_samples, fill_method
+    ):
+        # The RMS fill (method 3) blanks a slightly different span than the
+        # other fills on an odd gate width, including the 205-sample default.
+        # The mask has to follow whichever fill actually ran.
+        from resurfemg.preprocessing.ecg_removal import gating
 
-        np.testing.assert_array_equal(np.flatnonzero(mask), [3, 4, 5, 6, 7])
-        np.testing.assert_array_equal(np.flatnonzero(edge_mask), [0, 1, 2])
+        n_samples = 1000
+        peaks = np.array([300, 600])
+        # A varying signal, so a replaced sample differs from its original
+        # value under every fill method.
+        signal = np.sin(np.arange(n_samples) / 3.0) + 2.0
+
+        gated = gating(
+            signal.copy(),
+            peaks,
+            gate_width=gate_width_samples,
+            method=fill_method,
+        )
+        replaced = np.flatnonzero(gated != signal)
+        mask = _build_gate_mask(
+            n_samples,
+            peaks,
+            gate_width_samples=gate_width_samples,
+            fill_method=fill_method,
+        )
+
+        np.testing.assert_array_equal(np.flatnonzero(mask), replaced)
+
+    def test_gate_mask_is_clipped_at_the_start_of_the_record(self):
+        mask = _build_gate_mask(10, [0], gate_width_samples=4, fill_method=1)
+
+        np.testing.assert_array_equal(np.flatnonzero(mask), [0, 1])
 
     def test_updates_processed_emg_and_session_with_the_gated_signal(self):
         session = M3Session()

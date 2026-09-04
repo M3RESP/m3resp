@@ -22,18 +22,30 @@ from ._shared import (
 
 
 def _build_gate_mask(
-    n_samples: int, peak_indices: Any, *, gate_width_samples: int
+    n_samples: int, peak_indices: Any, *, gate_width_samples: int, fill_method: int
 ) -> np.ndarray:
     """A boolean mask marking the (clipped-to-bounds) gated region around
-    each peak. Purely descriptive - built from the same effective gate
-    width used for the cleaned array, but never fed back into it."""
+    each peak. Purely descriptive - it reports which samples the cleaned
+    array had replaced, and is never fed back into it.
+
+    The blanked region depends on the fill method. ReSurfEMG's RMS fill
+    (method 3) spans ``int(peak +/- gate_width / 2)`` while the zero,
+    interpolation and prior-segment fills (methods 0, 1, 2) span
+    ``peak +/- gate_width // 2``. On an odd gate width - the 205-sample
+    default among them - the RMS fill starts one sample earlier. The
+    arithmetic below mirrors each case so the mask names exactly the samples
+    that were replaced."""
 
     mask = np.zeros(n_samples, dtype=bool)
-    half_width = gate_width_samples // 2
     for peak in peak_indices:
-        start = max(0, int(peak) - half_width)
-        end = min(n_samples, int(peak) + half_width + 1)
-        mask[start:end] = True
+        if fill_method == 3:
+            start = int(int(peak) - gate_width_samples / 2)
+            end = int(int(peak) + gate_width_samples / 2)
+        else:
+            half_width = gate_width_samples // 2
+            start = int(peak) - half_width
+            end = int(peak) + half_width
+        mask[max(0, start) : min(n_samples, end)] = True
     return mask
 
 
@@ -206,7 +218,10 @@ def ecg_gating(
         fill_method=fill_method,
     )
     gate_mask = _build_gate_mask(
-        len(array), ecg_peak_indices, gate_width_samples=effective_gate_width_samples
+        len(array),
+        ecg_peak_indices,
+        gate_width_samples=effective_gate_width_samples,
+        fill_method=fill_method,
     )
 
     original_filter = processed_emg.get("filter") or {}
