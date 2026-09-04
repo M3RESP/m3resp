@@ -155,10 +155,21 @@ class _DefaultsMixin:
         processed_emg: Any,
         *,
         min_breath_width_seconds: float = 1.0,
-        half_window_seconds: float = 0.5,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
-        """Run ReSurfEMG EMG breath detection and return common rows."""
+        """Run ReSurfEMG EMG breath detection and return common rows.
+
+        ReSurfEMG detects breath *peaks* only. Onset and offset are a separate
+        measurement, made either by baseline crossing or by slope
+        extrapolation - never as a window around the peak - and they can fail
+        to be found, which is why they carry their own validity flag. Run
+        ``emg.onoffpeak_baseline_crossing`` to obtain them.
+
+        `BreathEvent` currently requires an interval, so each event is emitted
+        with ``start_time == end_time == peak_time``: a zero-length breath at
+        the peak, marked ``boundaries_measured: False``. That is a placeholder
+        for a measurement not yet made, not a claim about the breath's extent.
+        """
 
         if not isinstance(processed_emg, dict) or "envelope" not in processed_emg:
             raise UnsupportedWorkflowError(
@@ -170,7 +181,6 @@ class _DefaultsMixin:
         fs = float(processed_emg["fs"])
         envelope = processed_emg["envelope"]
         min_width_samples = max(1, int(min_breath_width_seconds * fs))
-        half_window_samples = max(1, int(half_window_seconds * fs))
 
         peak_indices = detect_emg_breath_peaks(
             envelope,
@@ -180,19 +190,19 @@ class _DefaultsMixin:
 
         events = []
         for peak_index in peak_indices:
-            start_index = max(0, int(peak_index) - half_window_samples)
-            end_index = min(len(envelope) - 1, int(peak_index) + half_window_samples)
+            peak_time = int(peak_index) / fs
             events.append(
                 {
-                    "start_time": start_index / fs,
-                    "end_time": end_index / fs,
-                    "peak_time": int(peak_index) / fs,
-                    "start_index": start_index,
+                    "start_time": peak_time,
+                    "end_time": peak_time,
+                    "peak_time": peak_time,
+                    "start_index": int(peak_index),
                     "peak_index": int(peak_index),
-                    "end_index": end_index,
+                    "end_index": int(peak_index),
                     "sample_frequency": fs,
                     "signal_name": processed_emg["channel"],
                     "source": "resurfemg.detect_emg_breaths",
+                    "metadata": {"boundaries_measured": False},
                 }
             )
 

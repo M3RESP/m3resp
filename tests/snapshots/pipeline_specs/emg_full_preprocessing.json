@@ -95,7 +95,6 @@
       "out": {},
       "uses": "emg.detect_breaths",
       "with": {
-        "half_window_seconds": 0.5,
         "min_breath_width_seconds": 0.5
       }
     },

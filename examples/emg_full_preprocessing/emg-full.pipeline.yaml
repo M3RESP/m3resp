@@ -84,7 +84,7 @@ steps:
   # selection and time-base rules".
   - id: detect_breaths
     uses: emg.detect_breaths
-    with: { min_breath_width_seconds: 0.5, half_window_seconds: 0.5 }
+    with: { min_breath_width_seconds: 0.5 }
 
   - id: peak_indices
     uses: emg.peak_indices

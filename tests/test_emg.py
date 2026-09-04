@@ -70,6 +70,44 @@ def test_custom_emg_detector_normalization_still_works():
     ]
 
 
+class TestDetectedBreathBoundaries:
+    """ReSurfEMG detects breath peaks only; onset and offset are a separate
+    measurement (baseline crossing or slope extrapolation), never a window
+    around the peak. Detection must not invent them."""
+
+    @staticmethod
+    def _detect():
+        pytest.importorskip("resurfemg")
+        np = pytest.importorskip("numpy")
+
+        fs = 100.0
+        time = np.arange(0, 20, 1 / fs)
+        envelope = np.maximum(np.sin(2 * np.pi * 0.25 * time), 0.0)
+
+        return ReSurfEMGAdapter().detect_breaths(
+            {
+                "envelope": envelope,
+                "fs": fs,
+                "channel": "EMGdi",
+            },
+            min_breath_width_seconds=0.5,
+        )
+
+    def test_detection_reports_the_peak_and_no_breath_extent(self):
+        events = self._detect()
+
+        assert len(events) > 0
+        for event in events:
+            assert event.peak_time is not None
+            assert event.start_time == event.peak_time
+            assert event.end_time == event.peak_time
+            assert event.duration == 0.0
+
+    def test_unmeasured_boundaries_are_marked_as_such(self):
+        for event in self._detect():
+            assert event.metadata["boundaries_measured"] is False
+
+
 def test_custom_emg_preprocess_callable_still_works():
     adapter = ReSurfEMGAdapter()
 

@@ -68,7 +68,7 @@ steps:
     with: { channel: 0, high_pass_hz: 80, envelope_window_seconds: 0.5 }
 
   - uses: emg.detect_breaths
-    with: { min_breath_width_seconds: 1.0, half_window_seconds: 0.5 }
+    with: { min_breath_width_seconds: 1.0 }
 
   - uses: emg.peak_indices
 
