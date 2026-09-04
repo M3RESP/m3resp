@@ -36,6 +36,8 @@ class EMGPipeline(Pipeline):
       ``{"ecg_channel": n}`` when a dedicated reference ECG channel was
       recorded; the default detects peaks in the EMG channel itself)
     - ``ecg_gating`` -> the ``emg.ecg_gating`` step
+    - ``baseline`` -> the moving baseline that breath detection measures
+      against (``window_seconds``, ``step_seconds``, ``percentile``)
     - ``detect_breaths`` -> ``session.detect_emg_breaths``
     - ``postprocess`` -> ``session.postprocess_emg``
 
@@ -60,9 +62,41 @@ class EMGPipeline(Pipeline):
     ) -> M3Session:
         processed = session.preprocess_emg(**self._kwargs_for(config, "preprocess"))
         self._remove_ecg(session, processed, config)
-        session.detect_emg_breaths(**self._kwargs_for(config, "detect_breaths"))
+        baseline = self._moving_baseline(session, config)
+        session.detect_emg_breaths(
+            baseline=baseline, **self._kwargs_for(config, "detect_breaths")
+        )
         session.postprocess_emg(**self._kwargs_for(config, "postprocess"))
         return session
+
+    def _moving_baseline(
+        self, session: M3Session, config: PipelineConfig | None
+    ) -> Any:
+        """The quiet level the breath-detection threshold is measured against.
+
+        A breath is a rise above the local quiet level, which drifts through a
+        recording, so the baseline has to exist before breaths are detected.
+        It depends only on the envelope, never on the peaks, so computing it
+        first is not circular.
+        """
+
+        import numpy as np
+
+        processed = session.processed.get("emg") or {}
+        envelope = processed.get("envelope")
+        if envelope is None:
+            return None
+
+        kwargs = dict(self._kwargs_for(config, "baseline"))
+        fs = float(processed["fs"])
+        window_seconds = float(kwargs.pop("window_seconds", 30.0))
+        step_seconds = float(kwargs.pop("step_seconds", 1.0))
+        return session.emg_adapter.moving_baseline(
+            np.asarray(envelope, dtype=float),
+            window_samples=max(1, int(window_seconds * fs)),
+            step_samples=max(1, int(step_seconds * fs)),
+            **kwargs,
+        )
 
     def _remove_ecg(
         self,
