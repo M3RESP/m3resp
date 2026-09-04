@@ -88,16 +88,25 @@ _MODALITY_DEVICE_TYPE: dict[str, DeviceType] = {
 }
 
 
-def _stream_key(modality: str | None, category: str | None) -> str:
+def _stream_key(
+    modality: str | None, category: str | None, channel: str | None = None
+) -> str:
     """Cache key identifying one recorded ``SignalStream``.
 
-    Both axes are needed: one device emits several streams. Falls back to the
-    bare modality when no category is set, so EIT/EMG signals (which have one
-    stream per modality) keep the keys they had before categories existed.
+    All three axes are needed: one device emits several streams, and one
+    device can emit several streams of the *same* physical quantity. EIT is
+    the case in point - the global impedance and the pixel impedance are both
+    ``eit``/``impedance``, and only the channel tells them apart. Falls back
+    to the bare modality when no category is set, so signals recorded before
+    categories existed keep the keys they had.
     """
 
     resolved = modality or "unknown"
-    return f"{resolved}:{category}" if category else resolved
+    if not category:
+        return resolved
+    if not channel:
+        return f"{resolved}:{category}"
+    return f"{resolved}:{category}:{channel}"
 
 
 #: Fallback signal type for the provenance-inference path (Milestone 1),
@@ -195,8 +204,17 @@ class DataModelRecorder:
                 sample_count=signal.n_samples,
             )
         )
+        # The channel-qualified key always points at this exact stream. The
+        # broader keys are filled in first-wins, so a later stream on the same
+        # device and quantity (the pixel impedance arriving after the global
+        # one) cannot take over the attribution of results that name only
+        # their modality and quantity.
         stream_key = _stream_key(signal.modality, signal.category)
-        self._signals[stream_key] = stream.signal_id
+        self._signals[_stream_key(signal.modality, signal.category, signal.channel)] = (
+            stream.signal_id
+        )
+        for fallback_key in (stream_key, _stream_key(signal.modality, None)):
+            self._signals.setdefault(fallback_key, stream.signal_id)
 
         if file_path is not None:
             data_file = self.store.add_data_file(
@@ -212,20 +230,25 @@ class DataModelRecorder:
         return stream
 
     def _lookup_signal_id(
-        self, modality: str | None, category: str | None
+        self, modality: str | None, category: str | None, channel: str | None = None
     ) -> str | None:
         """Find the recorded stream a parameter/flag belongs to.
 
-        Prefers an exact ``(modality, category)`` match. A result that names
-        only its modality falls back to that modality's first recorded stream,
-        which is what everything did before categories existed.
+        Prefers an exact ``(modality, category, channel)`` match, then the
+        same pair without the channel. A result that names only its modality
+        falls back to that modality's first recorded stream, which is what
+        everything did before categories existed.
         """
 
         if modality is None:
             return None
-        signal_id = self._signals.get(_stream_key(modality, category))
-        if signal_id is not None:
-            return signal_id
+        for key in (
+            _stream_key(modality, category, channel),
+            _stream_key(modality, category),
+        ):
+            signal_id = self._signals.get(key)
+            if signal_id is not None:
+                return signal_id
         signal_id = self._signals.get(modality)
         if signal_id is not None:
             return signal_id
@@ -240,7 +263,9 @@ class DataModelRecorder:
     ) -> DerivedFeature:
         """Materialize a ``ParameterResult`` as a ``DerivedFeature``."""
 
-        signal_id = self._lookup_signal_id(parameter.modality, parameter.category)
+        signal_id = self._lookup_signal_id(
+            parameter.modality, parameter.category, parameter.channel
+        )
         return self.store.add_derived_feature(
             DerivedFeature(
                 source_signal_ids=[signal_id] if signal_id is not None else [],

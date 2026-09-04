@@ -236,6 +236,18 @@ def test_load_step_works_without_eitprocessing_and_matches_declared_writes():
     assert result["raw_global_impedance_signal"].modality == "eit"
     assert session.signals.for_modality("eit")
 
+    # Both impedances are signals from the moment the file is read, and the
+    # channel is what tells them apart.
+    pixel_signal = result["raw_pixel_impedance_signal"]
+    assert pixel_signal.modality == "eit"
+    assert pixel_signal.category == "impedance"
+    assert pixel_signal.channel == "pixel_impedance"
+    assert pixel_signal.processing_state == "raw"
+    assert {signal.channel for signal in session.signals.for_modality("eit")} == {
+        "global_impedance",
+        "pixel_impedance",
+    }
+
 
 def test_load_step_forwards_the_declared_reading_parameters():
     """sample_frequency/first_frame/max_frames are real parameters, not bag keys."""
