@@ -110,6 +110,54 @@ class TestEcgDetectPeaks:
             ecg_detect_peaks(session, _fake_processed_emg(), ecg_channel=99)
 
 
+class TestSeparateFilteredAndCleanedSignals:
+    """Band-pass filtering and ECG removal are separate processing steps, so
+    their results are kept under separate keys - as ReSurfEMG keeps 'filt'
+    and 'clean'."""
+
+    def test_gating_keeps_the_band_passed_signal_alongside_the_gated_one(self):
+        session = M3Session()
+        processed_emg = _fake_processed_emg()
+        band_passed = processed_emg["filtered"]
+        peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
+
+        after = ecg_gating(session, processed_emg, peaks)["processed_emg_after_ecg"]
+
+        np.testing.assert_array_equal(after["filtered"], band_passed)
+        assert not np.array_equal(after["ecg_cleaned"], band_passed)
+
+    def test_a_second_removal_step_works_on_the_already_cleaned_signal(self):
+        # Two gating passes chain without either naming a source key: the
+        # second reads what the first produced, not the band-passed signal.
+        session = M3Session()
+        processed_emg = _fake_processed_emg()
+        peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
+
+        first = ecg_gating(session, processed_emg, peaks)["processed_emg_after_ecg"]
+        second = ecg_gating(session, first, peaks + 50)["processed_emg_after_ecg"]
+
+        np.testing.assert_array_equal(second["filtered"], processed_emg["filtered"])
+        assert not np.array_equal(second["ecg_cleaned"], first["ecg_cleaned"])
+
+    def test_an_explicit_source_still_selects_that_signal(self):
+        session = M3Session()
+        processed_emg = _fake_processed_emg()
+        peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
+        first = ecg_gating(session, processed_emg, peaks)["processed_emg_after_ecg"]
+
+        result = ecg_gating(session, first, peaks + 50, source="filtered")
+
+        assert result["ecg_gate_mask_result"].metadata["source"] == "filtered"
+
+    def test_an_unknown_source_is_rejected(self):
+        session = M3Session()
+        processed_emg = _fake_processed_emg()
+        peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
+
+        with pytest.raises(ValueError, match="not present in processed_emg"):
+            ecg_gating(session, processed_emg, peaks, source="nope")
+
+
 class TestPreprocessEnvelopeSkipping:
     """ECG gating recomputes the envelope from the gated signal, so an
     envelope computed during preprocessing would be discarded."""
@@ -208,9 +256,15 @@ class TestEcgGating:
         result = ecg_gating(session, processed_emg, peaks)
 
         gated = result["ecg_gated_emg"]
-        assert gated.shape == processed_emg["filtered"].shape
-        assert result["processed_emg_after_ecg"]["filtered"] is gated
+        band_passed = processed_emg["filtered"]
+        assert gated.shape == band_passed.shape
+        # Band-passing and gating are separate steps and keep separate
+        # results; the band-passed signal survives gating.
+        after = result["processed_emg_after_ecg"]
+        assert after["ecg_cleaned"] is gated
+        assert after["filtered"] is band_passed
         assert session.processed["emg"] is result["processed_emg_after_ecg"]
+        assert session.emg is None or session.emg.ecg_cleaned is gated
 
         signal = result["ecg_gated_signal"]
         assert isinstance(signal, Signal)
@@ -331,7 +385,8 @@ class TestEcgWaveletDenoising:
         signal = result["ecg_wavelet_cleaned_signal"]
         assert isinstance(signal, Signal)
         assert signal.method == "resurfemg.wavelet_denoising"
-        assert session.processed["emg"]["filtered"] is cleaned
+        assert session.processed["emg"]["ecg_cleaned"] is cleaned
+        assert session.processed["emg"]["filtered"] is processed_emg["filtered"]
         assert session.emg is None or session.emg.filtered is cleaned
 
     def test_rejects_unknown_source(self):

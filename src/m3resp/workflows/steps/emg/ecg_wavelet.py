@@ -18,6 +18,7 @@ from ._shared import (
     _record_step,
     _update_session_after_ecg_removal,
     _upstream_metadata,
+    resolve_emg_source,
 )
 
 
@@ -64,8 +65,9 @@ from ._shared import (
         StepParameter(
             name="source",
             value_type="string",
-            default="filtered",
-            description="Key into processed_emg to denoise.",
+            required=False,
+            default=None,
+            description="Key into processed_emg to denoise. Defaults to the most-processed trace present: the ECG-cleaned signal when an earlier removal step produced one, otherwise the band-passed signal.",
         ),
         StepParameter(
             name="hard_thresholding",
@@ -144,18 +146,14 @@ def ecg_wavelet_denoising(
     processed_emg: Any,
     ecg_peak_indices: Any,
     *,
-    source: str = "filtered",
+    source: str | None = None,
     hard_thresholding: bool = True,
     levels: int = 4,
     wavelet_type: str = "db2",
     fixed_threshold: float = 4.5,
     envelope_window_seconds: float | None = None,
 ) -> dict[str, Any]:
-    if source not in processed_emg:
-        raise ValueError(
-            f"emg.ecg_wavelet_denoising source {source!r} is not present in "
-            f"processed_emg; available keys: {sorted(processed_emg.keys())}."
-        )
+    source = resolve_emg_source(processed_emg, source, "emg.ecg_wavelet_denoising")
 
     array = np.asarray(processed_emg[source], dtype=float)
     fs = float(processed_emg["fs"])
@@ -189,7 +187,9 @@ def ecg_wavelet_denoising(
 
     processed_emg_after_ecg = {
         **processed_emg,
-        "filtered": cleaned,
+        # Beside the band-passed signal, not over it - see
+        # `emg_signal_for_analysis`.
+        "ecg_cleaned": cleaned,
         "envelope": envelope,
     }
     _update_session_after_ecg_removal(session, processed_emg_after_ecg)

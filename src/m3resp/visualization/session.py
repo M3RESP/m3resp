@@ -403,6 +403,7 @@ def _get_emg_rows(
     rows: list[tuple[str, str, np.ndarray, np.ndarray, str]] = []
     raw = processed.get("raw_channel")
     filtered = processed.get("filtered")
+    ecg_cleaned = processed.get("ecg_cleaned")
     envelope = processed.get("envelope")
 
     if raw is not None:
@@ -422,6 +423,16 @@ def _get_emg_rows(
                 f"EMG filtered ({label})",
                 _time_for(filtered, fs),
                 np.asarray(filtered),
+                ylabel,
+            )
+        )
+    if ecg_cleaned is not None:
+        rows.append(
+            (
+                "emg",
+                f"EMG ECG-removed ({label})",
+                _time_for(ecg_cleaned, fs),
+                np.asarray(ecg_cleaned),
                 ylabel,
             )
         )

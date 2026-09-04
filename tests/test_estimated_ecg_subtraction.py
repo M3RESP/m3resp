@@ -257,7 +257,9 @@ def test_workflow_step_updates_session_and_keeps_diagnostics():
     output = ecg_estimated_subtraction(session, processed_emg)
 
     cleaned = output["ees_cleaned_emg"]
-    assert output["processed_emg_after_ecg"]["filtered"] is cleaned
+    after = output["processed_emg_after_ecg"]
+    assert after["ecg_cleaned"] is cleaned
+    assert after["filtered"] is processed_emg["filtered"]
     assert session.processed["emg"] is output["processed_emg_after_ecg"]
     assert len(output["ees_qrs_events"]) == len(beat_times)
     assert all(event.name == "ees_qrs" for event in output["ees_qrs_events"])

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
@@ -85,17 +86,52 @@ def _record_step(
     )
 
 
+def resolve_emg_source(processed_emg: Any, source: str | None, step_name: str) -> str:
+    """The bundle key an EMG step should read, given an optional explicit one.
+
+    Band-pass filtering and ECG removal are two separate steps and each keeps
+    its own result: ``"filtered"`` is the band-passed signal, ``"ecg_cleaned"``
+    the one with the heartbeat removed. With no explicit ``source``, a step
+    works on the most-processed trace available - the cleaned one where an
+    ECG-removal step has already run, the band-passed one otherwise. That is
+    the ``clean`` -> ``filt`` order ReSurfEMG resolves signals in, and it lets
+    two removal steps chain without either naming a key.
+    """
+
+    if not isinstance(processed_emg, Mapping):
+        raise TypeError(f"{step_name} needs a processed EMG bundle.")
+
+    key = source
+    if key is None:
+        key = (
+            "ecg_cleaned"
+            if processed_emg.get("ecg_cleaned") is not None
+            else "filtered"
+        )
+    if processed_emg.get(key) is None:
+        raise ValueError(
+            f"{step_name} source {key!r} is not present in processed_emg; "
+            f"available keys: {sorted(processed_emg.keys())}."
+        )
+    return key
+
+
 def _update_session_after_ecg_removal(
     session: M3Session,
     processed_emg_after_ecg: dict[str, Any],
 ) -> None:
-    """Update `session.processed["emg"]` and the `EMGRecording` filtered/
-    envelope fields so existing breath detection operates on the
-    ECG-cleaned data (mirrors what `M3Session.preprocess_emg` does)."""
+    """Update `session.processed["emg"]` and the `EMGRecording` signal fields
+    so existing breath detection operates on the ECG-cleaned data (mirrors
+    what `M3Session.preprocess_emg` does).
+
+    `filtered` keeps the band-passed signal: ECG removal writes its result to
+    `ecg_cleaned`, so both stages stay available.
+    """
 
     session.processed["emg"] = processed_emg_after_ecg
     if session.emg is not None:
         session.emg.filtered = processed_emg_after_ecg.get("filtered")
+        session.emg.ecg_cleaned = processed_emg_after_ecg.get("ecg_cleaned")
         session.emg.envelope = processed_emg_after_ecg.get("envelope")
 
 

@@ -266,6 +266,7 @@ class M3Session:
         result = self.emg_adapter.preprocess(recording.data, **kwargs)
         if self.emg is not None and isinstance(result, dict):
             self.emg.filtered = result.get("filtered")
+            self.emg.ecg_cleaned = result.get("ecg_cleaned")
             self.emg.envelope = result.get("envelope")
             self.emg.channel = result.get("channel")
             self.emg.fs = result.get("fs")

@@ -24,6 +24,7 @@ from ._shared import (
     _record_step,
     _update_session_after_ecg_removal,
     _upstream_metadata,
+    resolve_emg_source,
 )
 
 
@@ -79,8 +80,9 @@ from ._shared import (
         StepParameter(
             name="source",
             value_type="string",
-            default="filtered",
-            description="Key into processed_emg to clean.",
+            required=False,
+            default=None,
+            description="Key into processed_emg to clean. Defaults to the most-processed trace present: the ECG-cleaned signal when an earlier removal step produced one, otherwise the band-passed signal.",
         ),
         StepParameter(
             name="detection_low_hz",
@@ -299,7 +301,7 @@ def ecg_estimated_subtraction(
     session: M3Session,
     processed_emg: Any,
     *,
-    source: str = "filtered",
+    source: str | None = None,
     detection_low_hz: float = 4.0,
     detection_high_hz: float = 50.0,
     filter_order: int = 4,
@@ -324,11 +326,8 @@ def ecg_estimated_subtraction(
     retained so the detected beats and estimated artifact can be reviewed.
     """
 
-    if source not in processed_emg:
-        raise ValueError(
-            f"emg.ecg_estimated_subtraction source {source!r} is not present in "
-            f"processed_emg; available keys: {sorted(processed_emg.keys())}."
-        )
+    source = resolve_emg_source(processed_emg, source, "emg.ecg_estimated_subtraction")
+
     array = np.asarray(processed_emg[source], dtype=float)
     fs = float(processed_emg["fs"])
     output_bandpass_hz = (
@@ -370,7 +369,9 @@ def ecg_estimated_subtraction(
         )
     processed_emg_after_ecg = {
         **processed_emg,
-        "filtered": result.cleaned,
+        # Beside the band-passed signal, not over it - see
+        # `emg_signal_for_analysis`.
+        "ecg_cleaned": result.cleaned,
         "envelope": envelope,
     }
     _update_session_after_ecg_removal(session, processed_emg_after_ecg)

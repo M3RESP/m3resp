@@ -18,6 +18,7 @@ from ._shared import (
     _record_step,
     _update_session_after_ecg_removal,
     _upstream_metadata,
+    resolve_emg_source,
 )
 
 
@@ -91,8 +92,9 @@ def _build_gate_mask(
         StepParameter(
             name="source",
             value_type="string",
-            default="filtered",
-            description="Key into processed_emg to gate.",
+            required=False,
+            default=None,
+            description="Key into processed_emg to gate. Defaults to the most-processed trace present: the ECG-cleaned signal when an earlier removal step produced one, otherwise the band-passed signal.",
         ),
         StepParameter(
             name="gate_width_seconds",
@@ -165,7 +167,7 @@ def ecg_gating(
     processed_emg: Any,
     ecg_peak_indices: Any,
     *,
-    source: str = "filtered",
+    source: str | None = None,
     gate_width_seconds: float | None = None,
     gate_width_samples: int | None = None,
     fill_method: int = 1,
@@ -196,11 +198,7 @@ def ecg_gating(
             "emg.ecg_gating: set only one of gate_width_seconds or "
             "gate_width_samples, not both."
         )
-    if source not in processed_emg:
-        raise ValueError(
-            f"emg.ecg_gating source {source!r} is not present in processed_emg; "
-            f"available keys: {sorted(processed_emg.keys())}."
-        )
+    source = resolve_emg_source(processed_emg, source, "emg.ecg_gating")
 
     array = np.asarray(processed_emg[source], dtype=float)
     fs = float(processed_emg["fs"])
@@ -250,7 +248,10 @@ def ecg_gating(
 
     processed_emg_after_ecg = {
         **processed_emg,
-        "filtered": gated,
+        # Band-passing and gating are separate steps: "filtered" keeps the
+        # band-passed signal and the gated one lands beside it, so what
+        # gating did stays visible and recomputable.
+        "ecg_cleaned": gated,
         "envelope": envelope,
         # Carry the *effective* envelope settings forward, so a later
         # recomputation off this bundle reuses what was actually applied here
