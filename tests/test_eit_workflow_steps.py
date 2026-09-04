@@ -307,14 +307,9 @@ def test_detect_rates_step_works_without_eitprocessing_and_matches_declared_writ
     assert {"respiratory_rate", "heart_rate"} <= names
 
 
-@pytest.mark.parametrize(
-    ("rate_name", "rate"),
-    [
-        ("respiratory_rate_hz", -0.1),
-        ("heart_rate_hz", 0.0),
-    ],
-)
-def test_detect_rates_rejects_non_positive_rate(rate_name, rate):
+def _detect_rates_with(rate_name, rate):
+    """Run `eit.detect_rates` against a detector returning one bad rate."""
+
     session = _session_with_fake_adapter()
     rates = {
         "respiratory_rate_hz": 0.3,
@@ -325,9 +320,33 @@ def test_detect_rates_rejects_non_positive_rate(rate_name, rate):
     rates[rate_name] = rate
     session.eit_adapter.detect_rates = lambda *a, **k: rates  # type: ignore[method-assign]
     raw = _FakeEITData(np.ones((4, 1, 1)), time=np.arange(4, dtype=float))
+    return detect_rates(raw, session=session)
 
-    with pytest.raises(ValueError, match="non-finite/non-positive"):
-        detect_rates(raw, session=session)
+
+@pytest.mark.parametrize("rate_name", ["respiratory_rate_hz", "heart_rate_hz"])
+def test_detect_rates_reports_a_missing_rate_as_such(rate_name):
+    """NaN means no rate could be estimated, which is the only failure
+    eitprocessing's own detector can produce. It is reported in those terms
+    rather than lumped in with an implausible value."""
+
+    with pytest.raises(ValueError, match="could not estimate"):
+        _detect_rates_with(rate_name, float("nan"))
+
+
+@pytest.mark.parametrize(
+    ("rate_name", "rate"),
+    [
+        ("respiratory_rate_hz", -0.1),
+        ("heart_rate_hz", 0.0),
+        ("heart_rate_hz", float("inf")),
+    ],
+)
+def test_detect_rates_rejects_an_implausible_rate(rate_name, rate):
+    """Zero, negative and infinite rates cannot come from eitprocessing, but a
+    substituted detector is under no such constraint."""
+
+    with pytest.raises(ValueError, match="implausible"):
+        _detect_rates_with(rate_name, rate)
 
 
 def test_mdn_filter_step_works_without_eitprocessing_and_matches_declared_writes():

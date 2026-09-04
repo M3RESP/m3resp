@@ -136,18 +136,27 @@ def detect_rates(
         ("respiratory_rate_hz", respiratory_rate_hz),
         ("heart_rate_hz", heart_rate_hz),
     ):
-        # Checked against whichever rate detector `session.eit_adapter` wraps,
-        # not just eitprocessing's. With eitprocessing's own detector only the
-        # NaN case can occur - the rate is drawn from the search band and its
-        # parabolic refinement shifts it by less than half a frequency bin, so
-        # it cannot come back zero or negative, but a frequency bin in which no
-        # pixel was measured leaves NaN in the averaged pixel power spectrum
-        # and the refinement carries that through. A substituted or custom
-        # detector is under no such constraint, so both cases are rejected.
+        # NaN means no rate could be estimated. With eitprocessing's own
+        # detector this is the only failure that can occur: the rate is drawn
+        # from the search band and its parabolic refinement shifts it by less
+        # than half a frequency bin, so it cannot come back zero or negative,
+        # but a frequency bin in which no pixel was measured leaves NaN in the
+        # averaged pixel power spectrum and the refinement carries it through.
+        if math.isnan(value):
+            raise ValueError(
+                f"eit.detect_rates could not estimate a {name}: the detector "
+                "returned NaN, which happens when the power spectrum has no "
+                "measured pixels in the frequency band being searched. Check "
+                "that the signal covers enough breaths and that the subject "
+                "type matches the expected rate range."
+            )
+        # A rate outside the search band cannot come from eitprocessing, but
+        # this step runs against whichever detector `session.eit_adapter`
+        # wraps, and a substituted or custom one is under no such constraint.
         if not math.isfinite(value) or value <= 0:
             raise ValueError(
-                f"eit.detect_rates produced a non-finite/non-positive {name}: "
-                f"{value!r}."
+                f"eit.detect_rates produced an implausible {name}: {value!r}. "
+                "A rate must be finite and greater than zero."
             )
 
     metadata = _upstream_metadata(
