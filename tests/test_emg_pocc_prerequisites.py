@@ -11,6 +11,7 @@ import pytest
 
 from m3resp.core.events import BreathEvent
 from m3resp.data import ParameterResult
+from m3resp.processing.ventilator import estimate_peep
 from m3resp.workflows import run_pipeline
 
 pytest.importorskip("resurfemg")
@@ -80,15 +81,16 @@ class TestPoccIntervals:
 
         assert result.session.events["pocc_breaths"] == events
 
-    def test_uses_the_same_peep_median_rule_as_find_occluded_breaths(self):
+    def test_uses_the_same_peep_rule_as_find_occluded_breaths(self):
         result = run_pipeline(POCC_SPEC)
-        pressure = result.value("ventilator_signals")["pressure"]
-        expected_peep = float(np.nanmedian(pressure))
+        signals = result.value("ventilator_signals")
+        expected_peep = estimate_peep(signals["pressure"], signals["volume"])
         for event in result.value("pocc_events"):
             assert event.metadata["peep"] == pytest.approx(expected_peep)
 
-    def test_explicit_peep_overrides_the_median_rule(self):
-        # Close to the natural median (~5.18) so the override is exercised
+    def test_explicit_peep_overrides_the_estimate(self):
+        # Close to the estimated end-expiratory PEEP (~4.97) so the override
+        # is exercised
         # without tripping the unrelated onoff_from_baseline_crossings edge
         # case where a far-off baseline never crosses again after the last
         # peak (a pre-existing primitive limitation, not this step's bug).
@@ -139,9 +141,10 @@ class TestPoccTimeProduct:
         from m3resp.processing.metrics import window_integral
 
         result = run_pipeline(POCC_SPEC)
-        pressure = np.asarray(result.value("ventilator_signals")["pressure"])
-        fs = float(result.value("ventilator_signals")["fs"])
-        peep = float(np.nanmedian(pressure))
+        signals = result.value("ventilator_signals")
+        pressure = np.asarray(signals["pressure"])
+        fs = float(signals["fs"])
+        peep = estimate_peep(pressure, signals["volume"])
         baseline = np.full(pressure.shape, peep)
 
         expected = window_integral(

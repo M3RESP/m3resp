@@ -25,6 +25,7 @@ from m3resp.processing.peaks import (
     detect_occluded_breath_peaks,
     detect_ventilator_breath_peaks,
 )
+from m3resp.processing.ventilator import estimate_peep
 from m3resp.processing.windows import rolling_envelope
 
 from ._protocols import _PostprocessingOpsProtocol
@@ -47,7 +48,7 @@ class _DefaultsMixin:
         channel: int = 0,
         high_pass_hz: float = 20.0,
         low_pass_hz: float | None = None,
-        envelope_window_seconds: float = 0.5,
+        envelope_window_seconds: float = 0.25,
         envelope_method: str = "rms",
         notch_base_frequency: float | None = None,
         notch_max_frequency: float | None = None,
@@ -322,7 +323,7 @@ class _DefaultsMixin:
             pocc_indices = np.asarray([], dtype=int)
             if enabled(("event_detection", "find_occluded_breaths")):
                 if peep is None:
-                    peep = float(np.nanmedian(p_vent))
+                    peep = estimate_peep(p_vent, v_vent)
                 pocc_indices = np.asarray(
                     detect_occluded_breath_peaks(
                         p_vent,

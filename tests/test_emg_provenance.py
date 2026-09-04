@@ -89,6 +89,9 @@ def test_native_primitive_step_records_m3resp_as_the_source_package():
             "steps": [
                 {
                     "uses": "ventilator.pocc_intervals",
+                    # This synthetic trace carries no volume channel, so PEEP
+                    # cannot be estimated from end-expiration; state it.
+                    "with": {"peep": peep},
                     "in": {
                         "ventilator_signals": "_ventilator_signals_input",
                         "pocc_indices": "_pocc_indices_input",

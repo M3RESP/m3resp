@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 
 from m3resp.core.events import BreathEvent
+from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult
 from m3resp.processing.intervals import (
@@ -19,6 +20,7 @@ from m3resp.processing.peaks import (
     detect_occluded_breath_peaks,
     detect_ventilator_breath_peaks,
 )
+from m3resp.processing.ventilator import estimate_peep
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 
 from ._shared import (
@@ -30,6 +32,27 @@ from ._shared import (
     _record_step,
     _upstream_metadata,
 )
+
+
+def _resolve_peep(ventilator_signals: Any, pressure: Any, peep: float | None) -> float:
+    """PEEP to measure against: the caller's value, else the end-expiratory
+    estimate (Warnaar et al. 2024). Never falls back to a whole-trace
+    statistic, which would sit above PEEP and bias every derived threshold."""
+
+    if peep is not None:
+        return float(peep)
+    volume = (
+        ventilator_signals.get("volume")
+        if isinstance(ventilator_signals, dict)
+        else None
+    )
+    if volume is None:
+        raise MissingModalityDataError(
+            "PEEP is estimated from the end-expiratory minima of the "
+            "ventilator volume signal, which is not present here. Provide "
+            "the volume channel or pass an explicit `peep` value."
+        )
+    return estimate_peep(pressure, volume)
 
 
 @register_step(
@@ -124,8 +147,7 @@ def find_occluded_breaths(
 
     pressure = ventilator_signals["pressure"]
     fs = float(ventilator_signals["fs"])
-    if peep is None:
-        peep = float(np.nanmedian(pressure))
+    peep = _resolve_peep(ventilator_signals, pressure, peep)
     indices = detect_occluded_breath_peaks(
         pressure,
         sample_frequency=fs,
@@ -212,7 +234,7 @@ def pocc_intervals(
 
     # Same PEEP rule as ventilator.find_occluded_breaths, so pocc_indices (detected
     # against this same baseline) and these intervals stay consistent.
-    effective_peep = peep if peep is not None else float(np.nanmedian(pressure))
+    effective_peep = _resolve_peep(ventilator_signals, pressure, peep)
     baseline = np.full(pressure.shape, effective_peep)
 
     starts, ends, valid_starts, valid_ends, valid_peaks = onoff_from_baseline_crossings(
@@ -337,7 +359,7 @@ def pocc_time_product(
 ) -> dict[str, Any]:
     pressure = np.asarray(ventilator_signals["pressure"], dtype=float)
     fs = float(ventilator_signals["fs"])
-    effective_peep = peep if peep is not None else float(np.nanmedian(pressure))
+    effective_peep = _resolve_peep(ventilator_signals, pressure, peep)
     baseline = np.full(pressure.shape, effective_peep)
 
     time_products = window_integral(

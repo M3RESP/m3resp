@@ -16,7 +16,8 @@ Source: https://github.com/resurfemg-org/ReSurfEMG
 License: Apache License, Version 2.0
 
 Portions of `src/m3resp/processing/peaks.py`, `src/m3resp/processing/windows.py`,
-and `src/m3resp/processing/metrics.py` are derived from ReSurfEMG; see the
+`src/m3resp/processing/metrics.py`, and `src/m3resp/processing/ventilator.py`
+are derived from ReSurfEMG; see the
 per-module "Provenance" notes in those files for the specific functions and
 upstream revision.
 
