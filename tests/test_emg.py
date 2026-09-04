@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -68,6 +69,59 @@ def test_custom_emg_detector_normalization_still_works():
             source="resurfemg",
         )
     ]
+
+
+class TestDetectionBaseline:
+    """A breath is a rise above the local quiet level, which drifts through a
+    recording. The detection threshold is taken from the envelope above the
+    baseline, so the baseline has to be computed first."""
+
+    @staticmethod
+    def _drifting_envelope():
+        np = pytest.importorskip("numpy")
+
+        fs = 100.0
+        time = np.arange(0, 60, 1 / fs)
+        bursts = np.maximum(np.sin(2 * np.pi * 0.25 * time), 0.0)
+        # Electrode drift: the quiet level climbs through the record, so later
+        # bursts sit higher without being any larger.
+        drift = np.linspace(0.0, 1.5, time.size)
+        return {
+            "envelope": bursts + drift,
+            "fs": fs,
+            "channel": "EMGdi",
+        }, drift
+
+    def test_detection_without_a_baseline_warns(self):
+        pytest.importorskip("resurfemg")
+        processed, _ = self._drifting_envelope()
+
+        with pytest.warns(UserWarning, match="baseline not defined"):
+            ReSurfEMGAdapter().detect_breaths(processed, min_breath_width_seconds=0.5)
+
+    def test_a_baseline_recovers_breaths_the_drift_would_hide(self):
+        pytest.importorskip("resurfemg")
+        processed, drift = self._drifting_envelope()
+
+        with pytest.warns(UserWarning, match="baseline not defined"):
+            without = ReSurfEMGAdapter().detect_breaths(
+                processed, min_breath_width_seconds=0.5
+            )
+        with_baseline = ReSurfEMGAdapter().detect_breaths(
+            processed, min_breath_width_seconds=0.5, baseline=drift
+        )
+
+        assert len(with_baseline) > len(without)
+
+    def test_passing_a_baseline_does_not_warn(self):
+        pytest.importorskip("resurfemg")
+        processed, drift = self._drifting_envelope()
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            ReSurfEMGAdapter().detect_breaths(
+                processed, min_breath_width_seconds=0.5, baseline=drift
+            )
 
 
 class TestDetectedBreathBoundaries:

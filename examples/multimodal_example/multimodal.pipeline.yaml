@@ -67,6 +67,11 @@ steps:
   - uses: emg.preprocess
     with: { channel: 0, high_pass_hz: 80, envelope_window_seconds: 0.5 }
 
+  # The baseline comes first: a breath is a rise above the local quiet level,
+  # and the detection threshold is taken from the envelope above that level.
+  - uses: emg.slopesum_baseline
+    with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
+
   - uses: emg.detect_breaths
     with: { min_breath_width_seconds: 1.0 }
 
@@ -77,9 +82,6 @@ steps:
       pressure_channel: 0
       flow_channel: 1
       volume_channel: 2
-
-  - uses: emg.slopesum_baseline
-    with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
 
   - uses: emg.find_occluded_breaths
 

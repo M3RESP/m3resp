@@ -81,6 +81,14 @@ steps:
     out: { processed_emg_after_ecg: processed_emg }
 
   # -- EMG breath detection ---------------------------------------------------
+  # The baseline comes first: a breath is a rise above the local quiet level,
+  # which drifts over a recording, and the detection threshold is taken from
+  # the envelope above that level. It depends only on the envelope, not on the
+  # peaks, so there is no circularity.
+  - id: moving_baseline
+    uses: emg.moving_baseline
+    with: { window_seconds: 7.5, step_seconds: 0.2, percentile: 33.0 }
+
   # min_breath_width_seconds is narrower than the 1.0 s default: this
   # fixture's "quiet breathing" envelope bursts are shorter than that,
   # so the default finds zero breaths - see docs/pipelines.md "Channel
@@ -91,10 +99,6 @@ steps:
 
   - id: peak_indices
     uses: emg.peak_indices
-
-  - id: moving_baseline
-    uses: emg.moving_baseline
-    with: { window_seconds: 7.5, step_seconds: 0.2, percentile: 33.0 }
 
   - id: onoffpeak_baseline_crossing
     uses: emg.onoffpeak_baseline_crossing

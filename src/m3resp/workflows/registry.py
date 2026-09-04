@@ -129,6 +129,12 @@ class StepDefinition:
     reads: Mapping[str, str | None] = field(default_factory=dict)
     #: natural output names the step returns (default context keys it writes).
     writes: tuple[str, ...] = ()
+    #: parameter names in ``reads`` whose context key may be absent. The step
+    #: is called without the argument (falling back to its own default) rather
+    #: than the pipeline failing to compile. For an input that improves a
+    #: result when present but is not required to produce one - e.g. the EMG
+    #: baseline that ``emg.detect_breaths`` sets its threshold against.
+    optional_reads: tuple[str, ...] = ()
     #: context keys that must already exist before the step runs, but are not
     #: passed as arguments (e.g. an in-place mutated sequence).
     requires: tuple[str, ...] = ()
@@ -209,6 +215,7 @@ def register_step(
     name: str,
     *,
     reads: Mapping[str, str | None] | None = None,
+    optional_reads: tuple[str, ...] = (),
     writes: tuple[str, ...] = (),
     requires: tuple[str, ...] = (),
     summary: str = "",
@@ -270,10 +277,17 @@ def register_step(
                     f"Pipeline step alias '{alias}' is already mapped to "
                     f"'{STEP_ALIASES[alias]}'."
                 )
+        unknown_optional = set(optional_reads) - set(reads or {})
+        if unknown_optional:
+            raise ValueError(
+                f"Pipeline step '{name}' declares optional_reads "
+                f"{sorted(unknown_optional)} that are not in 'reads'."
+            )
         definition = StepDefinition(
             name=name,
             func=func,
             reads=dict(reads or {}),
+            optional_reads=tuple(optional_reads),
             writes=tuple(writes),
             requires=tuple(requires),
             summary=summary or (func.__doc__ or "").strip().split("\n", 1)[0],

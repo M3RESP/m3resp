@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from typing import Any
 
@@ -169,9 +170,18 @@ class _DefaultsMixin:
         processed_emg: Any,
         *,
         min_breath_width_seconds: float = 1.0,
+        baseline: Any = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
         """Run ReSurfEMG EMG breath detection and return common rows.
+
+        A breath is a rise above the *local* quiet level, not above zero. The
+        detection threshold is taken from the envelope above ``baseline``, so
+        electrode drift is removed before the threshold is set. Without a
+        baseline the threshold is set against zero and the drift inflates it,
+        which drops genuine breaths wherever the quiet level has risen; that
+        case warns, as it does in ReSurfEMG. Compute the baseline first, with
+        ``emg.moving_baseline`` or ``emg.slopesum_baseline``.
 
         ReSurfEMG detects breath *peaks* only. Onset and offset are a separate
         measurement, made either by baseline crossing or by slope
@@ -196,8 +206,19 @@ class _DefaultsMixin:
         envelope = processed_emg["envelope"]
         min_width_samples = max(1, int(min_breath_width_seconds * fs))
 
+        if baseline is None:
+            warnings.warn(
+                "EMG baseline not defined; detecting breath peaks relative to "
+                "zero. Run `emg.moving_baseline` or `emg.slopesum_baseline` "
+                "before `emg.detect_breaths` so the detection threshold "
+                "follows the drifting quiet level.",
+                UserWarning,
+                stacklevel=2,
+            )
+
         peak_indices = detect_emg_breath_peaks(
             envelope,
+            baseline=baseline,
             min_peak_width_samples=min_width_samples,
             **kwargs,
         )

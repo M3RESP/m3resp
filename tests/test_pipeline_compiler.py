@@ -293,3 +293,86 @@ def test_validation_report_as_dict_is_json_serializable(_compiler_steps, tmp_pat
     )
     report = validate_pipeline(spec, readiness=True)
     json.dumps(report.as_dict())
+
+
+# --------------------------------------------------------------------------- #
+# optional reads                                                              #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def _optional_read_steps():
+    @register_step(
+        "optional_test.make_hint",
+        writes=("hint",),
+    )
+    def _make_hint() -> dict[str, Any]:
+        return {"hint": 10}
+
+    @register_step(
+        "optional_test.use_hint",
+        reads={"hint": "hint"},
+        optional_reads=("hint",),
+        writes=("used",),
+    )
+    def _use_hint(hint: Any = None) -> dict[str, Any]:
+        return {"used": -1 if hint is None else hint}
+
+    yield
+    STEP_REGISTRY.pop("optional_test.make_hint", None)
+    STEP_REGISTRY.pop("optional_test.use_hint", None)
+
+
+def test_optional_read_compiles_when_nothing_produces_the_key(
+    _optional_read_steps, tmp_path
+):
+    # Without the optional marker this spec is rejected: the step reads a
+    # context key no earlier step produces.
+    spec = load_spec(
+        {"name": "p", "steps": [{"uses": "optional_test.use_hint"}]},
+        root=tmp_path,
+    )
+
+    compiled = compile_pipeline(spec)
+
+    assert compiled.steps[0].optional_bindings == frozenset({"hint"})
+
+
+def test_optional_read_is_omitted_at_run_time_when_absent(
+    _optional_read_steps, tmp_path
+):
+    from m3resp.workflows import run_pipeline
+
+    result = run_pipeline({"name": "p", "steps": [{"uses": "optional_test.use_hint"}]})
+
+    assert result.value("used") == -1
+
+
+def test_optional_read_is_passed_when_an_earlier_step_produces_it(
+    _optional_read_steps, tmp_path
+):
+    from m3resp.workflows import run_pipeline
+
+    result = run_pipeline(
+        {
+            "name": "p",
+            "steps": [
+                {"uses": "optional_test.make_hint"},
+                {"uses": "optional_test.use_hint"},
+            ],
+        }
+    )
+
+    assert result.value("used") == 10
+
+
+def test_optional_reads_must_name_a_declared_read():
+    with pytest.raises(ValueError, match="optional_reads"):
+
+        @register_step(
+            "optional_test.bad",
+            reads={"a": "a"},
+            optional_reads=("b",),
+        )
+        def _bad(a: Any) -> dict[str, Any]:
+            return {}

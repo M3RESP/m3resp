@@ -286,10 +286,12 @@ def _bind_compiled_arguments(
     context reads resolve against the live context; static parameters were
     already fully resolved (``@ref``s and paths) at compile time."""
 
-    kwargs: dict[str, Any] = {
-        param: ctx.get(context_key)
-        for param, context_key in compiled_step.input_bindings.items()
-    }
+    kwargs: dict[str, Any] = {}
+    for param, context_key in compiled_step.input_bindings.items():
+        if param in compiled_step.optional_bindings and not ctx.has(context_key):
+            # Nothing produced it; let the step fall back to its own default.
+            continue
+        kwargs[param] = ctx.get(context_key)
     kwargs.update(compiled_step.parameters)
     return kwargs
 

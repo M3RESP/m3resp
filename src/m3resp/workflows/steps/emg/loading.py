@@ -153,7 +153,8 @@ def preprocess(session: M3Session, **kwargs: Any) -> dict[str, Any]:
 
 @register_step(
     "emg.detect_breaths",
-    reads={"session": "session"},
+    reads={"session": "session", "baseline": "baseline"},
+    optional_reads=("baseline",),
     writes=("emg_breath_events",),
     summary="Detect EMG breaths from the envelope.",
     description="Detect EMG breaths from the processed envelope via ReSurfEMGAdapter.detect_breaths. Accepts arbitrary adapter keyword arguments beyond 'variant'.",
@@ -162,7 +163,15 @@ def preprocess(session: M3Session, **kwargs: Any) -> dict[str, Any]:
     optional_packages=_RESURFEMG,
     session_reads=("session.processed.emg",),
     session_writes=("session.events.emg_breaths",),
-    input_artifacts=(_SESSION_ARTIFACT,),
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="baseline",
+            artifact_type="signal_array",
+            default_context_key="baseline",
+            description="EMG baseline from 'emg.moving_baseline' or 'emg.slopesum_baseline'. Detection thresholds are set against the envelope above this level; without it they are set against zero.",
+        ),
+    ),
     parameters=(
         StepParameter(
             name="variant",
@@ -181,8 +190,10 @@ def preprocess(session: M3Session, **kwargs: Any) -> dict[str, Any]:
         ),
     ),
 )
-def detect_breaths(session: M3Session, **kwargs: Any) -> dict[str, Any]:
-    events = session.detect_emg_breaths(**kwargs)
+def detect_breaths(
+    session: M3Session, baseline: Any = None, **kwargs: Any
+) -> dict[str, Any]:
+    events = session.detect_emg_breaths(baseline=baseline, **kwargs)
     return {"emg_breath_events": events}
 
 

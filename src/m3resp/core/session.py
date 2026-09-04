@@ -430,7 +430,12 @@ class M3Session:
             event_key = "emg_breaths"
         events = self.emg_adapter.detect_breaths(data, **kwargs)
         self.add_events(event_key, events)
-        self._record("detect_emg_breaths", "emg", variant=variant, **kwargs)
+        recorded = dict(kwargs)
+        if "baseline" in recorded:
+            # The baseline is a full-length array; record that one was used,
+            # not its samples.
+            recorded["baseline"] = recorded["baseline"] is not None
+        self._record("detect_emg_breaths", "emg", variant=variant, **recorded)
         return self.events[event_key]
 
     def detect_ventilator_breaths(
