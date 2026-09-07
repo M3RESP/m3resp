@@ -9,12 +9,15 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+import numpy as np
+
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
 
 from m3resp.export.tables import (
     events_to_rows,
     linked_breaths_to_rows,
+    parameter_results_to_rows_and_archive,
     parameters_to_rows,
 )
 
@@ -28,6 +31,7 @@ def export_session_summary(
     parameters_csv: bool = True,
     postprocessing: bool = True,
     structured_export: bool = True,
+    processing_run_id: str | None = None,
 ) -> Path:
     """Export a minimal CSV/JSON summary for an M3Resp session.
 
@@ -38,6 +42,14 @@ def export_session_summary(
     and ``processing_history.json``. These are additive - ``summary.json``
     and the per-event-list CSVs above are unchanged and keep their Stage 1
     shape.
+
+    Array-valued ``ParameterResult``s (Stage 2 EIT gap migration, Phase 5.3)
+    are written to a shared ``parameter_result_arrays.npz`` archive instead of
+    being serialized into ``parameter_results.csv`` cells. ``processing_run_id``
+    - typically ``PipelineResult.processing_run_id`` - links that archive to
+    the ``ProcessingRun`` that produced it when a ``DataModelRecorder`` is
+    attached; a manual export with no associated pipeline run still writes the
+    archive but leaves it unlinked rather than inventing a run.
     """
 
     output_path = Path(output_dir)
@@ -74,12 +86,16 @@ def export_session_summary(
         )
 
     if structured_export:
-        _export_structured_collections(session, output_path)
+        _export_structured_collections(
+            session, output_path, processing_run_id=processing_run_id
+        )
 
     return output_path
 
 
-def _export_structured_collections(session: Any, output_path: Path) -> None:
+def _export_structured_collections(
+    session: Any, output_path: Path, *, processing_run_id: str | None = None
+) -> None:
     """Write the Milestone 2.6 per-entity files (see ``export_session_summary``)."""
 
     _write_json(output_path / "session_metadata.json", _jsonable(session.metadata))
@@ -92,9 +108,21 @@ def _export_structured_collections(session: Any, output_path: Path) -> None:
             output_path / "signals_manifest.csv", session.signals.to_manifest_rows()
         )
     if session.parameter_results:
-        _write_csv(
-            output_path / "parameter_results.csv", session.parameter_results.to_rows()
-        )
+        rows, archive = parameter_results_to_rows_and_archive(session.parameter_results)
+        _write_csv(output_path / "parameter_results.csv", rows)
+        if archive:
+            archive_path = Path(
+                os.path.join(str(output_path), "parameter_result_arrays.npz")
+            )
+            # numpy's stub declares an `allow_pickle: bool` keyword alongside
+            # `**kwds: ArrayLike`, so mypy conservatively checks **archive's
+            # value type against `bool` too; this a stub limitation, not a
+            # real type error (archive is never given an `allow_pickle` key).
+            np.savez_compressed(str(archive_path), **archive)  # type: ignore[arg-type]
+            if session.datamodel is not None and processing_run_id is not None:
+                session.datamodel.record_parameter_file(
+                    archive_path, processing_run_id=processing_run_id
+                )
     if session.quality:
         _write_csv(output_path / "quality_flags.csv", session.quality.to_rows())
     if session.linked_breaths:
