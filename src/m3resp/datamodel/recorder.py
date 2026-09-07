@@ -93,12 +93,19 @@ def _stream_key(
 ) -> str:
     """Cache key identifying one recorded ``SignalStream``.
 
-    All three axes are needed: one device emits several streams, and one
-    device can emit several streams of the *same* physical quantity. EIT is
-    the case in point - the global impedance and the pixel impedance are both
-    ``eit``/``impedance``, and only the channel tells them apart. Falls back
-    to the bare modality when no category is set, so signals recorded before
-    categories existed keep the keys they had.
+    All three axes are needed. One device emits several streams (a ventilator
+    produces pressure, flow and volume), and one device can emit several
+    streams of the *same* quantity, which only the channel tells apart. Both
+    cases are real: EIT records the global impedance and the pixel impedance
+    as ``eit``/``impedance``, and a study can capture an airway pressure both
+    from a ventilator export and from the EIT file's own Medibus channels.
+    Keying on modality and category alone made each of those pairs
+    indistinguishable, so the second overwrote the first and every derived
+    feature and quality flag was attributed to whichever was recorded last.
+
+    Falls back to the bare modality when no category is set, so signals
+    recorded before categories existed keep the keys they had, and omits the
+    channel when there is none.
     """
 
     resolved = modality or "unknown"
@@ -107,6 +114,23 @@ def _stream_key(
     if not channel:
         return f"{resolved}:{category}"
     return f"{resolved}:{category}:{channel}"
+
+
+def _instrument_of(signal: Signal) -> str | None:
+    """Which instrument recorded this signal, when more than one did.
+
+    When a study records the same quantity on two instruments, the
+    non-primary recording's channels are qualified with its name
+    (``pressure__pod`` rather than ``pressure``, see
+    ``M3Session.preprocess_ventilator``). That qualifier is the instrument,
+    and it still decides the ``Device`` record. The stream keys themselves
+    are qualified by the full channel, which already tells the two apart.
+    """
+
+    channel = signal.channel
+    if channel and "__" in channel:
+        return channel.split("__", 1)[1]
+    return None
 
 
 #: Fallback signal type for the provenance-inference path (Milestone 1),
@@ -155,13 +179,18 @@ class DataModelRecorder:
         )
 
         self._devices: dict[str, str] = {}
-        # Keyed by `_stream_key(modality, category)`. One device now emits
-        # several streams (a ventilator produces pressure, flow and volume), so
-        # modality alone no longer identifies a stream - keying by it would let
-        # each ventilator channel overwrite the previous one and misattribute
-        # every derived feature to whichever was recorded last.
+        # Keyed by `_stream_key(modality, category, channel)`. Every stream is
+        # filed under its own fully qualified key; the first channel to claim
+        # a quantity is additionally filed under the unqualified
+        # `modality:category` key, so a result that names no channel still
+        # resolves to it.
         self._signals: dict[str, str] = {}
         self._files: dict[str, str] = {}
+        # Which channel claimed each unqualified key. A later signal on that
+        # same channel (its processed version, say) may replace it; one on a
+        # different channel may not, or the global and pixel impedances - or
+        # two instruments' airway pressures - would overwrite each other.
+        self._stream_owners: dict[str, str | None] = {}
 
     # -- Layer 1 objects -> persisted entities (Milestone 2.3) ---------------
 
@@ -193,7 +222,8 @@ class DataModelRecorder:
             )
             return None
 
-        device_id = self._ensure_device(signal.modality)
+        instrument = _instrument_of(signal)
+        device_id = self._ensure_device(signal.modality, instrument)
         stream = self.store.add_signal_stream(
             SignalStream(
                 session_id=self.recording_session.session_id,
@@ -205,16 +235,21 @@ class DataModelRecorder:
             )
         )
         # The channel-qualified key always points at this exact stream. The
-        # broader keys are filled in first-wins, so a later stream on the same
-        # device and quantity (the pixel impedance arriving after the global
-        # one) cannot take over the attribution of results that name only
-        # their modality and quantity.
-        stream_key = _stream_key(signal.modality, signal.category)
-        self._signals[_stream_key(signal.modality, signal.category, signal.channel)] = (
-            stream.signal_id
+        # unqualified key is owned by the first channel that claimed it, so a
+        # later stream of the same modality and quantity on a *different*
+        # channel (the pixel impedance arriving after the global one, or a
+        # second instrument's airway pressure) cannot take over the
+        # attribution of results that name only their modality and quantity.
+        # Re-recording the *same* channel still replaces its own entry.
+        stream_key = _stream_key(signal.modality, signal.category, signal.channel)
+        self._signals[stream_key] = stream.signal_id
+        shared_key = _stream_key(signal.modality, signal.category)
+        owns_shared = (
+            self._stream_owners.setdefault(shared_key, signal.channel) == signal.channel
         )
-        for fallback_key in (stream_key, _stream_key(signal.modality, None)):
-            self._signals.setdefault(fallback_key, stream.signal_id)
+        if owns_shared:
+            self._signals[shared_key] = stream.signal_id
+        self._signals.setdefault(_stream_key(signal.modality, None), stream.signal_id)
 
         if file_path is not None:
             data_file = self.store.add_data_file(
@@ -227,6 +262,8 @@ class DataModelRecorder:
                 )
             )
             self._files[stream_key] = data_file.file_id
+            if owns_shared:
+                self._files[shared_key] = data_file.file_id
         return stream
 
     def _lookup_signal_id(
@@ -235,9 +272,10 @@ class DataModelRecorder:
         """Find the recorded stream a parameter/flag belongs to.
 
         Prefers an exact ``(modality, category, channel)`` match, then the
-        same pair without the channel. A result that names only its modality
-        falls back to that modality's first recorded stream, which is what
-        everything did before categories existed.
+        channel that owns the bare ``(modality, category)`` pair. A result
+        that names only its modality falls back to that modality's first
+        recorded stream, which is what everything did before categories
+        existed.
         """
 
         if modality is None:
@@ -348,12 +386,20 @@ class DataModelRecorder:
         )
         return self.store.add_processing_run(run)
 
-    def _ensure_device(self, modality: str) -> str:
-        if modality in self._devices:
-            return self._devices[modality]
+    def _ensure_device(self, modality: str, instrument: str | None = None) -> str:
+        """The ``Device`` record for one instrument of one modality.
+
+        Two instruments recording the same modality are two devices, each with
+        its own manufacturer, model and serial number, so they cannot share a
+        record. The primary recording keeps the bare modality as its key.
+        """
+
+        key = f"{modality}@{instrument}" if instrument else modality
+        if key in self._devices:
+            return self._devices[key]
         device_type = _MODALITY_DEVICE_TYPE.get(modality, "monitor")
         device = self.store.add_device(Device(device_type=device_type))
-        self._devices[modality] = device.device_id
+        self._devices[key] = device.device_id
         return device.device_id
 
     def _record_load(self, modality: str) -> None:
