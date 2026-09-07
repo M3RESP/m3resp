@@ -354,7 +354,10 @@ def _expected_cv() -> tuple[float, float, float, int]:
 _ROTARC_SPEC: dict[str, Any] = {
     "name": "rotarc-breath-duration",
     "steps": [
-        {"uses": "eit.load", "with": {"file": "data/eit.bin", "vendor": "draeger"}},
+        {
+            "uses": "eit.load",
+            "with": {"file_path": "data/eit.bin", "vendor": "draeger"},
+        },
         {
             "uses": "eit.slice",
             "in": {"signal": "raw_eit"},
@@ -405,7 +408,10 @@ def test_rotarc_full_selection_spec_has_one_slice():
     spec = {
         "name": "rotarc-breath-duration",
         "steps": [
-            {"uses": "eit.load", "with": {"file": "data/eit.bin", "vendor": "draeger"}},
+            {
+                "uses": "eit.load",
+                "with": {"file_path": "data/eit.bin", "vendor": "draeger"},
+            },
             {
                 "uses": "eit.slice",
                 "in": {"signal": "raw_eit"},

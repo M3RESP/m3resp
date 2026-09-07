@@ -33,7 +33,7 @@ from ._shared import (
     input_artifacts=(_SESSION_ARTIFACT,),
     parameters=(
         StepParameter(
-            name="file",
+            name="file_path",
             value_type="path",
             required=True,
             path_kind="file",
@@ -65,7 +65,7 @@ from ._shared import (
 def load(
     session: M3Session,
     *,
-    file: str,
+    file_path: str,
     loader_options: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     if loader_options is not None and not isinstance(loader_options, Mapping):
@@ -74,7 +74,7 @@ def load(
             f"for M3Session.load_emg(), got {type(loader_options).__name__}."
         )
 
-    session.load_emg(file, verbose=False, **dict(loader_options or {}))
+    session.load_emg(file_path, verbose=False, **dict(loader_options or {}))
     recording = session.emg
     assert recording is not None
 

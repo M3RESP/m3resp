@@ -47,11 +47,11 @@ steps:
   # -- Loading ---------------------------------------------------------------
   - id: load
     uses: emg.load
-    with: { file: "@emg_file" }
+    with: { file_path: "@emg_file" }
 
   - id: load_ventilator
     uses: ventilator.load
-    with: { file: "@vent_file" }
+    with: { file_path: "@vent_file" }
 
   - id: ventilator_channels
     uses: ventilator.channels

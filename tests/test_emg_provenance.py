@@ -35,7 +35,7 @@ def test_upstream_backed_step_records_the_shared_provenance_schema():
             "name": "provenance-smoke",
             "inputs": {"emg_file": str(EMG_PATH)},
             "steps": [
-                {"uses": "emg.load", "with": {"file": "@emg_file"}},
+                {"uses": "emg.load", "with": {"file_path": "@emg_file"}},
                 {
                     "uses": "emg.preprocess",
                     "with": {"channel": 0},
@@ -123,7 +123,7 @@ def test_each_migrated_step_call_adds_exactly_one_provenance_record():
             "name": "provenance-count-smoke",
             "inputs": {"emg_file": str(EMG_PATH)},
             "steps": [
-                {"uses": "emg.load", "with": {"file": "@emg_file"}},
+                {"uses": "emg.load", "with": {"file_path": "@emg_file"}},
                 {
                     "uses": "emg.preprocess",
                     "with": {"channel": 0},

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 import numpy as np
 
@@ -34,7 +34,7 @@ def _object_array_to_float(values: Any) -> np.ndarray:
 @register_step(
     "eit.pixel_tiv",
     reads={
-        "filtered_eit": "filtered_eit",
+        "eit_data": "filtered_eit",
         "signal": "global_impedance",
         "eit_sequence": "eit_sequence",
         "breath_detector": "breath_detector",
@@ -49,9 +49,13 @@ def _object_array_to_float(values: Any) -> np.ndarray:
     session_writes=("session.parameter_results",),
     input_artifacts=(
         StepArtifact(
-            name="filtered_eit",
+            name="eit_data",
             artifact_type="eit_pixel_signal",
-            description="Filtered EIT pixel signal to compute per-pixel TIV on.",
+            default_context_key="filtered_eit",
+            description=(
+                "EIT pixel signal to compute per-pixel TIV on. Defaults to the "
+                "filtered signal, but any pixel signal can be bound here."
+            ),
             compatibility_only=True,
         ),
         StepArtifact(
@@ -83,7 +87,12 @@ def _object_array_to_float(values: Any) -> np.ndarray:
             value_type="choice",
             default="continuous",
             choices=("pixel", "continuous"),
-            description="Whether breath timing is taken per-pixel or from the continuous (global) signal.",
+            description=(
+                "Whether breath timing is taken per-pixel, or from the "
+                "continuous waveform bound to 'signal'. That waveform is the "
+                "global impedance by default, but it can be a regional or "
+                "functional one instead."
+            ),
         ),
         StepParameter(
             name="result_label",
@@ -109,17 +118,17 @@ def _object_array_to_float(values: Any) -> np.ndarray:
     ),
 )
 def pixel_tiv(
-    filtered_eit: Any,
+    *,
+    eit_data: Any,
     signal: Any,
     eit_sequence: Any,
     breath_detector: Any,
     session: M3Session,
-    *,
     tiv_timing: Literal["pixel", "continuous"] = "continuous",
     result_label: str = "pixel_tivs",
 ) -> dict[str, Any]:
     result = session.eit_adapter.compute_pixel_tiv(
-        filtered_eit,
+        eit_data,
         signal,
         sequence=eit_sequence,
         breath_detector=breath_detector,
@@ -170,7 +179,16 @@ def pixel_tiv(
     return {"pixel_tiv": result, "pixel_tiv_result": pixel_tiv_result}
 
 
-_ALLOWED_PIXEL_BREATH_PHASE_MODES = {"negative amplitude", "phase shift", "none", None}
+#: The per-pixel phase correction methods, defined once. The declared
+#: `choices`, the runtime check and the type hint all derive from this, so a
+#: GUI built from `choices` offers exactly what the step accepts. `None` (YAML
+#: `null`) is a real option, equivalent to "none".
+#: Written flat rather than as `Literal[...] | None` (which PYI061 would
+#: prefer) because only the flat form makes `get_args` return the four options
+#: as one tuple, which is what `choices` and the runtime check both need.
+PhaseCorrectionMode = Literal["negative amplitude", "phase shift", "none", None]  # noqa: PYI061
+
+_ALLOWED_PIXEL_BREATH_PHASE_MODES = get_args(PhaseCorrectionMode)
 
 
 def _pixel_breaths_to_landmark_array(values: Any) -> np.ndarray:
@@ -181,18 +199,16 @@ def _pixel_breaths_to_landmark_array(values: Any) -> np.ndarray:
     become NaN."""
 
     array = np.asarray(values, dtype=object)
-    n_breaths, n_rows, n_cols = array.shape
-    landmarks = np.full((n_breaths, n_rows, n_cols, 3), np.nan, dtype=float)
-    for breath_index in range(n_breaths):
-        for row in range(n_rows):
-            for col in range(n_cols):
-                breath = array[breath_index, row, col]
-                if breath is not None:
-                    landmarks[breath_index, row, col] = (
-                        breath.start_time,
-                        breath.middle_time,
-                        breath.end_time,
-                    )
+    landmarks = np.full((*array.shape, 3), np.nan, dtype=float)
+    for breath_index, row, col in np.ndindex(array.shape):
+        # Object-dtype element, so a `Breath | None`, not an array.
+        breath: Any = array[breath_index, row, col]
+        if breath is not None:
+            landmarks[breath_index, row, col] = (
+                breath.start_time,
+                breath.middle_time,
+                breath.end_time,
+            )
     return landmarks
 
 
@@ -241,8 +257,12 @@ def _pixel_breaths_to_landmark_array(values: Any) -> np.ndarray:
             value_type="choice",
             required=False,
             default="negative amplitude",
-            choices=("negative amplitude", "phase shift", "none"),
-            description="Per-pixel phase correction method. Null is also accepted, equivalent to 'none'.",
+            choices=_ALLOWED_PIXEL_BREATH_PHASE_MODES,
+            description=(
+                "Per-pixel phase correction method. The empty option (`null` "
+                "in a YAML spec, `None` from Python) is accepted too and means "
+                "the same as 'none'."
+            ),
         ),
         StepParameter(
             name="minimum_duration_seconds",
@@ -277,20 +297,22 @@ def _pixel_breaths_to_landmark_array(values: Any) -> np.ndarray:
     ),
 )
 def pixel_breaths(
+    *,
     eit_data: Any,
     timing_data: Any,
     eit_sequence: Any,
     session: M3Session,
-    *,
-    phase_correction_mode: Literal["negative amplitude", "phase shift", "none"]
-    | None = "negative amplitude",
+    phase_correction_mode: PhaseCorrectionMode = "negative amplitude",
     minimum_duration_seconds: float = 2 / 3,
     result_label: str = "pixel_breaths",
 ) -> dict[str, Any]:
     if phase_correction_mode not in _ALLOWED_PIXEL_BREATH_PHASE_MODES:
+        named = ", ".join(
+            repr(mode) for mode in _ALLOWED_PIXEL_BREATH_PHASE_MODES if mode is not None
+        )
         raise ValueError(
             "eit.pixel_breaths 'phase_correction_mode' must be one of "
-            "'negative amplitude', 'phase shift', 'none', or null; "
+            f"{named}, or empty (`null` in a YAML spec, `None` from Python); "
             f"got {phase_correction_mode!r}."
         )
 
@@ -304,7 +326,11 @@ def pixel_breaths(
     )
 
     landmarks = _pixel_breaths_to_landmark_array(result.values)
-    valid = ~np.isnan(landmarks[..., 0])
+    # A pixel breath counts as determined only when all three of its timings
+    # are present. Checking the start time alone would be enough for a breath
+    # this module built itself, which sets all three together or none, but it
+    # would silently pass a breath whose middle or end time came back missing.
+    valid = ~np.isnan(landmarks).any(axis=-1)
 
     metadata = _upstream_metadata(
         source_function=(

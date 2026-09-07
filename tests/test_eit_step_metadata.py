@@ -98,9 +98,27 @@ def test_eit_pixel_breaths_phase_correction_choices_match_allowed_set():
 
     description = describe_step("eit.pixel_breaths")
     param = next(p for p in description.parameters if p.name == "phase_correction_mode")
-    # The allowed set also includes Python None, which is not a `choices` entry
-    # (choices are the string values; null is accepted as a separate case).
-    assert set(param.choices or ()) == _ALLOWED_PIXEL_BREATH_PHASE_MODES - {None}
+    # Every accepted mode is offered, the empty one included: it is a real
+    # option meaning "no phase correction", so a GUI built from `choices` must
+    # be able to select it.
+    assert set(param.choices or ()) == set(_ALLOWED_PIXEL_BREATH_PHASE_MODES)
+    assert None in (param.choices or ())
+
+
+def test_eit_pixel_breaths_phase_correction_options_have_one_definition():
+    """The choices, the runtime check and the type hint cannot drift apart."""
+
+    from typing import get_args, get_type_hints
+
+    from m3resp.workflows.steps.eit import _ALLOWED_PIXEL_BREATH_PHASE_MODES
+    from m3resp.workflows.steps.eit.pixel import pixel_breaths
+
+    annotation = get_type_hints(pixel_breaths)["phase_correction_mode"]
+    description = describe_step("eit.pixel_breaths")
+    param = next(p for p in description.parameters if p.name == "phase_correction_mode")
+
+    assert set(get_args(annotation)) == set(_ALLOWED_PIXEL_BREATH_PHASE_MODES)
+    assert set(param.choices or ()) == set(_ALLOWED_PIXEL_BREATH_PHASE_MODES)
 
 
 def test_eit_roi_filter_by_size_connectivity_choices_are_one_or_two():

@@ -140,7 +140,11 @@ class TestPayloadUnwrapping:
 class TestCroppingALoadedRecording:
     def test_crops_the_payload_in_place(self):
         session = _session()
-        session.load_ventilator("subject.txt")
+        # `source="ventilator"` marks this a standalone recording with a
+        # clock of its own. Without it the ".txt" suffix means the
+        # multi-channel export sharing the EMG clock, which is aligned
+        # with the EMG and must not also take a ventilator offset.
+        session.load_ventilator("subject.txt", source="ventilator")
 
         session.synchronize_raw_modalities(
             offset_seconds={"ventilator": 1.0}, reference_modality="eit"
@@ -152,7 +156,11 @@ class TestCroppingALoadedRecording:
         # Mirrors `_crop_emg_recording`: `.raw` must not keep pointing at the
         # pre-crop array after the payload is cropped.
         session = _session()
-        session.load_ventilator("subject.txt")
+        # `source="ventilator"` marks this a standalone recording with a
+        # clock of its own. Without it the ".txt" suffix means the
+        # multi-channel export sharing the EMG clock, which is aligned
+        # with the EMG and must not also take a ventilator offset.
+        session.load_ventilator("subject.txt", source="ventilator")
 
         session.synchronize_raw_modalities(
             offset_seconds={"ventilator": 1.0}, reference_modality="eit"
@@ -163,7 +171,11 @@ class TestCroppingALoadedRecording:
 
     def test_both_raw_keys_observe_the_crop(self):
         session = _session()
-        session.load_ventilator("subject.txt")
+        # `source="ventilator"` marks this a standalone recording with a
+        # clock of its own. Without it the ".txt" suffix means the
+        # multi-channel export sharing the EMG clock, which is aligned
+        # with the EMG and must not also take a ventilator offset.
+        session.load_ventilator("subject.txt", source="ventilator")
 
         session.synchronize_raw_modalities(
             offset_seconds={"vent": 1.0}, reference_modality="eit"
@@ -190,7 +202,7 @@ class TestPipelineStepDelegates:
         from m3resp.workflows.registry import get_step
 
         session = _session()
-        result = get_step("ventilator.load").func(session=session, file="vent.txt")
+        result = get_step("ventilator.load").func(session=session, file_path="vent.txt")
 
         # The step still emits the raw payload dict its downstream consumer
         # (`emg.ventilator_channels`) expects...

@@ -38,8 +38,8 @@ GRANULAR_SPEC = {
     "name": "emg-granular-postprocess",
     "inputs": {"emg_file": str(EMG_PATH), "vent_file": str(VENT_PATH)},
     "steps": [
-        {"uses": "emg.load", "with": {"file": "@emg_file"}},
-        {"uses": "ventilator.load", "with": {"file": "@vent_file"}},
+        {"uses": "emg.load", "with": {"file_path": "@emg_file"}},
+        {"uses": "ventilator.load", "with": {"file_path": "@vent_file"}},
         {
             "uses": "emg.preprocess",
             "with": {"channel": 0, "high_pass_hz": 80, "envelope_window_seconds": 0.5},

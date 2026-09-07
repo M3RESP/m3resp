@@ -30,7 +30,7 @@
       "out": {},
       "uses": "emg.load",
       "with": {
-        "file": "@emg_file"
+        "file_path": "@emg_file"
       }
     },
     {
@@ -39,7 +39,7 @@
       "out": {},
       "uses": "ventilator.load",
       "with": {
-        "file": "@vent_file"
+        "file_path": "@vent_file"
       }
     },
     {

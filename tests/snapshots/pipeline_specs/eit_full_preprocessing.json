@@ -30,7 +30,7 @@
       "out": {},
       "uses": "eit.load",
       "with": {
-        "file": "@eit_file",
+        "file_path": "@eit_file",
         "vendor": "@vendor"
       }
     },

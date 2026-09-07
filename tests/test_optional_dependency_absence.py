@@ -46,7 +46,10 @@ def _eit_emg_spec() -> dict:
         "name": "p",
         "inputs": {"eit_file": "does-not-need-to-exist.bin"},
         "steps": [
-            {"uses": "eit.load", "with": {"file": "@eit_file", "vendor": "draeger"}}
+            {
+                "uses": "eit.load",
+                "with": {"file_path": "@eit_file", "vendor": "draeger"},
+            }
         ],
     }
 
