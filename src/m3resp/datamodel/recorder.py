@@ -89,27 +89,31 @@ _MODALITY_DEVICE_TYPE: dict[str, DeviceType] = {
 
 
 def _stream_key(
-    modality: str | None, category: str | None, instrument: str | None = None
+    modality: str | None, category: str | None, channel: str | None = None
 ) -> str:
     """Cache key identifying one recorded ``SignalStream``.
 
     All three axes are needed. One device emits several streams (a ventilator
-    produces pressure, flow and volume), and one study can record the same
-    quantity on more than one instrument - a ventilator export and the EIT
-    file's own Medibus channels each carry an airway pressure. Keying on
-    modality and category alone made those two indistinguishable, so the
-    second overwrote the first and every derived feature and quality flag was
-    attributed to whichever was recorded last.
+    produces pressure, flow and volume), and one device can emit several
+    streams of the *same* quantity, which only the channel tells apart. Both
+    cases are real: EIT records the global impedance and the pixel impedance
+    as ``eit``/``impedance``, and a study can capture an airway pressure both
+    from a ventilator export and from the EIT file's own Medibus channels.
+    Keying on modality and category alone made each of those pairs
+    indistinguishable, so the second overwrote the first and every derived
+    feature and quality flag was attributed to whichever was recorded last.
 
-    Falls back to the bare modality when no category is set, so EIT/EMG
-    signals (which have one stream per modality) keep the keys they had before
-    categories existed, and omits the instrument for the primary recording, so
-    a study with one instrument keeps the keys it had before this axis.
+    Falls back to the bare modality when no category is set, so signals
+    recorded before categories existed keep the keys they had, and omits the
+    channel when there is none.
     """
 
     resolved = modality or "unknown"
-    key = f"{resolved}:{category}" if category else resolved
-    return f"{key}@{instrument}" if instrument else key
+    if not category:
+        return resolved
+    if not channel:
+        return f"{resolved}:{category}"
+    return f"{resolved}:{category}:{channel}"
 
 
 def _instrument_of(signal: Signal) -> str | None:
@@ -118,9 +122,9 @@ def _instrument_of(signal: Signal) -> str | None:
     When a study records the same quantity on two instruments, the
     non-primary recording's channels are qualified with its name
     (``pressure__pod`` rather than ``pressure``, see
-    ``M3Session.preprocess_ventilator``). That qualifier is the instrument.
-    The primary recording's channels are unqualified and return ``None``,
-    which keeps its keys and its ``Device`` record as they were.
+    ``M3Session.preprocess_ventilator``). That qualifier is the instrument,
+    and it still decides the ``Device`` record. The stream keys themselves
+    are qualified by the full channel, which already tells the two apart.
     """
 
     channel = signal.channel
@@ -175,16 +179,17 @@ class DataModelRecorder:
         )
 
         self._devices: dict[str, str] = {}
-        # Keyed by `_stream_key(modality, category, instrument)`. Every stream
-        # is filed under its own fully qualified key; the primary recording is
-        # additionally filed under the unqualified `modality:category` key, so
-        # a result that names no instrument still resolves to it.
+        # Keyed by `_stream_key(modality, category, channel)`. Every stream is
+        # filed under its own fully qualified key; the first channel to claim
+        # a quantity is additionally filed under the unqualified
+        # `modality:category` key, so a result that names no channel still
+        # resolves to it.
         self._signals: dict[str, str] = {}
         self._files: dict[str, str] = {}
-        # Which instrument claimed each unqualified key. A later signal from
-        # that same instrument (its processed version, say) may replace it; one
-        # from a second instrument may not, or the two recordings' airway
-        # pressures would overwrite each other again.
+        # Which channel claimed each unqualified key. A later signal on that
+        # same channel (its processed version, say) may replace it; one on a
+        # different channel may not, or the global and pixel impedances - or
+        # two instruments' airway pressures - would overwrite each other.
         self._stream_owners: dict[str, str | None] = {}
 
     # -- Layer 1 objects -> persisted entities (Milestone 2.3) ---------------
@@ -229,11 +234,22 @@ class DataModelRecorder:
                 sample_count=signal.n_samples,
             )
         )
-        stream_key = _stream_key(signal.modality, signal.category, instrument)
+        # The channel-qualified key always points at this exact stream. The
+        # unqualified key is owned by the first channel that claimed it, so a
+        # later stream of the same modality and quantity on a *different*
+        # channel (the pixel impedance arriving after the global one, or a
+        # second instrument's airway pressure) cannot take over the
+        # attribution of results that name only their modality and quantity.
+        # Re-recording the *same* channel still replaces its own entry.
+        stream_key = _stream_key(signal.modality, signal.category, signal.channel)
         self._signals[stream_key] = stream.signal_id
         shared_key = _stream_key(signal.modality, signal.category)
-        if self._stream_owners.setdefault(shared_key, instrument) == instrument:
+        owns_shared = (
+            self._stream_owners.setdefault(shared_key, signal.channel) == signal.channel
+        )
+        if owns_shared:
             self._signals[shared_key] = stream.signal_id
+        self._signals.setdefault(_stream_key(signal.modality, None), stream.signal_id)
 
         if file_path is not None:
             data_file = self.store.add_data_file(
@@ -246,33 +262,31 @@ class DataModelRecorder:
                 )
             )
             self._files[stream_key] = data_file.file_id
-            if self._stream_owners.get(shared_key) == instrument:
+            if owns_shared:
                 self._files[shared_key] = data_file.file_id
         return stream
 
     def _lookup_signal_id(
-        self,
-        modality: str | None,
-        category: str | None,
-        instrument: str | None = None,
+        self, modality: str | None, category: str | None, channel: str | None = None
     ) -> str | None:
         """Find the recorded stream a parameter/flag belongs to.
 
-        Prefers the exact instrument when one is named, then the primary
-        recording's ``(modality, category)`` stream. A result that names only
-        its modality falls back to that modality's first recorded stream,
-        which is what everything did before categories existed.
+        Prefers an exact ``(modality, category, channel)`` match, then the
+        channel that owns the bare ``(modality, category)`` pair. A result
+        that names only its modality falls back to that modality's first
+        recorded stream, which is what everything did before categories
+        existed.
         """
 
         if modality is None:
             return None
-        if instrument is not None:
-            signal_id = self._signals.get(_stream_key(modality, category, instrument))
+        for key in (
+            _stream_key(modality, category, channel),
+            _stream_key(modality, category),
+        ):
+            signal_id = self._signals.get(key)
             if signal_id is not None:
                 return signal_id
-        signal_id = self._signals.get(_stream_key(modality, category))
-        if signal_id is not None:
-            return signal_id
         signal_id = self._signals.get(modality)
         if signal_id is not None:
             return signal_id
@@ -287,7 +301,9 @@ class DataModelRecorder:
     ) -> DerivedFeature:
         """Materialize a ``ParameterResult`` as a ``DerivedFeature``."""
 
-        signal_id = self._lookup_signal_id(parameter.modality, parameter.category)
+        signal_id = self._lookup_signal_id(
+            parameter.modality, parameter.category, parameter.channel
+        )
         return self.store.add_derived_feature(
             DerivedFeature(
                 source_signal_ids=[signal_id] if signal_id is not None else [],

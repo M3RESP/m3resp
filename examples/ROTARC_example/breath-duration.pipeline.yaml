@@ -33,7 +33,7 @@ inputs:
 
 steps:
   - uses: eit.load
-    with: { file: "@eit_file", vendor: "@vendor" }
+    with: { file_path: "@eit_file", vendor: "@vendor" }
 
   # start/end are sample indices into eit_file above (0:1550 = the full
   # recording for the currently configured file, 1550 samples at 50 Hz).

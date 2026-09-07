@@ -159,13 +159,18 @@ def test_a_result_naming_no_instrument_resolves_to_the_primary_recording():
 
 
 def test_the_second_instrument_is_reachable_by_name():
+    """Streams are keyed by their full channel, so the second instrument is
+    reached by the qualified channel it was recorded under."""
+
     session = M3Session()
     store = DataModelStore()
     recorder = DataModelRecorder(session, store)
     recorder.record_signal(_airway_pressure("pressure"))
     second = recorder.record_signal(_airway_pressure("pressure__pod"))
 
-    resolved = recorder._lookup_signal_id("ventilator", "airway_pressure", "pod")
+    resolved = recorder._lookup_signal_id(
+        "ventilator", "airway_pressure", "pressure__pod"
+    )
     assert resolved == second.signal_id
 
 
@@ -193,6 +198,67 @@ def test_reprocessing_one_instrument_replaces_its_own_stream():
     )
 
     assert feature.source_signal_ids == [reprocessed.signal_id]
+
+
+def test_two_eit_impedance_streams_keep_separate_attribution():
+    """The global and pixel impedance are both eit/impedance and are told
+    apart only by their channel. A result naming its channel must reach its
+    own stream, and one naming only the modality must stay with the first
+    stream recorded rather than following the most recent one."""
+
+    session = M3Session()
+    store = DataModelStore()
+    recorder = DataModelRecorder(session, store)
+
+    global_stream = recorder.record_signal(
+        Signal(
+            values=[1.0, 2.0],
+            time=[0.0, 1.0],
+            modality="eit",
+            category="impedance",
+            channel="global_impedance",
+        )
+    )
+    pixel_stream = recorder.record_signal(
+        Signal(
+            values=[[[1.0]], [[2.0]]],
+            time=[0.0, 1.0],
+            modality="eit",
+            category="impedance",
+            channel="pixel_impedance",
+        )
+    )
+    assert global_stream.signal_id != pixel_stream.signal_id
+
+    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+    pixel_feature = recorder.record_parameter(
+        ParameterResult(
+            name="pixel_tiv",
+            value=1.0,
+            modality="eit",
+            category="impedance",
+            channel="pixel_impedance",
+        ),
+        processing_run_id=run.processing_run_id,
+    )
+    global_feature = recorder.record_parameter(
+        ParameterResult(
+            name="tiv",
+            value=2.0,
+            modality="eit",
+            category="impedance",
+            channel="global_impedance",
+        ),
+        processing_run_id=run.processing_run_id,
+    )
+    unchannelled_feature = recorder.record_parameter(
+        ParameterResult(name="eeli", value=3.0, modality="eit"),
+        processing_run_id=run.processing_run_id,
+    )
+
+    assert pixel_feature.source_signal_ids == [pixel_stream.signal_id]
+    assert global_feature.source_signal_ids == [global_stream.signal_id]
+    assert unchannelled_feature.source_signal_ids == [global_stream.signal_id]
 
 
 def test_record_parameter_and_quality_flag_link_to_recorded_signal():
