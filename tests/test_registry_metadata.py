@@ -290,6 +290,7 @@ def test_every_registered_step_has_reviewed_parameters():
 
 _AUDITED_SESSION_STEPS = frozenset(
     {
+        "eit.butterworth_filter",
         "eit.detect_rates",
         "eit.eeli",
         "eit.load",

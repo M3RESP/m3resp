@@ -35,7 +35,7 @@ EMG_PATH = (
 )
 
 LOAD_AND_PREPROCESS = [
-    {"uses": "emg.load", "with": {"file": "@emg_file"}},
+    {"uses": "emg.load", "with": {"file_path": "@emg_file"}},
     {"uses": "emg.preprocess", "with": {"channel": 0}},
 ]
 
