@@ -73,7 +73,9 @@ def test_session_normalizes_ventilator_breaths_after_emg_postprocessing():
 
     session.emg_adapter.postprocess = postprocess
     session.postprocess_emg(
-        ventilator={"metadata": {"fs": 100.0}, "array": [[0.0, 1.0]]},
+        # 300 samples at 100 Hz: a 3 s recording, so the breaths detected at
+        # samples 100 and 200 both sit well inside it.
+        ventilator={"metadata": {"fs": 100.0}, "array": [[0.0] * 300]},
         ventilator_breath_width_seconds=0.4,
     )
 

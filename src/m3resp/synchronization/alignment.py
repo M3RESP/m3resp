@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Any, overload
 
 from m3resp.core.events import BreathEvent, Event
+from m3resp.synchronization.cropping import normalize_modality
 
 
 @overload
@@ -80,12 +81,23 @@ def align_events_by_modality_offset(
     events: Sequence[Event | BreathEvent],
     offsets_seconds: Mapping[str, float],
 ) -> list[Any]:
-    """Return event copies shifted by the offset configured for each modality."""
+    """Return event copies shifted by the offset configured for each modality.
 
+    Both the event's modality and the offset keys are canonicalized before
+    matching, so an event still tagged with a legacy spelling (``"vent"``) is
+    shifted by an offset given under the canonical name (``"ventilator"``), and
+    vice versa. Without this, a mismatch would silently apply a zero offset
+    rather than raise.
+    """
+
+    offsets_by_canonical_modality = {
+        normalize_modality(modality): offset
+        for modality, offset in offsets_seconds.items()
+    }
     aligned: list[Any] = []
     for event in events:
-        modality = _event_modality(event)
-        offset = float(offsets_seconds.get(modality, 0.0))
+        modality = normalize_modality(_event_modality(event))
+        offset = float(offsets_by_canonical_modality.get(modality, 0.0))
         aligned.extend(align_events_manual_offset([event], offset))
     return aligned
 

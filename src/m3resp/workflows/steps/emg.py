@@ -655,9 +655,14 @@ def normalize_ventilator_breaths(
     breath_width_seconds: float = 0.5,
 ) -> dict[str, Any]:
     fs = float(ventilator_signals["fs"])
+    pressure = ventilator_signals.get("pressure")
+    duration_seconds = len(pressure) / fs if pressure is not None and fs else None
     events = [
         _normalize_ventilator_breath(
-            detection, fs=fs, width_seconds=breath_width_seconds
+            detection,
+            fs=fs,
+            width_seconds=breath_width_seconds,
+            duration_seconds=duration_seconds,
         )
         for detection in _iter_ventilator_detections(ventilator_breath_indices)
     ]
