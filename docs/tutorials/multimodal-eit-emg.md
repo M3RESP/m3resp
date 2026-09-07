@@ -82,9 +82,18 @@ offset (`method="manual_offset"` is currently the only method either accepts).
 - `session.compute_multimodal_parameters()` turns those links into
   `ParameterResult`s. All three are measures of breath *timing* - they use
   only breath start/end times, never the signal values within a breath:
-  - `eit_to_emg_delay` (per breath, seconds, signed): the lag between the
-    two modalities' breaths - electromechanical coupling time when measured
-    between EMG effort and EIT volume change. A physiological quantity.
+  - `eit_to_emg_delay` (per breath, seconds, signed): the EMG breath anchor
+    minus the EIT breath anchor. Read it as a check on detection and
+    alignment, not as an outcome measure. With the default `anchor="start"`
+    the two sides are not the same kind of landmark: the EIT start is a
+    detected breath start, while the EMG start is built from the envelope
+    peak by subtracting a fixed half-window (`half_window_seconds`, 0.5 s by
+    default), so changing that setting shifts the delay by the same amount.
+    With `anchor="peak"` it compares the EIT breath middle against the EMG
+    envelope peak. Calling this electromechanical coupling time would need
+    the EMG anchor to be diaphragm activation onset and the EIT anchor the
+    start of volume change, defined consistently and validated against each
+    other; that is separate work.
   - `eit_emg_duration_difference` (per breath, seconds): how much longer one
     modality's breath is than the other's.
   - `eit_emg_event_agreement` (aggregate, fraction): how often both
