@@ -8,8 +8,8 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.core.events import BreathEvent
-from m3resp.core.events import coerce_breath_events
+from m3resp.adapters.ventilator_adapter import DEFAULT_CHANNELS, split_channels
+from m3resp.core.events import BreathEvent, coerce_breath_events
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
 from m3resp.data import ParameterResult, QualityFlag, Signal
 from m3resp.data.signals import ProcessingState
@@ -827,36 +827,40 @@ class ReSurfEMGAdapter:
 def _ventilator_signals(
     ventilator: Any | None,
     *,
-    pressure_channel: int,
-    flow_channel: int,
-    volume_channel: int,
+    pressure_channel: int | None = None,
+    flow_channel: int | None = None,
+    volume_channel: int | None = None,
+    channels: Any = DEFAULT_CHANNELS,
     fs: float | None = None,
 ) -> dict[str, Any] | None:
+    """Split the ventilator channels an EMG postprocessing run needs.
+
+    Delegates to `m3resp.adapters.ventilator_adapter.split_channels` rather
+    than indexing columns itself, so the ventilator channels reaching Pocc and
+    ventilator-breath detection are found by the same name resolution used
+    everywhere else. A recording that labels its channels is read by those
+    labels; an unlabelled array still falls back to fixed columns.
+    """
+
     if ventilator is None:
         return None
-
-    try:
-        import numpy as np
-    except ImportError as exc:
-        raise OptionalDependencyError("EMG postprocessing requires numpy.") from exc
 
     metadata = ventilator.get("metadata", {}) if isinstance(ventilator, dict) else {}
     array = ventilator.get("array") if isinstance(ventilator, dict) else ventilator
     if array is None:
         raise TypeError("Ventilator postprocessing input needs an array.")
 
-    vent_fs = fs if fs is not None else metadata.get("fs")
-    if vent_fs is None:
+    if fs is None and not metadata.get("fs"):
         raise TypeError("Ventilator postprocessing input needs a sampling rate.")
 
-    array = np.asarray(array, dtype=float)
-    return {
-        "pressure": np.asarray(array[pressure_channel], dtype=float),
-        "flow": np.asarray(array[flow_channel], dtype=float),
-        "volume": np.asarray(array[volume_channel], dtype=float),
-        "fs": float(vent_fs),
-        "metadata": metadata,
-    }
+    return split_channels(
+        {"array": array, "metadata": metadata},
+        channels=channels,
+        pressure_channel=pressure_channel,
+        flow_channel=flow_channel,
+        volume_channel=volume_channel,
+        fs=fs,
+    )
 
 
 def _require_emg_recording(recording: Any) -> None:
