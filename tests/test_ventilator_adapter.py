@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from m3resp.adapters.ventilator_adapter import (
-    DEFAULT_LOWPASS_HZ,
+    SUGGESTED_LOWPASS_HZ,
     VentilatorAdapter,
     split_channels,
 )
@@ -89,31 +89,34 @@ class TestSplitChannels:
 
 
 class TestPreprocess:
-    def test_attenuates_out_of_band_noise(self):
+    def test_does_not_filter_unless_asked(self):
+        # Low-passing ventilator waveforms is not standard practice, so
+        # loading a recording must return what the ventilator recorded.
         processed = _adapter().preprocess(_payload())
+        assert processed["filter"]["lowpass_hz"] is None
+        assert processed["filtered"] == {}
+        assert np.allclose(processed["volume"], processed["raw"]["volume"])
+
+    def test_attenuates_out_of_band_noise_when_a_cutoff_is_given(self):
+        processed = _adapter().preprocess(_payload(), lowpass_hz=SUGGESTED_LOWPASS_HZ)
         clean = np.sin(2 * np.pi * 0.25 * np.arange(N) / FS)
         raw_error = np.abs(processed["raw"]["volume"] - clean).mean()
         filtered_error = np.abs(processed["volume"] - clean).mean()
         assert filtered_error < raw_error / 2
 
     def test_keeps_the_unfiltered_channels_available(self):
-        processed = _adapter().preprocess(_payload())
+        processed = _adapter().preprocess(_payload(), lowpass_hz=SUGGESTED_LOWPASS_HZ)
         assert set(processed["raw"]) == {"pressure", "flow", "volume"}
         assert not np.allclose(processed["raw"]["volume"], processed["volume"])
 
     def test_plain_keys_expose_the_processed_signal(self):
-        processed = _adapter().preprocess(_payload())
+        processed = _adapter().preprocess(_payload(), lowpass_hz=SUGGESTED_LOWPASS_HZ)
         assert np.allclose(processed["volume"], processed["filtered"]["volume"])
 
     def test_records_the_filter_it_applied(self):
-        processed = _adapter().preprocess(_payload())
-        assert processed["filter"]["lowpass_hz"] == DEFAULT_LOWPASS_HZ
+        processed = _adapter().preprocess(_payload(), lowpass_hz=SUGGESTED_LOWPASS_HZ)
+        assert processed["filter"]["lowpass_hz"] == SUGGESTED_LOWPASS_HZ
         assert processed["filter"]["filter_order"] == 4
-
-    def test_filtering_can_be_disabled(self):
-        processed = _adapter().preprocess(_payload(), lowpass_hz=None)
-        assert processed["filter"]["lowpass_hz"] is None
-        assert np.allclose(processed["volume"], processed["raw"]["volume"])
 
     def test_cutoff_is_clamped_below_nyquist(self):
         # A low-rate export must stay usable rather than raise.
@@ -129,12 +132,17 @@ class TestPreprocess:
 
 
 class TestToSignals:
-    def _signals(self):
+    def _signals(self, **kwargs):
         adapter = _adapter()
-        return adapter.to_signals(adapter.preprocess(_payload()))
+        return adapter.to_signals(adapter.preprocess(_payload(), **kwargs))
 
-    def test_emits_raw_and_processed_per_channel(self):
-        assert len(self._signals()) == 6
+    def test_emits_one_raw_signal_per_channel_by_default(self):
+        signals = self._signals()
+        assert len(signals) == 3
+        assert {s.processing_state for s in signals} == {"raw"}
+
+    def test_emits_raw_and_processed_per_channel_when_filtered(self):
+        assert len(self._signals(lowpass_hz=SUGGESTED_LOWPASS_HZ)) == 6
 
     def test_every_signal_is_the_ventilator_modality(self):
         assert {signal.modality for signal in self._signals()} == {"ventilator"}
@@ -151,7 +159,8 @@ class TestToSignals:
         assert pressure.sample_frequency == FS
 
     def test_processed_signals_record_the_method(self):
-        processed = [s for s in self._signals() if s.processing_state == "processed"]
+        signals = self._signals(lowpass_hz=SUGGESTED_LOWPASS_HZ)
+        processed = [s for s in signals if s.processing_state == "processed"]
         assert len(processed) == 3
         assert all("lowpass_filter" in (s.method or "") for s in processed)
 

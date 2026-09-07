@@ -189,8 +189,10 @@ class _CoreMixin:
     def to_signals(self, processed_ventilator: Any) -> list[Signal]:
         """Convert a preprocessed ventilator bundle into `Signal` objects.
 
-        One signal per resolved channel per processing state: the unfiltered
-        channel as ``"raw"`` and the filtered one as ``"processed"``. Each
+        One signal per resolved channel per processing state. Preprocessing
+        does not filter unless asked, so by default that is one ``"raw"``
+        signal per channel; when a cutoff was requested the filtered version
+        is emitted alongside it as ``"processed"``. Each
         carries ``modality="ventilator"``, the channel's physical quantity in
         ``category``, its unique key in ``channel``, and the instrument it came
         from in ``source``.

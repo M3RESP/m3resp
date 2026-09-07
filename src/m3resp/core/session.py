@@ -40,6 +40,7 @@ from m3resp.synchronization.cropping import (
 from m3resp.synchronization.linking import link_breaths_by_time
 from m3resp.synchronization.multimodal_parameters import compute_multimodal_parameters
 from m3resp.synchronization.ventilator import (
+    infer_ventilator_duration,
     infer_ventilator_fs,
     iter_ventilator_detections,
     normalize_ventilator_breath,
@@ -852,11 +853,13 @@ class M3Session:
             if ventilator_breath_width_seconds is None
             else float(ventilator_breath_width_seconds)
         )
+        duration_seconds = infer_ventilator_duration(ventilator, fs)
         return [
             normalize_ventilator_breath(
                 detection,
                 fs=fs,
                 width_seconds=width_seconds,
+                duration_seconds=duration_seconds,
             )
             for detection in iter_ventilator_detections(detections)
         ]

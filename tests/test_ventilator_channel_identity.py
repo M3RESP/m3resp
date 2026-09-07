@@ -326,14 +326,15 @@ class TestOriginDistinguishesDevices:
 class TestPreprocessingCarriesEveryChannel:
     LABELS = ("airway pressure", "flow", "volume", "esophageal pressure (pod)")
 
-    def _bundle(self):
+    def _bundle(self, **kwargs):
         return VentilatorAdapter().preprocess(
             _payload(self.LABELS, units=["mbar", "L/min", "mL", "mbar"]),
             channels=("pressure", "flow", "volume", "esophageal_pressure"),
+            **kwargs,
         )
 
-    def test_every_resolved_channel_is_filtered(self):
-        processed = self._bundle()
+    def test_every_resolved_channel_is_filtered_when_a_cutoff_is_given(self):
+        processed = self._bundle(lowpass_hz=20.0)
         assert set(processed["filtered"]) == {
             "pressure",
             "flow",
@@ -342,7 +343,7 @@ class TestPreprocessingCarriesEveryChannel:
         }
 
     def test_the_unfiltered_channels_stay_available(self):
-        processed = self._bundle()
+        processed = self._bundle(lowpass_hz=20.0)
         assert set(processed["raw"]) == set(processed["filtered"])
 
     def test_signals_are_emitted_for_every_channel(self):
@@ -385,9 +386,9 @@ class TestTwoAirwayPressuresReachTheSignalCollection:
             collection.add(signal)
 
         airway = collection.for_category("airway_pressure")
-        # Two channels x (raw, processed).
+        # Two channels, neither overwriting the other.
         assert {signal.channel for signal in airway} == {"pressure", "pressure__pod"}
-        assert len(airway) == 4
+        assert len(airway) == 2
 
     def test_the_pod_pressure_records_where_it_came_from(self):
         adapter = VentilatorAdapter()

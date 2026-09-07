@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from m3resp.adapters import ReSurfEMGAdapter
+from m3resp.adapters.ventilator_adapter import SUGGESTED_LOWPASS_HZ
 from m3resp.core.exceptions import (
     MissingModalityDataError,
     VariantAlreadyExistsError,
@@ -149,12 +150,14 @@ class TestTypedCollections:
         # Ventilator data never landed in `session.signals` before the
         # ventilator became a peer modality.
         session = _loaded_session()
-        session.preprocess_ventilator()
+        # A raw *and* a processed signal per channel only exist when a cutoff
+        # is asked for; preprocessing no longer filters by default.
+        session.preprocess_ventilator(lowpass_hz=SUGGESTED_LOWPASS_HZ)
         assert len(session.signals.for_modality("ventilator")) == 6
 
     def test_each_channel_is_retrievable_by_category(self):
         session = _loaded_session()
-        session.preprocess_ventilator()
+        session.preprocess_ventilator(lowpass_hz=SUGGESTED_LOWPASS_HZ)
 
         for category in ("airway_pressure", "airflow", "volume"):
             found = session.signals.for_category(category)
@@ -163,8 +166,8 @@ class TestTypedCollections:
 
     def test_signals_accumulate_across_variants(self):
         session = _loaded_session()
-        session.preprocess_ventilator(variant="a")
-        session.preprocess_ventilator(variant="b")
+        session.preprocess_ventilator(variant="a", lowpass_hz=SUGGESTED_LOWPASS_HZ)
+        session.preprocess_ventilator(variant="b", lowpass_hz=SUGGESTED_LOWPASS_HZ)
         assert len(session.signals.for_modality("ventilator")) == 12
 
 
