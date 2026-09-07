@@ -71,6 +71,14 @@ def _check_references(store: DataModelStore) -> list[str]:
                     f"DerivedFeature {feature.feature_id!r} names a source signal "
                     "that is not in the store"
                 )
+    for annotation in store.quality_annotations.values():
+        if not store.has_quality_annotation_target(
+            annotation.target_type, annotation.target_id
+        ):
+            problems.append(
+                f"QualityAnnotation {annotation.quality_annotation_id!r} has no "
+                f"matching {annotation.target_type} target {annotation.target_id!r}"
+            )
     return problems
 
 
