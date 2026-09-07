@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+import pytest
+
 from m3resp import (
     BreathEvent,
     Event,
@@ -116,6 +118,31 @@ def test_coerce_breath_events_normalizes_iterable():
         BreathEvent("emg", 0.0, 1.0, peak_time=0.5),
         BreathEvent("emg", 1.0, 2.0),
     ]
+
+
+def test_coerce_breath_event_rejects_a_too_short_tuple():
+    with pytest.raises(ValueError, match="length-1"):
+        coerce_breath_event((1,), modality="eit")
+
+
+def test_coerce_breath_event_rejects_a_too_long_tuple():
+    with pytest.raises(ValueError, match="length-4"):
+        coerce_breath_event((1, 2, 3, 4), modality="eit")
+
+
+def test_coerce_breath_event_rejects_a_string():
+    with pytest.raises(TypeError, match="mapping"):
+        coerce_breath_event("abc", modality="eit")
+
+
+def test_coerce_event_rejects_a_too_short_tuple():
+    with pytest.raises(ValueError, match="length-2"):
+        coerce_event(("trigger", "vent"))
+
+
+def test_coerce_event_rejects_a_string():
+    with pytest.raises(TypeError, match="mapping"):
+        coerce_event("trigger")
 
 
 def test_mixed_event_rows_and_alignment():
