@@ -9,6 +9,7 @@ import numpy as np
 
 from m3resp.core.events import BreathEvent
 from m3resp.core.session import M3Session
+from m3resp.synchronization.alignment import align_events_by_modality_offset
 
 
 def plot_session_overview(
@@ -92,7 +93,7 @@ def plot_eit_processing_summary(session: M3Session):
 
     processed = session.processed.get("eit")
     if not isinstance(processed, dict):
-        raise ValueError("No processed EIT dictionary found on the session.")
+        raise TypeError("No processed EIT dictionary found on the session.")
 
     signal = processed.get("filtered_global_impedance") or processed.get(
         "raw_global_impedance"
@@ -162,6 +163,7 @@ def plot_synchronization_comparison(
     )
     if not isinstance(offsets, dict):
         offsets = {}
+    after_events = _after_synchronization_events(session, synchronized, offsets)
 
     rows = _get_synchronization_plot_rows(session, emg_channel, eit_waveform, offsets)
     if not rows:
@@ -214,7 +216,7 @@ def plot_synchronization_comparison(
         )
         _plot_events(
             [after_ax],
-            synchronized.get(event_key, []),
+            after_events.get(event_key, []),
             color=color,
             label=f"{label} synchronized",
         )
@@ -223,6 +225,27 @@ def plot_synchronization_comparison(
         ax.set_xlabel("Time (s)")
     _deduplicate_legends(axes.ravel())
     return fig
+
+
+def _after_synchronization_events(
+    session: M3Session,
+    synchronized: dict[str, Any],
+    offsets: dict[str, float],
+) -> dict[str, list[Any]]:
+    """Return event overlays on the synchronized time base.
+
+    ``synchronize_multimodal_breaths`` stores shifted event copies in ``synchronized``. Raw
+    synchronization crops the signal arrays directly instead, so it has to
+    shift the original events here to draw them on the cropped trace's clock.
+    """
+
+    if synchronized:
+        return synchronized
+    return {
+        name: align_events_by_modality_offset(events, offsets)
+        for name, events in session.events.items()
+        if isinstance(events, list)
+    }
 
 
 def _get_eit_rows(
@@ -359,12 +382,22 @@ def _get_emg_rows(
     if fs <= 0:
         return []
 
-    channel = int(processed.get("channel", 0) if channel is None else channel)
+    processed_channel = int(processed.get("channel", 0))
+    if channel is not None and channel != processed_channel:
+        raise ValueError(
+            f"EMG channel {channel} was requested for plotting, but the available "
+            f"processed data is for channel {processed_channel}. Preprocess the "
+            "requested channel before plotting it."
+        )
     metadata = processed.get("metadata", {})
     labels = metadata.get("labels") or []
     units = metadata.get("units") or []
-    label = labels[channel] if channel < len(labels) else f"channel {channel}"
-    unit = units[channel] if channel < len(units) else "a.u."
+    label = (
+        labels[processed_channel]
+        if processed_channel < len(labels)
+        else f"channel {processed_channel}"
+    )
+    unit = units[processed_channel] if processed_channel < len(units) else "a.u."
     ylabel = _emg_amplitude_label(unit)
 
     rows: list[tuple[str, str, np.ndarray, np.ndarray, str]] = []

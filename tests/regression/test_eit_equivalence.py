@@ -1,16 +1,15 @@
 """Milestone 2.7 - EIT regression tests (plan_stage2.md Sec 25).
 
-`EITProcessingAdapter` is a thin wrapper (Stage 1): filtering is delegated
-straight to `eitprocessing.filters.butterworth_filters.ButterworthFilter`,
-with no transformation of the array before/after. This test drives that
-Butterworth path through the adapter's public `preprocess()` on synthetic
-data (no private/clinical recordings needed, per plan_stage2.md Sec 26) and
-checks it reproduces calling `ButterworthFilter` directly on the same raw
-array, to a documented tolerance.
+`EITProcessingAdapter` preserves upstream behavior at its public boundary.
+The lowpass/bandpass path now uses `m3resp.processing.filters`, so this test
+drives that path through the adapter's public `preprocess()` on synthetic data
+(no private/clinical recordings needed, per plan_stage2.md Sec 26) and checks
+it reproduces calling `eitprocessing.ButterworthFilter` directly on the same
+raw array, to a documented tolerance.
 
-Tolerance: exact equality (`atol=0, rtol=0`) - the adapter passes the same
-array into the same filter with the same parameters, so any divergence means
-the wrapper is doing something other than a pure pass-through.
+Tolerance: exact equality (`atol=0, rtol=0`) - the shared primitive uses the
+same SciPy SOS Butterworth implementation and parameters as the upstream
+filter, so any divergence means the native path has drifted.
 
 The heavier default path (rate detection + MDN filtering + breath-interval
 dependent TIV/EELI/pixel-TIV) is exercised end-to-end against a *real*
@@ -103,7 +102,7 @@ def test_lowpass_filter_path_reproduces_butterworth_filter_exactly():
         order=filter_order,
         sample_frequency=fs,
     )
-    expected_filtered = expected_filter.apply(np.nan_to_num(pixel_impedance), axis=0)
+    expected_filtered = expected_filter.apply(pixel_impedance, axis=0)
 
     adapter = EITProcessingAdapter(loader=lambda *a, **k: sequence)
     processed = adapter.preprocess(
@@ -142,7 +141,7 @@ def test_bandpass_filter_path_reproduces_butterworth_filter_exactly():
         order=filter_order,
         sample_frequency=fs,
     )
-    expected_filtered = expected_filter.apply(np.nan_to_num(pixel_impedance), axis=0)
+    expected_filtered = expected_filter.apply(pixel_impedance, axis=0)
 
     adapter = EITProcessingAdapter(loader=lambda *a, **k: sequence)
     processed = adapter.preprocess(
@@ -160,3 +159,65 @@ def test_bandpass_filter_path_reproduces_butterworth_filter_exactly():
     np.testing.assert_array_equal(
         processed["filtered_eit"].pixel_impedance, expected_filtered
     )
+
+
+def test_pixel_missing_for_whole_recording_stays_missing_through_the_filter():
+    """A pixel that was never measured is NaN throughout and must remain so.
+
+    Substituting zero would enter a real impedance reading where there was no
+    measurement, and the filter would spread it into neighbouring samples.
+    """
+
+    fs = 20.0
+    pixel_impedance, time = _synthetic_pixel_impedance(fs=fs)
+    # Two pixels: one measured, one absent for the entire recording.
+    pixel_impedance = np.concatenate(
+        [pixel_impedance, np.full_like(pixel_impedance, np.nan)], axis=2
+    )
+    raw_eit = _FakeEITData(
+        pixel_impedance=pixel_impedance, sample_frequency=fs, time=time
+    )
+    sequence = _FakeSequence(raw_eit)
+
+    adapter = EITProcessingAdapter(loader=lambda *a, **k: sequence)
+    processed = adapter.preprocess(
+        sequence,
+        filter_mode="lowpass",
+        lowpass_hz=1.0,
+        filter_order=4,
+        compute_breath_intervals=False,
+        compute_continuous_tiv=False,
+        compute_eeli=False,
+        compute_pixel_tiv=False,
+    )
+
+    filtered = processed["filtered_eit"].pixel_impedance
+    assert np.all(np.isnan(filtered[:, 0, 1])), "absent pixel must stay absent"
+    assert not np.any(np.isnan(filtered[:, 0, 0])), "measured pixel must survive"
+
+
+def test_pixel_missing_for_part_of_the_recording_is_rejected():
+    """Scattered dropouts would silently empty the pixel, so they must raise."""
+
+    fs = 20.0
+    pixel_impedance, time = _synthetic_pixel_impedance(fs=fs)
+    pixel_impedance = pixel_impedance.copy()
+    pixel_impedance[5:9, 0, 0] = np.nan
+
+    raw_eit = _FakeEITData(
+        pixel_impedance=pixel_impedance, sample_frequency=fs, time=time
+    )
+    sequence = _FakeSequence(raw_eit)
+
+    adapter = EITProcessingAdapter(loader=lambda *a, **k: sequence)
+    with pytest.raises(ValueError, match="part of the recording only"):
+        adapter.preprocess(
+            sequence,
+            filter_mode="lowpass",
+            lowpass_hz=1.0,
+            filter_order=4,
+            compute_breath_intervals=False,
+            compute_continuous_tiv=False,
+            compute_eeli=False,
+            compute_pixel_tiv=False,
+        )

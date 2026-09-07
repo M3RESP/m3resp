@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -22,8 +22,8 @@ class FakeCollection(dict):
 
 class FakeEITData:
     label = "raw"
-    time = [0.0, 1.0, 2.0]
-    pixel_impedance = [[[1.0]], [[2.0]], [[3.0]]]
+    time: ClassVar = [0.0, 1.0, 2.0]
+    pixel_impedance: ClassVar = [[[1.0]], [[2.0]], [[3.0]]]
     sample_frequency = 1.0
 
     def get_summed_impedance(self, return_label: str | None = None, **kwargs: Any):
@@ -52,7 +52,7 @@ class FakeBreath:
 
 
 class FakeIntervals:
-    values = [FakeBreath()]
+    values: ClassVar = [FakeBreath()]
 
 
 def test_load_eit_sets_preferred_and_legacy_session_slots():
@@ -146,8 +146,13 @@ def test_eit_real_data_pipeline_uses_committed_sample():
     pytest.importorskip("eitprocessing")
 
     eit_path = os.path.join(
-        repo_root, "data", "source", "draeger_synthetic_draeger_20Hz.bin"
+        repo_root,
+        "data",
+        "source",
+        "data_from_repo",
+        "draeger_synthetic_draeger_20Hz.bin",
     )
+    assert os.path.exists(eit_path), f"missing committed EIT fixture: {eit_path}"
     session = M3Session()
 
     session.load_eit(eit_path, vendor="draeger")
