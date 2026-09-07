@@ -22,8 +22,10 @@ from m3resp.data.collections import (
 )
 from m3resp.data.linked_breath import LinkedBreath
 from m3resp.export.session_export import export_session_summary
-from m3resp.modalities.eit import EITRecording, load as load_eit_recording
-from m3resp.modalities.emg import EMGRecording, load as load_emg_recording
+from m3resp.modalities.eit import EITRecording
+from m3resp.modalities.eit import load as load_eit_recording
+from m3resp.modalities.emg import EMGRecording
+from m3resp.modalities.emg import load as load_emg_recording
 from m3resp.synchronization.alignment import align_events_by_modality_offset
 from m3resp.synchronization.linking import link_breaths_by_time
 
@@ -529,11 +531,13 @@ class M3Session:
             if ventilator_breath_width_seconds is None
             else float(ventilator_breath_width_seconds)
         )
+        duration_seconds = _infer_ventilator_duration(ventilator, fs)
         return [
             _normalize_ventilator_breath(
                 detection,
                 fs=fs,
                 width_seconds=width_seconds,
+                duration_seconds=duration_seconds,
             )
             for detection in _iter_ventilator_detections(detections)
         ]
@@ -767,7 +771,7 @@ def _crop_sample_array(
 
     if sample_axis is None:
         sample_axis = 1 if array.ndim > 1 and array.shape[1] >= array.shape[0] else 0
-    n_samples = int(round(abs(offset) * float(fs)))
+    n_samples = round(abs(offset) * float(fs))
     axis_len = array.shape[sample_axis]
     if n_samples <= 0 or n_samples >= axis_len:
         return values, 0
@@ -812,6 +816,7 @@ def _normalize_ventilator_breath(
     *,
     fs: float | None,
     width_seconds: float,
+    duration_seconds: float | None = None,
 ) -> BreathEvent:
     if isinstance(detection, BreathEvent):
         return replace(detection, modality="vent")
@@ -832,10 +837,14 @@ def _normalize_ventilator_breath(
     sample_index = int(detection)
     peak_time = sample_index / float(fs)
     half_width = width_seconds / 2
+    start_time = max(0.0, peak_time - half_width)
+    end_time = peak_time + half_width
+    if duration_seconds is not None:
+        end_time = max(start_time, min(end_time, float(duration_seconds)))
     return BreathEvent(
         modality="vent",
-        start_time=max(0.0, peak_time - half_width),
-        end_time=peak_time + half_width,
+        start_time=start_time,
+        end_time=end_time,
         peak_time=peak_time,
         source="resurfemg.detect_ventilator_breath",
         metadata={
@@ -857,3 +866,24 @@ def _infer_ventilator_fs(
         if isinstance(metadata, Mapping) and metadata.get("fs") is not None:
             return float(metadata["fs"])
     return None
+
+
+def _infer_ventilator_duration(
+    ventilator: Any | None,
+    fs: float | None,
+) -> float | None:
+    """Length of a ventilator recording in seconds, or `None` if unknown."""
+
+    if fs is None or not fs:
+        return None
+    array = ventilator.get("array") if isinstance(ventilator, Mapping) else ventilator
+    if array is None:
+        return None
+    shape = np.asarray(array).shape
+    if not shape:
+        return None
+    # Same convention as _crop_sample_array: channels first unless the
+    # array is stored one row per sample.
+    axis = 1 if len(shape) > 1 and shape[1] >= shape[0] else 0
+    n_samples = shape[axis]
+    return n_samples / float(fs) if n_samples else None
