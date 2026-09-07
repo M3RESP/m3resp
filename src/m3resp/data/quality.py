@@ -12,6 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, get_args
 
+from m3resp.data.categories import normalize_category
+
 #: Controlled vocabulary for ``QualityFlag.severity`` (doc Sec 12).
 Severity = Literal["info", "warning", "error", "critical"]
 _VALID_SEVERITIES = frozenset(get_args(Severity))
@@ -32,6 +34,7 @@ class QualityFlag:
     passed: bool
     severity: Severity
     modality: str | None = None
+    category: str | None = None
     signal_name: str | None = None
     breath_id: str | None = None
     start_time: float | None = None
@@ -42,6 +45,7 @@ class QualityFlag:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        self.category = normalize_category(self.category) or self.category
         if self.severity not in _VALID_SEVERITIES:
             raise ValueError(
                 f"Unknown QualityFlag.severity {self.severity!r}; expected one "

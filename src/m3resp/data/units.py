@@ -145,7 +145,7 @@ def load_unit_aliases(path: str | Path, *, replace: bool = False) -> dict[str, s
     if raw is None:
         raw = {}
     if not isinstance(raw, dict):
-        raise ValueError(
+        raise TypeError(
             f"Unit alias file {resolved} must be a mapping of "
             f"alias -> canonical, got {type(raw).__name__}."
         )
