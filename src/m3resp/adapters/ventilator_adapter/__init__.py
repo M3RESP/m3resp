@@ -43,10 +43,11 @@ from ._channels import (
     split_channels,
 )
 from ._core import _CoreMixin, resolve_ventilator_source
-from ._defaults import DEFAULT_FILTER_ORDER, DEFAULT_LOWPASS_HZ, _DefaultsMixin
+from ._defaults import DEFAULT_FILTER_ORDER, SUGGESTED_LOWPASS_HZ, _DefaultsMixin
 from ._eit_source import (
     DEFAULT_EIT_CHANNELS,
     EIT_ORIGIN,
+    SENTINEL_CUTOFF,
     available_ventilator_channels,
     ventilator_payload_from_sequence,
 )
@@ -69,8 +70,9 @@ __all__ = [
     "DEFAULT_CHANNEL_UNITS",
     "DEFAULT_EIT_CHANNELS",
     "DEFAULT_FILTER_ORDER",
-    "DEFAULT_LOWPASS_HZ",
     "EIT_ORIGIN",
+    "SENTINEL_CUTOFF",
+    "SUGGESTED_LOWPASS_HZ",
     "ChannelSpec",
     "VentilatorAdapter",
     "available_ventilator_channels",

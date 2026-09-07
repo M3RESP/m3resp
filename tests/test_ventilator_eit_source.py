@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 
 from m3resp.adapters.ventilator_adapter import (
+    SUGGESTED_LOWPASS_HZ,
     VentilatorAdapter,
     available_ventilator_channels,
     split_channels,
@@ -243,8 +244,13 @@ class TestPayloadFeedsTheExistingVentilatorPath:
 
     def test_preprocessing_runs_end_to_end(self):
         adapter = VentilatorAdapter()
-        processed = adapter.preprocess(ventilator_payload_from_sequence(_draeger()))
+        processed = adapter.preprocess(
+            ventilator_payload_from_sequence(_draeger()),
+            lowpass_hz=SUGGESTED_LOWPASS_HZ,
+        )
         assert processed["pressure"].shape == (N,)
+        # The requested cutoff is clamped below Nyquist for this 20 Hz
+        # recording, so check that a filter ran rather than the exact value.
         assert processed["filter"]["lowpass_hz"] is not None
 
     def test_signals_carry_the_ventilator_categories(self):
