@@ -154,15 +154,30 @@ def preprocess(session: M3Session, **kwargs: Any) -> dict[str, Any]:
 @register_step(
     "emg.detect_breaths",
     reads={"session": "session"},
+    # Peak detection sets its prominence threshold from the envelope's height
+    # *above the baseline*, so a pipeline that computes the baseline first
+    # detects breaths against it; one that does not falls back to a flat zero
+    # baseline, where electrode drift inflates the threshold and quiet breaths
+    # are missed. Optional rather than required so the many specs that never
+    # compute a baseline keep running unchanged.
+    optional_reads={"baseline": "baseline"},
     writes=("emg_breath_events",),
     summary="Detect EMG breaths from the envelope.",
-    description="Detect EMG breaths from the processed envelope via ReSurfEMGAdapter.detect_breaths. Accepts arbitrary adapter keyword arguments beyond 'variant'.",
+    description="Detect EMG breaths from the processed envelope via ReSurfEMGAdapter.detect_breaths, above the moving baseline when an earlier step computed one. Accepts arbitrary adapter keyword arguments beyond 'variant'.",
     category="detection",
     modality="emg",
     optional_packages=_RESURFEMG,
     session_reads=("session.processed.emg",),
     session_writes=("session.events.emg_breaths",),
-    input_artifacts=(_SESSION_ARTIFACT,),
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="baseline",
+            artifact_type="signal_array",
+            default_context_key="baseline",
+            description="Baseline from 'emg.moving_baseline' or 'emg.slopesum_baseline'; detection falls back to a zero baseline when absent.",
+        ),
+    ),
     parameters=(
         StepParameter(
             name="variant",
@@ -181,7 +196,11 @@ def preprocess(session: M3Session, **kwargs: Any) -> dict[str, Any]:
         ),
     ),
 )
-def detect_breaths(session: M3Session, **kwargs: Any) -> dict[str, Any]:
+def detect_breaths(
+    session: M3Session, baseline: Any | None = None, **kwargs: Any
+) -> dict[str, Any]:
+    if baseline is not None:
+        kwargs["baseline"] = np.asarray(baseline, dtype=float)
     events = session.detect_emg_breaths(**kwargs)
     return {"emg_breath_events": events}
 

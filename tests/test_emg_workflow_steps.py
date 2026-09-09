@@ -145,3 +145,77 @@ class TestFullExampleEndToEnd:
             # A wavelet/gate-mask-shaped array from ECG removal should be
             # in the shared archive, not a competing EMG-only format.
             assert any(key.startswith("ecg_gate_mask") for key in archive.files)
+
+
+class TestDetectBreathsUsesTheBaseline:
+    """EMG peak detection thresholds on the envelope's height *above* the
+    baseline, so a pipeline that computes the baseline first must actually
+    hand it to detection - see `emg.detect_breaths`' `optional_reads`.
+    """
+
+    def test_step_declares_baseline_as_an_optional_read(self):
+        definition = get_step("emg.detect_breaths")
+        assert definition.optional_reads == {"baseline": "baseline"}
+        # Optional, not required: the many specs with no baseline step must
+        # keep compiling.
+        assert "baseline" not in definition.reads
+
+    def test_step_forwards_a_baseline_to_the_session(self):
+        class _RecordingSession:
+            def __init__(self):
+                self.kwargs = None
+
+            def detect_emg_breaths(self, **kwargs):
+                self.kwargs = kwargs
+                return ["event"]
+
+        session = _RecordingSession()
+        baseline = np.linspace(0.0, 1.0, 16)
+        get_step("emg.detect_breaths").func(
+            session, baseline=baseline, min_breath_width_seconds=0.5
+        )
+        assert session.kwargs["min_breath_width_seconds"] == 0.5
+        np.testing.assert_allclose(session.kwargs["baseline"], baseline)
+
+    def test_step_omits_the_baseline_entirely_when_there_is_none(self):
+        """Absent means absent, not `baseline=None` - the detector's own
+        zero-baseline default has to apply."""
+
+        class _RecordingSession:
+            def __init__(self):
+                self.kwargs = None
+
+            def detect_emg_breaths(self, **kwargs):
+                self.kwargs = kwargs
+                return []
+
+        session = _RecordingSession()
+        get_step("emg.detect_breaths").func(session, min_breath_width_seconds=0.5)
+        assert "baseline" not in session.kwargs
+
+    def test_a_baseline_raises_the_breath_count_on_a_drifting_envelope(self):
+        """The reason the ordering matters, on a synthetic signal.
+
+        Breaths of equal size ride on a rising drift. Detected against a flat
+        zero the drift inflates the prominence threshold and the early, lower
+        breaths are missed; against a moving baseline every breath is found.
+        """
+
+        from m3resp.processing.peaks import detect_emg_breath_peaks
+
+        fs = 100.0
+        duration_s = 120.0
+        time = np.arange(int(duration_s * fs)) / fs
+        breaths = np.clip(np.sin(2 * np.pi * time / 4.0), 0.0, None) ** 2
+        drift = 3.0 * time / duration_s
+        envelope = breaths + drift
+
+        without_baseline = detect_emg_breath_peaks(
+            envelope, min_peak_width_samples=int(0.5 * fs)
+        )
+        with_baseline = detect_emg_breath_peaks(
+            envelope, baseline=drift, min_peak_width_samples=int(0.5 * fs)
+        )
+
+        assert len(with_baseline) > len(without_baseline)
+        assert len(with_baseline) == int(duration_s / 4.0)

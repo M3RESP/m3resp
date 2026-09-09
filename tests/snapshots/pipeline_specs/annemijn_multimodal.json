@@ -187,7 +187,18 @@
       }
     },
     {
-      "id": "step_015_emg_detect_breaths",
+      "id": "step_015_emg_slopesum_baseline",
+      "in": {},
+      "out": {},
+      "uses": "emg.slopesum_baseline",
+      "with": {
+        "percentile": 33.0,
+        "step_seconds": 0.2,
+        "window_seconds": 7.5
+      }
+    },
+    {
+      "id": "step_016_emg_detect_breaths",
       "in": {},
       "out": {},
       "uses": "emg.detect_breaths",
@@ -197,22 +208,11 @@
       }
     },
     {
-      "id": "step_016_emg_peak_indices",
+      "id": "step_017_emg_peak_indices",
       "in": {},
       "out": {},
       "uses": "emg.peak_indices",
       "with": {}
-    },
-    {
-      "id": "step_017_emg_slopesum_baseline",
-      "in": {},
-      "out": {},
-      "uses": "emg.slopesum_baseline",
-      "with": {
-        "percentile": 33.0,
-        "step_seconds": 1.0,
-        "window_seconds": 30.0
-      }
     },
     {
       "id": "step_018_emg_onoffpeak_baseline_crossing",

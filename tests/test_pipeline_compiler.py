@@ -38,9 +38,19 @@ def _compiler_steps():
     def _echo_path(seed: Any, *, p: str) -> dict[str, Any]:
         return {"resolved": p}
 
+    @register_step(
+        "compiler_test.refine",
+        optional_reads={"extra": "a"},
+        writes=("refined",),
+        parameters_reviewed=True,
+    )
+    def _refine(extra: Any | None = None) -> dict[str, Any]:
+        return {"refined": extra}
+
     yield
     STEP_REGISTRY.pop("compiler_test.make", None)
     STEP_REGISTRY.pop("compiler_test.echo_path", None)
+    STEP_REGISTRY.pop("compiler_test.refine", None)
 
 
 # --------------------------------------------------------------------------- #
@@ -77,6 +87,46 @@ def test_compile_pipeline_resolves_bindings_and_parameters(_compiler_steps, tmp_
     assert second.input_bindings == {"seed": "a"}
     # @ref substituted AND resolved against the spec root (Phase 2.4 + 2.5).
     assert second.parameters["p"] == str((tmp_path / "data" / "thing.bin").resolve())
+
+
+def test_optional_read_binds_when_an_earlier_step_produces_the_key(_compiler_steps):
+    spec = load_spec(
+        {
+            "name": "p",
+            "steps": [
+                {"uses": "compiler_test.make", "with": {"value": 7}},
+                {"uses": "compiler_test.refine"},
+            ],
+        }
+    )
+    compiled = compile_pipeline(spec)
+    assert compiled.steps[1].input_bindings == {"extra": "a"}
+
+
+def test_optional_read_stays_unbound_when_nothing_produces_the_key(_compiler_steps):
+    """The step still compiles and runs; its own parameter default applies.
+
+    This is what lets `emg.detect_breaths` use a baseline when a pipeline
+    computes one first, without breaking every pipeline that computes none.
+    """
+
+    spec = load_spec({"name": "p", "steps": [{"uses": "compiler_test.refine"}]})
+    compiled = compile_pipeline(spec)
+    assert compiled.steps[0].input_bindings == {}
+
+
+def test_optional_read_ignores_a_producer_that_comes_later(_compiler_steps):
+    spec = load_spec(
+        {
+            "name": "p",
+            "steps": [
+                {"uses": "compiler_test.refine"},
+                {"uses": "compiler_test.make", "with": {"value": 7}},
+            ],
+        }
+    )
+    compiled = compile_pipeline(spec)
+    assert compiled.steps[0].input_bindings == {}
 
 
 def test_compile_pipeline_fills_unset_optional_parameter_defaults(_compiler_steps):

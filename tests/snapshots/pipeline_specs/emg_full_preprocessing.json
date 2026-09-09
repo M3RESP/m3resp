@@ -90,6 +90,17 @@
       }
     },
     {
+      "id": "moving_baseline",
+      "in": {},
+      "out": {},
+      "uses": "emg.moving_baseline",
+      "with": {
+        "percentile": 33.0,
+        "step_seconds": 0.2,
+        "window_seconds": 7.5
+      }
+    },
+    {
       "id": "detect_breaths",
       "in": {},
       "out": {},
@@ -105,17 +116,6 @@
       "out": {},
       "uses": "emg.peak_indices",
       "with": {}
-    },
-    {
-      "id": "moving_baseline",
-      "in": {},
-      "out": {},
-      "uses": "emg.moving_baseline",
-      "with": {
-        "percentile": 33.0,
-        "step_seconds": 1.0,
-        "window_seconds": 30.0
-      }
     },
     {
       "id": "onoffpeak_baseline_crossing",

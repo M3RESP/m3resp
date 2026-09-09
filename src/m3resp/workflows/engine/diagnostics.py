@@ -6,7 +6,7 @@ from typing import Any
 
 from m3resp.core.exceptions import PipelineSpecError, UnknownStepError
 from m3resp.workflows.context import (
-    RESOLVED_OUTPUT_DIR_KEY,
+    SEEDED_CONTEXT_KEYS,
     SESSION_KEY,
     iter_input_references,
     resolve_value,
@@ -51,15 +51,7 @@ _PARAM_TYPE_CHECKS: dict[str, Any] = {
 }
 
 
-_RESERVED_ENGINE_KEYS = frozenset(
-    (
-        SESSION_KEY,
-        "_spec_outputs",
-        "_spec_experiment",
-        RESOLVED_OUTPUT_DIR_KEY,
-        "_run_timestamp",
-    )
-)
+_RESERVED_ENGINE_KEYS = SEEDED_CONTEXT_KEYS
 
 
 def validate_spec(spec: PipelineSpec, *, available: set[str] | None = None) -> None:
@@ -102,11 +94,7 @@ def collect_diagnostics(
     # them as globally available. Pre-seeded keys are exempt from
     # duplicate-write detection.
     seeded: set[str] = {
-        SESSION_KEY,
-        "_spec_outputs",
-        "_spec_experiment",
-        RESOLVED_OUTPUT_DIR_KEY,
-        "_run_timestamp",
+        *SEEDED_CONTEXT_KEYS,
         *spec.inputs,
         *(available or set()),
     }
@@ -336,6 +324,23 @@ def _check_bindings(
                     step_label,
                 )
             )
+    for param, default in definition.optional_reads.items():
+        # Nothing produces it -> the step runs without it, by design. When
+        # something does, it still has to be the right kind of artifact.
+        context_key = step_spec.inputs.get(param, default)
+        if context_key in produced:
+            diagnostics.extend(
+                _check_artifact_type_compatibility(
+                    param,
+                    context_key,
+                    input_artifacts_by_name,
+                    produced_artifact_type,
+                    step_spec,
+                    position,
+                    step_label,
+                )
+            )
+
     for context_key in definition.requires:
         if context_key not in produced:
             diagnostics.append(

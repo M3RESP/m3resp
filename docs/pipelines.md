@@ -294,7 +294,7 @@ Every step also writes its raw/compatibility output(s) unchanged (existing consu
 | `emg.ecg_gating` | `processed_emg`, `ecg_peak_indices` | `source` (default `"filtered"`), `gate_width_seconds` **xor** `gate_width_samples`, `fill_method` (0-3), `envelope_window_seconds`, `envelope_method` (defaults to preprocessing's) | `ecg_gated_signal`, `ecg_gate_mask_result` (array) | upstream |
 | `emg.ecg_estimated_subtraction` | `processed_emg` | 4--50 Hz detection band, smoothing/threshold windows, QRS window, inter-QRS tolerance | cleaned/estimated/detection/threshold signals, QRS events, template arrays | native (`m3resp.processing.ecg`) |
 | `emg.ecg_wavelet_denoising` | `processed_emg`, `ecg_peak_indices` | `source`, `hard_thresholding`, `levels`, `wavelet_type`, `fixed_threshold`, `envelope_window_seconds` | `ecg_wavelet_cleaned_signal`, `wavelet_decomposition_result`, `wavelet_thresholds_result`, `wavelet_gate_mask_result` (all arrays) | upstream |
-| `emg.detect_breaths` | — | `min_breath_width_seconds`, `half_window_seconds`, `prominence_factor`, `threshold` | `emg_breath_events` | native |
+| `emg.detect_breaths` | `baseline` (optional) | `min_breath_width_seconds`, `half_window_seconds`, `prominence_factor`, `threshold` | `emg_breath_events` | native |
 | `emg.moving_baseline` | `processed_emg` | `window_seconds`, `step_seconds`, `percentile` (0-100) | `baseline_signal` | upstream |
 | `emg.slopesum_baseline` | `processed_emg` | `window_seconds`, `step_seconds`, `percentile`, `augmented_percentile`, `moving_average_seconds`, `percentile_window_seconds` | `baseline_signal`, `baseline_running_mean_signal`, `baseline_running_std_signal`, `slopesum_baseline_native_detail` (NumPy-only) | upstream |
 | `ventilator.pocc_intervals` | `ventilator_signals`, `pocc_indices` | `peep` (defaults to the pressure median) | `pocc_events` (`BreathEvent`, `modality="pressure"`) | native (`onoff_from_baseline_crossings`) |
@@ -418,6 +418,34 @@ To apply the existing wavelet cleaner to residual ECG, reuse the EES R indices:
 This optional residual cleaner is not paper-identical: ReSurfEMG uses a stationary/a-trous wavelet transform with configurable db2 defaults and hard or soft thresholds, while the paper reports level-five db4 decomposition with an adaptive sigmoid threshold.
 
 `gating`'s `fill_method` keeps ReSurfEMG's meanings: `0` zeros the gated region, `1` interpolates between its edges (the default), `2` fills with the mean of a neighboring segment, `3` replaces it with a running-RMS estimate. `wavelet_denoising` additionally zero-pads the signal internally to a multiple of `2**levels` for its stationary wavelet transform - the cleaned signal, thresholds, and gate mask are trimmed back to the original length, but the decomposition array (`wavelet_decomposition_result`) stays at the padded length; both lengths are recorded in its metadata (`original_length`/`padded_length`). All four array-valued outputs (gate masks, decomposition, thresholds) go through the same shared `parameter_result_arrays.npz` archive as every other array-valued `ParameterResult` - see "Array export" below.
+
+### Compute the baseline before detecting breaths
+
+Put the baseline step *above* `emg.detect_breaths`, not below it. Peak
+detection sets its prominence threshold from the envelope's height above the
+baseline, so the order decides what every breath is measured against:
+
+```yaml
+  - id: moving_baseline
+    uses: emg.moving_baseline
+    with: { window_seconds: 7.5, step_seconds: 0.2, percentile: 33.0 }
+
+  - id: detect_breaths
+    uses: emg.detect_breaths
+    with: { min_breath_width_seconds: 0.5, half_window_seconds: 0.5 }
+```
+
+`emg.detect_breaths` reads `baseline` *optionally*: when an earlier step wrote
+it, detection runs against it; when nothing did, it falls back to a flat zero
+baseline. That fallback is why the wrong order fails quietly rather than
+loudly — electrode drift is then counted as signal, inflating the threshold
+until quieter breaths drop out. On the committed quiet-breathing fixture,
+`emg-full.pipeline.yaml` found 61 EMG breaths with the baseline last and 154
+with it first, against 154 ventilator breaths.
+
+The same applies to `emg.slopesum_baseline`, and to any custom step: declare
+an input as `optional_reads` when it refines a step's result but is not
+required to run it, so existing specs keep compiling either way.
 
 ### Baseline alternatives
 

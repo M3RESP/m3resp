@@ -27,6 +27,20 @@ SESSION_KEY = "session"
 #: ``export.session_summary`` already do.
 RESOLVED_OUTPUT_DIR_KEY = "_resolved_output_dir"
 
+#: Context keys ``run_spec()`` injects before any step runs, so every step can
+#: count on them being available regardless of what the spec declares. Kept
+#: here rather than in either consumer so the compiler's optional-read binding
+#: and ``collect_diagnostics``' produced-key tracking cannot drift apart.
+SEEDED_CONTEXT_KEYS: frozenset[str] = frozenset(
+    {
+        SESSION_KEY,
+        "_spec_outputs",
+        "_spec_experiment",
+        RESOLVED_OUTPUT_DIR_KEY,
+        "_run_timestamp",
+    }
+)
+
 _REF_PREFIX = "@"
 _ESCAPE_PREFIX = "@@"
 

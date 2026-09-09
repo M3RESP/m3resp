@@ -73,6 +73,11 @@ def set_ventilator_raw(raw: dict[str, Any], recording: Any) -> None:
     raw["vent"] = recording
 
 
+#: Longest list/tuple/set still recorded element-by-element in provenance;
+#: anything longer is summarized by `_summarize_provenance_value`.
+_MAX_RECORDED_SEQUENCE = 32
+
+
 class M3Session:
     """Small, explicit session object for Stage 1 multimodal workflows."""
 
@@ -696,7 +701,10 @@ class M3Session:
         parameters: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        record_parameters = parameters or kwargs
+        record_parameters = {
+            name: _summarize_provenance_value(value)
+            for name, value in (parameters or kwargs).items()
+        }
         provenance_record = record(action, modality, **record_parameters)
         self.provenance.append(provenance_record)
         if self.datamodel is not None:
@@ -765,3 +773,23 @@ def _coerce_metadata(
     if isinstance(metadata, SessionMetadata):
         return metadata
     return SessionMetadata(attributes=dict(metadata))
+
+
+def _summarize_provenance_value(value: Any) -> Any:
+    """Replace bulk array arguments with a short description.
+
+    Provenance is a human-readable, JSON-exported audit trail of what was
+    called with which settings. An argument that is itself signal-length data
+    (e.g. the baseline array `emg.detect_breaths` now passes to the detector)
+    would bury that trail under hundreds of thousands of numbers, so record
+    its shape instead of its contents.
+    """
+
+    if isinstance(value, str | bytes):
+        return value
+    shape = getattr(value, "shape", None)
+    if shape is not None:
+        return f"<array shape={tuple(shape)}>"
+    if isinstance(value, (list, tuple, set)) and len(value) > _MAX_RECORDED_SEQUENCE:
+        return f"<{type(value).__name__} of {len(value)} values>"
+    return value

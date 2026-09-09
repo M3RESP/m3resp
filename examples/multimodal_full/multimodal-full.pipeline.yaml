@@ -145,6 +145,14 @@ steps:
   # values recover exactly the configured 14 breaths/min (respiratory_rate_bpm
   # in the generator config) - see docs/pipelines.md "Channel selection and
   # time-base rules".
+  # The baseline comes before detection, not after: peak detection sets its
+  # prominence threshold from the envelope's height above the baseline, so
+  # detecting first would measure every breath against a flat zero and let
+  # electrode drift inflate the threshold until quiet breaths drop out.
+  - id: slopesum_baseline
+    uses: emg.slopesum_baseline
+    with: { window_seconds: 7.5, step_seconds: 0.2, percentile: 33.0 }
+
   - id: detect_breaths_emg
     uses: emg.detect_breaths
     with: { min_breath_width_seconds: 0.5, half_window_seconds: 0.5, prominence_factor: 0.05 }
@@ -158,10 +166,6 @@ steps:
       pressure_channel: 0
       flow_channel: 1
       volume_channel: 2
-
-  - id: slopesum_baseline
-    uses: emg.slopesum_baseline
-    with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
 
   - id: onoffpeak_baseline_crossing
     uses: emg.onoffpeak_baseline_crossing

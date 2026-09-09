@@ -233,6 +233,17 @@
       }
     },
     {
+      "id": "slopesum_baseline",
+      "in": {},
+      "out": {},
+      "uses": "emg.slopesum_baseline",
+      "with": {
+        "percentile": 33.0,
+        "step_seconds": 0.2,
+        "window_seconds": 7.5
+      }
+    },
+    {
       "id": "detect_breaths_emg",
       "in": {},
       "out": {},
@@ -259,17 +270,6 @@
         "flow_channel": 1,
         "pressure_channel": 0,
         "volume_channel": 2
-      }
-    },
-    {
-      "id": "slopesum_baseline",
-      "in": {},
-      "out": {},
-      "uses": "emg.slopesum_baseline",
-      "with": {
-        "percentile": 33.0,
-        "step_seconds": 1.0,
-        "window_seconds": 30.0
       }
     },
     {

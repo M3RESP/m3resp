@@ -77,6 +77,15 @@ steps:
     with: { fill_method: 1 }
     out: { processed_emg_after_ecg: processed_emg }
 
+  # -- EMG baseline ------------------------------------------------------------
+  # The baseline comes before detection, not after: peak detection sets its
+  # prominence threshold from the envelope's height above the baseline, so
+  # detecting first would measure every breath against a flat zero and let
+  # electrode drift inflate the threshold until quiet breaths drop out.
+  - id: moving_baseline
+    uses: emg.moving_baseline
+    with: { window_seconds: 7.5, step_seconds: 0.2, percentile: 33.0 }
+
   # -- EMG breath detection ---------------------------------------------------
   # min_breath_width_seconds is narrower than the 1.0 s default: this
   # fixture's "quiet breathing" envelope bursts are shorter than that,
@@ -88,10 +97,6 @@ steps:
 
   - id: peak_indices
     uses: emg.peak_indices
-
-  - id: moving_baseline
-    uses: emg.moving_baseline
-    with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
 
   - id: onoffpeak_baseline_crossing
     uses: emg.onoffpeak_baseline_crossing

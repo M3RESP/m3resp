@@ -313,7 +313,10 @@ def _build_edges(
     for position, step_spec, definition, produced_at in iter_context_key_producers(
         steps
     ):
-        for param, default in definition.reads.items():
+        for param, default in {
+            **definition.reads,
+            **definition.optional_reads,
+        }.items():
             context_key = step_spec.inputs.get(param, default)
             if context_key is None or context_key == SESSION_KEY:
                 continue

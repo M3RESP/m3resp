@@ -127,6 +127,13 @@ class StepDefinition:
     #: parameter name -> default context key, or None if the binding is required
     #: and must be supplied via ``in:`` in the spec.
     reads: Mapping[str, str | None] = field(default_factory=dict)
+    #: parameter name -> default context key, bound only when an earlier step
+    #: actually produces that key. Unlike ``reads``, a missing producer is not
+    #: an error: the parameter is simply left unbound and the step falls back
+    #: to its own default. This is for inputs that genuinely refine a step
+    #: rather than enable it - e.g. ``emg.detect_breaths`` detects peaks above
+    #: a baseline when one has been computed, and above zero when it has not.
+    optional_reads: Mapping[str, str] = field(default_factory=dict)
     #: natural output names the step returns (default context keys it writes).
     writes: tuple[str, ...] = ()
     #: context keys that must already exist before the step runs, but are not
@@ -209,6 +216,7 @@ def register_step(
     name: str,
     *,
     reads: Mapping[str, str | None] | None = None,
+    optional_reads: Mapping[str, str] | None = None,
     writes: tuple[str, ...] = (),
     requires: tuple[str, ...] = (),
     summary: str = "",
@@ -235,6 +243,11 @@ def register_step(
     bound from; a spec can override the binding per step via ``in:``. ``writes``
     lists the natural output names returned by the function; a spec can rename
     them into other context keys via ``out:``.
+
+    ``optional_reads`` maps parameters that are bound only when an earlier
+    step produces the context key, and left unbound (so the function's own
+    default applies) when nothing does - see the field docstring on
+    :class:`StepDefinition`.
 
     ``parameters``/``input_artifacts``/``output_artifacts`` are optional,
     additive GUI/discovery metadata (Phase 1 of the pipeline-structure plan).
@@ -274,6 +287,7 @@ def register_step(
             name=name,
             func=func,
             reads=dict(reads or {}),
+            optional_reads=dict(optional_reads or {}),
             writes=tuple(writes),
             requires=tuple(requires),
             summary=summary or (func.__doc__ or "").strip().split("\n", 1)[0],
@@ -330,6 +344,13 @@ def _validate_step_definition(definition: StepDefinition) -> None:
                 f"'{output_name}'."
             )
 
+    overlapping = set(definition.optional_reads) & set(definition.reads)
+    if overlapping:
+        raise StepMetadataError(
+            f"Step '{definition.name}' declares {sorted(overlapping)} as both a "
+            "required and an optional read."
+        )
+
     _validate_parameters(definition)
     _validate_mutually_exclusive_parameters(definition)
     _validate_artifacts(definition.name, "input_artifacts", definition.input_artifacts)
@@ -351,7 +372,7 @@ def _validate_parameters(definition: StepDefinition) -> None:
             )
         seen.add(param.name)
 
-        if param.name in definition.reads:
+        if param.name in definition.reads or param.name in definition.optional_reads:
             raise StepMetadataError(
                 f"Step '{definition.name}' parameter '{param.name}' collides "
                 "with a declared context read of the same name."

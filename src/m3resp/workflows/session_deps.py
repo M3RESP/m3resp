@@ -243,7 +243,10 @@ def _build_dependency_edges(
     for position, step_spec, definition, produced_at in iter_context_key_producers(
         steps
     ):
-        for param, default in definition.reads.items():
+        for param, default in {
+            **definition.reads,
+            **definition.optional_reads,
+        }.items():
             context_key = step_spec.inputs.get(param, default)
             if context_key is not None and context_key in produced_at:
                 add_edge(produced_at[context_key][0], position)

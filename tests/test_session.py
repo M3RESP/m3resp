@@ -135,3 +135,43 @@ def test_session_scalar_alignment_offsets_emg_only_and_rejects_unknown_method():
         raise AssertionError(
             "Expected unsupported alignment method to raise ValueError"
         )
+
+
+def test_provenance_summarizes_bulk_array_arguments():
+    """Provenance is a readable audit trail, so a signal-length argument (the
+    baseline `emg.detect_breaths` passes to the detector) is recorded by shape
+    rather than by value."""
+
+    import numpy as np
+
+    session = M3Session(
+        emg_adapter=ReSurfEMGAdapter(
+            loader=lambda path, **kwargs: {"path": path, "kind": "emg"}
+        )
+    )
+    session.load_emg("subject.edf")
+    session.detect_emg_breaths(
+        detector=lambda signal, **kwargs: [],
+        baseline=np.zeros(100_000),
+        min_breath_width_seconds=0.5,
+    )
+
+    parameters = session.provenance[-1].parameters
+    assert parameters["baseline"] == "<array shape=(100000,)>"
+    assert parameters["min_breath_width_seconds"] == 0.5
+
+
+def test_provenance_keeps_short_scalar_and_sequence_arguments_verbatim():
+    session = M3Session(
+        emg_adapter=ReSurfEMGAdapter(
+            loader=lambda path, **kwargs: {"path": path, "kind": "emg"}
+        )
+    )
+    session.load_emg("subject.edf")
+    session.detect_emg_breaths(
+        detector=lambda signal, **kwargs: [], channels=[0, 1], label="left"
+    )
+
+    parameters = session.provenance[-1].parameters
+    assert parameters["channels"] == [0, 1]
+    assert parameters["label"] == "left"

@@ -11,12 +11,16 @@ from the spec and the registry.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
 from m3resp.core.exceptions import PipelineSpecError, UnknownStepError
 from m3resp.core.path_helper import resolve_optional_path
-from m3resp.workflows.context import resolve_value
+from m3resp.workflows.context import (
+    SEEDED_CONTEXT_KEYS,
+    resolve_value,
+)
 from m3resp.workflows.diagnostics import Diagnostic
 from m3resp.workflows.engine import collect_diagnostics
 from m3resp.workflows.registry import (
@@ -104,12 +108,31 @@ def compile_pipeline(
         raise PipelineSpecError(first.message)
 
     compiled_steps = tuple(
-        _compile_step(step_spec, get_step(step_spec.uses), spec, position)
-        for position, step_spec in enumerate(spec.steps)
+        _compile_step(step_spec, get_step(step_spec.uses), spec, position, produced)
+        for step_spec, position, produced in _steps_with_produced_keys(spec)
     )
     return CompiledPipeline(
         name=spec.name, schema_version=spec.schema_version, steps=compiled_steps
     )
+
+
+def _steps_with_produced_keys(
+    spec: PipelineSpec,
+) -> Iterator[tuple[StepSpec, int, frozenset[str]]]:
+    """Yield each step with the set of context keys available before it runs.
+
+    Optional reads bind only when something upstream actually produces their
+    key, so compiling them needs the same "most recent preceding writer" view
+    that `collect_diagnostics` builds - including the pipeline-level `inputs:`
+    and the keys `run_spec` injects, which are available to every step.
+    """
+
+    produced: set[str] = {*SEEDED_CONTEXT_KEYS, *spec.inputs}
+    for position, step_spec in enumerate(spec.steps):
+        definition = get_step(step_spec.uses)
+        yield step_spec, position, frozenset(produced)
+        for name in definition.writes:
+            produced.add(step_spec.outputs.get(name, name))
 
 
 def _compile_step(
@@ -117,6 +140,7 @@ def _compile_step(
     definition: StepDefinition,
     spec: PipelineSpec,
     position: int,
+    produced: frozenset[str],
 ) -> CompiledStep:
     input_bindings: dict[str, str] = {}
     for param, default in definition.reads.items():
@@ -125,6 +149,12 @@ def _compile_step(
         # above, so every read is guaranteed bound by the time we get here.
         assert context_key is not None
         input_bindings[param] = context_key
+    for param, default in definition.optional_reads.items():
+        # An optional read that nothing produces stays unbound, so the step
+        # function's own default applies rather than a None being passed in.
+        context_key = step_spec.inputs.get(param, default)
+        if context_key in produced:
+            input_bindings[param] = context_key
     output_bindings = {
         name: step_spec.outputs.get(name, name) for name in definition.writes
     }
