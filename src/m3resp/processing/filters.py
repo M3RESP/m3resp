@@ -1,4 +1,52 @@
-"""Shared filtering primitives for EIT, EMG, and ventilator signals."""
+"""Shared filtering primitives for EIT, EMG, and ventilator signals.
+
+---------------------------------------------------------------------------
+Provenance
+----------
+Portions of this module are derived from eitprocessing.
+
+    Source:     https://github.com/EIT-ALIVE/eitprocessing
+    Revision:   1.8.7
+    Original:   eitprocessing/filters/butterworth_filters.py::
+                ButterworthFilter.apply_filter
+    Copyright:  Copyright (c) Netherlands eScience Center and Erasmus MC
+    License:    Apache License, Version 2.0
+
+Modified for M3RESP:
+    - Extracted from the `ButterworthFilter` class into the free function
+      `butterworth_filter`, taking the filter type and cutoff directly.
+    - Optional `captures` mapping records the filter parameters for provenance.
+
+Portions of this module are derived from ReSurfEMG.
+
+    Source:     https://github.com/resurfemg-org/ReSurfEMG
+    Revision:   m3resp-integration (c63668689030e4581d5f985e7d09d3a8c01e7a77)
+    Original:   resurfemg/preprocessing/filtering.py::emg_bandpass_butter,
+                emg_lowpass_butter, emg_highpass_butter, notch_filter,
+                compute_power_loss
+    Copyright:  Copyright (c) 2022 Netherlands eScience Center and
+                University of Twente
+    License:    Apache License, Version 2.0
+
+Modified for M3RESP:
+    - `emg_bandpass_butter`/`emg_lowpass_butter`/`emg_highpass_butter` renamed
+      to `bandpass_filter`/`lowpass_filter`/`highpass_filter` and reduced to
+      thin wrappers over `butterworth_filter`, so EIT, EMG and ventilator
+      signals share one filter implementation.
+    - Parameters renamed and reorganized as keyword-only arguments.
+    - `compute_power_loss` intentionally does NOT reproduce upstream. The
+      upstream version sums the whole `(frequencies, density)` pair returned
+      by `scipy.signal.welch` instead of the density alone, and inverts the
+      power ratio. This version unpacks the pair and uses
+      `100 * (1 - processed / original)`. Upstream has been notified; until
+      that is resolved these two functions disagree by design.
+    - `harmonic_notch_filter`, `bandstop_filter` and the validation helpers
+      below are independent M3RESP code.
+
+The original copyright and license notices are retained per Apache-2.0 §4.
+Full attribution notice: see top-level NOTICE.md.
+---------------------------------------------------------------------------
+"""
 
 from __future__ import annotations
 
