@@ -1,4 +1,32 @@
-"""Shared interval and onset/offset primitives."""
+"""Shared interval and onset/offset primitives.
+
+---------------------------------------------------------------------------
+Provenance
+----------
+Portions of this module are derived from ReSurfEMG.
+
+    Source:     https://github.com/resurfemg-org/ReSurfEMG
+    Revision:   m3resp-integration (c63668689030e4581d5f985e7d09d3a8c01e7a77)
+    Original:   resurfemg/postprocessing/event_detection.py::
+                onoffpeak_baseline_crossing, onoffpeak_slope_extrapolation
+    Copyright:  Copyright (c) 2022 Netherlands eScience Center and
+                University of Twente
+    License:    Apache License, Version 2.0
+
+Modified for M3RESP:
+    - `onoffpeak_baseline_crossing` renamed to
+      `onoff_from_baseline_crossings`, `onoffpeak_slope_extrapolation` renamed
+      to `onoff_from_slope`.
+    - Parameters renamed and reorganized as keyword-only arguments.
+    - `baseline_crossings` extracted as a named function from the crossing
+      calculation both upstream functions perform inline.
+    - `sample_intervals_to_breath_events` below is independent M3RESP code
+      (conversion to `BreathEvent`), not derived from ReSurfEMG.
+
+The original copyright and license notices are retained per Apache-2.0 §4.
+Full attribution notice: see top-level NOTICE.md.
+---------------------------------------------------------------------------
+"""
 
 from __future__ import annotations
 

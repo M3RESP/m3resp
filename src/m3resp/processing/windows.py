@@ -9,7 +9,7 @@ Portions of this module are derived from ReSurfEMG.
     Revision:   m3resp-integration (c63668689030e4581d5f985e7d09d3a8c01e7a77)
     Original:   resurfemg/preprocessing/envelope.py::full_rolling_rms,
                 naive_rolling_rms, full_rolling_arv, rolling_rms_ci, rolling_arv_ci;
-                resurfemg/postprocessing/features.py::running_smoother
+                resurfemg/helper_functions/math_operations.py::running_smoother
     Copyright:  Copyright (c) 2022 Netherlands eScience Center and
                 University of Twente
     License:    Apache License, Version 2.0
@@ -17,6 +17,21 @@ Portions of this module are derived from ReSurfEMG.
 Modified for M3RESP:
     - `full_rolling_rms`/`full_rolling_arv` renamed to `rolling_rms`/`rolling_arv`.
     - Parameters renamed and reorganized as keyword-only arguments.
+
+Portions of this module are derived from eitprocessing.
+
+    Source:     https://github.com/EIT-ALIVE/eitprocessing
+    Revision:   1.8.7
+    Original:   eitprocessing/features/moving_average.py::MovingAverage.apply
+    Copyright:  Copyright (c) Netherlands eScience Center and Erasmus MC
+    License:    Apache License, Version 2.0
+
+Modified for M3RESP:
+    - Extracted from the `MovingAverage` class into the free function
+      `moving_average`, taking its window size and padding as keyword-only
+      arguments.
+    - `rolling_envelope` below is independent M3RESP code, dispatching to the
+      named envelope primitive.
 
 The original copyright and license notices are retained per Apache-2.0 §4.
 Full attribution notice: see top-level NOTICE.md.

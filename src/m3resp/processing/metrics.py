@@ -18,8 +18,24 @@ Modified for M3RESP:
       `window_integral`, `respiratory_rate` renamed to
       `respiratory_rate_from_indices`.
     - Parameters renamed and reorganized as keyword-only arguments.
-    - `tidal_variation` below is independent M3RESP code (EIT-style tidal
-      variation), not derived from ReSurfEMG.
+
+Portions of this module are derived from eitprocessing.
+
+    Source:     https://github.com/EIT-ALIVE/eitprocessing
+    Revision:   1.8.7
+    Original:   eitprocessing/parameters/tidal_impedance_variation.py::
+                TIV._calculate_tiv_values
+    Copyright:  Copyright (c) Netherlands eScience Center and Erasmus MC
+    License:    Apache License, Version 2.0
+
+Modified for M3RESP:
+    - Extracted from the private `TIV._calculate_tiv_values` method into the
+      free function `tidal_variation`, so it is reusable without constructing
+      a `TIV` object.
+    - Breath start/middle/end times are read by attribute or by key, so plain
+      mappings work alongside upstream `Breath` objects.
+    - The output array keeps the trailing dimensions of the input, so
+      pixel-level data is preserved rather than flattened.
 
 The original copyright and license notices are retained per Apache-2.0 §4.
 Full attribution notice: see top-level NOTICE.md.
