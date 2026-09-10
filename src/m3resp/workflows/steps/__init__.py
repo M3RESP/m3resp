@@ -7,10 +7,12 @@ or ``resurfemg`` packages.
 
 from m3resp.workflows.steps import (
     eit,
+    emg,
     export,
     metrics,
     session,
     sync,
+    ventilator,
 )
 
-__all__ = ["eit", "export", "metrics", "session", "sync"]
+__all__ = ["eit", "emg", "export", "metrics", "session", "sync", "ventilator"]

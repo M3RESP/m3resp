@@ -38,6 +38,9 @@ class CompiledStep:
     summary: str
     #: step function parameter name -> context key it reads from.
     input_bindings: dict[str, str] = field(default_factory=dict)
+    #: parameter names in ``input_bindings`` whose context key may be absent
+    #: at run time; the step is then called without that argument.
+    optional_bindings: frozenset[str] = frozenset()
     #: step's natural output name -> context key it is stored under.
     output_bindings: dict[str, str] = field(default_factory=dict)
     #: static parameter name -> recursively resolved value (``@ref``
@@ -119,12 +122,18 @@ def _compile_step(
     position: int,
 ) -> CompiledStep:
     input_bindings: dict[str, str] = {}
+    optional_bindings: set[str] = set()
     for param, default in definition.reads.items():
         context_key = step_spec.inputs.get(param, default)
         # collect_diagnostics already rejected a None (unbound) context key
-        # above, so every read is guaranteed bound by the time we get here.
-        assert context_key is not None
+        # above, so every required read is guaranteed bound by the time we get
+        # here. An optional read may still be unbound, and is simply not passed.
+        if context_key is None:
+            assert param in definition.optional_reads
+            continue
         input_bindings[param] = context_key
+        if param in definition.optional_reads:
+            optional_bindings.add(param)
     output_bindings = {
         name: step_spec.outputs.get(name, name) for name in definition.writes
     }
@@ -161,6 +170,7 @@ def _compile_step(
         operation_id=definition.operation_id,
         summary=definition.summary,
         input_bindings=input_bindings,
+        optional_bindings=frozenset(optional_bindings),
         output_bindings=output_bindings,
         parameters=resolved_parameters,
         input_artifacts=definition.input_artifacts,

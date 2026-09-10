@@ -38,7 +38,16 @@ def summarize_emg(session: M3Session) -> dict[str, Any]:
         "filter": emg["filter"],
         "n_raw_samples": len(emg["raw_channel"]),
         "n_filtered_samples": len(emg["filtered"]),
-        "n_envelope_samples": len(emg["envelope"]),
+        # Present once an ECG-removal step has run; the band-passed signal
+        # above is kept alongside it.
+        "n_ecg_cleaned_samples": (
+            None if emg.get("ecg_cleaned") is None else len(emg["ecg_cleaned"])
+        ),
+        # None when preprocessing skipped the envelope because ECG gating
+        # recomputes it (`compute_envelope=False`).
+        "n_envelope_samples": (
+            None if emg.get("envelope") is None else len(emg["envelope"])
+        ),
         "n_ventilator_breaths": len(session.events.get("ventilator_breaths", [])),
     }
     if "emg_breaths" in session.events:

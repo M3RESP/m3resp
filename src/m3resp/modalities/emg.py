@@ -16,7 +16,11 @@ class EMGRecording:
     raw: Any = None
     dataframe: Any = None
     metadata: dict[str, Any] | None = None
+    #: Band-passed signal, as produced by preprocessing.
     filtered: Any = None
+    #: Band-passed signal with the ECG removed, when an ECG-removal step has
+    #: run. Kept separate from `filtered` so both stages stay available.
+    ecg_cleaned: Any = None
     envelope: Any = None
     channel: int | None = None
     fs: float | None = None

@@ -311,6 +311,9 @@ def _check_bindings(
                 )
             )
         elif context_key not in produced:
+            if param in definition.optional_reads:
+                # Absent is allowed: the step runs without the argument.
+                continue
             diagnostics.append(
                 Diagnostic(
                     severity="error",
