@@ -71,7 +71,6 @@ def onoff_from_baseline_crossings(
             - numpy.ndarray: List of boolean values for valid ends.
             - numpy.ndarray: List of boolean values for valid peaks.
     """
-
     crossings = baseline_crossings(values, baseline)
     peaks = np.asarray(peak_indices, dtype=int)
     starts = np.zeros((len(peaks),), dtype=int)

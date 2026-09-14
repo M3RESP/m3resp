@@ -87,7 +87,6 @@ def moving_average(
     Returns:
         np.ndarray: The moving average of the input data.
     """
-
     data = np.asarray(values)
     window_size = _normalize_odd_window_size(window_size)
     if window_size > len(data):
@@ -145,7 +144,6 @@ def rolling_rms(
     Returns:
         np.ndarray: The rolling RMS envelope.
     """
-
     squared = pd.Series(np.power(values, 2))
     return np.asarray(
         np.sqrt(
@@ -277,7 +275,8 @@ def rolling_envelope(
     """
     normalized = str(method).lower()
     if normalized not in ENVELOPE_METHODS:
-        raise ValueError(f"method must be one of {ENVELOPE_METHODS}; got {method!r}.")
+        msg = f"method must be one of {ENVELOPE_METHODS}; got {method!r}."
+        raise ValueError(msg)
     compute = {
         "rms": rolling_rms,
         "arv": rolling_arv,
@@ -366,7 +365,6 @@ def rolling_arv_ci(
         tuple[np.ndarray, np.ndarray]: The lower and upper bounds of the confidence
             interval.
     """
-
     stats = _scipy_stats()
     absolute = pd.Series(np.abs(values))
     arv = np.asarray(
@@ -394,9 +392,11 @@ def rolling_arv_ci(
 
 def _normalize_odd_window_size(window_size: int) -> int:
     if not isinstance(window_size, int):
-        raise TypeError("window_size must be an int")
+        msg = "window_size must be an int"
+        raise TypeError(msg)
     if window_size < 1:
-        raise ValueError("window_size must be positive")
+        msg = "window_size must be positive"
+        raise ValueError(msg)
     return window_size + 1 if window_size % 2 == 0 else window_size
 
 
@@ -404,8 +404,9 @@ def _scipy_stats():
     try:
         from scipy import stats
     except ImportError as exc:
-        raise OptionalDependencyError(
+        msg = (
             "Rolling confidence intervals require SciPy. Install `scipy` to "
             "use `m3resp.processing.windows` confidence interval helpers."
-        ) from exc
+        )
+        raise OptionalDependencyError(msg) from exc
     return stats
