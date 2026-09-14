@@ -40,13 +40,15 @@ Full attribution notice: see top-level NOTICE.md.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pandas as pd
 
 from m3resp.core.exceptions import OptionalDependencyError
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 PaddingType = Literal[
     "constant",
@@ -114,10 +116,7 @@ def running_smoother(values: np.ndarray) -> np.ndarray:
 
     Returns:
         np.ndarray: Smoothed, rectified data.
-    """
 
-    Returns:
-        numpy.ndarray: Smoothed array.
     """
     data = np.asarray(values)
     n_samples = len(data) // 10
@@ -170,7 +169,6 @@ def naive_rolling_rms(values: np.ndarray, *, window_length: int) -> np.ndarray:
         np.ndarray: The rolling RMS envelope. Without padding it is
             `window_length` samples shorter than `values`.
     """
-
     cumulative = np.cumsum(np.abs(values) ** 2)
     return np.sqrt(
         (cumulative[window_length:] - cumulative[:-window_length]) / window_length
@@ -197,7 +195,6 @@ def rolling_arv(
     Returns:
         np.ndarray: The rolling ARV envelope.
     """
-
     absolute = pd.Series(np.abs(values))
     return np.asarray(
         absolute.rolling(
@@ -232,7 +229,6 @@ def rolling_median_absolute(
     Returns:
         np.ndarray: The rolling median absolute value envelope.
     """
-
     absolute = pd.Series(np.abs(values))
     return np.asarray(
         absolute.rolling(
@@ -279,7 +275,6 @@ def rolling_envelope(
     Returns:
         np.ndarray: The rolling envelope computed using the specified method.
     """
-
     normalized = str(method).lower()
     if normalized not in ENVELOPE_METHODS:
         raise ValueError(f"method must be one of {ENVELOPE_METHODS}; got {method!r}.")
@@ -319,7 +314,6 @@ def rolling_rms_ci(
         tuple[np.ndarray, np.ndarray]: The lower and upper bounds of the confidence
             interval.
     """
-
     stats = _scipy_stats()
     squared = pd.Series(np.power(values, 2))
     mean_square = np.asarray(

@@ -21,19 +21,19 @@ from .shared import POSTPROCESSING_FUNCTIONS
 from .signals import peak_indices_from_events, ventilator_signals
 
 
-class ReSurfEMGAdapter(
+class ReSurfEMG(
     _CoreMixin,
     _EcgMixin,
     _BaselineMixin,
     _QualityMixin,
     _DefaultsMixin,
 ):
-    """Adapter boundary for the upstream `resurfemg` package."""
+    """Ported methods from the `ReSurfEMG` package."""
 
 
 __all__ = [
     "POSTPROCESSING_FUNCTIONS",
-    "ReSurfEMGAdapter",
+    "ReSurfEMG",
     "peak_indices_from_events",
     "ventilator_signals",
 ]
