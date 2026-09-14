@@ -210,7 +210,6 @@ class _CoreMixin:
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Run default EMG postprocessing and report unavailable input needs."""
-
         custom = kwargs.pop("postprocess", None)
         if custom is not None:
             return custom(processed_emg, events=events, **kwargs)

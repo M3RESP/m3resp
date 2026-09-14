@@ -96,7 +96,7 @@ def _load_biopac_txt(path: str) -> dict[str, Any]:
     :meth:`ReSurfEMGAdapter.load`, with ``array`` channel-major
     ``(n_channels, n_samples)`` and ``metadata["fs"]`` populated.
     """
-    import pandas as pd
+    import pandas as pd  # noqa: PLC0415
 
     with Path.open(Path(path), encoding="utf-8", errors="replace") as handle:
         header: list[str] = [handle.readline().rstrip("\n") for _ in range(3)]
@@ -156,7 +156,7 @@ def _emg_optional_dependency_error() -> OptionalDependencyError:
     )
 
 
-def _require_1d_array(name: str, value: Any) -> np.ndarray:
+def _require_1d_array(name: str, value: np.ndarray) -> np.ndarray:
     array = np.asarray(value, dtype=float)
     if array.ndim != 1:
         msg = f"{name} must be a 1D array; got shape {array.shape}."
@@ -164,7 +164,7 @@ def _require_1d_array(name: str, value: Any) -> np.ndarray:
     return array
 
 
-def _require_index_array(name: str, value: Any) -> np.ndarray:
+def _require_index_array(name: str, value: np.ndarray) -> np.ndarray:
     array = np.asarray(value)
     if array.ndim != 1:
         msg = f"{name} must be a 1D array of indices; got shape {array.shape}."
@@ -193,20 +193,20 @@ def _require_finite_positive(name: str, value: float) -> None:
 def _require_equal_length(*named_arrays: tuple[str, np.ndarray]) -> None:
     lengths = {name: len(array) for name, array in named_arrays}
     if len(set(lengths.values())) > 1:
-        msg = "Arrays must have equal length; got {}.".format(lengths)
+        msg = f"Arrays must have equal length; got {lengths}."
         raise ValueError(msg)
 
-
-def _mask_invalid(values: Any, validity: Any) -> np.ndarray:
-    """Mask invalid values with NaNs.
+def _mask_invalid(values: np.ndarray, validity: np.ndarray) -> np.ndarray:
+    """[NOT APPROVED] Mask invalid values with NaNs.
 
     Replace entries at invalid breath positions with NaN, preserving
-    array length/index alignment with `peak_indices`. 
+    array length/index alignment with `peak_indices`.
 
     `valid_peaks` (from `onoff_from_baseline_crossings`) flags breaths
     whose onset/offset window overlaps a neighboring breath or was never found;
     letting those through unmasked would make an overlapping/degenerate
-    window masquerade as a real measurement."""
+    window masquerade as a real measurement.
+    """
     array = np.array(values, dtype=float, copy=True)
     valid = np.asarray(validity, dtype=bool)
     _require_equal_length(("values", array), ("validity", valid))
@@ -215,24 +215,22 @@ def _mask_invalid(values: Any, validity: Any) -> np.ndarray:
 
 
 def _require_integer_valued_sample_frequency(sample_frequency: float) -> int:
-    """Normalize `sample_frequency` to `int` for upstream calls that need an
-    exact integer (e.g. `fs // 200` fed straight into a pandas rolling
-    window - see plan/stage2/2_resurfemg_gap_migration_implementation_plan.md
-    Phase 0.2). Only an exactly integer-valued float (`2048.0`) is
-    normalized; a genuinely fractional frequency is a clear error rather
-    than a silent rounding.
-    """
+    """Normalize the sample frequency to integer type.
 
+    Converts the sample frequency to integer type, for use in methods that require
+    an exact integer value (e.g., for pandas rolling window calculations).
+
+    Raises a ValueError if the sample frequency is not a finite positive number
+    or if it is not an exact integer value.
+    """
     if not np.isfinite(sample_frequency) or sample_frequency <= 0:
-        raise ValueError(
-            f"sample_frequency must be finite and positive; got {sample_frequency!r}."
-        )
+        msg = f"sample_frequency must be finite and positive; got {sample_frequency!r}."
+        raise ValueError(msg)
     if float(sample_frequency).is_integer():
         return int(sample_frequency)
-    raise ValueError(
-        "sample_frequency must be an exact integer value for this operation "
-        f"(ReSurfEMG requires an int internally); got {sample_frequency!r}."
-    )
+    msg = ("sample_frequency must be an exact integer value for this operation;"
+           f" got {sample_frequency!r}.")
+    raise ValueError(msg)
 
 
 def _computed_category(postprocessed: dict[str, Any], category: str) -> dict[str, Any]:
@@ -241,7 +239,7 @@ def _computed_category(postprocessed: dict[str, Any], category: str) -> dict[str
     return dict(postprocessed.get("computed", {}).get(category, {}))
 
 
-def _as_parameter_value(value: Any) -> float | np.ndarray:
+def _as_parameter_value(value: Any) -> float | np.ndarray:  # noqa: ANN401
     if isinstance(value, bool):
         return float(value)
     if isinstance(value, (int, float)):
@@ -290,7 +288,7 @@ def _missing_postprocessing_dependency() -> str | None:
 def _unavailable_postprocessing_result(
     *,
     selected: set[tuple[str, str]],
-    peak_indices: Any,
+    peak_indices: np.ndarray,
     computed: dict[str, Any],
     reason: str,
     settings: dict[str, Any],
