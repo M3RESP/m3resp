@@ -5,19 +5,20 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+from scipy.signal import find_peaks
+
+from m3resp.processing.filters import bandpass_filter
+from m3resp.processing.windows import rolling_rms  # TODO: check correctness
 
 from .shared import (
-    _emg_optional_dependency_error,
     _require_1d_array,
     _require_index_array,
     _require_integer_valued_sample_frequency,
 )
 
-from m3resp.processing.filters import bandpass_filter
-
 
 class _EcgMixin:
-    #TODO
+
     def detect_ecg_peaks(
         self,
         signal: np.ndarray,
@@ -26,7 +27,7 @@ class _EcgMixin:
         peak_fraction: float = 0.4,
         peak_width_samples: int | None = None,
         peak_distance_samples: int | None = None,
-        bandpass_filter: bool = True,
+        apply_bandpass_filter: bool = True,
     ) -> np.ndarray:
         """Detect ECG peak sample indices in `signal`.
 
@@ -39,7 +40,7 @@ class _EcgMixin:
             peak_width_samples (int, optional): ECG peaks width threshold in samples.
             peak_distance_samples (int, optional): Minimum time between ECG peaks,
                 in samples.
-            bandpass_filter (bool): Bandpass filter the ecg_raw between 1-500 Hz before
+            apply_bandpass_filter (bool): Bandpass filter the ecg_raw between 1-500 Hz before
                 peak detection.
 
         Returns:
@@ -54,13 +55,25 @@ class _EcgMixin:
         if peak_distance_samples is None:
             peak_distance_samples = fs // 3
 
-        if bandpass_filter:
+        if apply_bandpass_filter:
             lp_cutoff = min([500, 0.95 * fs / 2])
-            ecg_filtered = bandpass_filter(_signal, high_pass = 1, low_pass = lp_cutoff, sample_frequency = fs)
+            cutoff_frequencies = (1, lp_cutoff)
+            _signal = bandpass_filter(
+                _signal, cutoff_frequency=cutoff_frequencies, sample_frequency=fs
+            )
 
+        _signal_rms = rolling_rms(_signal, window_length=fs // 200)
+        [min_rms, max_rms] = np.percentile(_signal_rms, [1, 99])
 
+        peak_height = peak_fraction * (max_rms - min_rms)
+        return find_peaks(
+            _signal_rms,
+            height=peak_height,
+            width=peak_width_samples,
+            distance=peak_distance_samples,
+        )[0]
 
-    #TODO
+    # TODO
     def gate_ecg(
         self,
         signal: Any,
@@ -88,23 +101,14 @@ class _EcgMixin:
         Returns:
             numpy.ndarray: The gated result.
         """
-        try:
-            from resurfemg.preprocessing.ecg_removal import gating
-        except ImportError as exc:
-            raise _emg_optional_dependency_error() from exc
-
         array = _require_1d_array("signal", signal)
         peaks = _require_index_array("peak_indices", peak_indices)
         if fill_method not in (0, 1, 2, 3):
             msg = f"fill_method must be one of 0, 1, 2, 3; got {fill_method!r}."
-            raise ValueError(
-                msg
-            )
+            raise ValueError(msg)
         if gate_width_samples <= 0:
             msg = f"gate_width_samples must be positive; got {gate_width_samples!r}."
-            raise ValueError(
-                msg
-            )
+            raise ValueError(msg)
         return np.asarray(
             gating(
                 array,
@@ -113,7 +117,8 @@ class _EcgMixin:
                 method=fill_method,
             )
         )
-#TODO
+
+    # TODO
     def wavelet_denoise_ecg(
         self,
         signal: Any,
@@ -143,11 +148,6 @@ class _EcgMixin:
                 - thresholds (numpy.ndarray): Threshold values.
                 - gate_mask (numpy.ndarray): Gated signal based on R-peaks, where gate == 1.
         """
-        try:
-            from resurfemg.preprocessing.ecg_removal import wavelet_denoising
-        except ImportError as exc:
-            raise _emg_optional_dependency_error() from exc
-
         array = _require_1d_array("signal", signal)
         peaks = _require_index_array("peak_indices", peak_indices)
         fs = _require_integer_valued_sample_frequency(sample_frequency)
