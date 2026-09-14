@@ -69,7 +69,7 @@ def butterworth_filter(
     filter_type: ButterworthFilterType,
     cutoff_frequency: float | Sequence[float],
     sample_frequency: float,
-    order: int,
+    order: int = 3,
     axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
@@ -105,7 +105,6 @@ def butterworth_filter(
             few samples for SciPy's edge padding.
         OptionalDependencyError: If SciPy is unavailable.
     """
-
     scipy_signal = _scipy_signal()
     allowed_types = get_args(ButterworthFilterType)
     if filter_type not in allowed_types:
@@ -124,10 +123,7 @@ def butterworth_filter(
             "Input data contains NaN or infinite values. Fill gaps before "
             "applying a Butterworth filter."
         )
-
-    capture_value(captures, "unfiltered_data", data)
-    capture_value(captures, "sample_frequency", sample_frequency)
-    _capture_butterworth_parameters(captures, filter_type, cutoff)
+        raise ValueError(msg)
 
     sos = scipy_signal.butter(
         N=order,
@@ -138,7 +134,12 @@ def butterworth_filter(
         output="sos",
     )
     filtered = scipy_signal.sosfiltfilt(sos, data, axis=axis)
-    capture_value(captures, "filtered_data", filtered)
+    if captures is not None:
+        capture_value(captures, "unfiltered_data", data)
+        capture_value(captures, "sample_frequency", sample_frequency)
+        _capture_butterworth_parameters(captures, filter_type, cutoff)
+        capture_value(captures, "filtered_data", filtered)
+
     return filtered
 
 
@@ -147,7 +148,7 @@ def lowpass_filter(
     *,
     cutoff_frequency: float,
     sample_frequency: float,
-    order: int,
+    order: int = 3,
     axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
@@ -165,7 +166,6 @@ def lowpass_filter(
     Returns:
         numpy.ndarray: Filtered data.
     """
-
     return butterworth_filter(
         values,
         filter_type="lowpass",
@@ -182,7 +182,7 @@ def highpass_filter(
     *,
     cutoff_frequency: float,
     sample_frequency: float,
-    order: int,
+    order: int = 3,
     axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
@@ -200,7 +200,6 @@ def highpass_filter(
     Returns:
         numpy.ndarray: Filtered data.
     """
-
     return butterworth_filter(
         values,
         filter_type="highpass",
@@ -217,7 +216,7 @@ def bandpass_filter(
     *,
     cutoff_frequency: Sequence[float],
     sample_frequency: float,
-    order: int,
+    order: int = 3,
     axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
@@ -236,7 +235,6 @@ def bandpass_filter(
     Returns:
         numpy.ndarray: Filtered data.
     """
-
     return butterworth_filter(
         values,
         filter_type="bandpass",
@@ -253,7 +251,7 @@ def bandstop_filter(
     *,
     cutoff_frequency: Sequence[float],
     sample_frequency: float,
-    order: int,
+    order: int = 3,
     axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
@@ -272,7 +270,6 @@ def bandstop_filter(
     Returns:
         numpy.ndarray: Filtered data.
     """
-
     return butterworth_filter(
         values,
         filter_type="bandstop",
@@ -305,7 +302,6 @@ def notch_filter(
     Returns:
         numpy.ndarray: Filtered data.
     """
-
     scipy_signal = _scipy_signal()
     b_notch, a_notch = scipy_signal.iirnotch(
         frequency,
@@ -350,9 +346,9 @@ def harmonic_notch_filter(
     Returns:
         numpy.ndarray: Filtered data.
     """
-
     if base_frequency <= 0:
-        raise ValueError("base_frequency must be positive")
+        msg = "base_frequency must be positive"
+        raise ValueError(msg)
 
     nyquist = sample_frequency / 2
     stop_frequency = min(max_frequency or nyquist, nyquist)
@@ -411,7 +407,6 @@ def compute_power_loss(
     Returns:
         float: Percentage power loss after processing.
     """
-
     scipy_signal = _scipy_signal()
     if n_segment is None:
         n_segment = int(original_frequency) // 2
@@ -453,9 +448,11 @@ def _normalize_cutoff_frequency(
         cutoff_frequency,
         str | bytes,
     ):
-        raise TypeError("cutoff_frequency must be a two-value sequence")
+        msg = "cutoff_frequency must be a two-value sequence"
+        raise TypeError(msg)
     if len(cutoff_frequency) != 2:
-        raise ValueError("cutoff_frequency must contain two values")
+        msg = "cutoff_frequency must contain two values"
+        raise ValueError(msg)
     low, high = cutoff_frequency
     if not _is_number(low) or not _is_number(high):
         raise TypeError("cutoff_frequency values must be numeric")
@@ -480,7 +477,8 @@ def _validate_common_filter_arguments(
     if not _is_number(sample_frequency):
         raise TypeError("sample_frequency must be numeric")
     if sample_frequency <= 0:
-        raise ValueError("sample_frequency must be positive")
+        msg_0 = "sample_frequency must be positive"
+        raise ValueError(msg_0)
 
 
 def _is_number(value: Any) -> TypeGuard[float]:
@@ -514,12 +512,13 @@ def _capture_butterworth_parameters(
             capture_value(captures, "frequency_bands", cutoff, append_to_list=True)
 
 
-def _scipy_signal():
+def _scipy_signal() -> Any:  # noqa: ANN401
     try:
-        from scipy import signal
+        from scipy import signal  # noqa: PLC0415
     except ImportError as exc:
-        raise OptionalDependencyError(
+        msg = (
             "Filtering requires SciPy. Install `scipy` to use "
             "`m3resp.processing.filters`."
-        ) from exc
+        )
+        raise OptionalDependencyError(msg) from exc
     return signal

@@ -6,19 +6,21 @@ from typing import Any
 
 import numpy as np
 
-from ._shared import (
+from .shared import (
     _emg_optional_dependency_error,
     _require_1d_array,
     _require_index_array,
     _require_integer_valued_sample_frequency,
 )
 
+from m3resp.processing.filters import bandpass_filter
+
 
 class _EcgMixin:
     #TODO
     def detect_ecg_peaks(
         self,
-        signal: Any,
+        signal: np.ndarray,
         *,
         sample_frequency: float,
         peak_fraction: float = 0.4,
@@ -26,40 +28,38 @@ class _EcgMixin:
         peak_distance_samples: int | None = None,
         bandpass_filter: bool = True,
     ) -> np.ndarray:
-        """Detect ECG peak sample indices in `signal` (ECG or an
-        ECG-contaminated EMG channel).
+        """Detect ECG peak sample indices in `signal`.
 
         Args:
-            signal: ECG signals to detect the ECG peaks in.
+            signal: ECG signals to detect the ECG peaks in (ECG or an
+        ECG-contaminated EMG channel).
             sample_frequency (float): Sampling rate of the EMG signals.
             peak_fraction (float): ECG peaks amplitude threshold relative to the
                 specified fraction of the min-max values in the ECG signal.
             peak_width_samples (int, optional): ECG peaks width threshold in samples.
-            peak_distance_samples (int, optional): Minimum time between ECG peaks in samples.
+            peak_distance_samples (int, optional): Minimum time between ECG peaks,
+                in samples.
             bandpass_filter (bool): Bandpass filter the ecg_raw between 1-500 Hz before
                 peak detection.
 
         Returns:
             numpy.ndarray: ECG peak indices.
         """
-        try:
-            from resurfemg.preprocessing.ecg_removal import detect_ecg_peaks
-        except ImportError as exc:
-            raise _emg_optional_dependency_error() from exc
-
-        array = _require_1d_array("signal", signal)
+        _signal = _require_1d_array("signal", signal)
         fs = _require_integer_valued_sample_frequency(sample_frequency)
-        return np.asarray(
-            detect_ecg_peaks(
-                array,
-                fs,
-                peak_fraction=peak_fraction,
-                peak_width_s=peak_width_samples,
-                peak_distance=peak_distance_samples,
-                bp_filter=bandpass_filter,
-            ),
-            dtype=int,
-        )
+
+        if peak_width_samples is None:
+            peak_width_samples = fs // 1000
+
+        if peak_distance_samples is None:
+            peak_distance_samples = fs // 3
+
+        if bandpass_filter:
+            lp_cutoff = min([500, 0.95 * fs / 2])
+            ecg_filtered = bandpass_filter(_signal, high_pass = 1, low_pass = lp_cutoff, sample_frequency = fs)
+
+
+
     #TODO
     def gate_ecg(
         self,
