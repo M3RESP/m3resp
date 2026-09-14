@@ -116,6 +116,9 @@ def running_smoother(values: np.ndarray) -> np.ndarray:
         np.ndarray: Smoothed, rectified data.
     """
 
+    Returns:
+        numpy.ndarray: Smoothed array.
+    """
     data = np.asarray(values)
     n_samples = len(data) // 10
     new_values = np.convolve(abs(data), np.ones(n_samples), "valid") / n_samples

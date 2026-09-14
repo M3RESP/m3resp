@@ -100,6 +100,55 @@ output_max_bytes = 50_000_000
 line-length = 88
 target-version = "py312"
 
+
+[tool.ruff.lint]
+select = ["ALL"]
+pydocstyle.convention = "google" # docstring settings
+ignore = [
+    # Unwanted (potentially)
+    "FBT",    # Using boolean arguments
+    "ANN002", # Missing type annotation for `*args`
+    "ANN003", # Missing type annotation for `**kwargs`
+    "ANN204", # Missing return type annotation for special (dunder) method
+    "S105",   # Possible hardcoded password
+    "S311",   # insecure random generators
+    "PT011",  # pytest-raises-too-broad
+    "PD011",  # Use of .values. Assumes .values refers to pandas dataframes, not object attributes
+    "TD",     # TODOs
+    "FIX002", # Resolve TODOs
+    "B028",   # No explicit `stacklevel` keyword argument found in warning
+    # "SIM108", # Use ternary operator (not sure if we want to ignore this)
+    # Unneeded docstrings
+    "D100",   # Missing module docstring
+    "D104",   # Missing public package docstring
+    "D105",   # Missing docstring in magic method
+    "D107",   # Missing docstring in `__init__`
+    "COM812", # missing trailing comma
+    "ISC001", # single line implicit string concatenation
+    "PLR2004", # Comparison against unnamed value
+
+]
+
+# Set autofixing.
+fixable = ["ALL"]
+unfixable = [
+    "F401",   # unused imports (should not disappear while editing)
+    "RUF100", # unused noqa (should not disappear while editing)
+    "B905",   # autofill strictness of zip (think about preferred behavior)
+]
+extend-safe-fixes = [
+    "D415",   # First line should end with a period, question mark, or exclamation point
+    "D300",   # Use triple double quotes `"""`
+    "D200",   # One-line docstring should fit on one line
+    "TC",     # Format type checking only imports
+    "ISC001", # Implicitly concatenated strings on a single line
+    "EM",     # Exception message variables
+    "RUF013", # Implicit Optional
+    "B006",   # Mutable default argument
+    "TID252", # Absolute imports over relative imports
+]
+pylint.max-args = 9
+
 [tool.ruff.lint.per-file-ignores]
 # marimo stores notebooks as plain Python: every cell is a function that ends in
 # a bare expression (its output) and a `return` of the variables other cells
@@ -110,6 +159,14 @@ target-version = "py312"
 [tool.mypy]
 python_version = "3.12"
 packages = ["m3resp"]
+strict = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+check_untyped_defs = true
+no_implicit_reexport = true
+warn_redundant_casts = true
+warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
 module = [
@@ -118,3 +175,5 @@ module = [
   "resurfemg.*",
 ]
 ignore_missing_imports = true
+
+
