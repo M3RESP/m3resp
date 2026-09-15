@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+import pandas as pd
+import pywt
 from scipy.signal import find_peaks
 
 from m3resp.processing.filters import bandpass_filter
@@ -145,7 +147,6 @@ def _gate_fill_prior_mean(gating_context: _GateContext) -> np.ndarray:
 
 
 def _gate_fill_rms(gating_context: _GateContext) -> np.ndarray:
-    import pandas as pd  # noqa: PLC0415
 
     rms = np.copy(gating_context.array_gated)
     rms[np.array(gating_context.gate_mask, dtype=np.bool_)] = np.nan
@@ -234,7 +235,6 @@ class _EcgMixin:
             distance=peak_distance_samples,
         )[0]
 
-    # TODO
     def _build_gate_context(
         self,
         signal: np.ndarray,
@@ -338,7 +338,35 @@ class _EcgMixin:
         wavelet_type: str = "db2",
         fixed_threshold: float = 4.5,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """Remove ECG artifacts from `signal` via a-trous wavelet shrinkage.
+        """Wavelet denoising of ECG artifacts.
+
+        Shrinkage Denoising using a-trous wavelet decomposition (SWT). NB: This
+        function assumes that the emg_raw has already been preprocessed for
+        removal of baseline, powerline, and aliasing. N.B. This is a Python
+        implementation of the SWT, as previously implemented in MATLAB by Jan
+        Graßhoff. See Copyright notice below.
+        --------------------------------------------------------------------------
+        Copyright 2019 Institute for Electrical Engineering in Medicine,
+        University of Luebeck
+        Jan Graßhoff
+
+        Permission is hereby granted, free of charge, to any person obtaining a
+        copy of this software and associated documentation files (the "Software"),
+        to deal in the Software without restriction, including without limitation
+        the rights to use, copy, modify, merge, publish, distribute, sublicense,
+        and/or sell copies of the Software, and to permit persons to whom the
+        Software is furnished to do so, subject to the following conditions:
+
+        The above copyright notice and this permission notice shall be included
+        in all copies or substantial portions of the Software.
+
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+        OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+        FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+        DEALINGS IN THE SOFTWARE.
 
         Args:
             signal: 1D raw EMG data.
@@ -359,24 +387,142 @@ class _EcgMixin:
                 - gate_mask (numpy.ndarray): Gated signal based on R-peaks,
                     where gate == 1.
         """
-        array = _require_1d_array("signal", signal)
-        peaks = _require_index_array("peak_indices", peak_indices)
+
+        def estimate_noise(signal: np.ndarray, window_length: int) -> np.ndarray:
+            """Estimate noise level.
+
+            Args:
+                    signal (numpy.ndarray): Wavelet-decomposed signal.
+                    window_length (int): Window length for noise estimation.
+
+            Returns:
+                    numpy.ndarray: Estimated noise level.
+            """
+            nb_levels = signal.shape[0]
+            std_estimate = np.zeros_like(signal)
+
+            for nb_level in range(nb_levels):
+                # estimate std from MAD: std ~ MAD/0.6745
+                std_estimate[nb_level, :] = (
+                    pd.Series(np.abs(signal[nb_level, :]))
+                    .rolling(window=window_length, min_periods=1, center=True)
+                    .median()
+                    .to_numpy(dtype=float)
+                    / 0.6745
+                )
+
+                # current on- and offset effects
+                std_estimate[nb_level, : window_length // 2] = std_estimate[
+                    nb_level, window_length // 2
+                ]
+                std_estimate[nb_level, -window_length // 2] = std_estimate[
+                    nb_level, -window_length // 2
+                ]
+            return std_estimate
+
+        def get_gate_windows(
+            rpeak_bool_vec: np.ndarray, window_length: int
+        ) -> np.ndarray:
+            """Generate gate windows for the peaks.
+
+            Args:
+                    rpeak_bool_vec (numpy.ndarray): 1D array, where R-peak location == 1
+                    window_length (int): Number of samples to gate around peaks.
+
+            Returns:
+                    numpy.ndarray: Gated signal based on R-peaks, where gate == 1.
+            """
+            window_length = int(np.floor(window_length / 2) * 2)
+            rpeak_indexes = np.where(rpeak_bool_vec == 1)[0]
+            gate_windows = np.zeros_like(rpeak_bool_vec)
+            for rpeak_index in rpeak_indexes:
+                gate_windows[
+                    max(rpeak_index - window_length // 2, 0) : min(
+                        rpeak_index + window_length // 2, len(rpeak_bool_vec)
+                    )
+                ] = 1
+
+            return gate_windows
+
+        def threshold_wavelets(
+            data: np.ndarray, hard_thresholding: bool, threshold: float | np.ndarray
+        ) -> np.ndarray:
+            """Threshold wavelet coefficients.
+
+            Apply thresholding to data based on 'soft' or 'hard' option.
+
+            Args:
+                    data (numpy.ndarray): Input data.
+                    hard_thresholding (bool): True for hard thresholding, False for soft
+                    threshold (float): Threshold value.
+
+            Returns:
+                    numpy.ndarray: Thresholded data.
+            """
+            if hard_thresholding is True:
+                # Hard thresohlding
+                data[np.abs(data) < threshold] = 0
+            elif hard_thresholding is False:
+                # Soft thresholding
+                data = np.sign(data) * np.maximum(np.abs(data) - threshold, 0)
+            return data
+
+        _signal = _require_1d_array("signal", signal)
+        _peak_indices = _require_index_array("peak_indices", peak_indices)
         fs = _require_integer_valued_sample_frequency(sample_frequency)
         if levels <= 0:
             msg = f"levels must be positive; got {levels!r}."
             raise ValueError(msg)
-        cleaned, decomposition, thresholds, gate_mask = wavelet_denoising(
-            array,
-            peaks,
-            fs,
-            hard_thresholding=hard_thresholding,
-            n=levels,
-            wavelet_type=wavelet_type,
-            fixed_threshold=fixed_threshold,
+
+        # calculate the gate windows
+        rpeak_bool_vec = np.zeros(_signal.shape, dtype=bool)
+        rpeak_bool_vec[_peak_indices] = 1
+        gate_bool_array = get_gate_windows(rpeak_bool_vec, window_length=fs // 10)
+
+        # Signal extension by zero padding
+        pow_2_levels = 2**levels
+        n_samples = len(_signal)
+        n_samples_extended = int(np.ceil(n_samples / pow_2_levels) * pow_2_levels)
+        zero_padding = np.zeros(n_samples_extended - n_samples)
+        padded_signal = np.concatenate((_signal, zero_padding))
+        gate_bool_array = np.concatenate((gate_bool_array, zero_padding))
+
+        # Wavelet decomposition of emg_raw using Stationary Wavelet Transform (SWT)
+        coeffs = pywt.swt(data=padded_signal, wavelet=wavelet_type, level=levels)
+        coeffs_unpacked = np.array([[sub_band[0], sub_band[1]] for sub_band in coeffs])
+        swc = np.vstack(
+            (
+                coeffs_unpacked[:, 1, :],
+                coeffs_unpacked[levels - 1, 0, :],
+            )
         )
+
+        # Gate out R-peaks in wavelet subbands
+        coeffs_gated = np.copy(swc)
+        coeffs_gated[:, gate_bool_array == 1] = np.nan
+
+        # Custom threshold coefficients
+        window_length = 15 * fs
+        std_estimate = estimate_noise(coeffs_gated[:-1], window_length=window_length)
+
+        thresholds = np.zeros_like(swc)
+        wxd = np.copy(coeffs_unpacked)
+
+        for level in range(levels):
+            threshold = fixed_threshold & std_estimate[level, :]
+            wxd[level, 1, :] = threshold_wavelets(
+                coeffs_unpacked[level, 1, :], hard_thresholding, threshold
+            )
+
+        # Wavelet reconstruction
+        reconstructed_signal = pywt.iswt(
+            coeffs=[tuple(sub_band) for sub_band in wxd], wavelet=wavelet_type
+        )
+
+        # Return results
         return (
-            np.asarray(cleaned),
-            np.asarray(decomposition),
-            np.asarray(thresholds),
-            np.asarray(gate_mask),
+            _signal - reconstructed_signal[:n_samples],
+            swc,
+            thresholds[:, :n_samples],
+            gate_bool_array[:n_samples],
         )
