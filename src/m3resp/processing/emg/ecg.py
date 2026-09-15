@@ -1,4 +1,29 @@
-"""ECG-artifact-handling methods of `ReSurfEMGAdapter`."""
+"""ECG-artifact-handling methods of `ReSurfEMGAdapter`.
+
+---------------------------------------------------------------------------
+Provenance
+----------
+Portions of this module are derived from ReSurfEMG.
+
+    Source:     https://github.com/resurfemg-org/ReSurfEMG
+    Revision:   m3resp-integration (c63668689030e4581d5f985e7d09d3a8c01e7a77)
+    Original:   resurfemg/preprocessing/ecg_removal::detect_ecg_peaks, gating,
+                wavelet_denoising
+    Copyright:  Copyright (c) 2022 Netherlands eScience Center and
+                University of Twente
+    License:    Apache License, Version 2.0
+
+Modified for M3RESP:
+    - ``detect_ecg_peaks`: compacted percentiles calculation into a single line.
+    - `gating`: renamed to `gate_ecg` and refactored to use a `_GateContext` dataclass
+        and related helpers.
+    - `wavelet_denoising`: renamed to `wavelet_denoise_ecg`
+    - Parameters renamed and reorganized as keyword-only arguments.
+
+The original copyright and license notices are retained per Apache-2.0 §4.
+Full attribution notice: see top-level NOTICE.md.
+---------------------------------------------------------------------------
+"""
 
 from __future__ import annotations
 
