@@ -55,6 +55,65 @@ def baseline_crossings(signal: np.ndarray, baseline: np.ndarray) -> np.ndarray:
     ]
 
 
+def _validate_peak_indices(peak_indexes: np.ndarray, **kwargs) -> tuple[bool, bool]:
+    # check the validity of the peaks
+    peak_number = kwargs.get("peak_number", 0)
+    start_index = kwargs.get("start_index", 0)
+    valid_starts = kwargs.get("valid_starts", np.array([True]))
+    valid_ends = kwargs.get("valid_ends", np.array([True]))
+    peak_ends = kwargs.get("peak_ends", np.array([0]))
+    # upslope and downslope are only used for slope-based peak detection,
+    # so we check if they are present in kwargs
+    upslope = "previous_downslope" in kwargs and "new_upslope" in kwargs
+    previous_downslope = kwargs.get("previous_downslope", 0)
+    new_upslope = kwargs.get("new_upslope", 0)
+
+    end_index = peak_ends[peak_number]
+    peak_index = peak_indexes[peak_number]
+    # If the start index is after the peak index, mark the start as invalid
+    if peak_number > 0 and start_index > peak_index:
+        valid_starts[peak_number] = False
+    # If the end index is before the peak index, mark the end as invalid
+    if end_index < peak_index:
+        valid_ends[peak_number] = False
+    # If the current peak's end index is after the next peak's start index,
+    # mark the current peak's end as invalid
+    if (
+        peak_number < (len(peak_indexes) - 1)
+        and end_index > peak_indexes[peak_number + 1]
+    ):
+        valid_ends[peak_number] = False
+
+    # check if the start of the peak is before the end of the previous peak
+    if (
+        peak_number > 0
+        and start_index < peak_ends[peak_number - 1]
+        and valid_ends[peak_number - 1]
+        and valid_starts[peak_number]
+    ):
+        # case: upslope-based on- and offset detection
+        if upslope:
+            # if the new upslope is less than the previous downslope, the previous
+            # peak's end is valid and the current peak's start is invalid
+            previous_end_validity = new_upslope <= -previous_downslope
+            current_start_validity = not previous_end_validity
+        # case: baseline-crossing-based on- and offset detection
+        else:
+            # if the distance from the peak index to the start index is less than or
+            # equal to the distance from the previous peak's end index to the previous
+            # peak's index,the current peak's start is valid and the previous peak's
+            # end is invalid
+            current_start_validity = (
+                peak_index - start_index
+                <= peak_ends[peak_number - 1] - peak_indexes[peak_number - 1]
+            )
+            previous_end_validity = not current_start_validity
+        valid_ends[peak_number - 1] = previous_end_validity
+        valid_starts[peak_number] = current_start_validity
+
+    return valid_starts[peak_number], valid_ends[peak_number]
+
+
 def onoff_from_baseline_crossings(
     signal: np.ndarray,
     baseline: np.ndarray,
@@ -93,11 +152,7 @@ def onoff_from_baseline_crossings(
         if len(delta_samples) < 1:
             peak_starts[peak_number] = 0
             crossings_after = crossings[crossings > peak_index]
-            peak_ends[peak_number] = (
-                int(crossings_after[0])
-                # if len(crossings_after) >= 1
-                # else len(signal) - 1
-            )
+            peak_ends[peak_number] = int(crossings_after[0])
         else:
             crossing_index = np.argmin(delta_samples)
             peak_starts[peak_number] = int(crossings[crossing_index])
@@ -106,28 +161,13 @@ def onoff_from_baseline_crossings(
             else:
                 peak_ends[peak_number] = len(signal) - 1
 
-        if peak_number > 0 and peak_starts[peak_number] > peak_index:
-            valid_starts[peak_number] = False
-        # CHANGELOG: len(_peak_indexes) - 2 to len(_peak_indexes) - 1
-        if (
-            peak_number < len(_peak_indexes) - 1
-            and valid_ends[peak_number] > _peak_indexes[peak_number + 1]
-        ):
-            valid_ends[peak_number] = False
-
-        if (
-            peak_number > 0
-            and peak_starts[peak_number] <= peak_ends[peak_number - 1]
-            and valid_starts[peak_number]
-            and valid_ends[peak_number - 1]
-        ):
-            invalid_current_start = (
-                peak_index - peak_starts[peak_number]
-                > peak_ends[peak_number - 1] - _peak_indexes[peak_number - 1]
-            )
-
-            valid_starts[peak_number] = not invalid_current_start
-            valid_ends[peak_number - 1] = invalid_current_start
+        valid_starts[peak_number], valid_ends[peak_number] = _validate_peak_indices(
+            _peak_indexes,
+            peak_number=peak_number,
+            start_index=peak_starts[peak_number],
+            valid_starts=valid_starts,
+            valid_ends=valid_ends,
+        )
 
     valid_peaks = [
         valids[0] and valids[1]
@@ -137,7 +177,6 @@ def onoff_from_baseline_crossings(
     return peak_starts, peak_ends, valid_starts, valid_ends, valid_peaks
 
 
-# TODO
 def onoff_from_slope(
     signal: np.ndarray,
     *,
@@ -219,6 +258,8 @@ def onoff_from_slope(
             max_downslope_index = int(
                 max_downslope_indices[max_downslope_indices > peak_index][0]
             )
+            if peak_number > 0:
+                previous_downslope = derivative[max_downslope_index]
             y_value = _signal[max_downslope_index]
             dy_dt_value = derivative[max_downslope_index]
             downslope_index_delta = int(
@@ -232,36 +273,15 @@ def onoff_from_slope(
         peak_ends[peak_number] = end_index
 
         # check the validity of the peaks
-
-        # exclude start indexes that are after the peak index
-        if start_index > peak_index:
-            valid_starts[peak_number] = False
-        # exclude end indexes that are before the peak index
-        if end_index < peak_index:
-            valid_ends[peak_number] = False
-        # exclude peak ends that are after the start of the next peak
-        if (
-            peak_number < (len(_peak_indexes) - 1)
-            and end_index > _peak_indexes[peak_number + 1]
-        ):
-            valid_ends[peak_number] = False
-        # check if the start of the peak is before the end of the previous peak
-        if peak_number > 0 and start_index < peak_ends[peak_number - 1]:
-            # if the previous end is invalid, we can ignore this check
-            if not valid_ends[peak_number - 1]:
-                pass
-            # else, if the new upslope is greather than the previous downslope,
-            # keep the current peak start and invalidate the previous peak end
-            elif new_upslope > -previous_downslope:
-                valid_ends[peak_number - 1] = False
-            else:
-                # otherwise, if the previous downslope is greater than the new upslope,
-                # keep the previous peak end and invalidate the current peak start
-                valid_starts[peak_number] = False
-        # if there are more than one local derivative minimum after the current peak,
-        # store the amplitude of the previous downslope for the next iteration
-        if len(max_downslope_indices[max_downslope_indices > peak_index]) >= 1:
-            previous_downslope = derivative[max_downslope_index]
+        valid_starts[peak_number], valid_ends[peak_number] = _validate_peak_indices(
+            _peak_indexes,
+            peak_number=peak_number,
+            start_index=peak_starts[peak_number],
+            valid_starts=valid_starts,
+            valid_ends=valid_ends,
+            previous_downslope=previous_downslope,
+            new_upslope=new_upslope,
+        )
     # valid peaks have valid starts and ends
     valid_peaks = [
         detection[0] and detection[1]
