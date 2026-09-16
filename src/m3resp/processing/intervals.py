@@ -30,13 +30,17 @@ Full attribution notice: see top-level NOTICE.md.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from m3resp.data.events import BreathEvent
 from m3resp.core.events import BreathEvent
 from m3resp.processing.emg.shared import _compute_derivative
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from types import ModuleType
 
 
 def baseline_crossings(signal: np.ndarray, baseline: np.ndarray) -> np.ndarray:
@@ -129,9 +133,10 @@ def onoff_from_baseline_crossings(
     baseline of an EMG envelope, or the moving baseline of airway pressure.
 
     Args:
-        values (numpy.ndarray): Signal, e.g. an EMG envelope or airway pressure.
-        baseline (numpy.ndarray): Baseline of `values`, one value per sample.
-        peak_indices (numpy.ndarray): List of peak indices for which to find on- and offset.
+        signal (numpy.ndarray): Envelope signal.
+        baseline (numpy.ndarray): Baseline signal of EMG data for baseline detection.
+        peak_indices (numpy.ndarray): List of peak indices for which to find on-
+            and offset.
 
     Returns:
         tuple:
@@ -188,7 +193,7 @@ def onoff_from_slope(
     """Calculate the on- and offsets of peaks using slope extrapolation.
 
     This function calculates the peak on- and offsets of a signal by extra-
-    polating the maximum slopes in de slope_window_s to the zero crossings.
+    polating the maximum slopes in the `slope_window_s` to the zero crossings.
     The validity arrays provide feedback on the validity of the detected on-
     and offsets, aiming to prevent onsets after peak indices, offsets before
     peak indices, and overlapping peaks.
@@ -196,7 +201,8 @@ def onoff_from_slope(
     Args:
         signal (numpy.ndarray): Signal to identify on- and offsets in.
         sample_frequency (int): Sampling rate of the signal.
-        peak_indices (numpy.ndarray): List of peak indices for which to find on- and offset.
+        peak_indices (numpy.ndarray): List of peak indices for which to find on- and
+            offset.
         slope_window (int): How many samples on each side to use for detecting the
             local maximum slope.
 
@@ -368,19 +374,19 @@ def _sample_to_time(
     if time is not None:
         return float(time[sample_index])
     if sample_frequency is None:
-        raise ValueError("sample_frequency or time is required")
+        msg = "sample_frequency or time is required"
+        raise ValueError(msg)
     return float(sample_index) / float(sample_frequency)
 
 
 # TODO
-def _scipy_signal():
+def _scipy_signal() -> ModuleType:
     try:
-        from scipy import signal
+        from scipy import signal  # noqa: PLC0415
     except ImportError as exc:
-        from m3resp.core.exceptions import OptionalDependencyError
+        from m3resp.core.exceptions import OptionalDependencyError  # noqa: PLC0415
 
-        raise OptionalDependencyError(
-            "Slope-based interval detection requires SciPy. Install `scipy` to "
-            "use `m3resp.processing.intervals`."
-        ) from exc
+        msg = "Slope-based interval detection requires SciPy. Install `scipy` to "
+        "use `m3resp.processing.intervals`."
+        raise OptionalDependencyError(msg) from exc
     return signal
