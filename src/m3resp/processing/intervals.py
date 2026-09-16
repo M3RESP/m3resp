@@ -35,18 +35,28 @@ from collections.abc import Sequence
 import numpy as np
 
 from m3resp.core.events import BreathEvent
+from m3resp.processing.emg.shared import _compute_derivative
 
 
-def baseline_crossings(values: np.ndarray, baseline: np.ndarray) -> np.ndarray:
-    """Return indices where a signal crosses its baseline."""
+def baseline_crossings(signal: np.ndarray, baseline: np.ndarray) -> np.ndarray:
+    """Detect baseline crossings.
 
-    return np.nonzero(np.diff(np.sign(np.asarray(values) - np.asarray(baseline))) != 0)[
+    Return indices where a signal crosses its baseline.
+
+    Args:
+        signal (numpy.ndarray): the signal array.
+        baseline (numpy.ndarray): the baseline array.
+
+    Returns:
+        numpy.ndarray: Indices where the signal crosses its baseline.
+    """
+    return np.nonzero(np.diff(np.sign(np.asarray(signal) - np.asarray(baseline))) != 0)[
         0
     ]
 
 
 def onoff_from_baseline_crossings(
-    values: np.ndarray,
+    signal: np.ndarray,
     baseline: np.ndarray,
     peak_indices: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[bool]]:
@@ -71,145 +81,196 @@ def onoff_from_baseline_crossings(
             - numpy.ndarray: List of boolean values for valid ends.
             - numpy.ndarray: List of boolean values for valid peaks.
     """
-    crossings = baseline_crossings(values, baseline)
-    peaks = np.asarray(peak_indices, dtype=int)
-    starts = np.zeros((len(peaks),), dtype=int)
-    ends = np.zeros((len(peaks),), dtype=int)
-    valid_starts = np.array([True for _ in range(len(peaks))])
-    valid_ends = np.array([True for _ in range(len(peaks))])
+    crossings = baseline_crossings(signal, baseline)
+    _peak_indexes = np.asarray(peak_indices, dtype=int)
+    peak_starts = np.zeros((len(_peak_indexes),), dtype=int)
+    peak_ends = np.zeros((len(_peak_indexes),), dtype=int)
+    valid_starts = np.array([True for _ in range(len(_peak_indexes))])
+    valid_ends = np.array([True for _ in range(len(_peak_indexes))])
 
-    for peak_number, peak_index in enumerate(peaks):
+    for peak_number, peak_index in enumerate(_peak_indexes):
         delta_samples = peak_index - crossings[crossings < peak_index]
         if len(delta_samples) < 1:
-            starts[peak_number] = 0
+            peak_starts[peak_number] = 0
             crossings_after = crossings[crossings > peak_index]
-            ends[peak_number] = (
+            peak_ends[peak_number] = (
                 int(crossings_after[0])
-                if len(crossings_after) >= 1
-                else len(values) - 1
+                # if len(crossings_after) >= 1
+                # else len(signal) - 1
             )
         else:
             crossing_index = np.argmin(delta_samples)
-            starts[peak_number] = int(crossings[crossing_index])
+            peak_starts[peak_number] = int(crossings[crossing_index])
             if crossing_index < len(crossings) - 1:
-                ends[peak_number] = int(crossings[crossing_index + 1])
+                peak_ends[peak_number] = int(crossings[crossing_index + 1])
             else:
-                ends[peak_number] = len(values) - 1
+                peak_ends[peak_number] = len(signal) - 1
 
-        if peak_number > 0 and starts[peak_number] > peak_index:
+        if peak_number > 0 and peak_starts[peak_number] > peak_index:
             valid_starts[peak_number] = False
-
+        # CHANGELOG: len(_peak_indexes) - 2 to len(_peak_indexes) - 1
         if (
-            peak_number < (len(peaks) - 1)
-            and ends[peak_number] > peaks[peak_number + 1]
+            peak_number < len(_peak_indexes) - 1
+            and valid_ends[peak_number] > _peak_indexes[peak_number + 1]
         ):
             valid_ends[peak_number] = False
 
-        if peak_number > 0 and starts[peak_number] <= ends[peak_number - 1]:
-            if not valid_starts[peak_number] or not valid_ends[peak_number - 1]:
-                pass
-            elif (
-                peak_index - starts[peak_number]
-                > ends[peak_number - 1] - peaks[peak_number - 1]
-            ):
-                valid_starts[peak_number] = False
-            else:
-                valid_ends[peak_number - 1] = False
+        if (
+            peak_number > 0
+            and peak_starts[peak_number] <= peak_ends[peak_number - 1]
+            and valid_starts[peak_number]
+            and valid_ends[peak_number - 1]
+        ):
+            invalid_current_start = (
+                peak_index - peak_starts[peak_number]
+                > peak_ends[peak_number - 1] - _peak_indexes[peak_number - 1]
+            )
+
+            valid_starts[peak_number] = not invalid_current_start
+            valid_ends[peak_number - 1] = invalid_current_start
 
     valid_peaks = [
-        detection[0] and detection[1]
-        for detection in zip(valid_starts, valid_ends, strict=True)
+        valids[0] and valids[1]
+        for valids in zip(valid_starts, valid_ends, strict=False)
     ]
-    return starts, ends, valid_starts, valid_ends, valid_peaks
+
+    return peak_starts, peak_ends, valid_starts, valid_ends, valid_peaks
 
 
+# TODO
 def onoff_from_slope(
-    values: np.ndarray,
+    signal: np.ndarray,
     *,
     sample_frequency: float,
     peak_indices: np.ndarray,
     slope_window: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[bool]]:
-    """Find peak starts/ends by extrapolating local maximum slopes."""
+    """Calculate the on- and offsets of peaks using slope extrapolation.
 
-    signal = _scipy_signal()
-    data = np.asarray(values)
-    peaks = np.asarray(peak_indices, dtype=int)
-    derivative = (data[1:] - data[:-1]) * sample_frequency
+    This function calculates the peak on- and offsets of a signal by extra-
+    polating the maximum slopes in de slope_window_s to the zero crossings.
+    The validity arrays provide feedback on the validity of the detected on-
+    and offsets, aiming to prevent onsets after peak indices, offsets before
+    peak indices, and overlapping peaks.
 
-    max_upslope_indices = signal.argrelextrema(
+    Args:
+        signal (numpy.ndarray): Signal to identify on- and offsets in.
+        sample_frequency (int): Sampling rate of the signal.
+        peak_indices (numpy.ndarray): List of peak indices for which to find on- and offset.
+        slope_window (int): How many samples on each side to use for detecting the
+            local maximum slope.
+
+    Returns:
+        tuple:
+            - numpy.ndarray: List of start indices of the peaks.
+            - numpy.ndarray: List of end indices of the peaks.
+            - numpy.ndarray: List of boolean values for valid starts.
+            - numpy.ndarray: List of boolean values for valid ends.
+            - numpy.ndarray: List of boolean values for valid peaks.
+    """
+    scipy_signal = _scipy_signal()
+    _signal = np.asarray(signal)
+    _peak_indexes = np.asarray(peak_indices, dtype=int)
+    derivative = _compute_derivative(_signal, sample_frequency)
+
+    # get the local minima and maxima in the derivative
+    max_upslope_indices = scipy_signal.argrelextrema(
         derivative, np.greater, order=slope_window
     )[0]
-    max_downslope_indices = signal.argrelextrema(
+    max_downslope_indices = scipy_signal.argrelextrema(
         derivative, np.less, order=slope_window
     )[0]
 
-    starts = np.zeros((len(peaks),), dtype=int)
-    ends = np.zeros((len(peaks),), dtype=int)
-    valid_starts = np.array([True for _ in range(len(peaks))])
-    valid_ends = np.array([True for _ in range(len(peaks))])
+    peak_starts = np.zeros((len(_peak_indexes),), dtype=int)
+    peak_ends = np.zeros((len(_peak_indexes),), dtype=int)
+    valid_starts = np.array([True for _ in range(len(_peak_indexes))])
+    valid_ends = np.array([True for _ in range(len(_peak_indexes))])
     previous_downslope = 0
-
-    for peak_number, peak_index in enumerate(peaks):
+    new_upslope = 0
+    max_downslope_index = 0
+    for peak_number, peak_index in enumerate(_peak_indexes):
+        # if there are no local derivative maxima before the current peak,
+        # set the start index to 0
         if len(max_upslope_indices[max_upslope_indices < peak_index]) < 1:
             start_index = 0
-            new_upslope = 0
         else:
+            # get the closest local derivative maximum before the current peak
             max_upslope_index = int(
                 max_upslope_indices[max_upslope_indices < peak_index][-1]
             )
+            # store the amplitude of the derivative there
             new_upslope = derivative[max_upslope_index]
-            y_value = data[max_upslope_index]
+            # and the corresponding amplitude of the signal
+            y_value = _signal[max_upslope_index]
             dy_dt_value = derivative[max_upslope_index]
+            # calculate y/dy (newton's method)
             upslope_index_delta = int(
                 np.array(y_value * sample_frequency // dy_dt_value, dtype=int).astype(
                     np.int64
                 )
             )
+            # find the root: x
             start_index = max(0, max_upslope_index - upslope_index_delta)
-        starts[peak_number] = start_index
-
+        peak_starts[peak_number] = start_index
+        # do the same for the downslope after the peak
         if len(max_downslope_indices[max_downslope_indices > peak_index]) < 1:
-            end_index = len(data) - 1
+            end_index = len(_signal) - 1
         else:
             max_downslope_index = int(
                 max_downslope_indices[max_downslope_indices > peak_index][0]
             )
-            y_value = data[max_downslope_index]
+            y_value = _signal[max_downslope_index]
             dy_dt_value = derivative[max_downslope_index]
             downslope_index_delta = int(
                 np.array(y_value * sample_frequency // dy_dt_value, dtype=int).astype(
                     np.int64
                 )
             )
-            end_index = min(len(data) - 1, max_downslope_index - downslope_index_delta)
-        ends[peak_number] = end_index
+            end_index = min(
+                len(_signal) - 1, max_downslope_index - downslope_index_delta
+            )
+        peak_ends[peak_number] = end_index
 
+        # check the validity of the peaks
+
+        # exclude start indexes that are after the peak index
         if start_index > peak_index:
             valid_starts[peak_number] = False
+        # exclude end indexes that are before the peak index
         if end_index < peak_index:
             valid_ends[peak_number] = False
-        if peak_number < (len(peaks) - 1) and end_index > peaks[peak_number + 1]:
+        # exclude peak ends that are after the start of the next peak
+        if (
+            peak_number < (len(_peak_indexes) - 1)
+            and end_index > _peak_indexes[peak_number + 1]
+        ):
             valid_ends[peak_number] = False
-
-        if peak_number > 0 and start_index < ends[peak_number - 1]:
+        # check if the start of the peak is before the end of the previous peak
+        if peak_number > 0 and start_index < peak_ends[peak_number - 1]:
+            # if the previous end is invalid, we can ignore this check
             if not valid_ends[peak_number - 1]:
                 pass
+            # else, if the new upslope is greather than the previous downslope,
+            # keep the current peak start and invalidate the previous peak end
             elif new_upslope > -previous_downslope:
                 valid_ends[peak_number - 1] = False
             else:
+                # otherwise, if the previous downslope is greater than the new upslope,
+                # keep the previous peak end and invalidate the current peak start
                 valid_starts[peak_number] = False
-
+        # if there are more than one local derivative minimum after the current peak,
+        # store the amplitude of the previous downslope for the next iteration
         if len(max_downslope_indices[max_downslope_indices > peak_index]) >= 1:
-            previous_downslope = derivative[max_downslope_index]  # type: ignore
-
+            previous_downslope = derivative[max_downslope_index]
+    # valid peaks have valid starts and ends
     valid_peaks = [
         detection[0] and detection[1]
         for detection in zip(valid_starts, valid_ends, strict=True)
     ]
-    return starts, ends, valid_starts, valid_ends, valid_peaks
+    return peak_starts, peak_ends, valid_starts, valid_ends, valid_peaks
 
 
+# TODO
 def sample_intervals_to_breath_events(
     *,
     start_indices: Sequence[int],
@@ -248,6 +309,7 @@ def sample_intervals_to_breath_events(
     ]
 
 
+# TODO
 def _sample_to_time(
     sample_index: int,
     *,
@@ -261,6 +323,7 @@ def _sample_to_time(
     return float(sample_index) / float(sample_frequency)
 
 
+# TODO
 def _scipy_signal():
     try:
         from scipy import signal
