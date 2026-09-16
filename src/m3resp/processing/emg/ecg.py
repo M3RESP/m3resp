@@ -280,8 +280,8 @@ class _EcgMixin:
             if fill_method == _GATE_FILL_RMS  # was `is` — use `==`
             else gate_width_samples // 2
         )
-        starts = np.clip(peaks - half_gate_width, 0, max_samples, dtype=np.int64)
-        ends = np.clip(peaks + half_gate_width, 0, max_samples, dtype=np.int64)
+        starts = np.clip(peaks - half_gate_width, 0, max_samples).astype(np.int64)
+        ends = np.clip(peaks + half_gate_width, 0, max_samples).astype(np.int64)
         delta = np.zeros(max_samples + 1, dtype=np.int64)
         np.add.at(delta, starts, 1)  # +1 entering each gate
         np.add.at(delta, ends, -1)  # -1 exiting each gate
@@ -351,7 +351,6 @@ class _EcgMixin:
         # now, fill the gates according to the selected method
         return _GATE_FILLERS[fill_method](gating_context)
 
-    # TODO
     def wavelet_denoise_ecg(
         self,
         signal: np.ndarray,
