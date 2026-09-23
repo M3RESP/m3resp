@@ -60,7 +60,20 @@ def time_to_peak(
     *,
     smooth: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Compute absolute and relative time-to-peak within breath windows."""
+    """Compute absolute and relative time-to-peak within breath windows.
+
+    Args:
+        values (np.ndarray): The signal containing the breath data.
+        start_indices (np.ndarray): The starting indices (in samples) of each breath
+            window.
+        end_indices (np.ndarray): The ending indices (in samples) of each breath window.
+        smooth (bool): Whether to smooth the breath data before finding the peak.
+            Defaults to True.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: The absolute and relative time-to-peak for each
+            breath.
+    """
 
     data = np.asarray(values)
     starts = np.asarray(start_indices)
