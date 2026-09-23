@@ -70,7 +70,25 @@ def butterworth_filter(
     axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
-    """Apply a zero-phase Butterworth filter using second-order sections."""
+    """Apply a zero-phase Butterworth filter using second-order sections.
+
+    Args:
+        values (numpy.ndarray): Input data to filter.
+        filter_type (str): Type of filter to apply. One of "lowpass", "highpass",
+            "bandpass", or "bandstop".
+        cutoff_frequency (float or sequence of floats): Cutoff frequency(ies)
+            for the filter. If `filter_type` is "bandpass" or "bandstop",
+            `cutoff_frequency` should be a sequence of two values ((low, high)
+            for bandstop, (high, low) for bandpass).
+        sample_frequency (float): Sampling rate of the input data.
+        order (int): Order of the filter.
+        axis (int): Axis along which to apply the filter.
+        captures (dict, optional): Dictionary to store captured values.
+            If None (default), no values will be captured.
+
+    Returns:
+        numpy.ndarray: Filtered data.
+    """
 
     scipy_signal = _scipy_signal()
     cutoff = _normalize_cutoff_frequency(filter_type, cutoff_frequency)
