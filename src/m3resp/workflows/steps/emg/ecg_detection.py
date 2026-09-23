@@ -153,7 +153,7 @@ def ecg_detect_peaks(
     source: str = "raw_channel",
     peak_fraction: float = 0.4,
     peak_width_seconds: float | None = None,
-    peak_distance_seconds: float | None = None,
+    peak_distance_seconds: float | None = 0.33,
     bandpass_filter: bool = True,
 ) -> dict[str, Any]:
     array, fs, source_label = _select_ecg_source(
