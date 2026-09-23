@@ -369,7 +369,20 @@ def compute_power_loss(
     n_segment: int | None = None,
     percent_overlap: float = 25,
 ) -> float:
-    """Compute percentage power loss after processing."""
+    """Compute percentage power loss after processing.
+
+    Args:
+        original (numpy.ndarray): Original data.
+        processed (numpy.ndarray): Processed data.
+        original_frequency (float): Sampling frequency of the original data.
+        processed_frequency (float): Sampling frequency of the processed data.
+        n_segment (int, optional): width of the window for Welch's method in samples.
+            If None, it is set to half the sampling frequency.
+        percent_overlap (float): Percentage of overlap between segments. Default is 25.
+
+    Returns:
+        float: Percentage power loss after processing.
+    """
 
     scipy_signal = _scipy_signal()
     if n_segment is None:
