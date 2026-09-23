@@ -130,7 +130,20 @@ def lowpass_filter(
     axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
-    """Apply a low-pass Butterworth filter."""
+    """Apply a low-pass Butterworth filter.
+
+    Args:
+        values (numpy.ndarray): Input data to filter.
+        cutoff_frequency (float): lowpass cutoff frequency of the filter.
+        sample_frequency (float): Sampling rate of the input data.
+        order (int): Order of the filter.
+        axis (int): Axis along which to apply the filter.
+        captures (dict, optional): Dictionary to store captured values.
+            If None (default), no values will be captured.
+
+    Returns:
+        numpy.ndarray: Filtered data.
+    """
 
     return butterworth_filter(
         values,
