@@ -222,7 +222,21 @@ def rolling_envelope(
     A single seam for "compute the envelope this way", so that every place
     that (re)computes an envelope - preprocessing and the post-ECG-removal
     recomputation - can be handed one method choice instead of each hard-coding
-    its own.
+    """Compute a rolling envelope using the specified method.
+
+    Args:
+        values (np.ndarray): Input data to compute the envelope for.
+        window_length (int): The size in samples of the rolling window.
+        method (str): The envelope method to use. Must be one of "rms" or "arv".
+            Defaults to "rms".
+        center (bool): If True, the window is centered around each point. If False,
+            the window is right-aligned. Defaults to True.
+        min_periods (int): The minimum number of periods required to compute the rolling
+            mean. Defaults to 1.
+
+    Returns:
+        np.ndarray: The rolling envelope computed using the specified method.
+    """
     """
 
     normalized = str(method).lower()
