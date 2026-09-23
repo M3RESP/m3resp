@@ -21,7 +21,6 @@ _EMG_STEP_NAMES = [
     "emg.moving_baseline",
     "emg.slopesum_baseline",
     "emg.ecg_detect_peaks",
-    "emg.ecg_estimated_subtraction",
     "emg.ecg_gating",
     "emg.ecg_wavelet_denoising",
     "emg.interpeak_dist",
@@ -74,12 +73,12 @@ _QUALITY_STEP_NAMES = [
 ]
 
 
-def test_all_thirty_six_emg_and_ventilator_steps_are_registered_and_described():
+def test_all_thirty_five_emg_and_ventilator_steps_are_registered_and_described():
     emg = {d.name for d in describe_steps(prefix="emg.")}
     ventilator = {d.name for d in describe_steps(prefix="ventilator.")}
     assert emg == set(_EMG_STEP_NAMES)
     assert ventilator == set(_VENTILATOR_STEP_NAMES)
-    assert len(_ALL_STEP_NAMES) == 36
+    assert len(_ALL_STEP_NAMES) == 35
 
 
 def test_every_emg_step_declares_some_metadata_and_is_json_safe():
@@ -102,22 +101,11 @@ def test_ten_quality_steps_are_all_categorized_quality():
 def test_ecg_removal_alternatives_are_mutually_cross_referenced():
     gating = describe_step("emg.ecg_gating")
     wavelet = describe_step("emg.ecg_wavelet_denoising")
-    ees = describe_step("emg.ecg_estimated_subtraction")
-    assert set(gating.alternatives) == {
-        "emg.ecg_wavelet_denoising",
-        "emg.ecg_estimated_subtraction",
-    }
-    assert set(wavelet.alternatives) == {
-        "emg.ecg_gating",
-        "emg.ecg_estimated_subtraction",
-    }
-    assert set(ees.alternatives) == {"emg.ecg_gating", "emg.ecg_wavelet_denoising"}
+    assert set(gating.alternatives) == {"emg.ecg_wavelet_denoising"}
+    assert set(wavelet.alternatives) == {"emg.ecg_gating"}
 
 
-def test_ecg_estimated_subtraction_is_native_not_resurfemg():
-    # Unlike the other ECG-removal steps, EES is m3resp-native (see
-    # emg.py's _upstream_metadata(source_package="m3resp", ...) call site).
-    assert describe_step("emg.ecg_estimated_subtraction").optional_packages == ()
+def test_ecg_removal_steps_need_resurfemg():
     for name in ("emg.ecg_gating", "emg.ecg_wavelet_denoising", "emg.ecg_detect_peaks"):
         assert describe_step(name).optional_packages == ("resurfemg",), name
 
@@ -176,12 +164,12 @@ def test_describe_steps_prefix_filter_separates_ventilator_from_emg():
     assert not names & set(_EMG_STEP_NAMES)
 
 
-def test_all_ninety_six_built_in_steps_still_describe_without_error():
+def test_all_fifty_nine_built_in_steps_still_describe_without_error():
     descriptions = describe_steps()
-    assert len(descriptions) == 60
+    assert len(descriptions) == 59
     with_metadata = [
         d
         for d in descriptions
         if d.parameters or d.output_artifacts or d.input_artifacts
     ]
-    assert len(with_metadata) == 60
+    assert len(with_metadata) == 59

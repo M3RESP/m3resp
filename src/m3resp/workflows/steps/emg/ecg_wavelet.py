@@ -47,7 +47,7 @@ from ._shared import (
         "session.signals",
         "session.parameter_results",
     ),
-    alternatives=("emg.ecg_gating", "emg.ecg_estimated_subtraction"),
+    alternatives=("emg.ecg_gating",),
     input_artifacts=(
         _SESSION_ARTIFACT,
         StepArtifact(

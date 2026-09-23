@@ -73,7 +73,7 @@ def _build_gate_mask(
         "session.signals",
         "session.parameter_results",
     ),
-    alternatives=("emg.ecg_wavelet_denoising", "emg.ecg_estimated_subtraction"),
+    alternatives=("emg.ecg_wavelet_denoising",),
     mutually_exclusive_parameters=(("gate_width_seconds", "gate_width_samples"),),
     input_artifacts=(
         _SESSION_ARTIFACT,

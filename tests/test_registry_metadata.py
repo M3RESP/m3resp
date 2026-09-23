@@ -306,7 +306,6 @@ _AUDITED_SESSION_STEPS = frozenset(
         "emg.detect_extreme_time_products",
         "emg.detect_local_high_aub",
         "emg.ecg_detect_peaks",
-        "emg.ecg_estimated_subtraction",
         "emg.ecg_gating",
         "emg.ecg_wavelet_denoising",
         "emg.evaluate_bell_curve_error",
