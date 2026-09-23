@@ -44,7 +44,7 @@ from ._shared import (
         StepParameter(
             name="window_seconds",
             value_type="number",
-            default=30.0,
+            default=7.5,
             unit="s",
             minimum=0,
             description="Moving-percentile window length.",
