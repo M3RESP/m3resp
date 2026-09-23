@@ -178,7 +178,19 @@ def rolling_arv(
     center: bool = True,
     min_periods: int = 1,
 ) -> np.ndarray:
-    """Compute a rolling average rectified value envelope."""
+   """Compute a rolling average rectified value envelope.
+
+    Args:
+        values (np.ndarray): Input data to compute the ARV envelope for.
+        window_length (int): The size in samples of the rolling window.
+        center (bool): If True, the window is centered around each point. If False,
+            the window is right-aligned. Defaults to True.
+        min_periods (int): The minimum number of periods required to compute the rolling
+            mean. Defaults to 1.
+
+    Returns:
+        np.ndarray: The rolling ARV envelope.
+    """
 
     absolute = pd.Series(np.abs(values))
     return np.asarray(
