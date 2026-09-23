@@ -117,7 +117,6 @@ def pseudo_slope(
     Returns:
         np.ndarray: The pseudo-slope of each breath, in signal units per sample.
     """
-
     if smoothing is not None:
         smooth = smoothing
 
@@ -322,7 +321,6 @@ def tidal_variation(
     method: str = "inspiratory",
 ) -> np.ndarray:
     """Compute EIT-style tidal variation for breath-like timing objects."""
-
     data = np.asarray(values)
     sample_time = np.asarray(time)
     breaths_array = np.asarray(breaths, dtype=object)

@@ -50,3 +50,7 @@ class StepMetadataError(PipelineError):
 
 class UnknownPipelineError(PipelineError):
     """Raised when ``M3Session.run_pipeline`` references an unregistered name."""
+
+
+class MutuallyExclusiveArgsError(M3RespError):
+    """Raised when mutually exclusive arguments are both set."""

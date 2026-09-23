@@ -2,20 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
 from importlib import import_module
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
 from m3resp.core.events import BreathEvent, coerce_breath_events
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
 from m3resp.data import ParameterResult, QualityFlag, Signal
-from m3resp.data.signals import ProcessingState
 from m3resp.processing.quality import quality_flag_from_result, skipped_quality_flag
 
-from ._protocols import _DefaultsProtocol
-from ._shared import (
+from .shared import (
     _POSTPROCESSING_MODULES,
     POSTPROCESSING_FUNCTIONS,
     _as_parameter_value,
@@ -23,14 +20,19 @@ from ._shared import (
     _load_biopac_txt,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+
+    from m3resp.data.signals import ProcessingState
+
 
 class _CoreMixin:
     def __init__(self, loader: Callable[..., Any] | None = None):
         self._loader = loader
-#TODO
+
+    # TODO
     def load(self, path: str, **kwargs: Any) -> Any:
         """Load EMG data through `resurfemg` or an injected loader."""
-
         if self._loader is not None:
             return self._loader(path, **kwargs)
 
@@ -45,9 +47,12 @@ class _CoreMixin:
         try:
             from resurfemg.data_connector.converter_functions import load_file
         except ImportError as exc:
-            raise OptionalDependencyError(
+            msg = (
                 "EMG support requires the optional dependency `resurfemg`. "
                 'Install with `pip install "m3resp[emg]"` or inject a loader.'
+            )
+            raise OptionalDependencyError(
+                msg
             ) from exc
 
         array, dataframe, metadata = load_file(path, **kwargs)
@@ -56,19 +61,19 @@ class _CoreMixin:
             "dataframe": dataframe,
             "metadata": metadata,
         }
-#TODO
+
+    # TODO
     def preprocess(self, signal: Any, **kwargs: Any) -> Any:
         """Preprocess EMG data through ReSurfEMG or a provided callable."""
-
         preprocess = kwargs.pop("preprocess", None)
         if preprocess is not None:
             return preprocess(signal, **kwargs)
 
-        return cast(_DefaultsProtocol, self)._preprocess_default(signal, **kwargs)
-#TODO
+        return cast("_DefaultsProtocol", self)._preprocess_default(signal, **kwargs)
+
+    # TODO
     def detect_breaths(self, signal: Any, **kwargs: Any) -> list[BreathEvent]:
         """Detect EMG breaths and normalize them into `BreathEvent` objects."""
-
         detector = kwargs.pop("detector", None)
         if detector is not None:
             detections = detector(signal, **kwargs)
@@ -78,7 +83,7 @@ class _CoreMixin:
                 source="resurfemg",
             )
 
-        detections = cast(_DefaultsProtocol, self)._detect_breaths_default(
+        detections = cast("_DefaultsProtocol", self)._detect_breaths_default(
             signal, **kwargs
         )
         return coerce_breath_events(
@@ -86,26 +91,30 @@ class _CoreMixin:
             modality="emg",
             source="resurfemg.detect_emg_breaths",
         )
-#TODO
+
+    # TODO
     def compute_features(
         self, signal: Any, events: Sequence[BreathEvent], **kwargs: Any
     ) -> Any:
         """Compute EMG features when an upstream callable is provided."""
-
         compute = kwargs.pop("compute", None)
         if compute is None:
-            raise UnsupportedWorkflowError(
+            msg = (
                 "EMG feature extraction needs an upstream callable in Stage 1. "
                 "Pass `compute=callable`."
             )
+            raise UnsupportedWorkflowError(
+                msg
+            )
         return compute(signal, events, **kwargs)
-#TODO
+
+    # TODO
     def to_signals(self, processed_emg: dict[str, Any]) -> list[Signal]:
         """Convert preprocessed EMG channel arrays into `Signal` objects."""
-
         if not isinstance(processed_emg, dict) or "fs" not in processed_emg:
+            msg = "to_signals expects processed EMG data from preprocess_emg()."
             raise UnsupportedWorkflowError(
-                "to_signals expects processed EMG data from preprocess_emg()."
+                msg
             )
 
         fs = float(processed_emg["fs"])
@@ -140,10 +149,10 @@ class _CoreMixin:
                 )
             )
         return signals
-#TODO
+
+    # TODO
     def to_parameters(self, postprocessed: dict[str, Any]) -> list[ParameterResult]:
         """Convert computed EMG features into `ParameterResult` objects."""
-
         features = _computed_category(postprocessed, "features")
         return [
             ParameterResult(
@@ -158,7 +167,8 @@ class _CoreMixin:
             )
             for name, value in features.items()
         ]
-#TODO
+
+    # TODO
     def to_quality_flags(self, postprocessed: dict[str, Any]) -> list[QualityFlag]:
         """Convert computed EMG quality-assessment results into `QualityFlag`
         objects.
@@ -171,7 +181,6 @@ class _CoreMixin:
         Functions skipped for missing inputs (`postprocessed["skipped"]`)
         become failed, ``warning``-severity flags.
         """
-
         if not isinstance(postprocessed, dict):
             return []
 
@@ -194,15 +203,16 @@ class _CoreMixin:
                 )
             )
         return flags
-#TODO
+
+    # TODO
     def available_postprocessing(self) -> dict[str, list[str]]:
         """Return ReSurfEMG postprocessing functions exposed by M3Resp."""
-
         return {
             category: list(functions)
             for category, functions in POSTPROCESSING_FUNCTIONS.items()
         }
-#TODO
+
+    # TODO
     def postprocess(
         self,
         processed_emg: Any,
@@ -214,26 +224,30 @@ class _CoreMixin:
         if custom is not None:
             return custom(processed_emg, events=events, **kwargs)
 
-        return cast(_DefaultsProtocol, self)._postprocess_default(
+        return cast("_DefaultsProtocol", self)._postprocess_default(
             processed_emg, events=events, **kwargs
         )
-#TODO
+
+    # TODO
     def run_postprocessing_function(
         self, category: str, function_name: str, *args: Any, **kwargs: Any
     ) -> Any:
         """Call any exposed `resurfemg.postprocessing` function by name."""
-
         if function_name not in POSTPROCESSING_FUNCTIONS.get(category, ()):
+            msg = f"Unknown ReSurfEMG postprocessing function {category}.{function_name}."
             raise ValueError(
-                f"Unknown ReSurfEMG postprocessing function {category}.{function_name}."
+                msg
             )
 
         try:
             module = import_module(_POSTPROCESSING_MODULES[category])
         except ImportError as exc:
-            raise OptionalDependencyError(
+            msg = (
                 "EMG postprocessing requires the optional dependency `resurfemg`. "
                 'Install with `pip install "m3resp[emg]"`.'
+            )
+            raise OptionalDependencyError(
+                msg
             ) from exc
 
         return getattr(module, function_name)(*args, **kwargs)

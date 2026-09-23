@@ -1,9 +1,6 @@
 """Shared signal-processing primitives used by modality adapters."""
 
-from m3resp.processing.ecg import (
-    EstimatedECGSubtractionResult,
-    estimated_ecg_subtraction,
-)
+from m3resp.processing.emg import ReSurfEMG
 from m3resp.processing.filters import (
     bandpass_filter,
     bandstop_filter,
@@ -64,7 +61,7 @@ from m3resp.processing.windows import (
 
 __all__ = [
     "ENVELOPE_METHODS",
-    "EstimatedECGSubtractionResult",
+    "ReSurfEMG",
     "amplitude_at_peaks",
     "area_under_baseline",
     "bandpass_filter",

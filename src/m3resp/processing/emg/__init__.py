@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from .baseline import _BaselineMixin
 from .core import _CoreMixin
-from .defaults import _DefaultsMixin
 from .ecg import _EcgMixin
 from .quality import _QualityMixin
 from .shared import POSTPROCESSING_FUNCTIONS
@@ -26,7 +25,6 @@ class ReSurfEMG(
     _EcgMixin,
     _BaselineMixin,
     _QualityMixin,
-    _DefaultsMixin,
 ):
     """Ported methods from the `ReSurfEMG` package."""
 
