@@ -196,7 +196,21 @@ def bandstop_filter(
     axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
-    """Apply a band-stop Butterworth filter."""
+    """Apply a band-stop Butterworth filter.
+
+    Args:
+        values (numpy.ndarray): Input data to filter.
+        cutoff_frequency (tuple): A tuple of two floats representing the lower and upper
+            cutoff frequencies.
+        sample_frequency (float): Sampling rate of the input data.
+        order (int): Order of the filter.
+        axis (int): Axis along which to apply the filter.
+        captures (dict, optional): Dictionary to store captured values.
+            If None (default), no values will be captured.
+
+    Returns:
+        numpy.ndarray: Filtered data.
+    """
 
     return butterworth_filter(
         values,
