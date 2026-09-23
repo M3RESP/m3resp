@@ -25,6 +25,7 @@ _MIGRATED_EMG_STEPS = (
     "emg.slopesum_baseline",
     "emg.ecg_detect_peaks",
     "emg.ecg_gating",
+    "emg.ecg_estimated_subtraction",
     "emg.ecg_wavelet_denoising",
     "ventilator.pocc_intervals",
     "ventilator.pocc_time_product",
@@ -62,6 +63,7 @@ def test_registered_reads_and_writes_match_the_alternative_step_pairs():
 
     for name in (
         "emg.ecg_gating",
+        "emg.ecg_estimated_subtraction",
         "emg.ecg_wavelet_denoising",
     ):
         assert "processed_emg_after_ecg" in get_step(name).writes
@@ -76,6 +78,7 @@ def test_registered_reads_and_writes_match_the_alternative_step_pairs():
         "emg.interpeak_dist",
         "emg.ecg_detect_peaks",
         "emg.ecg_gating",
+        "emg.ecg_estimated_subtraction",
         "emg.ecg_wavelet_denoising",
     ],
 )

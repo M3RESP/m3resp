@@ -86,7 +86,8 @@ Two defaults worth knowing, both settable per call on
 `preprocess_emg`'s own default path handles only the bandpass + envelope
 part, so calling it directly (rather than through the preset above) leaves
 ECG in the signal. ECG
-removal (gating or wavelet denoising), custom baselines, and Pocc-specific quality checks are exposed
+removal (gating, wavelet denoising, or the native estimated-ECG-subtraction
+alternative), custom baselines, and Pocc-specific quality checks are exposed
 individually on `ReSurfEMGAdapter` (see
 [../developer/adapters.md](../developer/adapters.md)) and as composable
 steps in the declarative pipeline engine - see "ECG-removal alternatives" in
