@@ -144,7 +144,19 @@ def window_integral(
     end_indices: np.ndarray,
     baseline: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Integrate signal-minus-baseline over each inclusive sample window."""
+    """Integrate signal-minus-baseline over each inclusive sample window.
+
+    Args:
+        values (numpy.ndarray): Signal to calculate the time product over.
+        sample_frequency (float): Sampling frequency.
+        start_indices (numpy.ndarray): List of individual peak start indices.
+        end_indices (numpy.ndarray): List of individual peak end indices.
+        baseline (numpy.ndarray, optional): Running baseline of the signal.
+            If None, a zero baseline is used.
+
+    Returns:
+        numpy.ndarray: The calculated time products.
+    """
 
     data = np.asarray(values)
     starts = np.asarray(start_indices)
