@@ -171,7 +171,29 @@ def area_under_baseline(
     baseline: np.ndarray,
     reference_values: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Compute ReSurfEMG-style area under baseline around each breath peak."""
+"""Compute ReSurfEMG-style area under baseline around each breath peak.
+
+    Calculate the area between the baseline and the nadir of the
+    reference signal in a window around each peak.
+    The nadir is the minimum (or maximum) value of the reference signal in the window
+    around the peak, depending on whether the signal is above or below the baseline
+
+    Args:
+        values (numpy.ndarray): Signal to calculate the time product over.
+        sample_frequency (float): Sampling frequency.
+        peak_indices (list[int]): List of individual peak indices.
+        start_indices (list[int]): List of individual peak start indices.
+        end_indices (list[int]): List of individual peak end indices.
+        window (int): Number of samples before and after peak_indices to look
+            for the nadir.
+        baseline (numpy.ndarray): Running baseline of the signal.
+        reference_values (numpy.ndarray, optional): Signal in which the nadir is searched.
+
+    Returns:
+        tuple:
+            - numpy.ndarray: The calculated areas under the baseline.
+            - numpy.ndarray: The reference signal nadir values.
+    """
 
     data = np.asarray(values)
     if reference_values is None:
