@@ -419,6 +419,16 @@ def capture_value(
     *,
     append_to_list: bool = False,
 ) -> None:
+    """Capture a value in a dictionary.
+
+    Args:
+        captures (dict or None): Dictionary to capture values in.
+            If None, no values will be captured.
+        key (str): Key to use for capturing the value.
+        value (Any): Value to capture.
+        append_to_list (bool): If True, the value will be appended to a list
+            under the given key.
+    """
     if captures is None:
         return
     if append_to_list:
