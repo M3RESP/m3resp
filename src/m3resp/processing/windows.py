@@ -103,7 +103,16 @@ def moving_average(
 
 
 def running_smoother(values: np.ndarray) -> np.ndarray:
-    """Smooth values with ReSurfEMG's running smoother."""
+    """Smooth an input array.
+
+    Smooth values with ReSurfEMG's `running smoother`.
+
+    Args:
+        values (np.ndarray): Input data to smooth.
+
+    Returns:
+        np.ndarray: Smoothed data.
+    """
 
     data = np.asarray(values)
     n_samples = len(data) // 10
