@@ -23,14 +23,15 @@ Full attribution notice: see top-level NOTICE.md.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, cast, overload
 
 import numpy as np
 import pandas as pd
 
-from m3resp.core.exceptions import OptionalDependencyError
+from m3resp.core.exceptions import MutuallyExclusiveArgsError, OptionalDependencyError
 
 POSTPROCESSING_FUNCTIONS: dict[str, tuple[str, ...]] = {
     "baseline": ("moving_baseline", "slopesum_baseline"),
@@ -196,6 +197,7 @@ def _require_equal_length(*named_arrays: tuple[str, np.ndarray]) -> None:
         msg = f"Arrays must have equal length; got {lengths}."
         raise ValueError(msg)
 
+
 def _mask_invalid(values: np.ndarray, validity: np.ndarray) -> np.ndarray:
     """[NOT APPROVED] Mask invalid values with NaNs.
 
@@ -214,6 +216,81 @@ def _mask_invalid(values: np.ndarray, validity: np.ndarray) -> np.ndarray:
     return array
 
 
+def _validate_incompatible_kwargs(
+    arg_name1: str,
+    arg_value1: Any,
+    arg_name2: str,
+    arg_value2: Any | None = None,
+    *,
+    default_value: Any | None = None,
+    **kwargs,
+) -> Any:
+    """Validate that two parameters are not both set."""
+    arg_value2 = arg_value2 or kwargs.get(arg_name2)
+    if arg_value1 is not None and arg_value2 is not None:
+        msg_0 = f"{arg_name1} and {arg_name2} cannot both be set at the same time."
+        raise MutuallyExclusiveArgsError(msg_0)
+    return arg_value1 or arg_value2 or kwargs.get(arg_name2) or default_value
+
+
+@overload
+def _validate_to_samples(
+    in_seconds: float | None,
+    in_samples: int | None,
+    *,
+    default_seconds: float = 1.0,
+    sampling_frequency: float = 1.0,
+) -> int: ...
+@overload
+def _validate_to_samples(
+    in_seconds: float | None,
+    in_samples: int | None,
+    *,
+    default: int = 1,
+) -> int: ...
+def _validate_to_samples(
+    in_seconds: float | None,
+    in_samples: int | None,
+    *,
+    default: int | None = None,
+    default_seconds: float | None = None,
+    sampling_frequency: float | None = None,
+) -> int:
+    """Validate and convert a time-based or sample-based parameter to samples.
+
+    Some m3resp functions accept parameters in either seconds or samples.
+    This function validates that only one of the two is provided,
+    and converts the time-based parameter to samples using the sampling frequency.
+    If no sample frequency is provided, it defaults to 1Hz.
+
+    Args:
+        in_seconds (float | None): Time-based parameter in seconds.
+        in_samples (int | None): Sample-based parameter in samples.
+        default (int | None): Default value for the parameter.
+        default_seconds (float): Default value for the time-based parameter.
+        sampling_frequency (float | None): Sampling frequency in Hz.
+
+    Returns:
+        int: The parameter converted to samples.
+    """
+    if in_samples is None:
+        if default is not None:
+            in_samples = default
+        elif default_seconds is not None and sampling_frequency is not None:
+            in_samples = int(sampling_frequency * (in_seconds or default_seconds))
+    return in_samples or 1
+
+
+def _require_sampling_frequency(sample_frequency: float | None) -> float:
+    if sample_frequency is None:
+        msg = "sample_frequency is required."
+        raise ValueError(msg)
+    if not np.isfinite(sample_frequency) or sample_frequency <= 0:
+        msg = f"sample_frequency must be finite and positive; got {sample_frequency!r}."
+        raise ValueError(msg)
+    return float(sample_frequency)
+
+
 def _require_integer_valued_sample_frequency(sample_frequency: float) -> int:
     """Normalize the sample frequency to integer type.
 
@@ -225,11 +302,13 @@ def _require_integer_valued_sample_frequency(sample_frequency: float) -> int:
     """
     if not np.isfinite(sample_frequency) or sample_frequency <= 0:
         msg = f"sample_frequency must be finite and positive; got {sample_frequency!r}."
-        raise ValueError(msg)
+        raise MutuallyExclusiveArgsError(msg)
     if float(sample_frequency).is_integer():
         return int(sample_frequency)
-    msg = ("sample_frequency must be an exact integer value for this operation;"
-           f" got {sample_frequency!r}.")
+    msg = (
+        "sample_frequency must be an exact integer value for this operation;"
+        f" got {sample_frequency!r}."
+    )
     raise ValueError(msg)
 
 
@@ -329,16 +408,15 @@ def _compute_derivative(
             .mean()
             .to_numpy(dtype=float)
         )
-        derivative = (array_moving_average[1:] - array_moving_average[:-1]) * fs
+        derivative = np.diff(array_moving_average) * fs
     else:
-        derivative = (array[1:] - array[:-1]) * fs
+        derivative = np.diff(array) * fs
     return derivative
 
 
-def bell_curve(array: np.ndarray,
-               amplitudes: float,
-               time_shift: float,
-               steepness: float) -> np.ndarray:
+def bell_curve(
+    array: np.ndarray, amplitudes: float, time_shift: float, steepness: float
+) -> np.ndarray:
     """Calculate a shifted, smoothed and amplified bell curve.
 
     This function calculates a bell curve on the samples of the input array, shifted by

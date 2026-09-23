@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from m3resp.data import QualityFlag
-from m3resp.data.quality import Severity
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from m3resp.data.quality import Severity
 
 
 def threshold_flag(
@@ -21,7 +24,6 @@ def threshold_flag(
     severity: Severity = "info",
 ) -> QualityFlag:
     """Create a quality flag by comparing a scalar value to a threshold."""
-
     scalar = float(value)
     limit = float(threshold)
     passed = _compare(scalar, limit, comparison)
@@ -45,7 +47,6 @@ def fraction_flag(
     severity: Severity = "info",
 ) -> QualityFlag:
     """Create a quality flag for a fraction that must meet a minimum value."""
-
     return threshold_flag(
         name,
         passed_fraction,
@@ -66,7 +67,6 @@ def timing_window_flag(
     severity: Severity = "info",
 ) -> QualityFlag:
     """Create a quality flag for event timing deltas inside a time window."""
-
     values = np.asarray(deltas, dtype=float)
     valid = np.ones(values.shape, dtype=bool)
     if min_delta is not None:
@@ -111,7 +111,6 @@ def quality_flag_from_result(
     the two. Operation-specific conversions (Phase 5) replace this generic
     mapping once each quality function's scientific meaning is encoded.
     """
-
     is_boolean, passed = _boolean_verdict(result)
     metadata = _result_metadata(result, source_method=source_method)
     if not is_boolean:
@@ -134,7 +133,6 @@ def skipped_quality_flag(
     severity: Severity = "warning",
 ) -> QualityFlag:
     """Create a warning flag for a skipped quality calculation."""
-
     return QualityFlag(
         name=name,
         passed=False,
@@ -161,9 +159,8 @@ def _compare(
         "!=": value != threshold,
     }
     if comparison not in operators:
-        raise ValueError(
-            "comparison must be one of '>', '>=', '<', '<=', '==', '!=' or a callable"
-        )
+        msg = "comparison must be one of '>', '>=', '<', '<=', '==', '!=' or a callable"
+        raise ValueError(msg)
     return bool(operators[comparison])
 
 
@@ -181,7 +178,6 @@ def _boolean_verdict(value: Any) -> tuple[bool, bool]:
     to a single homogeneous array at all (e.g. `snr_pseudo`'s
     `(mean, per-peak array)` tuple, whose elements have different shapes).
     """
-
     if isinstance(value, bool):
         return True, value
     array = _safe_asarray(value)
@@ -218,8 +214,8 @@ def _result_metadata(
 
 def _safe_asarray(value: Any) -> np.ndarray | None:
     """`np.asarray(value)`, or `None` if `value` has no single homogeneous
-    array shape (e.g. a tuple of differently-shaped elements)."""
-
+    array shape (e.g. a tuple of differently-shaped elements).
+    """
     try:
         return np.asarray(value)
     except ValueError:
