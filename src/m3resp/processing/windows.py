@@ -259,7 +259,21 @@ def rolling_rms_ci(
     center: bool = True,
     min_periods: int = 1,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Estimate rolling confidence intervals for RMS values."""
+    """Estimate rolling confidence intervals for RMS values.
+
+    Args:
+        values (np.ndarray): Input data to compute the RMS envelope for.
+        window_length (int): The size in samples of the rolling window.
+        alpha (float): Significance level for the confidence interval. Defaults to 0.05.
+        center (bool): If True, the window is centered around each point. If False,
+            the window is right-aligned. Defaults to True.
+        min_periods (int): The minimum number of periods required to compute the rolling
+            mean. Defaults to 1.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: The lower and upper bounds of the confidence
+            interval.
+    """
 
     stats = _scipy_stats()
     squared = pd.Series(np.power(values, 2))
