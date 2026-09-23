@@ -84,8 +84,8 @@ def moving_baseline(
     session: M3Session,
     processed_emg: Any,
     *,
-    window_seconds: float = 30.0,
-    step_seconds: float = 1.0,
+    window_seconds: float = 7.5,
+    step_seconds: float = 0.2,
     percentile: float = 33.0,
 ) -> dict[str, Any]:
     _require_positive_seconds("window_seconds", window_seconds)
