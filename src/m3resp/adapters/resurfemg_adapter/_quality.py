@@ -422,8 +422,8 @@ class _QualityMixin:
         first_event_times: Any,
         second_event_times: Any,
         *,
-        min_delta: float = 0.0,
-        max_delta: float | None = None,
+        min_delta: float = -0.5,
+        max_delta: float | None = 2.0,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate the timing of two sets of events.
 
