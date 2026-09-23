@@ -70,7 +70,21 @@ def moving_average(
     window_function: Callable[[int], np.ndarray] | None = None,
     padding_type: PaddingType = "edge",
 ) -> np.ndarray:
-    """Apply an EIT-style centered moving average with padded boundaries."""
+    """Apply an EIT-style centered moving average with padded boundaries.
+
+    Args:
+        values (np.ndarray): Input data to apply the moving average to.
+        window_size (int): The size in samples of the moving average window.
+            Must be a positive integer. If the passed value is an even number,
+            it will be converted to the next odd integer.
+        window_function (Callable[[int], np.ndarray] | None): A function that generates
+            the window weights. If None, a uniform window is used.
+        padding_type (PaddingType): The type of padding to use at the boundaries.
+            Defaults to "edge". See `np.pad` for available options.
+
+    Returns:
+        np.ndarray: The moving average of the input data.
+    """
 
     data = np.asarray(values)
     window_size = _normalize_odd_window_size(window_size)
