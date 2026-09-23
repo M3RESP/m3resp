@@ -98,7 +98,6 @@ def pseudo_slope(
 ) -> np.ndarray:
     """Compute the initial per-breath pseudo-slope in units per sample.
 
-"""
     The pseudo-slope is an approximate rise rate, not a true slope: for each breath,
     it's computed as the ratio between the peak height and the rising time.
     A true slope would require fitting an actual slope to the rising edge and would
@@ -113,9 +112,6 @@ def pseudo_slope(
             Defaults to True.
         smoothing (bool | None): ReSurfEMG's backward-compatible parameter name for
             `smooth`. If provided, it overrides `smooth`. Defaults to None.
-    """
-    divides the peak height by the time it took to reach the peak, rather
-    than fitting an actual slope to the rising edge.
     """
 
     if smoothing is not None:
@@ -211,7 +207,7 @@ def area_under_baseline(
     baseline: np.ndarray,
     reference_values: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-"""Compute ReSurfEMG-style area under baseline around each breath peak.
+    """Compute ReSurfEMG-style area under baseline around each breath peak.
 
     Calculate the area between the baseline and the nadir of the
     reference signal in a window around each peak.

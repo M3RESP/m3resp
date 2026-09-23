@@ -11,7 +11,6 @@ import pytest
 
 from m3resp.core.events import BreathEvent
 from m3resp.data import ParameterResult
-from m3resp.processing.ventilator import estimate_peep
 from m3resp.workflows import run_pipeline
 
 pytest.importorskip("resurfemg")
@@ -81,24 +80,32 @@ class TestPoccIntervals:
 
         assert result.session.events["pocc_breaths"] == events
 
-    def test_uses_the_same_peep_rule_as_find_occluded_breaths(self):
+    def test_crossings_use_a_moving_pressure_baseline(self):
+        # ReSurfEMG takes Pocc on/offset against the moving baseline of the
+        # airway pressure (percentile 33, 7.5 s window), not the constant PEEP.
+        from resurfemg.postprocessing.baseline import moving_baseline
+
         result = run_pipeline(POCC_SPEC)
         signals = result.value("ventilator_signals")
-        expected_peep = estimate_peep(signals["pressure"], signals["volume"])
-        for event in result.value("pocc_events"):
-            assert event.metadata["peep"] == pytest.approx(expected_peep)
+        pressure = np.asarray(signals["pressure"], dtype=float)
+        fs = float(signals["fs"])
+        expected = moving_baseline(
+            pressure, int(7.5 * fs), int(0.2 * fs), set_percentile=33
+        )
+        baseline = result.value("pressure_baseline")
+        np.testing.assert_array_equal(baseline, expected)
+        assert np.ptp(baseline) > 0
 
-    def test_explicit_peep_overrides_the_estimate(self):
-        # Close to the estimated end-expiratory PEEP (~4.97) so the override
-        # is exercised
-        # without tripping the unrelated onoff_from_baseline_crossings edge
-        # case where a far-off baseline never crosses again after the last
-        # peak (a pre-existing primitive limitation, not this step's bug).
+    def test_baseline_parameters_are_passed_through(self):
         spec = {**POCC_SPEC, "steps": [*POCC_SPEC["steps"]]}
-        spec["steps"][-2] = {"uses": "ventilator.pocc_intervals", "with": {"peep": 5.2}}
-        result = run_pipeline(spec)
-        for event in result.value("pocc_events"):
-            assert event.metadata["peep"] == 5.2
+        spec["steps"][-2] = {
+            "uses": "ventilator.pocc_intervals",
+            "with": {"baseline_percentile": 20.0},
+        }
+        low = run_pipeline(spec).value("pressure_baseline")
+        default = run_pipeline(POCC_SPEC).value("pressure_baseline")
+        assert np.all(low <= default)
+        assert np.any(low < default)
 
     def test_does_not_assume_emg_and_ventilator_fs_are_equal(self):
         result = run_pipeline(POCC_SPEC)
@@ -133,25 +140,58 @@ class TestPoccTimeProduct:
         ]
         assert np.all(time_products > 0)
 
-    def test_matches_the_native_window_integral_equivalence_proof(self):
-        # This is the same computation
-        # test_processing_metric_equivalence.py's negative-deflection test
-        # proves matches upstream time_product; re-derive it here manually
-        # to pin the step's own wiring (peep baseline, indices) too.
-        from m3resp.processing.metrics import window_integral
+    def test_matches_resurfemg_ptpocc(self):
+        # ReSurfEMG's PTPocc (basic_emg_pipeline_annotated.ipynb):
+        # calculate_time_products(include_aub=True, aub_window_s=5 * fs,
+        # aub_reference_signal=p_vent.y_baseline) = time product against the
+        # moving baseline plus the area under that baseline.
+        from resurfemg.postprocessing import features as feat
 
         result = run_pipeline(POCC_SPEC)
         signals = result.value("ventilator_signals")
-        pressure = np.asarray(signals["pressure"])
+        pressure = np.asarray(signals["pressure"], dtype=float)
         fs = float(signals["fs"])
-        peep = estimate_peep(pressure, signals["volume"])
-        baseline = np.full(pressure.shape, peep)
+        baseline = result.value("pressure_baseline")
+        starts = result.value("pocc_start_indices")
+        ends = result.value("pocc_end_indices")
+        peaks = result.value("pocc_indices")
 
+        time_products = feat.time_product(
+            signal=pressure,
+            fs=fs,
+            start_idxs=starts,
+            end_idxs=ends,
+            baseline=baseline,
+        )
+        aub, _ = feat.area_under_baseline(
+            signal=pressure,
+            fs=fs,
+            peak_idxs=peaks,
+            start_idxs=starts,
+            end_idxs=ends,
+            aub_window_s=int(5 * fs),
+            baseline=baseline,
+            ref_signal=baseline,
+        )
+        np.testing.assert_allclose(
+            result.value("pocc_time_products"), np.asarray(time_products) + aub
+        )
+
+    def test_area_under_baseline_can_be_left_out(self):
+        from m3resp.processing.metrics import window_integral
+
+        spec = {**POCC_SPEC, "steps": [*POCC_SPEC["steps"]]}
+        spec["steps"][-1] = {
+            "uses": "ventilator.pocc_time_product",
+            "with": {"include_aub": False},
+        }
+        result = run_pipeline(spec)
+        signals = result.value("ventilator_signals")
         expected = window_integral(
-            pressure,
-            fs,
+            np.asarray(signals["pressure"]),
+            float(signals["fs"]),
             result.value("pocc_start_indices"),
             result.value("pocc_end_indices"),
-            baseline,
+            result.value("pressure_baseline"),
         )
         np.testing.assert_array_equal(result.value("pocc_time_products"), expected)

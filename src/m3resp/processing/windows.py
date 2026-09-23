@@ -128,7 +128,7 @@ def rolling_rms(
     center: bool = True,
     min_periods: int = 1,
 ) -> np.ndarray:
-       """Compute the full rolling root-mean-square envelope.
+    """Compute the full rolling root-mean-square envelope.
 
     Args:
         values (np.ndarray): Input data to compute the RMS envelope for.
@@ -178,7 +178,7 @@ def rolling_arv(
     center: bool = True,
     min_periods: int = 1,
 ) -> np.ndarray:
-   """Compute a rolling average rectified value envelope.
+    """Compute a rolling average rectified value envelope.
 
     Args:
         values (np.ndarray): Input data to compute the ARV envelope for.
@@ -222,7 +222,7 @@ def rolling_envelope(
     A single seam for "compute the envelope this way", so that every place
     that (re)computes an envelope - preprocessing and the post-ECG-removal
     recomputation - can be handed one method choice instead of each hard-coding
-    """Compute a rolling envelope using the specified method.
+    its own.
 
     Args:
         values (np.ndarray): Input data to compute the envelope for.
@@ -236,7 +236,6 @@ def rolling_envelope(
 
     Returns:
         np.ndarray: The rolling envelope computed using the specified method.
-    """
     """
 
     normalized = str(method).lower()
