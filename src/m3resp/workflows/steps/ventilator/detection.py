@@ -14,6 +14,7 @@ from m3resp.processing.intervals import (
     onoff_from_baseline_crossings,
 )
 from m3resp.processing.metrics import (
+    area_under_baseline,
     window_integral,
 )
 from m3resp.processing.peaks import (
@@ -53,6 +54,28 @@ def _resolve_peep(ventilator_signals: Any, pressure: Any, peep: float | None) ->
             "the volume channel or pass an explicit `peep` value."
         )
     return estimate_peep(pressure, volume)
+
+
+def _pressure_baseline(
+    session: M3Session,
+    pressure: np.ndarray,
+    fs: float,
+    *,
+    window_seconds: float,
+    step_seconds: float,
+    percentile: float,
+) -> np.ndarray:
+    """Moving baseline of the airway pressure, as ReSurfEMG takes it for Pocc
+    on/offset and time products: the same moving percentile as the EMG
+    baseline, run on the raw pressure. It follows the measured
+    end-expiratory level where the set PEEP would stay flat."""
+
+    return session.emg_adapter.moving_baseline(
+        pressure,
+        window_samples=max(1, int(window_seconds * fs)),
+        step_samples=max(1, int(step_seconds * fs)),
+        percentile=percentile,
+    )
 
 
 @register_step(
@@ -169,11 +192,13 @@ def find_occluded_breaths(
         "pocc_end_indices",
         "pocc_interval_validity",
         "pocc_events",
+        "pressure_baseline",
     ),
     summary="Find Pocc manoeuvre start/end indices from the pressure channel.",
-    description="Find Pocc manoeuvre start/end indices around each detected peak via baseline crossing, and record BreathEvents.",
+    description="Find Pocc manoeuvre start/end indices around each detected peak where the pressure crosses its moving baseline, and record BreathEvents.",
     category="detection",
     modality="ventilator",
+    optional_packages=_RESURFEMG,
     session_writes=("session.events.pocc_breaths",),
     input_artifacts=(
         _SESSION_ARTIFACT,
@@ -190,12 +215,28 @@ def find_occluded_breaths(
     ),
     parameters=(
         StepParameter(
-            name="peep",
+            name="baseline_window_seconds",
             value_type="number",
-            required=False,
-            default=None,
-            unit="cmH2O",
-            description="PEEP baseline. Should match the value used in 'ventilator.find_occluded_breaths'; defaults to the median pressure when unset.",
+            default=7.5,
+            unit="s",
+            minimum=0,
+            description="Moving-baseline window length on the airway pressure.",
+        ),
+        StepParameter(
+            name="baseline_step_seconds",
+            value_type="number",
+            default=0.2,
+            unit="s",
+            minimum=0,
+            description="Step between successive moving-baseline windows.",
+        ),
+        StepParameter(
+            name="baseline_percentile",
+            value_type="number",
+            default=33.0,
+            minimum=0,
+            maximum=100,
+            description="Percentile of the airway pressure taken within each window.",
         ),
     ),
     output_artifacts=(
@@ -219,6 +260,12 @@ def find_occluded_breaths(
             artifact_type="breath_event_list",
             description="Native BreathEvent per Pocc manoeuvre.",
         ),
+        StepArtifact(
+            name="pressure_baseline",
+            artifact_type="signal_array",
+            unit="cmH2O",
+            description="Moving baseline of the airway pressure, one value per sample.",
+        ),
     ),
 )
 def pocc_intervals(
@@ -226,16 +273,24 @@ def pocc_intervals(
     ventilator_signals: Any,
     pocc_indices: Any,
     *,
-    peep: float | None = None,
+    baseline_window_seconds: float = 7.5,
+    baseline_step_seconds: float = 0.2,
+    baseline_percentile: float = 33.0,
 ) -> dict[str, Any]:
     pressure = np.asarray(ventilator_signals["pressure"], dtype=float)
     fs = float(ventilator_signals["fs"])
     peaks = np.asarray(pocc_indices, dtype=int)
 
-    # Same PEEP rule as ventilator.find_occluded_breaths, so pocc_indices (detected
-    # against this same baseline) and these intervals stay consistent.
-    effective_peep = _resolve_peep(ventilator_signals, pressure, peep)
-    baseline = np.full(pressure.shape, effective_peep)
+    # PEEP locates the occlusions (ventilator.find_occluded_breaths); their
+    # start and end are where pressure crosses its moving baseline.
+    baseline = _pressure_baseline(
+        session,
+        pressure,
+        fs,
+        window_seconds=baseline_window_seconds,
+        step_seconds=baseline_step_seconds,
+        percentile=baseline_percentile,
+    )
 
     starts, ends, valid_starts, valid_ends, valid_peaks = onoff_from_baseline_crossings(
         pressure, baseline, peaks
@@ -257,7 +312,6 @@ def pocc_intervals(
                 source="m3resp.processing.intervals.onoff_from_baseline_crossings",
                 metadata={
                     "event_type": "pocc",
-                    "peep": effective_peep,
                     "valid": bool(valid_peaks[index]),
                     "valid_start": bool(valid_starts[index]),
                     "valid_end": bool(valid_ends[index]),
@@ -272,7 +326,11 @@ def pocc_intervals(
         metadata=_upstream_metadata(
             source_function="m3resp.processing.intervals.onoff_from_baseline_crossings",
             operation="ventilator.pocc_intervals",
-            parameters={"peep": effective_peep, "requested_peep": peep},
+            parameters={
+                "baseline_window_seconds": baseline_window_seconds,
+                "baseline_step_seconds": baseline_step_seconds,
+                "baseline_percentile": baseline_percentile,
+            },
             source_package="m3resp",
             implementation="m3resp.processing.intervals",
         ),
@@ -282,6 +340,7 @@ def pocc_intervals(
         "pocc_end_indices": ends,
         "pocc_interval_validity": np.asarray(valid_peaks, dtype=bool),
         "pocc_events": events,
+        "pressure_baseline": baseline,
     }
 
 
@@ -294,10 +353,12 @@ def pocc_intervals(
         "pocc_start_indices": "pocc_start_indices",
         "pocc_end_indices": "pocc_end_indices",
         "pocc_interval_validity": "pocc_interval_validity",
+        "pressure_baseline": "pressure_baseline",
+        "pocc_indices": "pocc_indices",
     },
     writes=("pocc_time_products", "pocc_time_product_result"),
     summary="Compute the pressure-time product for each Pocc manoeuvre.",
-    description="Integrate pressure above the PEEP baseline over each Pocc manoeuvre's start/end window.",
+    description="Integrate pressure against its moving baseline over each Pocc manoeuvre's start/end window, plus the area under the baseline (ReSurfEMG PTPocc).",
     category="parameters",
     modality="ventilator",
     input_artifacts=(
@@ -322,15 +383,32 @@ def pocc_intervals(
             artifact_type="boolean_array",
             description="Per-manoeuvre validity from 'ventilator.pocc_intervals'.",
         ),
+        StepArtifact(
+            name="pressure_baseline",
+            artifact_type="signal_array",
+            unit="cmH2O",
+            description="Moving pressure baseline from 'ventilator.pocc_intervals', so both steps measure against the same baseline.",
+        ),
+        StepArtifact(
+            name="pocc_indices",
+            artifact_type="index_array",
+            description="Pocc peak indices from 'ventilator.find_occluded_breaths', around which the area under the baseline is sought.",
+        ),
     ),
     parameters=(
         StepParameter(
-            name="peep",
+            name="include_aub",
+            value_type="boolean",
+            default=True,
+            description="Add the area under the baseline to the time product, as ReSurfEMG's PTPocc does.",
+        ),
+        StepParameter(
+            name="aub_window_seconds",
             value_type="number",
-            required=False,
-            default=None,
-            unit="cmH2O",
-            description="PEEP baseline. Should match the value used in 'ventilator.pocc_intervals'; defaults to the median pressure when unset.",
+            default=5.0,
+            unit="s",
+            minimum=0,
+            description="Half-width of the window around each Pocc peak in which the highest baseline value is taken as the reference for the area under the baseline.",
         ),
     ),
     output_artifacts=(
@@ -353,23 +431,50 @@ def pocc_time_product(
     ventilator_signals: Any,
     pocc_start_indices: Any,
     pocc_end_indices: Any,
+    pressure_baseline: Any,
     *,
-    peep: float | None = None,
+    pocc_indices: Any = None,
     pocc_interval_validity: Any = None,
+    include_aub: bool = True,
+    aub_window_seconds: float = 5.0,
 ) -> dict[str, Any]:
     pressure = np.asarray(ventilator_signals["pressure"], dtype=float)
     fs = float(ventilator_signals["fs"])
-    effective_peep = _resolve_peep(ventilator_signals, pressure, peep)
-    baseline = np.full(pressure.shape, effective_peep)
+    baseline = np.asarray(pressure_baseline, dtype=float)
 
     time_products = window_integral(
         pressure, fs, pocc_start_indices, pocc_end_indices, baseline
     )
+    aub = None
+    if include_aub:
+        if pocc_indices is None:
+            raise ValueError(
+                "The area under the baseline is sought around each Pocc peak; "
+                "pass `pocc_indices` or set include_aub=False."
+            )
+        # ReSurfEMG PTPocc (calculate_time_products with the pressure
+        # baseline as reference): adds the area between the baseline and its
+        # highest value near the occlusion, so a baseline that dips during
+        # the manoeuvre does not shrink the product.
+        aub, _ = area_under_baseline(
+            pressure,
+            fs,
+            pocc_indices,
+            pocc_start_indices,
+            pocc_end_indices,
+            window=int(aub_window_seconds * fs),
+            baseline=baseline,
+            reference_values=baseline,
+        )
+        time_products = time_products + aub
     if pocc_interval_validity is not None:
         time_products = _mask_invalid(time_products, pocc_interval_validity)
 
     pressure_unit = ventilator_signals.get("unit") or "cmH2O"
-    parameters = {"peep": effective_peep, "requested_peep": peep}
+    parameters = {
+        "include_aub": include_aub,
+        "aub_window_seconds": aub_window_seconds,
+    }
     result = ParameterResult(
         name="pocc_time_product",
         value=time_products,
@@ -379,6 +484,7 @@ def pocc_time_product(
         method="m3resp.processing.metrics.window_integral",
         metadata={
             **parameters,
+            "area_under_baseline": None if aub is None else aub.tolist(),
             "start_indices": np.asarray(pocc_start_indices, dtype=int).tolist(),
             "end_indices": np.asarray(pocc_end_indices, dtype=int).tolist(),
         },
