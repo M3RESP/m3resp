@@ -231,7 +231,22 @@ def respiratory_rate_from_indices(
     outlier_percentile: float = 33,
     outlier_factor: float = 3,
 ) -> tuple[float, np.ndarray]:
-    """Estimate median and breath-to-breath respiratory rate in breaths/min."""
+    """Estimate median and breath-to-breath respiratory rate in breaths/min.
+
+    Breath-by-breath respiratory rate larger than the threshold defined by
+    the product (outlier_percentile * outlier_factor) are excluded from the computation.
+
+    Args:
+        indices (numpy.ndarray): Breath indices.
+        sample_frequency (float): Sampling frequency of the signal the indices are from.
+        outlier_percentile (float): Respiratory rate outlier percentile.
+        outlier_factor (float): Respiratory rate outlier factor.
+
+    Returns:
+        tuple:
+            - float: Median respiratory rate.
+            - numpy.ndarray: Breath-to-breath respiratory rate.
+    """
 
     breath_indices = np.asarray(indices)
     breath_interval = breath_indices[1:] - breath_indices[:-1]
