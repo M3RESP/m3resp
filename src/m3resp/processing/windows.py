@@ -155,7 +155,15 @@ def rolling_rms(
 
 
 def naive_rolling_rms(values: np.ndarray, *, window_length: int) -> np.ndarray:
-    """Compute a cumulative-sum RMS envelope without edge padding."""
+    """Compute a cumulative-sum RMS envelope without edge padding.
+
+    Args:
+        values (np.ndarray): Input data to compute the RMS envelope for.
+        window_length (int): The size in samplesof the rolling window.
+
+    Returns:
+        np.ndarray: The rolling RMS envelope.
+    """
 
     cumulative = np.cumsum(np.abs(values) ** 2)
     return np.sqrt(
