@@ -56,9 +56,19 @@ def estimate_peep(
     the set value, which collapses the occlusion-detection thresholds. Nearest
     is used here, matching the implementation.
 
-    Raises `MissingModalityDataError` when the volume signal holds no usable
-    end-expiratory minima, rather than silently falling back to a whole-trace
-    statistic. Pass an explicit PEEP in that case.
+    Args:
+        pressure (np.ndarray): Airway pressure signal (cmH2O).
+        volume (np.ndarray): Ventilator volume signal (mL).
+        round_to_integer (bool, optional): Round the estimated PEEP to the
+            nearest integer. Defaults to True.
+
+    Returns:
+        float: The estimated PEEP (cmH2O).
+
+    Raises:
+        MissingModalityDataError: when the volume signal holds no usable
+            end-expiratory minima, rather than silently falling back to a whole-trace
+            statistic. Pass an explicit PEEP in that case.
     """
 
     pressure = np.asarray(pressure, dtype=float)
