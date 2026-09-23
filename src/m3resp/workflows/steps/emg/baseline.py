@@ -52,7 +52,7 @@ from ._shared import (
         StepParameter(
             name="step_seconds",
             value_type="number",
-            default=1.0,
+            default=0.2,
             unit="s",
             minimum=0,
             description="Step between successive baseline windows.",
