@@ -217,7 +217,19 @@ def notch_filter(
     quality_factor: float,
     axis: int = 0,
 ) -> np.ndarray:
-    """Apply an IIR notch filter at one frequency."""
+    """Apply an IIR notch filter at one frequency.
+
+    Args:
+        values (numpy.ndarray): Input data to filter.
+        frequency (float): Frequency to remove.
+        sample_frequency (float): Sampling rate of the input data.
+        quality_factor (float): Quality factor of the filter (the ratio of the notch
+            frequency to the bandwidth of the bandstop filter)
+        axis (int): Axis along which to apply the filter.
+
+    Returns:
+        numpy.ndarray: Filtered data.
+    """
 
     scipy_signal = _scipy_signal()
     b_notch, a_notch = scipy_signal.iirnotch(
