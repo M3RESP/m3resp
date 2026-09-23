@@ -128,7 +128,20 @@ def amplitude_at_peaks(
     peak_indices: np.ndarray,
     baseline: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Compute peak amplitudes relative to a baseline or zero."""
+    """Compute peak amplitudes relative to a baseline or zero.
+
+    Calculate the peak height of signal and the baseline for the windows
+    at the peak_indices relative to the baseline. If no baseline is provided, the
+    peak height relative to zero is determined.
+
+    Args:
+        values (numpy.ndarray): Signal to determine the peak heights in.
+        peak_indices (numpy.ndarray): List of individual peak indices.
+        baseline (numpy.ndarray, optional): Running baseline of the signal.
+
+    Returns:
+        numpy.ndarray: List of peak amplitudes.
+    """
 
     data = np.asarray(values)
     peaks = np.asarray(peak_indices, dtype=int)
