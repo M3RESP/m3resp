@@ -90,7 +90,7 @@ def _resolve_peep(ventilator_signals: Any, pressure: Any, peep: float | None) ->
     ),
 )
 def detect_breaths(
-    ventilator_signals: Any, *, breath_width_seconds: float = 0.5
+    ventilator_signals: Any, *, breath_width_seconds: float = 0.25
 ) -> dict[str, Any]:
     import numpy as np
 
