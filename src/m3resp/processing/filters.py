@@ -306,7 +306,25 @@ def harmonic_notch_filter(
     axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
-    """Apply notch or band-stop filtering at harmonics of a base frequency."""
+    """Apply notch or band-stop filtering at harmonics of a base frequency.
+
+    Args:
+        values (numpy.ndarray): Input data to filter.
+        base_frequency (float): Base frequency of the harmonics.
+        sample_frequency (float): Sampling rate of the input data.
+        max_frequency (float, optional): Maximum frequency to filter.
+            If None (default), the Nyquist frequency is used.
+        distance (float, optional): Distance from the harmonic to the cutoff frequency.
+            If None (default), a single notch is applied at each harmonic.
+        order (int): Order of the filter.
+        quality_factor (float): Quality factor of the filter.
+        axis (int): Axis along which to apply the filter.
+        captures (dict, optional): Dictionary to store captured values.
+            If None (default), no values will be captured.
+
+    Returns:
+        numpy.ndarray: Filtered data.
+    """
 
     if base_frequency <= 0:
         raise ValueError("base_frequency must be positive")
