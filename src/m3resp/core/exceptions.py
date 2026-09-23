@@ -77,3 +77,7 @@ class UnsynchronizedDataWarning(UserWarning):
     - or better, call ``M3Session.synchronize_raw_modalities`` or
     ``M3Session.skip_synchronization``.
     """
+
+
+class MutuallyExclusiveArgsError(M3RespError):
+    """Raised when mutually exclusive arguments are both set."""
