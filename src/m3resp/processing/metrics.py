@@ -71,8 +71,9 @@ def time_to_peak(
             Defaults to True.
 
     Returns:
-        tuple[np.ndarray, np.ndarray]: The absolute and relative time-to-peak for each
-            breath.
+        tuple[np.ndarray, np.ndarray]: For each breath, the time-to-peak in
+            samples from the window start, and the same as a fraction (0-1)
+            of the window length.
     """
 
     data = np.asarray(values)
@@ -99,9 +100,9 @@ def pseudo_slope(
     """Compute the initial per-breath pseudo-slope in units per sample.
 
     The pseudo-slope is an approximate rise rate, not a true slope: for each breath,
-    it's computed as the ratio between the peak height and the rising time.
-    A true slope would require fitting an actual slope to the rising edge and would
-    depend on sampling rate and pre-processing.
+    it is the peak height divided by the number of samples from the window
+    start to the peak. It is not fitted to the rising edge, and because it is
+    per sample, its value depends on the sampling rate.
 
     Args:
         values (np.ndarray): The signal containing the breath data.
@@ -112,6 +113,9 @@ def pseudo_slope(
             Defaults to True.
         smoothing (bool | None): ReSurfEMG's backward-compatible parameter name for
             `smooth`. If provided, it overrides `smooth`. Defaults to None.
+
+    Returns:
+        np.ndarray: The pseudo-slope of each breath, in signal units per sample.
     """
 
     if smoothing is not None:
@@ -141,9 +145,9 @@ def amplitude_at_peaks(
 ) -> np.ndarray:
     """Compute peak amplitudes relative to a baseline or zero.
 
-    Calculate the peak height of signal and the baseline for the windows
-    at the peak_indices relative to the baseline. If no baseline is provided, the
-    peak height relative to zero is determined.
+    The amplitude of each peak is the signal value at the peak minus the
+    baseline value at the same sample. If no baseline is provided, the
+    peak height relative to zero is returned.
 
     Args:
         values (numpy.ndarray): Signal to determine the peak heights in.
@@ -212,14 +216,14 @@ def area_under_baseline(
     Calculate the area between the baseline and the nadir of the
     reference signal in a window around each peak.
     The nadir is the minimum (or maximum) value of the reference signal in the window
-    around the peak, depending on whether the signal is above or below the baseline
+    around the peak, depending on whether the signal is above or below the baseline.
 
     Args:
         values (numpy.ndarray): Signal to calculate the time product over.
         sample_frequency (float): Sampling frequency.
-        peak_indices (list[int]): List of individual peak indices.
-        start_indices (list[int]): List of individual peak start indices.
-        end_indices (list[int]): List of individual peak end indices.
+        peak_indices (numpy.ndarray): List of individual peak indices.
+        start_indices (numpy.ndarray): List of individual peak start indices.
+        end_indices (numpy.ndarray): List of individual peak end indices.
         window (int): Number of samples before and after peak_indices to look
             for the nadir.
         baseline (numpy.ndarray): Running baseline of the signal.
@@ -269,19 +273,23 @@ def respiratory_rate_from_indices(
 ) -> tuple[float, np.ndarray]:
     """Estimate median and breath-to-breath respiratory rate in breaths/min.
 
-    Breath-by-breath respiratory rate larger than the threshold defined by
-    the product (outlier_percentile * outlier_factor) are excluded from the computation.
+    A breath-to-breath rate is treated as an outlier when it exceeds
+    outlier_factor times the outlier_percentile-th percentile of all
+    breath-to-breath rates. Outliers are set to NaN in the returned array and
+    left out of the median.
 
     Args:
         indices (numpy.ndarray): Breath indices.
         sample_frequency (float): Sampling frequency of the signal the indices are from.
-        outlier_percentile (float): Respiratory rate outlier percentile.
-        outlier_factor (float): Respiratory rate outlier factor.
+        outlier_percentile (float): Percentile of the breath-to-breath rates
+            used as the reference for the outlier limit.
+        outlier_factor (float): Multiple of that percentile above which a rate
+            is an outlier.
 
     Returns:
         tuple:
             - float: Median respiratory rate.
-            - numpy.ndarray: Breath-to-breath respiratory rate.
+            - numpy.ndarray: Breath-to-breath respiratory rate, NaN for outliers.
     """
 
     breath_indices = np.asarray(indices)

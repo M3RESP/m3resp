@@ -103,15 +103,17 @@ def moving_average(
 
 
 def running_smoother(values: np.ndarray) -> np.ndarray:
-    """Smooth an input array.
+    """Smooth the rectified signal with ReSurfEMG's running smoother.
 
-    Smooth values with ReSurfEMG's `running smoother`.
+    A moving average of the absolute values over a window of one tenth of
+    the input length. The last window - 1 samples, which the average cannot
+    reach, are filled with zeros, so the output has the input's length.
 
     Args:
         values (np.ndarray): Input data to smooth.
 
     Returns:
-        np.ndarray: Smoothed data.
+        np.ndarray: Smoothed, rectified data.
     """
 
     data = np.asarray(values)
@@ -132,7 +134,7 @@ def rolling_rms(
 
     Args:
         values (np.ndarray): Input data to compute the RMS envelope for.
-        window_length (int): The size in samplesof the rolling window.
+        window_length (int): The size in samples of the rolling window.
         center (bool): If True, the window is centered around each point. If False,
             the window is right-aligned. Defaults to True.
         min_periods (int): The minimum number of periods required to compute the rolling
@@ -159,10 +161,11 @@ def naive_rolling_rms(values: np.ndarray, *, window_length: int) -> np.ndarray:
 
     Args:
         values (np.ndarray): Input data to compute the RMS envelope for.
-        window_length (int): The size in samplesof the rolling window.
+        window_length (int): The size in samples of the rolling window.
 
     Returns:
-        np.ndarray: The rolling RMS envelope.
+        np.ndarray: The rolling RMS envelope. Without padding it is
+            `window_length` samples shorter than `values`.
     """
 
     cumulative = np.cumsum(np.abs(values) ** 2)

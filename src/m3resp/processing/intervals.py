@@ -52,13 +52,15 @@ def onoff_from_baseline_crossings(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[bool]]:
     """Find peak starts/ends by nearest baseline crossings around peaks.
 
-
-    This function calculates the peaks of each breath using the
-    slopesum baseline of envelope data.
+    The start of each peak is the last crossing of the baseline before it,
+    and the end is the first crossing after it. Starts and ends that fall on
+    the wrong side of a peak, or overlap a neighbouring peak's window, are
+    marked invalid. Any baseline can be used, e.g. the moving or slope-sum
+    baseline of an EMG envelope, or the moving baseline of airway pressure.
 
     Args:
-        values (numpy.ndarray): Envelope signal.
-        baseline (numpy.ndarray): Baseline signal of EMG data for baseline detection.
+        values (numpy.ndarray): Signal, e.g. an EMG envelope or airway pressure.
+        baseline (numpy.ndarray): Baseline of `values`, one value per sample.
         peak_indices (numpy.ndarray): List of peak indices for which to find on- and offset.
 
     Returns:
