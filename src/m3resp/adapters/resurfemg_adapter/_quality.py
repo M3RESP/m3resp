@@ -278,6 +278,10 @@ class _QualityMixin:
             upper_factor (float): Multiplication factor for upper_percentile.
             lower_percentile (float): Percentile for detecting low time products.
             lower_factor (float): Multiplication factor for lower_percentile.
+
+        Returns:
+            numpy.ndarray: Boolean per time product, True where the value lies
+                within the bounds and False where it is extreme.
         """
 
         try:
@@ -422,8 +426,8 @@ class _QualityMixin:
         first_event_times: Any,
         second_event_times: Any,
         *,
-        min_delta: float = 0.0,
-        max_delta: float | None = None,
+        min_delta: float = -0.5,
+        max_delta: float | None = 2.0,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Evaluate the timing of two sets of events.
 

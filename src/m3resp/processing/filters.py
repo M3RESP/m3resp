@@ -70,7 +70,25 @@ def butterworth_filter(
     axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
-    """Apply a zero-phase Butterworth filter using second-order sections."""
+    """Apply a zero-phase Butterworth filter using second-order sections.
+
+    Args:
+        values (numpy.ndarray): Input data to filter.
+        filter_type (str): Type of filter to apply. One of "lowpass", "highpass",
+            "bandpass", or "bandstop".
+        cutoff_frequency (float or sequence of floats): Cutoff frequency(ies)
+            for the filter. If `filter_type` is "bandpass" or "bandstop",
+            `cutoff_frequency` should be a sequence of two values, (low, high),
+            for both.
+        sample_frequency (float): Sampling rate of the input data.
+        order (int): Order of the filter.
+        axis (int): Axis along which to apply the filter.
+        captures (dict, optional): Dictionary to store captured values.
+            If None (default), no values will be captured.
+
+    Returns:
+        numpy.ndarray: Filtered data.
+    """
 
     scipy_signal = _scipy_signal()
     cutoff = _normalize_cutoff_frequency(filter_type, cutoff_frequency)
@@ -112,7 +130,20 @@ def lowpass_filter(
     axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
-    """Apply a low-pass Butterworth filter."""
+    """Apply a low-pass Butterworth filter.
+
+    Args:
+        values (numpy.ndarray): Input data to filter.
+        cutoff_frequency (float): Lowpass cutoff frequency of the filter.
+        sample_frequency (float): Sampling rate of the input data.
+        order (int): Order of the filter.
+        axis (int): Axis along which to apply the filter.
+        captures (dict, optional): Dictionary to store captured values.
+            If None (default), no values will be captured.
+
+    Returns:
+        numpy.ndarray: Filtered data.
+    """
 
     return butterworth_filter(
         values,
@@ -134,7 +165,20 @@ def highpass_filter(
     axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
-    """Apply a high-pass Butterworth filter."""
+    """Apply a high-pass Butterworth filter.
+
+    Args:
+        values (numpy.ndarray): Input data to filter.
+        cutoff_frequency (float): Highpass cutoff frequency of the filter.
+        sample_frequency (float): Sampling rate of the input data.
+        order (int): Order of the filter.
+        axis (int): Axis along which to apply the filter.
+        captures (dict, optional): Dictionary to store captured values.
+            If None (default), no values will be captured.
+
+    Returns:
+        numpy.ndarray: Filtered data.
+    """
 
     return butterworth_filter(
         values,
@@ -156,7 +200,21 @@ def bandpass_filter(
     axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
-    """Apply a band-pass Butterworth filter."""
+    """Apply a band-pass Butterworth filter.
+
+    Args:
+        values (numpy.ndarray): Input data to filter.
+        cutoff_frequency (tuple): A tuple of two floats representing the lower and upper
+            cutoff frequencies.
+        sample_frequency (float): Sampling rate of the input data.
+        order (int): Order of the filter.
+        axis (int): Axis along which to apply the filter.
+        captures (dict, optional): Dictionary to store captured values.
+            If None (default), no values will be captured.
+
+    Returns:
+        numpy.ndarray: Filtered data.
+    """
 
     return butterworth_filter(
         values,
@@ -178,7 +236,21 @@ def bandstop_filter(
     axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
-    """Apply a band-stop Butterworth filter."""
+    """Apply a band-stop Butterworth filter.
+
+    Args:
+        values (numpy.ndarray): Input data to filter.
+        cutoff_frequency (tuple): A tuple of two floats representing the lower and upper
+            cutoff frequencies.
+        sample_frequency (float): Sampling rate of the input data.
+        order (int): Order of the filter.
+        axis (int): Axis along which to apply the filter.
+        captures (dict, optional): Dictionary to store captured values.
+            If None (default), no values will be captured.
+
+    Returns:
+        numpy.ndarray: Filtered data.
+    """
 
     return butterworth_filter(
         values,
@@ -199,7 +271,19 @@ def notch_filter(
     quality_factor: float,
     axis: int = 0,
 ) -> np.ndarray:
-    """Apply an IIR notch filter at one frequency."""
+    """Apply an IIR notch filter at one frequency.
+
+    Args:
+        values (numpy.ndarray): Input data to filter.
+        frequency (float): Frequency to remove.
+        sample_frequency (float): Sampling rate of the input data.
+        quality_factor (float): Quality factor of the filter: the notch
+            frequency divided by the width of the removed band.
+        axis (int): Axis along which to apply the filter.
+
+    Returns:
+        numpy.ndarray: Filtered data.
+    """
 
     scipy_signal = _scipy_signal()
     b_notch, a_notch = scipy_signal.iirnotch(
@@ -222,7 +306,29 @@ def harmonic_notch_filter(
     axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
-    """Apply notch or band-stop filtering at harmonics of a base frequency."""
+    """Apply notch or band-stop filtering at harmonics of a base frequency.
+
+    Args:
+        values (numpy.ndarray): Input data to filter.
+        base_frequency (float): Base frequency of the harmonics.
+        sample_frequency (float): Sampling rate of the input data.
+        max_frequency (float, optional): Maximum frequency to filter.
+            If None (default), the Nyquist frequency is used.
+        distance (float, optional): Distance from the harmonic to the cutoff frequency.
+            If None (default), a single notch is applied at each harmonic;
+            otherwise a band-stop filter from harmonic - distance to
+            harmonic + distance.
+        order (int): Order of the band-stop filter. Used only when `distance`
+            is set.
+        quality_factor (float): Quality factor of the notch filter. Used only
+            when `distance` is None.
+        axis (int): Axis along which to apply the filter.
+        captures (dict, optional): Dictionary to store captured values.
+            If None (default), no values will be captured.
+
+    Returns:
+        numpy.ndarray: Filtered data.
+    """
 
     if base_frequency <= 0:
         raise ValueError("base_frequency must be positive")
@@ -267,7 +373,23 @@ def compute_power_loss(
     n_segment: int | None = None,
     percent_overlap: float = 25,
 ) -> float:
-    """Compute percentage power loss after processing."""
+    """Compute percentage power loss after processing.
+
+    Args:
+        original (numpy.ndarray): Original data.
+        processed (numpy.ndarray): Processed data.
+        original_frequency (float): Sampling frequency of the original data.
+        processed_frequency (float): Sampling frequency of the processed data.
+        n_segment (int, optional): Width of the window for Welch's method in samples.
+            If None, it is set to half the sampling frequency.
+        percent_overlap (float): Overlap between segments, as a percentage of
+            the original sampling frequency (not of `n_segment`), matching
+            ReSurfEMG. With the default `n_segment` of fs/2, the default of 25
+            gives segments that overlap by half. Defaults to 25.
+
+    Returns:
+        float: Percentage power loss after processing.
+    """
 
     scipy_signal = _scipy_signal()
     if n_segment is None:
@@ -335,6 +457,16 @@ def capture_value(
     *,
     append_to_list: bool = False,
 ) -> None:
+    """Capture a value in a dictionary.
+
+    Args:
+        captures (dict or None): Dictionary to capture values in.
+            If None, no values will be captured.
+        key (str): Key to use for capturing the value.
+        value (Any): Value to capture.
+        append_to_list (bool): If True, the value will be appended to a list
+            under the given key.
+    """
     if captures is None:
         return
     if append_to_list:
