@@ -32,7 +32,6 @@ from m3resp.processing.windows import rolling_envelope
 from ._protocols import _PostprocessingOpsProtocol
 from ._shared import (
     _category_for_function,
-    _mask_invalid,
     _missing_postprocessing_dependency,
     _normalize_selected_postprocessing,
     _require_emg_recording,
@@ -420,7 +419,6 @@ class _DefaultsMixin:
 
         start_indices = None
         end_indices = None
-        start_end_validity = None
         if len(peak_indices_array) and baseline is not None:
             if enabled(("event_detection", "onoffpeak_baseline_crossing")):
                 computed["event_detection"]["onoffpeak_baseline_crossing"] = (
@@ -430,10 +428,9 @@ class _DefaultsMixin:
                         peak_indices_array,
                     )
                 )
-                start_indices, end_indices, _valid_starts, _valid_ends, valid_peaks = (
+                start_indices, end_indices, _valid_starts, _valid_ends, _valid_peaks = (
                     computed["event_detection"]["onoffpeak_baseline_crossing"]
                 )
-                start_end_validity = np.asarray(valid_peaks, dtype=bool)
             slope_window_samples = max(1, int(slope_window_seconds * fs))
             if enabled(("event_detection", "onoffpeak_slope_extrapolation")):
                 computed["event_detection"]["onoffpeak_slope_extrapolation"] = (
@@ -453,17 +450,14 @@ class _DefaultsMixin:
                         end_indices,
                     )
                     computed["features"]["time_to_peak"] = (
-                        _mask_invalid(absolute_times, start_end_validity),
-                        _mask_invalid(percent_times, start_end_validity),
+                        absolute_times,
+                        percent_times,
                     )
                 if enabled(("features", "pseudo_slope")):
-                    computed["features"]["pseudo_slope"] = _mask_invalid(
-                        pseudo_slope(
-                            envelope,
-                            start_indices,
-                            end_indices,
-                        ),
-                        start_end_validity,
+                    computed["features"]["pseudo_slope"] = pseudo_slope(
+                        envelope,
+                        start_indices,
+                        end_indices,
                     )
                 if enabled(("features", "amplitude")):
                     computed["features"]["amplitude"] = amplitude_at_peaks(
@@ -472,15 +466,12 @@ class _DefaultsMixin:
                         baseline,
                     )
                 if enabled(("features", "time_product")):
-                    computed["features"]["time_product"] = _mask_invalid(
-                        window_integral(
-                            envelope,
-                            fs,
-                            start_indices,
-                            end_indices,
-                            baseline,
-                        ),
-                        start_end_validity,
+                    computed["features"]["time_product"] = window_integral(
+                        envelope,
+                        fs,
+                        start_indices,
+                        end_indices,
+                        baseline,
                     )
                 if enabled(("features", "area_under_baseline")):
                     areas, references = area_under_baseline(
@@ -493,8 +484,8 @@ class _DefaultsMixin:
                         baseline,
                     )
                     computed["features"]["area_under_baseline"] = (
-                        _mask_invalid(areas, start_end_validity),
-                        _mask_invalid(references, start_end_validity),
+                        areas,
+                        references,
                     )
             else:
                 skipped["features"] = (

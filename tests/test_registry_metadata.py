@@ -314,6 +314,7 @@ _AUDITED_SESSION_STEPS = frozenset(
         "emg.interpeak_dist",
         "emg.load",
         "emg.moving_baseline",
+        "emg.onoffpeak_baseline_crossing",
         "emg.percentage_under_baseline",
         "emg.preprocess",
         "emg.slopesum_baseline",
