@@ -83,7 +83,13 @@ become lists) are the two helper members.
 - Cross-modality: `session.compute_multimodal_parameters()` computes timing
   delays, breath-duration differences, and event-agreement scores from
   `session.linked_breaths` - see [synchronization.md](synchronization.md).
-  These are deliberately timing-only metrics. A cross-modality index that
+  These are deliberately timing-only metrics: they read breath start/end
+  times and nothing else. Both the delay and the event-agreement fraction are
+  checks on detection and synchronization rather than outcome measures: the
+  delay subtracts two breath anchors that are not the same kind of landmark
+  (a detected EIT breath start against an EMG start built from the envelope
+  peak by a fixed half-window), so nothing establishes that it measures a
+  physiological interval. A cross-modality index that
   jointly analyzes signal *values* rather than breath timing (e.g. an
   EMG-effort-to-EIT-pendelluft coupling index) is genuinely new science with
   no upstream equivalent, which is out of scope for Stage 2 - see
