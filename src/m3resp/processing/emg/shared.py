@@ -253,7 +253,7 @@ def _validate_incompatible_kwargs(
         case 1: arg1 is a named argument, arg2 is passed in via kwargs
         ```python
         def my_function(arg1=None, **kwargs):
-            arg1 = _validate_incompatible_kwargs(
+            used_arg_name, arg_value = _validate_incompatible_kwargs(
                 "arg1", "arg2", arg_value1=arg1, default_value=0.1, **kwargs
             )
             ```
@@ -261,7 +261,7 @@ def _validate_incompatible_kwargs(
         case 2: both arg1 and arg2 are named arguments
         ```python
         def my_function(arg1=None, arg2=None):
-            arg1 = _validate_incompatible_kwargs(
+            used_arg_name, arg_value = _validate_incompatible_kwargs(
                 "arg1", "arg2", arg_value1=arg1, arg_value2=arg2, default_value=0.1
             )
         ```
@@ -269,7 +269,7 @@ def _validate_incompatible_kwargs(
         case 3: both arg1 and arg2 are passed in via kwargs
         ```python
         def my_function(**kwargs):
-            arg1 = _validate_incompatible_kwargs(
+            used_arg_name, arg_value = _validate_incompatible_kwargs(
                 "arg1", "arg2", default_value=0.1, **kwargs
             )
         ```
@@ -279,55 +279,12 @@ def _validate_incompatible_kwargs(
     if arg_value1 is not None and arg_value2 is not None:
         msg_0 = f"{arg_name1} and {arg_name2} cannot both be set at the same time."
         raise MutuallyExclusiveArgsError(msg_0)
-    return arg_value1 or arg_value2 or default_value
-
-
-@overload
-def _validate_to_samples(
-    in_seconds: float | None,
-    in_samples: int | None,
-    *,
-    default_seconds: float = 1.0,
-    sampling_frequency: float = 1.0,
-) -> int: ...
-@overload
-def _validate_to_samples(
-    in_seconds: float | None,
-    in_samples: int | None,
-    *,
-    default: int = 1,
-) -> int: ...
-def _validate_to_samples(
-    in_seconds: float | None,
-    in_samples: int | None,
-    *,
-    default: int | None = None,
-    default_seconds: float | None = None,
-    sampling_frequency: float | None = None,
-) -> int:
-    """Validate and convert a time-based or sample-based parameter to samples.
-
-    Some m3resp functions accept parameters in either seconds or samples.
-    This function validates that only one of the two is provided,
-    and converts the time-based parameter to samples using the sampling frequency.
-    If no sample frequency is provided, it defaults to 1Hz.
-
-    Args:
-        in_seconds (float | None): Time-based parameter in seconds.
-        in_samples (int | None): Sample-based parameter in samples.
-        default (int | None): Default value for the parameter.
-        default_seconds (float): Default value for the time-based parameter.
-        sampling_frequency (float | None): Sampling frequency in Hz.
-
-    Returns:
-        int: The parameter converted to samples.
-    """
-    if in_samples is None:
-        if default is not None:
-            in_samples = default
-        elif default_seconds is not None and sampling_frequency is not None:
-            in_samples = int(sampling_frequency * (in_seconds or default_seconds))
-    return in_samples or 1
+    if arg_value1 is not None:
+        return arg_value1
+    if arg_value2 is not None:
+        return arg_value2
+    return default_value
+    # return arg_value1 or arg_value2 or default_value
 
 
 def _require_sampling_frequency(sample_frequency: float | None) -> float:

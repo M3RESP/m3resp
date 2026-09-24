@@ -253,7 +253,7 @@ def detect_ventilator_breath_peaks(
     )
 
 
-def detect_occluded_breath_peaks(  # noqa: PLR0913
+def detect_occluded_breath_peaks(
     pressure: np.ndarray,
     *,
     sample_frequency: float,
@@ -263,8 +263,7 @@ def detect_occluded_breath_peaks(  # noqa: PLR0913
     prominence_factor: float = 0.8,
     min_width_seconds: float | None = None,
     distance_seconds: float | None = None,
-    min_width_s: int | None = None,
-    distance_s: int | None = None,
+    **kwargs,
 ) -> np.ndarray:
     """Find occlusion manoeuvres in ventilator pressure data.
 
@@ -283,8 +282,12 @@ def detect_occluded_breath_peaks(  # noqa: PLR0913
         prominence_factor (float): Multiplier in setting the minimum peak prominence.
         min_width_seconds (float, optional): Minimum peak width in seconds.
         distance_seconds (float, optional): Minimum interpeak distance in seconds.seconds
-        min_width_s (int, optional): Back-compat alias for min_width_seconds.
-        distance_s (int, optional): Back-compat alias for distance_seconds.
+        kwargs: ReSurfEMG backwards-compatible alternative keyword arguments for
+            `min_width_seconds` and `distance_seconds`:
+            - `min_width_s` (int, optional): Minimum peak width in seconds.
+                Mutually exclusive with `min_width_seconds`.
+            - `distance_s` (int, optional): Minimum interpeak distance in seconds.
+                Mutually exclusive with `distance_seconds`.
 
     Returns:
         numpy.ndarray: List of Pocc peak indices.
@@ -294,30 +297,28 @@ def detect_occluded_breath_peaks(  # noqa: PLR0913
         end_index = len(pressure) - 1
 
     sample_frequency = _require_sampling_frequency(sample_frequency)
-    _validate_incompatible_kwargs(
-        arg_name1="min_width_seconds",
-        arg_name2="min_width_s",
-        arg_value1=min_width_seconds,
-        arg_value2=min_width_s,
+    min_width_seconds = float(
+        _validate_incompatible_kwargs(
+            arg_name1="min_width_seconds",
+            arg_name2="min_width_s",
+            arg_value1=min_width_seconds,
+            # arg_value2=min_width_s,
+            default_value=0.1,
+            kwargs=kwargs,
+        )
     )
-    _validate_incompatible_kwargs(
-        arg_name1="distance_seconds",
-        arg_name2="distance_s",
-        arg_value1=distance_seconds,
-        arg_value2=distance_s,
+    distance_seconds = float(
+        _validate_incompatible_kwargs(
+            arg_name1="distance_seconds",
+            arg_name2="distance_s",
+            arg_value1=distance_seconds,
+            # arg_value2=distance_s,
+            default_value=0.5,
+            kwargs=kwargs,
+        )
     )
-    min_width_samples = _validate_to_samples(
-        min_width_seconds,
-        min_width_s,
-        default_seconds=0.1,
-        sampling_frequency=sample_frequency,
-    )
-    distance_samples = _validate_to_samples(
-        distance_seconds,
-        distance_s,
-        default_seconds=0.5,
-        sampling_frequency=sample_frequency,
-    )
+    min_width_samples = int(sample_frequency * min_width_seconds)
+    distance_samples = int(sample_frequency * distance_seconds)
 
     prominence = prominence_factor * np.abs(peep - min(pressure))
     height = prominence - peep
