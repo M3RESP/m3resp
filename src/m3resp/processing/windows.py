@@ -9,7 +9,7 @@ Portions of this module are derived from ReSurfEMG.
     Revision:   m3resp-integration (c63668689030e4581d5f985e7d09d3a8c01e7a77)
     Original:   resurfemg/preprocessing/envelope.py::full_rolling_rms,
                 naive_rolling_rms, full_rolling_arv, rolling_rms_ci, rolling_arv_ci;
-                resurfemg/postprocessing/features.py::running_smoother
+                resurfemg/helper_functions/math_operations.py::running_smoother
     Copyright:  Copyright (c) 2022 Netherlands eScience Center and
                 University of Twente
     License:    Apache License, Version 2.0
@@ -17,6 +17,21 @@ Portions of this module are derived from ReSurfEMG.
 Modified for M3RESP:
     - `full_rolling_rms`/`full_rolling_arv` renamed to `rolling_rms`/`rolling_arv`.
     - Parameters renamed and reorganized as keyword-only arguments.
+
+Portions of this module are derived from eitprocessing.
+
+    Source:     https://github.com/EIT-ALIVE/eitprocessing
+    Revision:   1.8.7
+    Original:   eitprocessing/features/moving_average.py::MovingAverage.apply
+    Copyright:  Copyright (c) Netherlands eScience Center and Erasmus MC
+    License:    Apache License, Version 2.0
+
+Modified for M3RESP:
+    - Extracted from the `MovingAverage` class into the free function
+      `moving_average`, taking its window size and padding as keyword-only
+      arguments.
+    - `rolling_envelope` below is independent M3RESP code, dispatching to the
+      named envelope primitive.
 
 The original copyright and license notices are retained per Apache-2.0 §4.
 Full attribution notice: see top-level NOTICE.md.
@@ -55,7 +70,21 @@ def moving_average(
     window_function: Callable[[int], np.ndarray] | None = None,
     padding_type: PaddingType = "edge",
 ) -> np.ndarray:
-    """Apply an EIT-style centered moving average with padded boundaries."""
+    """Apply an EIT-style centered moving average with padded boundaries.
+
+    Args:
+        values (np.ndarray): Input data to apply the moving average to.
+        window_size (int): The size in samples of the moving average window.
+            Must be a positive integer. If the passed value is an even number,
+            it will be converted to the next odd integer.
+        window_function (Callable[[int], np.ndarray] | None): A function that generates
+            the window weights. If None, a uniform window is used.
+        padding_type (PaddingType): The type of padding to use at the boundaries.
+            Defaults to "edge". See `np.pad` for available options.
+
+    Returns:
+        np.ndarray: The moving average of the input data.
+    """
 
     data = np.asarray(values)
     window_size = _normalize_odd_window_size(window_size)
@@ -74,7 +103,18 @@ def moving_average(
 
 
 def running_smoother(values: np.ndarray) -> np.ndarray:
-    """Smooth values with ReSurfEMG's running smoother."""
+    """Smooth the rectified signal with ReSurfEMG's running smoother.
+
+    A moving average of the absolute values over a window of one tenth of
+    the input length. The last window - 1 samples, which the average cannot
+    reach, are filled with zeros, so the output has the input's length.
+
+    Args:
+        values (np.ndarray): Input data to smooth.
+
+    Returns:
+        np.ndarray: Smoothed, rectified data.
+    """
 
     data = np.asarray(values)
     n_samples = len(data) // 10
@@ -90,7 +130,19 @@ def rolling_rms(
     center: bool = True,
     min_periods: int = 1,
 ) -> np.ndarray:
-    """Compute a rolling root-mean-square envelope."""
+    """Compute the full rolling root-mean-square envelope.
+
+    Args:
+        values (np.ndarray): Input data to compute the RMS envelope for.
+        window_length (int): The size in samples of the rolling window.
+        center (bool): If True, the window is centered around each point. If False,
+            the window is right-aligned. Defaults to True.
+        min_periods (int): The minimum number of periods required to compute the rolling
+            mean. Defaults to 1.
+
+    Returns:
+        np.ndarray: The rolling RMS envelope.
+    """
 
     squared = pd.Series(np.power(values, 2))
     return np.asarray(
@@ -105,7 +157,16 @@ def rolling_rms(
 
 
 def naive_rolling_rms(values: np.ndarray, *, window_length: int) -> np.ndarray:
-    """Compute a cumulative-sum RMS envelope without edge padding."""
+    """Compute a cumulative-sum RMS envelope without edge padding.
+
+    Args:
+        values (np.ndarray): Input data to compute the RMS envelope for.
+        window_length (int): The size in samples of the rolling window.
+
+    Returns:
+        np.ndarray: The rolling RMS envelope. Without padding it is
+            `window_length` samples shorter than `values`.
+    """
 
     cumulative = np.cumsum(np.abs(values) ** 2)
     return np.sqrt(
@@ -120,7 +181,19 @@ def rolling_arv(
     center: bool = True,
     min_periods: int = 1,
 ) -> np.ndarray:
-    """Compute a rolling average rectified value envelope."""
+    """Compute a rolling average rectified value envelope.
+
+    Args:
+        values (np.ndarray): Input data to compute the ARV envelope for.
+        window_length (int): The size in samples of the rolling window.
+        center (bool): If True, the window is centered around each point. If False,
+            the window is right-aligned. Defaults to True.
+        min_periods (int): The minimum number of periods required to compute the rolling
+            mean. Defaults to 1.
+
+    Returns:
+        np.ndarray: The rolling ARV envelope.
+    """
 
     absolute = pd.Series(np.abs(values))
     return np.asarray(
@@ -153,6 +226,19 @@ def rolling_envelope(
     that (re)computes an envelope - preprocessing and the post-ECG-removal
     recomputation - can be handed one method choice instead of each hard-coding
     its own.
+
+    Args:
+        values (np.ndarray): Input data to compute the envelope for.
+        window_length (int): The size in samples of the rolling window.
+        method (str): The envelope method to use. Must be one of "rms" or "arv".
+            Defaults to "rms".
+        center (bool): If True, the window is centered around each point. If False,
+            the window is right-aligned. Defaults to True.
+        min_periods (int): The minimum number of periods required to compute the rolling
+            mean. Defaults to 1.
+
+    Returns:
+        np.ndarray: The rolling envelope computed using the specified method.
     """
 
     normalized = str(method).lower()
@@ -175,7 +261,21 @@ def rolling_rms_ci(
     center: bool = True,
     min_periods: int = 1,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Estimate rolling confidence intervals for RMS values."""
+    """Estimate rolling confidence intervals for RMS values.
+
+    Args:
+        values (np.ndarray): Input data to compute the RMS envelope for.
+        window_length (int): The size in samples of the rolling window.
+        alpha (float): Significance level for the confidence interval. Defaults to 0.05.
+        center (bool): If True, the window is centered around each point. If False,
+            the window is right-aligned. Defaults to True.
+        min_periods (int): The minimum number of periods required to compute the rolling
+            mean. Defaults to 1.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: The lower and upper bounds of the confidence
+            interval.
+    """
 
     stats = _scipy_stats()
     squared = pd.Series(np.power(values, 2))
@@ -209,7 +309,21 @@ def rolling_arv_ci(
     center: bool = True,
     min_periods: int = 1,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Estimate rolling confidence intervals for ARV values."""
+    """Estimate rolling confidence intervals for ARV values.
+
+    Args:
+        values (np.ndarray): Input data to compute the ARV envelope for.
+        window_length (int): The size in samples of the rolling window.
+        alpha (float): Significance level for the confidence interval. Defaults to 0.05.
+        center (bool): If True, the window is centered around each point. If False,
+            the window is right-aligned. Defaults to True.
+        min_periods (int): The minimum number of periods required to compute the rolling
+            mean. Defaults to 1.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: The lower and upper bounds of the confidence
+            interval.
+    """
 
     stats = _scipy_stats()
     absolute = pd.Series(np.abs(values))

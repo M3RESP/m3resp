@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter, _ventilator_signals
+from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter, ventilator_signals
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.core.session import M3Session
 
@@ -89,36 +89,38 @@ class TestPositionalProducersNowResolveByName:
     def test_emg_postprocessing_finds_channels_by_label(self):
         # Columns deliberately out of the historical pressure/flow/volume
         # order: only name resolution gets these right.
-        signals = _ventilator_signals(_payload(["Volume", "Paw", "Flow"]))
+        signals = ventilator_signals(_payload(["Volume", "Paw", "Flow"]))
         assert signals is not None
         assert signals["channel_indices"] == {"pressure": 1, "flow": 2, "volume": 0}
 
     def test_an_unlabelled_recording_still_uses_the_old_positions(self):
         payload = {"array": np.vstack([_wave(i + 1) for i in range(3)])}
-        signals = _ventilator_signals(payload, fs=FS)
+        signals = ventilator_signals(payload, fs=FS)
         assert signals is not None
         assert signals["channel_indices"] == {"pressure": 0, "flow": 1, "volume": 2}
 
     def test_explicit_indices_still_win(self):
-        signals = _ventilator_signals(
+        signals = ventilator_signals(
             _payload(["Paw", "Flow", "Volume"]), volume_channel=0
         )
         assert signals is not None
         assert signals["channel_indices"]["volume"] == 0
 
     def test_no_ventilator_is_still_no_signals(self):
-        assert _ventilator_signals(None) is None
+        assert ventilator_signals(None) is None
 
     def test_a_missing_array_is_still_an_error(self):
         with pytest.raises(TypeError, match="needs an array"):
-            _ventilator_signals({"metadata": {"fs": FS}})
+            ventilator_signals({"metadata": {"fs": FS}})
 
     def test_a_missing_sample_rate_is_still_an_error(self):
         with pytest.raises(TypeError, match="needs a sampling rate"):
-            _ventilator_signals({"array": np.vstack([_wave()] * 3), "metadata": {}})
+            ventilator_signals({"array": np.vstack([_wave()] * 3), "metadata": {}})
 
     def test_the_pipeline_step_can_select_channels(self):
-        from m3resp.workflows.steps.emg import ventilator_channels
+        from m3resp.workflows.steps.ventilator.loading import (
+            channels as ventilator_channels,
+        )
 
         result = ventilator_channels(
             _payload(["Paw", "Flow", "Volume", "esophageal pressure (pod)"]),

@@ -47,6 +47,7 @@ from m3resp.processing.quality import (
     threshold_flag,
     timing_window_flag,
 )
+from m3resp.processing.ventilator import estimate_peep
 from m3resp.processing.windows import (
     ENVELOPE_METHODS,
     moving_average,
@@ -74,6 +75,7 @@ __all__ = [
     "detect_peaks",
     "detect_peaks_above_moving_average",
     "detect_ventilator_breath_peaks",
+    "estimate_peep",
     "estimated_ecg_subtraction",
     "fraction_flag",
     "harmonic_notch_filter",
