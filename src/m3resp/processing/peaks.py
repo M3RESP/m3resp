@@ -231,16 +231,16 @@ def detect_ventilator_breath_peaks(
         width=width_samples,
     )
     threshold_refined = _validate_incompatible_kwargs(
-        "threshold_refined",
-        threshold_refined,
-        "threshold_new",
+        arg_name1="threshold_refined",
+        arg_value1=threshold_refined,
+        arg_name2="threshold_new",
         default_value=0.5 * np.percentile(volume_slice[first_pass], 90),
         **kwargs,
     )
     prominence_refined = _validate_incompatible_kwargs(
-        "prominence_refined",
-        prominence_refined,
-        "prominence_new",
+        arg_name1="prominence_refined",
+        arg_value1=prominence_refined,
+        arg_name2="prominence_new",
         default_value=0.5 * np.percentile(volume_slice, 90),
         **kwargs,
     )
@@ -295,12 +295,16 @@ def detect_occluded_breath_peaks(  # noqa: PLR0913
 
     sample_frequency = _require_sampling_frequency(sample_frequency)
     _validate_incompatible_kwargs(
-        min_width_seconds=min_width_seconds,
-        min_width_s=min_width_s,
+        arg_name1="min_width_seconds",
+        arg_name2="min_width_s",
+        arg_value1=min_width_seconds,
+        arg_value2=min_width_s,
     )
     _validate_incompatible_kwargs(
-        distance_seconds=distance_seconds,
-        distance_s=distance_s,
+        arg_name1="distance_seconds",
+        arg_name2="distance_s",
+        arg_value1=distance_seconds,
+        arg_value2=distance_s,
     )
     min_width_samples = _validate_to_samples(
         min_width_seconds,
