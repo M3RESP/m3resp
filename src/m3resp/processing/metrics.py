@@ -290,9 +290,20 @@ def respiratory_rate_from_indices(
         tuple:
             - float: Median respiratory rate.
             - numpy.ndarray: Breath-to-breath respiratory rate, NaN for outliers.
+
+        With fewer than two breaths there is no time between breaths to
+        measure, so this warns and returns NaN and an empty array.
     """
 
     breath_indices = np.asarray(indices)
+    if breath_indices.size < 2:
+        warnings.warn(
+            f"Respiratory rate needs at least two breaths; got {breath_indices.size}. "
+            "Returning NaN.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return float("nan"), np.array([], dtype=float)
     breath_interval = breath_indices[1:] - breath_indices[:-1]
     breath_to_breath = 60 * sample_frequency / breath_interval
     outlier_threshold = outlier_factor * np.percentile(
