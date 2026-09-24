@@ -84,7 +84,7 @@ The four keys for each step:
 
 - **`uses`** — the registered step name.
 - **`in`** — maps a step's parameter name to the context key it reads from. Leave it out to use the step's default binding.
-- **`with`** — static parameters passed directly to the step function. A string value starting with `@` is resolved from `inputs`; this applies recursively inside lists and mappings, so `with: {paths: ["@a", "@b"]}` resolves both entries. Write `@@text` to get the literal string `@text` instead of a reference. A parameter a step declares as a `path` (e.g. `eit.load`'s `file`) resolves relative to the spec file's own directory, not the process working directory — same as `outputs.dir` below — after any `@` reference is substituted.
+- **`with`** — static parameters passed directly to the step function. A string value starting with `@` is resolved from `inputs`; this applies recursively inside lists and mappings, so `with: {paths: ["@a", "@b"]}` resolves both entries. Write `@@text` to get the literal string `@text` instead of a reference. A parameter a step declares as a `path` (e.g. `eit.load`'s `file_path`) resolves relative to the spec file's own directory, not the process working directory — same as `outputs.dir` below — after any `@` reference is substituted.
 - **`out`** — renames a step's natural output names to different context keys. Useful when you want to run the same step twice and keep both outputs.
 
 ### Top-level sections
@@ -101,7 +101,7 @@ The four keys for each step:
 
 A spec with no top-level `schema_version` key is parsed by the permissive legacy parser: unknown top-level/step keys are silently ignored, and a non-boolean `outputs.*` flag (e.g. `"yes"`) is coerced with `bool()` behind a `FutureWarning` rather than rejected. This exists for backward compatibility with specs written before Stage 2; new specs should set `schema_version: 1`.
 
-A versioned spec (`schema_version: 1`) is parsed strictly by a pydantic model: an unknown key anywhere (top level, a step, `outputs`, `experiment`, `execution`) is a hard `PipelineSpecError`, every boolean must be a real YAML/JSON boolean, and `outputs.mode` must be set explicitly whenever `outputs.dir` is set (see "Output modes" below — a legacy spec may still omit it and let the engine infer it). Both parsers build the same `PipelineSpec`/`StepSpec` dataclasses, so the engine, `compile_pipeline`, and every step behave identically either way; only what gets accepted at parse time differs. All five example specs under `examples/` use `schema_version: 1`, except the two smaller introductory ones (`multimodal_example`, `annemijn_multimodal`) which are kept legacy on purpose, as a lower-ceremony starting point.
+A versioned spec (`schema_version: 1`) is parsed strictly by a pydantic model: an unknown key anywhere (top level, a step, `outputs`, `experiment`, `execution`) is a hard `PipelineSpecError`, every boolean must be a real YAML/JSON boolean, and `outputs.mode` must be set explicitly whenever `outputs.dir` is set (see "Output modes" below — a legacy spec may still omit it and let the engine infer it). Both parsers build the same `PipelineSpec`/`StepSpec` dataclasses, so the engine, `compile_pipeline`, and every step behave identically either way; only what gets accepted at parse time differs. Four of the six example specs under `examples/` use `schema_version: 1`; the other two are the smaller introductory ones (`multimodal_example`, `annemijn_multimodal`) which are kept legacy on purpose, as a lower-ceremony starting point.
 
 ### Step ids
 
@@ -288,17 +288,16 @@ Every step also writes its raw/compatibility output(s) unchanged (existing consu
 
 | Step | Reads (besides `session`) | Key parameters | Native writes | Implementation |
 |---|---|---|---|---|
-| `emg.load` | — | `file`, `loader_options` | `raw_emg_signals` (one `Signal`/channel) | upstream loader |
+| `emg.load` | — | `file_path`, `loader_options` | `raw_emg_signals` (one `Signal`/channel) | upstream loader |
 | `emg.preprocess` | — | `channel`, `high_pass_hz` (default 20), `low_pass_hz` (default 500, Nyquist-capped), `envelope_window_seconds`, `envelope_method` (`"rms"` default / `"arv"`), `notch_base_frequency`, `notch_quality_factor` | — (raw `processed_emg` dict) | upstream + native notch filter |
 | `emg.ecg_detect_peaks` | `processed_emg` | `ecg_channel`, `source` (default `"raw_channel"`), `peak_fraction`, `peak_width_seconds`, `peak_distance_seconds`, `bandpass_filter` | `ecg_peak_events` (one `Event`/peak), `ecg_peak_count_result` | upstream |
 | `emg.ecg_gating` | `processed_emg`, `ecg_peak_indices` | `source` (default `"filtered"`), `gate_width_seconds` **xor** `gate_width_samples`, `fill_method` (0-3), `envelope_window_seconds`, `envelope_method` (defaults to preprocessing's) | `ecg_gated_signal`, `ecg_gate_mask_result` (array) | upstream |
-| `emg.ecg_estimated_subtraction` | `processed_emg` | 4--50 Hz detection band, smoothing/threshold windows, QRS window, inter-QRS tolerance | cleaned/estimated/detection/threshold signals, QRS events, template arrays | native (`m3resp.processing.ecg`) |
 | `emg.ecg_wavelet_denoising` | `processed_emg`, `ecg_peak_indices` | `source`, `hard_thresholding`, `levels`, `wavelet_type`, `fixed_threshold`, `envelope_window_seconds` | `ecg_wavelet_cleaned_signal`, `wavelet_decomposition_result`, `wavelet_thresholds_result`, `wavelet_gate_mask_result` (all arrays) | upstream |
-| `emg.detect_breaths` | — | `min_breath_width_seconds`, `half_window_seconds`, `prominence_factor`, `threshold` | `emg_breath_events` | native |
+| `emg.detect_breaths` | `baseline` (optional; from `emg.moving_baseline`/`emg.slopesum_baseline`) | `min_breath_width_seconds`, `half_window_seconds`, `prominence_factor`, `threshold` | `emg_breath_events` | native |
 | `emg.moving_baseline` | `processed_emg` | `window_seconds`, `step_seconds`, `percentile` (0-100) | `baseline_signal` | upstream |
 | `emg.slopesum_baseline` | `processed_emg` | `window_seconds`, `step_seconds`, `percentile`, `augmented_percentile`, `moving_average_seconds`, `percentile_window_seconds` | `baseline_signal`, `baseline_running_mean_signal`, `baseline_running_std_signal`, `slopesum_baseline_native_detail` (NumPy-only) | upstream |
-| `ventilator.pocc_intervals` | `ventilator_signals`, `pocc_indices` | `peep` (defaults to the pressure median) | `pocc_events` (`BreathEvent`, `modality="pressure"`) | native (`onoff_from_baseline_crossings`) |
-| `ventilator.pocc_time_product` | `ventilator_signals`, `pocc_start_indices`, `pocc_end_indices` | `peep` | `pocc_time_product_result` (unit `<pressure-unit>*s`) | native (`window_integral`) |
+| `ventilator.pocc_intervals` | `ventilator_signals`, `pocc_indices` | `baseline_window_seconds` (default 7.5), `baseline_step_seconds` (default 0.2), `baseline_percentile` (default 33) - a moving baseline of the airway pressure | `pocc_events` (`BreathEvent`, `modality="pressure"`), `pressure_baseline` | native (`onoff_from_baseline_crossings`) |
+| `ventilator.pocc_time_product` | `ventilator_signals`, `pocc_start_indices`, `pocc_end_indices`, `pressure_baseline`, `pocc_indices` | `include_aub` (default `true`, adds the area under the baseline as ReSurfEMG's PTPocc does), `aub_window_seconds` (default 5) | `pocc_time_product_result` (unit `<pressure-unit>*s`) | native (`window_integral`) |
 | `emg.snr_pseudo` | `processed_emg`, `peak_indices`, `baseline` | `minimum_snr` (optional) | `snr_pseudo_results`; `snr_pseudo_flags` only if `minimum_snr` is set | upstream |
 | `emg.percentage_under_baseline` | `processed_emg`, `peak_indices`, `start_indices`, `end_indices`, `baseline` | `aub_window_seconds`, `aub_threshold` | `percentage_under_baseline_results`, `_flags` | upstream |
 | `emg.detect_local_high_aub` | `area_under_baseline`, `peak_indices` | `threshold_percentile`, `threshold_factor` | `_flags`, `detect_local_high_aub_threshold_result` | upstream |
@@ -321,7 +320,7 @@ Run `m3resp steps` for the full list including the pre-existing feature steps (`
 
 ### ECG-removal alternatives
 
-`emg.ecg_gating`, `emg.ecg_estimated_subtraction`, and `emg.ecg_wavelet_denoising` all naturally write `processed_emg_after_ecg`. Pick one; a pipeline uses output renaming to keep the downstream key `processed_emg`:
+`emg.ecg_gating` and `emg.ecg_wavelet_denoising` both naturally write `processed_emg_after_ecg`. Pick one; a pipeline uses output renaming to keep the downstream key `processed_emg`:
 
 ```yaml
 - uses: emg.preprocess
@@ -330,92 +329,10 @@ Run `m3resp steps` for the full list including the pre-existing feature steps (`
 - uses: emg.ecg_detect_peaks
   in: { processed_emg: processed_emg_before_ecg }
 
-- uses: emg.ecg_gating  # or emg.ecg_estimated_subtraction / ecg_wavelet_denoising
+- uses: emg.ecg_gating  # or emg.ecg_wavelet_denoising
   in: { processed_emg: processed_emg_before_ecg }
   out: { processed_emg_after_ecg: processed_emg }
 ```
-
-Estimated ECG Subtraction detects its QRS locations internally and therefore does not need the preceding `emg.ecg_detect_peaks` step. It also needs ECG frequency content that the default 20 Hz EMG high-pass removes.
-
-#### Estimated ECG Subtraction details
-
-`emg.ecg_estimated_subtraction` is a paper-based implementation of the method from Jonkman et al., *Biomedical Signal Processing and Control* 69 (2021), 102861, [doi:10.1016/j.bspc.2021.102861](https://doi.org/10.1016/j.bspc.2021.102861). It is intended for offline research processing and does not need a separate ECG reference channel.
-
-The implementation follows the paper's eleven EES steps: fourth-order 4--50 Hz filtering; rectification; 16.7 ms smoothing; a dynamic threshold from 0.5 s mid-ranges smoothed over 12.5 ms; threshold-crossing QRS candidates; periodic rejection/restoration; Q/R/S localization; 0.3 s windows; separate Q--R and R--S normalization; average-template rescaling; and subtraction.
-
-Use paper-like preprocessing that retains the ECG detection band:
-
-```yaml
-- uses: emg.preprocess
-  with:
-    channel: 1
-    high_pass_hz: 30
-    low_pass_hz: 400
-    notch_base_frequency: 50
-    envelope_window_seconds: 0.5
-  out: { processed_emg: processed_emg_before_ecg }
-
-- uses: emg.ecg_estimated_subtraction
-  in: { processed_emg: processed_emg_before_ecg }
-  out: { processed_emg_after_ecg: processed_emg }
-```
-
-The main parameters are:
-
-| Parameter | Default | Meaning |
-|---|---:|---|
-| `source` | `filtered` | Key in `processed_emg` to clean |
-| `detection_low_hz` / `detection_high_hz` | 4 / 50 Hz | ECG-promotion band |
-| `filter_order` | 4 | Butterworth order |
-| `detection_smoothing_seconds` | 0.0167 s | Rectified-signal smoothing |
-| `threshold_interval_seconds` | 0.5 s | Mid-range block size |
-| `threshold_smoothing_seconds` | 0.0125 s | Threshold smoothing |
-| `qrs_window_seconds` | 0.3 s | Template window centered on R |
-| `inter_qrs_tolerance` | 0.66 | Fractional median inter-QRS tolerance |
-| `minimum_template_beats` | 3 | Minimum complete beats for averaging |
-| `minimum_qrs_interval_seconds` | 0.25 s | Fast-rate safety bound; `None` disables it |
-| `maximum_qrs_interval_seconds` | 2.0 s | Slow-rate safety bound; `None` disables it |
-| `envelope_window_seconds` | inherited | Cleaned-envelope window |
-
-The step returns the cleaned EMG, reconstructed ECG, detection signal, dynamic threshold, QRS events/R indices, candidate/corrected/rejected/restored indices, Q/R/S indices, normalized beats, and average template. These signals and arrays are retained in the session and shared array export so the subtraction can be reviewed.
-
-Before using the result for breath timing or amplitude measurements, confirm that R-wave count and intervals are plausible, markers coincide with ECG rather than EMG bursts, the estimated ECG is close to zero between template windows, and subtraction does not remove respiratory EMG.
-
-If the median corrected interval falls outside 0.25--2.0 seconds (240--30 beats/min), the step raises before updating the session. Change or disable these bounds only when the expected cardiac rate is known.
-
-Some details are not mathematically specified in the article. This implementation makes the following explicit choices:
-
-- Input amplitude means peak-to-peak amplitude. This scaling does not change crossings because the threshold is calculated from the same scaled signal.
-- Candidates closer than `(1 - inter_qrs_tolerance) * median_interval` are treated as duplicate/false detections and the stronger candidate is kept.
-- Missing beats are restored at the strongest above-threshold sample in the expected interval.
-- Separate affine Q--R and R--S transformations map Q or S to zero and R to one before averaging.
-- Overlapping reconstructed windows are averaged rather than summed.
-
-The method assumes reasonably stable, positive-R ECG morphology. Arrhythmias, catheter movement, inverted R waves, changes in Q--R/R--S timing, or ECG weaker than EMG in the detection band may reduce performance. It accepts one already selected EMGdi channel and does not implement the paper's earlier multielectrode electrical-active-region selection and double subtraction.
-
-Software behavior is covered by deterministic synthetic tests, but this is not yet clinical validation against the authors' EMGdi recordings or MATLAB code. The committed surface-EMG fixture is useful for integration testing, not as validation for this esophageal EMGdi method.
-
-An interactive Marimo walkthrough recreates the deterministic test signal and plots every detection, template, and subtraction stage in a shared-time-axis stack:
-
-```bash
-.venv/bin/marimo edit tools/visualization_tools/estimated_ecg_subtraction.py
-```
-
-To apply the existing wavelet cleaner to residual ECG, reuse the EES R indices:
-
-```yaml
-- uses: emg.ecg_estimated_subtraction
-  in: { processed_emg: processed_emg_before_ecg }
-  out: { processed_emg_after_ecg: processed_emg_after_ees }
-
-- uses: emg.ecg_wavelet_denoising
-  in:
-    processed_emg: processed_emg_after_ees
-    ecg_peak_indices: ees_r_peak_indices
-  out: { processed_emg_after_ecg: processed_emg }
-```
-
-This optional residual cleaner is not paper-identical: ReSurfEMG uses a stationary/a-trous wavelet transform with configurable db2 defaults and hard or soft thresholds, while the paper reports level-five db4 decomposition with an adaptive sigmoid threshold.
 
 `gating`'s `fill_method` keeps ReSurfEMG's meanings: `0` zeros the gated region, `1` interpolates between its edges (the default), `2` fills with the mean of a neighboring segment, `3` replaces it with a running-RMS estimate. `wavelet_denoising` additionally zero-pads the signal internally to a multiple of `2**levels` for its stationary wavelet transform - the cleaned signal, thresholds, and gate mask are trimmed back to the original length, but the decomposition array (`wavelet_decomposition_result`) stays at the padded length; both lengths are recorded in its metadata (`original_length`/`padded_length`). All four array-valued outputs (gate masks, decomposition, thresholds) go through the same shared `parameter_result_arrays.npz` archive as every other array-valued `ParameterResult` - see "Array export" below.
 
@@ -457,7 +374,7 @@ Array-valued `ParameterResult`s (gate masks, wavelet decomposition/thresholds, b
 | `workflows/registry.py` | `@register_step` decorator and the global step registry. |
 | `workflows/spec.py` | Parse and validate a YAML or JSON spec into typed dataclasses. |
 | `workflows/context.py` | `PipelineContext` — the shared artifact store wrapping an `M3Session`. |
-| `workflows/engine.py` | `run_pipeline` and `run_spec` — bind arguments, validate, execute. |
+| `workflows/engine/` | `run_pipeline` (`execution.py`), `run_spec` (`spec_runner.py`), and spec validation (`diagnostics.py`) — bind arguments, validate, execute. |
 | `workflows/steps/` | Built-in steps for EIT, EMG, metrics, session ops, and export. |
 | `workflows/utils.py` | Shared utilities: signal slicing, JSON writing, summary logging, `resolve_output_dir` (timestamped output directories). |
 | `workflows/summaries.py` | Compact session summaries written to the log after a run. |

@@ -148,10 +148,15 @@ src/m3resp/
 │   └── export.py                       export_store() - one JSON file per table
 │
 ├── adapters/                           Conversion boundary to the legacy packages - see adapters.md
-│   ├── eitprocessing_adapter.py        load/preprocess + to_signals/to_parameters/
+│   ├── eitprocessing_adapter/          load/preprocess + to_signals/to_parameters/
 │   │                                       to_quality_flags (Milestone 2.3)
-│   └── resurfemg_adapter/              same shape, for resurfemg (split by
-│                                           responsibility: core/ecg/baseline/quality/defaults)
+│   ├── resurfemg_adapter/              same shape, for resurfemg (split by
+│   │                                       responsibility: core/ecg/baseline/quality/defaults)
+│   └── ventilator_adapter/             same shape, for ventilator pressure/flow/volume;
+│                                           reads files through the EMG/EIT adapters above
+│
+├── processing/                         Shared, modality-neutral building blocks: filters, peaks,
+│                                           windows, intervals, metrics, quality, ecg
 │
 ├── synchronization/                    Alignment, resampling, breath linking, multimodal
 │   │                                       parameters (Milestone 2.5, see concepts/synchronization.md)
@@ -173,8 +178,12 @@ src/m3resp/
 │   └── steps/                          add a new @register_step here for a custom, composable step
 │       ├── eit/                        eit.* steps, split by pipeline stage
 │       │                                   (filtering/pixel/roi/loading/signals)
-│       └── emg/                        emg.* steps, split by pipeline stage
-│                                           (baseline/ecg_*/features/quality_*/...)
+│       ├── emg/                        emg.* steps, split by pipeline stage
+│       │                                   (baseline/ecg_*/features/quality_*/...)
+│       ├── ventilator/                 ventilator.* steps (loading, breath and Pocc
+│       │                                   detection, quality)
+│       └── sync.py, session.py,        sync.*/session.* (cross-modality timing),
+│           metrics.py, export.py           metric.*, export.* steps
 │
 ├── presets/                            Named, built-in Pipeline presets (Milestone 2.4) - see
 │   │                                       developer/pipeline-contracts.md; NOT the same thing as
@@ -182,7 +191,7 @@ src/m3resp/
 │   ├── eit.py, emg.py, multimodal.py   add a new preset here
 │   └── registry.py                     register_pipeline(name, cls)
 │
-├── modalities/                         Top-level load helpers (load_eit, load_emg)
+├── modalities/                         Recording types and load helpers per modality (EIT, EMG, ventilator)
 ├── export/                             session_export.py (Stage 1 + Milestone 2.6 structured export),
 │                                           tables.py (row-shaping helpers)
 ├── visualization/                      Session overview and synchronization plots
@@ -191,14 +200,14 @@ src/m3resp/
 Rule of thumb for "where does my new EIT/EMG/multimodal functionality go":
 
 1. **A new upstream algorithm you want exposed** -> a method on the adapter
-   (`adapters/*.py`), converting its result to a Layer 1 object via
+   (`adapters/`), converting its result to a Layer 1 object via
    `to_signals`/`to_parameters`/`to_quality_flags`.
 2. **A new computed metric type** (not just a new instance of an existing
    one) -> `data/parameters.py` (`ParameterResult` already covers most cases;
    only add a new class if the concept genuinely isn't a named/valued/
    unit-tagged metric).
 3. **A new composable pipeline step** for the YAML/JSON declarative engine
-   -> `workflows/steps/*.py` with `@register_step`.
+   -> a module under `workflows/steps/` with `@register_step`.
 4. **A new one-call preset** ("run all of EIT/EMG/multimodal processing in
    one call") -> `presets/*.py`, registered in `presets/registry.py`.
 5. **A new low-level, reusable synchronization or multimodal-metric building
@@ -263,7 +272,7 @@ does not need to touch them:
 These keep their name, their method signature, and their place in the
 package map, but what runs inside them changes:
 
-- **`adapters/eitprocessing_adapter.py` and `adapters/resurfemg_adapter/`**:
+- **`adapters/eitprocessing_adapter/`, `adapters/resurfemg_adapter/`, and `adapters/ventilator_adapter/`**:
   today these wrap calls into the `eitprocessing`/`resurfemg` libraries.
   Stage 3 replaces what is inside them, one operation at a time, with calls
   into new native packages: `src/m3resp/eit/io/`, `eit/processing/`,

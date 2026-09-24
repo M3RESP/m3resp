@@ -33,7 +33,7 @@ not `Pipeline` - populate the typed collections (`session.signals`,
 | Preset | `name` | Calls |
 |---|---|---|
 | `EITPipeline` | `"eit"` | `session.preprocess_eit(...)`, `session.detect_eit_breaths(...)` |
-| `EMGPipeline` | `"emg"` | `session.preprocess_emg(...)`, `emg.ecg_detect_peaks` + `emg.ecg_gating`, `session.detect_emg_breaths(...)`, `session.postprocess_emg(...)` |
+| `EMGPipeline` | `"emg"` | `session.preprocess_emg(...)`, `emg.ecg_detect_peaks` + `emg.ecg_gating`, a moving baseline (`session.emg_adapter.moving_baseline`), `session.detect_emg_breaths(...)`, `session.postprocess_emg(...)` |
 | `MultimodalPipeline` | `"multimodal"` | `session.synchronize_raw_modalities(...)`, `session.synchronize_multimodal_breaths(...)` |
 
 `presets/registry.py` maps each `name` to its class via `register_pipeline`/
@@ -52,8 +52,12 @@ methods, because there is no session-level ECG-removal method. Those steps
 already record provenance through `M3Session._record()` and populate the
 typed collections themselves, so this is still "a fixed sequence of
 instrumented calls" and not a second execution engine. It runs by default:
-band-pass -> ECG peak detection -> gating -> envelope -> breath detection ->
-postprocessing. `config={"ecg_removal": {"enabled": False}}` skips it, which
+band-pass -> ECG peak detection -> gating -> envelope -> baseline -> breath
+detection -> postprocessing. The baseline is the quiet level of the envelope
+that the breath-detection threshold is measured against, so it is computed
+before breaths are detected; set it with
+`config={"baseline": {"window_seconds": ..., "step_seconds": ..., "percentile": ...}}`
+(defaults: 30 s window, 1 s step, 33rd percentile). `config={"ecg_removal": {"enabled": False}}` skips ECG removal, which
 is a data-check/exploratory path only - the envelope and every
 amplitude-derived parameter downstream of it stay ECG-contaminated. Pass
 `config={"ecg_detect_peaks": {"ecg_channel": n}}` when a dedicated reference
@@ -78,7 +82,7 @@ when a real batch-processing use case appears.
   seam the `Pipeline` presets use (see `_record_step` in each modality's
   `_shared.py`) - `eit.roi_amplitude_lungspace`, `emg.ecg_gating`, and so on
   all do this. The exception is the small set of pure per-breath feature
-  steps (e.g. `emg.time_to_peak`, `ventilator.features`) that operate on
+  steps (e.g. `emg.time_to_peak`, `emg.amplitude`) that operate on
   already-extracted arrays with no natural collection to write to, and so
   stay stateless. Use this for bespoke or batch workflows where the exact
   sequence of operations varies per project.

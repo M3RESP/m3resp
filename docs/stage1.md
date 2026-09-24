@@ -40,7 +40,7 @@ src/m3resp/
 ├── visualization/ Session overview and synchronization plots
 └── workflows/      Declarative engine, step registry, built-in steps
     ├── steps/     eit.*, emg.*, metric.*, session.*, export.*
-    ├── engine.py  run_pipeline, run_spec, validate_spec
+    ├── engine/    run_pipeline, run_spec, validate_spec
     ├── spec.py    YAML/JSON parser
     ├── registry.py  @register_step
     ├── context.py   PipelineContext (shared artifact blackboard)
@@ -79,6 +79,8 @@ from m3resp import (
     PipelineResult,     # result object returned by run_pipeline / run_spec
     BreathEvent,        # common breath event dataclass
     Event,              # generic event dataclass
+)
+from m3resp.io import (
     load_eit,           # load an EIT recording
     load_emg,           # load an EMG recording
 )
