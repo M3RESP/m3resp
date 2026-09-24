@@ -27,7 +27,6 @@ from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _mask_invalid,
     _per_breath_flags,
     _per_breath_results,
     _record_step,
@@ -352,7 +351,6 @@ def pocc_intervals(
         "ventilator_signals": "ventilator_signals",
         "pocc_start_indices": "pocc_start_indices",
         "pocc_end_indices": "pocc_end_indices",
-        "pocc_interval_validity": "pocc_interval_validity",
         "pressure_baseline": "pressure_baseline",
         "pocc_indices": "pocc_indices",
     },
@@ -377,11 +375,6 @@ def pocc_intervals(
             name="pocc_end_indices",
             artifact_type="index_array",
             description="Pocc manoeuvre end indices from 'ventilator.pocc_intervals'.",
-        ),
-        StepArtifact(
-            name="pocc_interval_validity",
-            artifact_type="boolean_array",
-            description="Per-manoeuvre validity from 'ventilator.pocc_intervals'.",
         ),
         StepArtifact(
             name="pressure_baseline",
@@ -416,7 +409,7 @@ def pocc_intervals(
             name="pocc_time_products",
             artifact_type="array",
             unit="cmH2O*s",
-            description="Pressure-time product per Pocc manoeuvre (NaN where the interval is invalid).",
+            description="Pressure-time product per Pocc manoeuvre, including manoeuvres marked invalid in 'pocc_interval_validity' (their window may overlap a neighbouring manoeuvre).",
         ),
         StepArtifact(
             name="pocc_time_product_result",
@@ -434,7 +427,6 @@ def pocc_time_product(
     pressure_baseline: Any,
     *,
     pocc_indices: Any = None,
-    pocc_interval_validity: Any = None,
     include_aub: bool = True,
     aub_window_seconds: float = 5.0,
 ) -> dict[str, Any]:
@@ -467,8 +459,6 @@ def pocc_time_product(
             reference_values=baseline,
         )
         time_products = time_products + aub
-    if pocc_interval_validity is not None:
-        time_products = _mask_invalid(time_products, pocc_interval_validity)
 
     pressure_unit = ventilator_signals.get("unit") or "cmH2O"
     parameters = {
