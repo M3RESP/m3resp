@@ -168,7 +168,11 @@ def test_multimodal_full_example_runs_end_to_end():
 
     # Full EMG/ventilator chain, through the clinical quality steps.
     assert len(result.value("ecg_peak_indices")) > 0
-    assert len(result.value("emg_breath_events")) > 0
+    # The recording's muscle pressure (p_mus) has 14 breath efforts; the first
+    # is cut off at the start of the EMG, so 13 are detectable. A count well
+    # above this means the detector is picking up noise or heartbeats (as it
+    # did on the weak channel 0).
+    assert len(result.value("emg_breath_events")) == 13
     assert len(result.value("ventilator_breath_indices")) > 0
 
     # Native collections were populated exactly once, not duplicated.

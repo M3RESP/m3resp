@@ -205,7 +205,7 @@
       },
       "uses": "emg.preprocess",
       "with": {
-        "channel": 0,
+        "channel": 1,
         "envelope_window_seconds": 0.5,
         "high_pass_hz": 20
       }
@@ -249,8 +249,7 @@
       "out": {},
       "uses": "emg.detect_breaths",
       "with": {
-        "min_breath_width_seconds": 0.5,
-        "prominence_factor": 0.05
+        "min_breath_width_seconds": 1.0
       }
     },
     {

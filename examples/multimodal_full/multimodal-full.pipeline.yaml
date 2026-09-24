@@ -124,9 +124,11 @@ steps:
   # reference ECG channel here, unlike the data_from_repo fixture), so ECG
   # detection reads it from processed_emg (source="raw_channel", the
   # default) rather than a raw ecg_channel index.
+  # Channel 1 is the diaphragm EMG: the generator gives it a 5.0 uV breathing
+  # signal. Channel 0 carries only 2.0 uV of noise.
   - id: preprocess
     uses: emg.preprocess
-    with: { channel: 0, high_pass_hz: 20, envelope_window_seconds: 0.5 }
+    with: { channel: 1, high_pass_hz: 20, envelope_window_seconds: 0.5 }
     out: { processed_emg: processed_emg_before_ecg }
 
   - id: ecg_detect_peaks
@@ -145,17 +147,12 @@ steps:
     uses: emg.slopesum_baseline
     with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
 
-  # min_breath_width_seconds/prominence_factor are set below their defaults
-  # (1.0 s / 0.5) because this synthetic recording's EMG bursts are narrower
-  # and weaker than the defaults expect. Known issue: detection still finds
-  # too many breaths here (about 20-24 in 60 s, where the generator config
-  # sets 14 breaths/min). On this recording the slope-sum baseline sits above
-  # the envelope, so prominence_factor has no effect, and heartbeat bumps left
-  # after ECG gating are picked up as extra peaks. Treat the EMG breath count
-  # from this example as unreliable until that is fixed.
+  # Default detection settings. On channel 1 this finds 13 of the 14 breath
+  # efforts in the recording's muscle pressure (p_mus); the missed one is the
+  # first breath, which is cut off at the start of the recording.
   - id: detect_breaths_emg
     uses: emg.detect_breaths
-    with: { min_breath_width_seconds: 0.5, prominence_factor: 0.05 }
+    with: { min_breath_width_seconds: 1.0 }
 
   - id: peak_indices
     uses: emg.peak_indices
