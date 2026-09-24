@@ -6,6 +6,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
 from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
 from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
 from m3resp.adapters.ventilator_adapter import VentilatorAdapter, primary_channel
@@ -472,6 +474,53 @@ class M3Session:
             },
         )
         return synchronized
+
+    def slice_emg(
+        self, start_seconds: float, end_seconds: float | None = None
+    ) -> dict[str, Any]:
+        """Keep only the part of the loaded EMG recording between two times.
+
+        Times are in seconds from the start of the recording as it is now
+        (after any earlier cropping, such as `synchronize_raw_modalities`).
+        ``end_seconds=None`` keeps everything up to the end. Ventilator
+        channels recorded in the same file (for example airway pressure on a
+        Biopac export) are cut the same way, so they stay lined up with the
+        EMG. After slicing, times count from the new start.
+
+        Run this before `preprocess_emg`. The removed samples are gone from
+        the loaded recording; reload the file to get them back.
+        """
+
+        recording = self.emg
+        data = recording.data if recording is not None else None
+        if not isinstance(data, dict) or "array" not in data:
+            raise MissingModalityDataError("slice_emg needs a loaded EMG recording.")
+        fs = float(data["metadata"]["fs"])
+        n_samples = np.asarray(data["array"]).shape[-1]
+        duration = n_samples / fs
+        end = duration if end_seconds is None else float(end_seconds)
+        start = float(start_seconds)
+        if not 0.0 <= start < end <= duration:
+            raise ValueError(
+                f"slice_emg: need 0 <= start < end <= {duration:.3f} s (the "
+                f"recording's length); got start={start_seconds!r}, "
+                f"end={end_seconds!r}."
+            )
+
+        start_sample = round(start * fs)
+        end_sample = round(end * fs)
+        removed_start = crop_loaded_modality(self, "emg", -start_sample / fs)
+        removed_end = crop_loaded_modality(self, "emg", (n_samples - end_sample) / fs)
+        summary = {
+            "start_seconds": start,
+            "end_seconds": end,
+            "removed_samples_start": removed_start,
+            "removed_samples_end": removed_end,
+            "kept_samples": end_sample - start_sample,
+        }
+        self.parameters["emg_slice"] = summary
+        self._record("slice_emg", "emg", parameters=summary)
+        return summary
 
     def detect_eit_breaths(self, *, variant: str | None = None, **kwargs: Any) -> Any:
         """Detect EIT breaths and store normalized events.

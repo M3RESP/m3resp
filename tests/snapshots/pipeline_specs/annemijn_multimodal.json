@@ -44,7 +44,16 @@
       }
     },
     {
-      "id": "step_002_sync_estimate_offset",
+      "id": "step_002_ventilator_load",
+      "in": {},
+      "out": {},
+      "uses": "ventilator.load",
+      "with": {
+        "file_path": "@emg_file"
+      }
+    },
+    {
+      "id": "step_003_sync_estimate_offset",
       "in": {},
       "out": {},
       "uses": "sync.estimate_offset",
@@ -54,7 +63,7 @@
       }
     },
     {
-      "id": "step_003_sync_apply_estimated_offset",
+      "id": "step_004_sync_apply_estimated_offset",
       "in": {
         "offset_seconds": "estimated_offset_seconds"
       },
@@ -68,7 +77,7 @@
       }
     },
     {
-      "id": "step_004_eit_detect_rates",
+      "id": "step_005_eit_detect_rates",
       "in": {
         "signal": "raw_eit"
       },
@@ -81,7 +90,7 @@
       }
     },
     {
-      "id": "step_005_eit_mdn_filter",
+      "id": "step_006_eit_mdn_filter",
       "in": {
         "signal": "raw_eit"
       },
@@ -92,7 +101,7 @@
       }
     },
     {
-      "id": "step_006_eit_global_impedance",
+      "id": "step_007_eit_global_impedance",
       "in": {
         "signal": "filtered_eit"
       },
@@ -101,7 +110,7 @@
       "with": {}
     },
     {
-      "id": "step_007_eit_detect_breaths",
+      "id": "step_008_eit_detect_breaths",
       "in": {
         "signal": "global_impedance"
       },
@@ -112,14 +121,14 @@
       }
     },
     {
-      "id": "step_008_eit_normalize_breaths",
+      "id": "step_009_eit_normalize_breaths",
       "in": {},
       "out": {},
       "uses": "eit.normalize_breaths",
       "with": {}
     },
     {
-      "id": "step_009_eit_continuous_tiv",
+      "id": "step_010_eit_continuous_tiv",
       "in": {
         "signal": "global_impedance"
       },
@@ -128,7 +137,7 @@
       "with": {}
     },
     {
-      "id": "step_010_eit_eeli",
+      "id": "step_011_eit_eeli",
       "in": {
         "signal": "global_impedance"
       },
@@ -137,7 +146,7 @@
       "with": {}
     },
     {
-      "id": "step_011_eit_pixel_tiv",
+      "id": "step_012_eit_pixel_tiv",
       "in": {
         "eit_data": "filtered_eit",
         "signal": "global_impedance"
@@ -147,7 +156,16 @@
       "with": {}
     },
     {
-      "id": "step_012_emg_preprocess",
+      "id": "step_013_emg_slice",
+      "in": {},
+      "out": {},
+      "uses": "emg.slice",
+      "with": {
+        "start_seconds": 641.0
+      }
+    },
+    {
+      "id": "step_014_emg_preprocess",
       "in": {},
       "out": {
         "processed_emg": "processed_emg_before_ecg"
@@ -155,14 +173,14 @@
       "uses": "emg.preprocess",
       "with": {
         "channel": 1,
-        "envelope_window_seconds": 0.5,
+        "envelope_window_seconds": 1.0,
         "high_pass_hz": 80,
         "notch_base_frequency": 50.0,
         "notch_quality_factor": 30.0
       }
     },
     {
-      "id": "step_013_emg_ecg_detect_peaks",
+      "id": "step_015_emg_ecg_detect_peaks",
       "in": {
         "processed_emg": "processed_emg_before_ecg"
       },
@@ -173,7 +191,7 @@
       }
     },
     {
-      "id": "step_014_emg_ecg_gating",
+      "id": "step_016_emg_ecg_gating",
       "in": {
         "processed_emg": "processed_emg_before_ecg"
       },
@@ -187,7 +205,7 @@
       }
     },
     {
-      "id": "step_015_emg_slopesum_baseline",
+      "id": "step_017_emg_slopesum_baseline",
       "in": {},
       "out": {},
       "uses": "emg.slopesum_baseline",
@@ -198,7 +216,7 @@
       }
     },
     {
-      "id": "step_016_emg_detect_breaths",
+      "id": "step_018_emg_detect_breaths",
       "in": {},
       "out": {},
       "uses": "emg.detect_breaths",
@@ -207,31 +225,75 @@
       }
     },
     {
-      "id": "step_017_emg_peak_indices",
+      "id": "step_019_emg_peak_indices",
       "in": {},
       "out": {},
       "uses": "emg.peak_indices",
       "with": {}
     },
     {
-      "id": "step_018_emg_onoffpeak_baseline_crossing",
+      "id": "step_020_emg_respiratory_rate",
+      "in": {},
+      "out": {},
+      "uses": "emg.respiratory_rate",
+      "with": {}
+    },
+    {
+      "id": "step_021_emg_onoffpeak_baseline_crossing",
       "in": {},
       "out": {},
       "uses": "emg.onoffpeak_baseline_crossing",
       "with": {}
     },
     {
-      "id": "step_019_emg_snr_pseudo",
+      "id": "step_022_emg_snr_pseudo",
       "in": {},
       "out": {},
       "uses": "emg.snr_pseudo",
       "with": {}
     },
     {
-      "id": "step_020_emg_percentage_under_baseline",
+      "id": "step_023_emg_percentage_under_baseline",
       "in": {},
       "out": {},
       "uses": "emg.percentage_under_baseline",
+      "with": {}
+    },
+    {
+      "id": "step_024_ventilator_channels",
+      "in": {},
+      "out": {},
+      "uses": "ventilator.channels",
+      "with": {
+        "channels": [
+          "pressure"
+        ],
+        "pressure_channel": 0
+      }
+    },
+    {
+      "id": "step_025_ventilator_detect_pressure_breaths",
+      "in": {},
+      "out": {},
+      "uses": "ventilator.detect_pressure_breaths",
+      "with": {
+        "min_depth": 0.8,
+        "min_interval_seconds": 2.0,
+        "smoothing_seconds": 0.2
+      }
+    },
+    {
+      "id": "step_026_ventilator_normalize_breaths",
+      "in": {},
+      "out": {},
+      "uses": "ventilator.normalize_breaths",
+      "with": {}
+    },
+    {
+      "id": "step_027_ventilator_respiratory_rate",
+      "in": {},
+      "out": {},
+      "uses": "ventilator.respiratory_rate",
       "with": {}
     }
   ]

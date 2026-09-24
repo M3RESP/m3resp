@@ -32,6 +32,7 @@ from m3resp.processing.windows import rolling_envelope
 from ._protocols import _PostprocessingOpsProtocol
 from ._shared import (
     _category_for_function,
+    _choose_emg_channel,
     _missing_postprocessing_dependency,
     _normalize_selected_postprocessing,
     _require_emg_recording,
@@ -45,7 +46,7 @@ class _DefaultsMixin:
         self,
         recording: Any,
         *,
-        channel: int = 0,
+        channel: int | None = None,
         high_pass_hz: float = 20.0,
         low_pass_hz: float | None = None,
         envelope_window_seconds: float = 0.25,
@@ -56,6 +57,12 @@ class _DefaultsMixin:
         notch_quality_factor: float = 30.0,
     ) -> dict[str, Any]:
         """Run the Stage 1 EMG preprocessing pipeline through ReSurfEMG.
+
+        ``channel`` is the number of the EMG channel to analyse. When it is
+        left out, the channel is picked from the channel names: a channel
+        named ECG/EKG is never picked, and if more than one channel could be
+        the breathing muscle, an `UnresolvedChannelError` asks for
+        ``channel=`` rather than guessing.
 
         The band-pass defaults to 20-500 Hz, the range respiratory-sEMG
         literature specifies. The high-pass is deliberately *not* set low
@@ -101,6 +108,8 @@ class _DefaultsMixin:
         metadata = dict(recording["metadata"])
         fs = float(metadata["fs"])
         array = recording["array"]
+        if channel is None:
+            channel = _choose_emg_channel(len(array), metadata.get("labels"))
         raw = np.asarray(array[channel], dtype=float)
 
         if low_pass_hz is None:
@@ -168,7 +177,7 @@ class _DefaultsMixin:
         self,
         processed_emg: Any,
         *,
-        min_breath_width_seconds: float = 1.0,
+        min_breath_width_seconds: float = 0.5,
         baseline: Any = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:

@@ -6,12 +6,19 @@
 #   * EIT    -- Draeger, 50 Hz frame rate. Registration 03 is the one recorded
 #               simultaneously with the Biopac sEMG (ajM3resp_03_001_01.bin).
 #   * Biopac -- 2000 Hz, one tab-delimited .txt with 3 channels:
-#               0 = Paw (airway pressure via mouthpiece), 1 = diaphragm sEMG,
-#               2 = empty/ignore. The EIT device injects an interference comb
-#               into the sEMG while it records; the last ~2 min is EIT-off.
-# There is no mechanical ventilator in this recording. Paw channel 0 is used as
-# the ventilation reference for synchronization and visualization; ventilator-
-# only processing (flow/volume, occlusions, ventilator breaths) remains omitted.
+#               0 = Paw (airway pressure via mouthpiece, cmH2O),
+#               1 = EMGdi (diaphragm sEMG), 2 = EMGps (parasternal sEMG, unused).
+# There is no mechanical ventilator in this recording, so there is no flow or
+# volume. Breaths are counted from the Paw dips instead (breathing in lowers
+# the pressure at the mouthpiece), and Paw is the breath reference for the EMG:
+# it is on the same Biopac clock, so it needs no synchronization with EIT.
+#
+# EMG is analysed only after EIT registration 03 stops (the last ~94 s):
+# while EIT records it adds broadband noise to the sEMG, and during that quiet
+# breathing (Paw swings ~0.5 cmH2O) EMG breath detection matched Paw breaths no
+# better than chance. In the EIT-off part (Paw swings ~2 cmH2O) the EMG follows
+# every Paw breath about 0.6 s later. EIT and EMG therefore do not overlap in
+# time in this example; each is processed on its own.
 #
 # This is a dataset-specific multimodal example (the eit_emg_annemijn
 # recording has no ventilator and needs a bespoke sync method); for the
@@ -45,6 +52,11 @@ steps:
     with: { file_path: "@eit_file", vendor: draeger }
 
   - uses: emg.load
+    with: { file_path: "@emg_file" }
+
+  # Paw from the same Biopac file, read as ventilator data. It shares the
+  # EMG clock, so every crop of the EMG below crops it too.
+  - uses: ventilator.load
     with: { file_path: "@emg_file" }
 
   # There is no robust general-purpose automatic sync method, so the offset is
@@ -95,8 +107,14 @@ steps:
     in:  { signal: global_impedance, eit_data: filtered_eit }
 
   # EMG processing
-  # Biopac channels: 0 = Paw (airway pressure), 1 = diaphragm sEMG,
-  # 2 = empty/ignore. Preprocess the diaphragm sEMG (channel 1).
+  # Keep only the part after EIT registration 03 stops: 641 s after the
+  # synchronization crop, which is 1691.6 s into the Biopac file. A few short
+  # EIT bursts remain in it (about 5 s in total); the notch below handles them.
+  - uses: emg.slice
+    with: { start_seconds: 641.0 }
+
+  # Biopac channels: 0 = Paw, 1 = EMGdi, 2 = EMGps. Preprocess the diaphragm
+  # sEMG (channel 1).
   # `notch_base_frequency: 50` suppresses both mains hum and the EIT frame-rate
   # interference comb (50 Hz + harmonics) that contaminates the sEMG whenever
   # the EIT device records simultaneously.
@@ -104,7 +122,7 @@ steps:
     with: {
       channel: 1,
       high_pass_hz: 80,
-      envelope_window_seconds: 0.5,
+      envelope_window_seconds: 1.0,
       notch_base_frequency: 50.0,
       notch_quality_factor: 30.0
       }
@@ -130,16 +148,37 @@ steps:
   - uses: emg.slopesum_baseline
     with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
 
+  # With a 1.0 s envelope and 1.0 s minimum breath width, 14 of the 16 Paw
+  # breaths have an EMG breath 0.5 s before to 1.7 s after them (22 EMG
+  # breaths, 13.7 breaths/min). Most of the extra EMG breaths fall in the short
+  # EIT bursts. The old 0.5 s envelope found far fewer of the Paw breaths.
   - uses: emg.detect_breaths
     with: { min_breath_width_seconds: 1.0 }
 
   - uses: emg.peak_indices
+
+  - uses: emg.respiratory_rate
 
   - uses: emg.onoffpeak_baseline_crossing
 
   - uses: emg.snr_pseudo
 
   - uses: emg.percentage_under_baseline
+
+  # Paw breaths: the reference to compare the EMG breath count and rate with.
+  - uses: ventilator.channels
+    with: { channels: [pressure], pressure_channel: 0 }
+
+  # In this part each breath dips the Paw by 1.4-6 cmH2O, and several breaths
+  # have a small second dip (up to ~0.9 cmH2O) about 2 s later while the
+  # pressure recovers. min_depth 0.8 counts only the main dips: 16 breaths,
+  # 12.9 breaths/min. The default (0.15) would count 21.
+  - uses: ventilator.detect_pressure_breaths
+    with: { smoothing_seconds: 0.2, min_depth: 0.8, min_interval_seconds: 2.0 }
+
+  - uses: ventilator.normalize_breaths
+
+  - uses: ventilator.respiratory_rate
 
   # No explicit export step needed — the `outputs:` section above handles
   # creating the timestamped directory and calling export_session_summary.

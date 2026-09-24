@@ -42,6 +42,85 @@ will differ from previous runs.**
   envelopes. ECG removal lives in the preset, not in the adapter primitive, so
   composing the blocks by hand stays possible.
 
+### New steps: `emg.slice` and `ventilator.detect_pressure_breaths`
+
+- `emg.slice` / `session.slice_emg(start_seconds, end_seconds=None)` keeps only
+  a time window of the loaded EMG recording, for example to leave out a stretch
+  where another device disturbed the EMG. Ventilator channels read from the same
+  file (such as airway pressure on a Biopac export) are cut the same way, so
+  they stay lined up. A window outside the recording raises `ValueError`.
+- `ventilator.detect_pressure_breaths` finds spontaneous breaths as dips in the
+  airway pressure, for recordings without a ventilator volume channel. It
+  writes `ventilator_breath_indices`, so `ventilator.respiratory_rate` and
+  `ventilator.normalize_breaths` work on its output. Missing pressure samples
+  warn and never hold a breath.
+
+### The Annemijn example analyses EMG only where EIT is off, against Paw breaths
+
+While EIT registration 03 records, it adds broadband noise to the sEMG, and
+during that quiet breathing EMG breath detection matched the airway-pressure
+(Paw) breaths no better than chance, whatever the settings. The example now:
+
+- keeps the EMG only after EIT stops (the last ~94 s, `emg.slice`),
+- uses a 1.0 s envelope (was 0.5 s),
+- counts breaths from the Paw dips as the reference (Paw is on the same Biopac
+  clock as the EMG, so it needs no synchronization with EIT) and reports both
+  respiratory rates.
+
+Result: 16 Paw breaths (12.9/min) and 22 EMG breaths (13.7/min); 14 of the 16
+Paw breaths have an EMG breath 0.5 s before to 1.7 s after them. EIT is still
+processed, on its own part of the recording; EIT and EMG no longer overlap.
+
+### Respiratory rate with fewer than two breaths warns instead of crashing
+
+`respiratory_rate_from_indices` (used by the `emg.respiratory_rate` and
+`ventilator.respiratory_rate` steps) crashed with `index -1 is out of bounds`
+when fewer than two breaths were found. It now warns and returns NaN and an
+empty breath-to-breath array.
+
+### EMG breath detection accepts breaths from 0.5 s wide (was 1.0 s)
+
+The default `min_breath_width_seconds` of `emg.detect_breaths`,
+`session.detect_emg_breaths()` and `run_pipeline("emg")` is now **0.5 s**. At
+1.0 s the `emg_data_synth_quiet_breathing` file (about 22 breaths/min) gave
+**0** breaths; at 0.5 s it gives 154 (22.0 breaths/min, against 154
+ventilator breaths).
+
+**This is a behavior change: EMG breath counts, and everything computed from
+them, can differ from previous runs.** Pipelines that set
+`min_breath_width_seconds` themselves are not affected. Pass
+`min_breath_width_seconds=1.0` to get the old behavior.
+
+### EMG preprocessing no longer analyses channel 0 by default
+
+`preprocess_emg()` (and so `run_pipeline("emg")` and the `emg.preprocess` step)
+used channel 0 whenever no `channel` was given. In the
+`emg_data_synth_quiet_breathing` file, channel 0 is the ECG, so the breathing
+analysis ran on the heart signal.
+
+**This is a behavior change: code that relied on the silent channel 0 either
+gets a different channel or an error.**
+
+- When `channel` is not given, it is picked from the channel names: a
+  recording with one channel uses it, and a channel named ECG/EKG is never
+  picked. If exactly one other channel is left, that one is used.
+- If the names do not show which channel is the breathing muscle (for example
+  `emg_0` and `emg_1` from the synthetic generator), an `UnresolvedChannelError`
+  lists the channels and asks for `channel=`.
+- A `channel` you pass is always used as given.
+
+### The EMG preset no longer crashes when saving the respiratory rate
+
+`session.run_pipeline("emg")` and `session.postprocess_emg()` failed with
+`ValueError: ... inhomogeneous shape` on every recording with at least two
+detected breaths. The respiratory rate is a pair (median rate, rate of each
+breath) with two different shapes, and it was saved as one value.
+
+- The pair is now saved as two `ParameterResult`s: `respiratory_rate` (the
+  median, a single number) and `respiratory_rate_breath_to_breath` (one value
+  per breath, NaN for outlier breaths). Both are in breaths/min.
+- A new test runs the EMG preset from start to end on a made-up recording.
+
 ### Signals carry a data *category* alongside their modality
 
 `Signal`, `ParameterResult`, and `QualityFlag` gained a `category` field.

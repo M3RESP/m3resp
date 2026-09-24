@@ -26,6 +26,7 @@ Full attribution notice: see top-level NOTICE.md.
 
 from __future__ import annotations
 
+import warnings
 from itertools import pairwise
 from typing import Any
 
@@ -223,6 +224,63 @@ def detect_occluded_breath_peaks(
         width=min_width_samples,
         distance=distance_samples,
     )
+
+
+def detect_pressure_dip_breaths(
+    pressure: np.ndarray,
+    *,
+    sample_frequency: float,
+    smoothing_seconds: float = 0.2,
+    min_depth: float = 0.15,
+    min_interval_seconds: float = 2.0,
+) -> np.ndarray:
+    """Find breaths as dips in the airway pressure of a spontaneously
+    breathing subject.
+
+    Breathing in through a mouthpiece or mask lowers the airway pressure, so
+    each breath shows up as a dip. The pressure is first smoothed with a
+    moving average of ``smoothing_seconds`` to remove fast noise. A dip counts
+    as a breath when it is at least ``min_depth`` deep compared with the
+    pressure around it (in the pressure's own unit, e.g. cmH2O) and at least
+    ``min_interval_seconds`` after the previous breath (2 s allows up to
+    30 breaths/min).
+
+    Returns the sample index of the lowest point of each dip, which is the
+    moment of strongest breathing-in effort.
+
+    Not for mechanically ventilated breaths, where breathing in raises the
+    airway pressure. Missing samples (NaN) are bridged for the smoothing
+    only, with a warning, and no breath is placed on a missing sample.
+    """
+
+    values = np.asarray(pressure, dtype=float)
+    missing = ~np.isfinite(values)
+    if missing.all():
+        raise ValueError(
+            "detect_pressure_dip_breaths: every pressure sample is missing."
+        )
+    if missing.any():
+        warnings.warn(
+            f"{int(missing.sum())} airway pressure samples are missing (NaN); "
+            "they are bridged for smoothing and no breath is placed on them.",
+            UserWarning,
+            stacklevel=2,
+        )
+        positions = np.arange(values.size)
+        values = values.copy()
+        values[missing] = np.interp(
+            positions[missing], positions[~missing], values[~missing]
+        )
+
+    window = max(1, round(smoothing_seconds * sample_frequency))
+    smoothed = np.convolve(values, np.ones(window) / window, mode="same")
+    indices = detect_peaks(
+        smoothed,
+        invert=True,
+        prominence=min_depth,
+        distance=max(1, round(min_interval_seconds * sample_frequency)),
+    )
+    return indices[~missing[indices]]
 
 
 def pair_valley_peak_valley(
