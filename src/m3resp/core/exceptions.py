@@ -22,7 +22,8 @@ class UnsupportedWorkflowError(M3RespError):
 
 
 class UnresolvedChannelError(M3RespError, LookupError):
-    """Raised when a requested channel is not present in a recording.
+    """Raised when a requested channel is not present in a recording, or when
+    it cannot be worked out which channel is meant.
 
     Distinct from `MissingModalityDataError`: the modality was loaded, but the
     recording does not carry that particular channel - a ventilator export

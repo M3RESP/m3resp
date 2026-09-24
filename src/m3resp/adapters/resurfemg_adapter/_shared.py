@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from importlib import import_module
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from m3resp.core.exceptions import OptionalDependencyError
+from m3resp.core.exceptions import OptionalDependencyError, UnresolvedChannelError
 
 POSTPROCESSING_FUNCTIONS: dict[str, tuple[str, ...]] = {
     "baseline": ("moving_baseline", "slopesum_baseline"),
@@ -125,6 +126,44 @@ def _require_emg_recording(recording: Any) -> None:
         raise TypeError("EMG preprocessing expects a ReSurfEMG recording dict.")
     if "metadata" not in recording:
         raise TypeError("EMG preprocessing expects recording metadata.")
+
+
+#: Channel names that mark a heart (ECG) reference channel rather than EMG.
+_ECG_LABELS = ("ecg", "ekg")
+
+
+def _choose_emg_channel(n_channels: int, labels: Sequence[str] | None) -> int:
+    """Pick the EMG channel to analyse when the user did not name one.
+
+    - A recording with one channel: that channel.
+    - Otherwise, channels whose name says ECG/EKG are left out. If exactly one
+      channel is left, that one is used.
+    - Otherwise it is unclear which channel is the breathing muscle, so this
+      raises `UnresolvedChannelError` and asks for ``channel=`` instead of
+      guessing.
+    """
+
+    if n_channels == 1:
+        return 0
+    names = list(labels or [])
+    if len(names) == n_channels:
+        candidates = [
+            index
+            for index, name in enumerate(names)
+            if str(name).strip().lower() not in _ECG_LABELS
+        ]
+        if len(candidates) == 1:
+            return candidates[0]
+    channel_list = ", ".join(
+        f"{index} ({names[index]!r})" if index < len(names) else str(index)
+        for index in range(n_channels)
+    )
+    raise UnresolvedChannelError(
+        f"This EMG recording has {n_channels} channels ({channel_list}) and it is "
+        "not clear which one is the breathing muscle. Pass the channel number, "
+        "for example preprocess_emg(channel=1), or "
+        'run_pipeline("emg", config={"preprocess": {"channel": 1}}).'
+    )
 
 
 def _emg_optional_dependency_error() -> OptionalDependencyError:

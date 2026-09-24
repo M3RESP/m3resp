@@ -35,7 +35,7 @@ session.synchronize_raw_modalities(
 # Process each modality independently.
 session.preprocess_eit()
 session.detect_eit_breaths()
-session.preprocess_emg()
+session.preprocess_emg(channel=1)  # channel 1 is the breathing muscle signal
 session.detect_emg_breaths()
 session.postprocess_emg()
 
