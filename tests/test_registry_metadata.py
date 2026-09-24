@@ -317,6 +317,7 @@ _AUDITED_SESSION_STEPS = frozenset(
         "emg.onoffpeak_baseline_crossing",
         "emg.percentage_under_baseline",
         "emg.preprocess",
+        "emg.remove_invalid_breaths",
         "emg.slopesum_baseline",
         "emg.snr_pseudo",
         "export.rotarc_result",
