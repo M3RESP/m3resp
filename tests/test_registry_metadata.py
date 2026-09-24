@@ -321,6 +321,7 @@ _AUDITED_SESSION_STEPS = frozenset(
         "emg.slice",
         "emg.slopesum_baseline",
         "emg.snr_pseudo",
+        "emg.subtract_baseline",
         "export.rotarc_result",
         "export.session_summary",
         "session.sync_raw",

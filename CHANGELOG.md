@@ -42,6 +42,42 @@ will differ from previous runs.**
   envelopes. ECG removal lives in the preset, not in the adapter primitive, so
   composing the blocks by hand stays possible.
 
+### The Annemijn example is replaced by the multidomain Recording1 example
+
+`examples/annemijn_multimodal/annemijn.pipeline.yaml` is now
+`examples/multidomain_recording1/recording1_a2.pipeline.yaml`. It runs the multidomain
+results chain (`tools/visualization_tools/paper_results_v2.py`) on
+Recording1 (`TestPS3.txt`), window A2 (140-200 s, EIT off), without the
+adaptive harmonic stage, which A2 does not need. It gives the notebook's
+numbers value for value: 77 ECG peaks, 9 breaths, 9.72 breaths/min, and the
+same on/offsets, amplitudes and time products. EIT and FluxMed files are not
+used (there is no EIT data in A2).
+
+New options this needed, all off by default so existing pipelines do not
+change:
+
+- `emg.preprocess`: `notch_before_bandpass` (notch the raw signal first, as
+  the multidomain results chain does) and `envelope_method: median` (median of the absolute
+  signal, which ignores short spikes such as heartbeat leftovers).
+- `emg.subtract_baseline`: a new step that subtracts the baseline from the
+  envelope, clipped at zero, and passes on a zero baseline.
+- `emg.detect_breaths`: `merge_close_peaks_within_width` merges peaks closer
+  than the minimum breath width, keeping the higher one.
+
+### Biopac `.txt` files with a leading time column were read one column off
+
+Some Biopac exports start every row with a time column (`min` before `CH1`).
+The reader labelled that time column as the first channel, so every channel
+was shifted by one and the last channel was dropped. The time column is now
+skipped and named in `metadata["skipped_time_column"]`.
+
+### `emg.ecg_wavelet_denoising` keeps the preprocessing envelope method
+
+It always rebuilt the envelope as ARV, whatever preprocessing used. It now
+uses the same method as preprocessing (like `emg.ecg_gating`), or the one
+given in its new `envelope_method` setting. **Pipelines that combine this step
+with the default RMS preprocessing now get an RMS envelope instead of ARV.**
+
 ### New steps: `emg.slice` and `ventilator.detect_pressure_breaths`
 
 - `emg.slice` / `session.slice_emg(start_seconds, end_seconds=None)` keeps only
@@ -54,22 +90,6 @@ will differ from previous runs.**
   writes `ventilator_breath_indices`, so `ventilator.respiratory_rate` and
   `ventilator.normalize_breaths` work on its output. Missing pressure samples
   warn and never hold a breath.
-
-### The Annemijn example analyses EMG only where EIT is off, against Paw breaths
-
-While EIT registration 03 records, it adds broadband noise to the sEMG, and
-during that quiet breathing EMG breath detection matched the airway-pressure
-(Paw) breaths no better than chance, whatever the settings. The example now:
-
-- keeps the EMG only after EIT stops (the last ~94 s, `emg.slice`),
-- uses a 1.0 s envelope (was 0.5 s),
-- counts breaths from the Paw dips as the reference (Paw is on the same Biopac
-  clock as the EMG, so it needs no synchronization with EIT) and reports both
-  respiratory rates.
-
-Result: 16 Paw breaths (12.9/min) and 22 EMG breaths (13.7/min); 14 of the 16
-Paw breaths have an EMG breath 0.5 s before to 1.7 s after them. EIT is still
-processed, on its own part of the recording; EIT and EMG no longer overlap.
 
 ### Respiratory rate with fewer than two breaths warns instead of crashing
 

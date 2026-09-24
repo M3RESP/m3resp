@@ -1,0 +1,167 @@
+{
+  "experiment": {
+    "mode": null,
+    "run_identifier": null,
+    "selection": "selected",
+    "subject_id": null,
+    "timepoint": null
+  },
+  "inputs": {
+    "emg_file": "../../data/source/Test_PS_27072026/EMG_Vent/TestPS3.txt"
+  },
+  "name": "multidomain_recording1_a2",
+  "outputs": {
+    "dir": "output/multidomain-recording1-a2",
+    "event_csvs": true,
+    "figures": true,
+    "mode": null,
+    "parameters_csv": true,
+    "postprocessing": true,
+    "structured_export": false,
+    "summary_json": true,
+    "timestamped": true
+  },
+  "schema_version": null,
+  "steps": [
+    {
+      "id": "step_000_emg_load",
+      "in": {},
+      "out": {},
+      "uses": "emg.load",
+      "with": {
+        "file_path": "@emg_file"
+      }
+    },
+    {
+      "id": "step_001_emg_slice",
+      "in": {},
+      "out": {},
+      "uses": "emg.slice",
+      "with": {
+        "end_seconds": 200.0005,
+        "start_seconds": 140.0
+      }
+    },
+    {
+      "id": "step_002_emg_preprocess",
+      "in": {},
+      "out": {
+        "processed_emg": "processed_emg_before_ecg"
+      },
+      "uses": "emg.preprocess",
+      "with": {
+        "channel": 1,
+        "envelope_method": "median",
+        "envelope_window_seconds": 0.85,
+        "high_pass_hz": 20.0,
+        "low_pass_hz": 500.0,
+        "notch_base_frequency": 50.0,
+        "notch_before_bandpass": true,
+        "notch_max_frequency": 950.0,
+        "notch_quality_factor": 30.0
+      }
+    },
+    {
+      "id": "step_003_emg_ecg_detect_peaks",
+      "in": {
+        "processed_emg": "processed_emg_before_ecg"
+      },
+      "out": {},
+      "uses": "emg.ecg_detect_peaks",
+      "with": {
+        "peak_fraction": 0.2,
+        "source": "filtered"
+      }
+    },
+    {
+      "id": "step_004_emg_ecg_wavelet_denoising",
+      "in": {
+        "processed_emg": "processed_emg_before_ecg"
+      },
+      "out": {
+        "processed_emg_after_ecg": "processed_emg_ecg_removed"
+      },
+      "uses": "emg.ecg_wavelet_denoising",
+      "with": {
+        "fixed_threshold": 4.5,
+        "hard_thresholding": true,
+        "levels": 4,
+        "source": "filtered"
+      }
+    },
+    {
+      "id": "step_005_emg_moving_baseline",
+      "in": {
+        "processed_emg": "processed_emg_ecg_removed"
+      },
+      "out": {
+        "baseline": "envelope_baseline"
+      },
+      "uses": "emg.moving_baseline",
+      "with": {
+        "percentile": 33.0,
+        "step_seconds": 0.2,
+        "window_seconds": 7.5
+      }
+    },
+    {
+      "id": "step_006_emg_subtract_baseline",
+      "in": {
+        "baseline": "envelope_baseline",
+        "processed_emg": "processed_emg_ecg_removed"
+      },
+      "out": {
+        "baseline_subtracted": "baseline",
+        "processed_emg_baseline_subtracted": "processed_emg"
+      },
+      "uses": "emg.subtract_baseline",
+      "with": {}
+    },
+    {
+      "id": "step_007_emg_detect_breaths",
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_breaths",
+      "with": {
+        "merge_close_peaks_within_width": true,
+        "min_breath_width_seconds": 0.7,
+        "prominence_factor": 0.4
+      }
+    },
+    {
+      "id": "step_008_emg_peak_indices",
+      "in": {},
+      "out": {},
+      "uses": "emg.peak_indices",
+      "with": {}
+    },
+    {
+      "id": "step_009_emg_onoffpeak_baseline_crossing",
+      "in": {},
+      "out": {},
+      "uses": "emg.onoffpeak_baseline_crossing",
+      "with": {}
+    },
+    {
+      "id": "step_010_emg_amplitude",
+      "in": {},
+      "out": {},
+      "uses": "emg.amplitude",
+      "with": {}
+    },
+    {
+      "id": "step_011_emg_time_product",
+      "in": {},
+      "out": {},
+      "uses": "emg.time_product",
+      "with": {}
+    },
+    {
+      "id": "step_012_emg_respiratory_rate",
+      "in": {},
+      "out": {},
+      "uses": "emg.respiratory_rate",
+      "with": {}
+    }
+  ]
+}

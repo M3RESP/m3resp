@@ -257,9 +257,9 @@ print(refined.refined_offset_seconds)
 
 Once you've confirmed the fit against the power/correlation traces (see
 `2_annemijn_multimodal_vis.py`), hardcode the resulting offset as
-`manual_offset_seconds` in your pipeline spec's `sync.estimate_offset` step -
-see `examples/annemijn_multimodal/annemijn.pipeline.yaml` for the actual
-values used for this dataset.
+`manual_offset_seconds` in your pipeline spec's `sync.estimate_offset` step.
+For the `eit_emg_annemijn` dataset (EIT registration 03 against the Biopac
+file) the value found this way was 1050.62 s.
 
 Or call the estimators directly on arrays - see the docstrings for every tuning
 knob (`detection_rate_hz`, `search_window_seconds`, `plateau_guard_seconds`,

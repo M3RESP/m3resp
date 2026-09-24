@@ -147,5 +147,7 @@ def test_rolling_envelope_dispatches_to_the_named_primitive():
 def test_rolling_envelope_rejects_an_unknown_method():
     with pytest.raises(ValueError, match="method must be one of"):
         rolling_envelope(
-            _synthetic_signal(duration_seconds=0.1), window_length=10, method="median"
+            _synthetic_signal(duration_seconds=0.1),
+            window_length=10,
+            method="peak_to_peak",
         )

@@ -4,9 +4,8 @@ This walks through loading EIT and EMG (and, optionally, ventilator) data
 into one session, synchronizing them, processing each modality, linking
 their breaths, and computing cross-modality timing parameters. For the same
 processing (plus ventilator) expressed as a declarative YAML spec, see
-`examples/multimodal_full/multimodal-full.pipeline.yaml`,
-`examples/multimodal_example/multimodal.pipeline.yaml`, or
-`examples/annemijn_multimodal/annemijn.pipeline.yaml`, and
+`examples/multimodal_full/multimodal-full.pipeline.yaml`
+or `examples/multimodal_example/multimodal.pipeline.yaml`, and
 [../pipelines.md](../pipelines.md).
 
 ## Step by step

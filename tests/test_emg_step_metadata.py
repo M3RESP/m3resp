@@ -21,6 +21,7 @@ _EMG_STEP_NAMES = [
     "emg.peak_indices",
     "emg.moving_baseline",
     "emg.slopesum_baseline",
+    "emg.subtract_baseline",
     "emg.ecg_detect_peaks",
     "emg.ecg_gating",
     "emg.ecg_wavelet_denoising",
@@ -77,12 +78,12 @@ _QUALITY_STEP_NAMES = [
 ]
 
 
-def test_all_thirty_eight_emg_and_ventilator_steps_are_registered_and_described():
+def test_all_thirty_nine_emg_and_ventilator_steps_are_registered_and_described():
     emg = {d.name for d in describe_steps(prefix="emg.")}
     ventilator = {d.name for d in describe_steps(prefix="ventilator.")}
     assert emg == set(_EMG_STEP_NAMES)
     assert ventilator == set(_VENTILATOR_STEP_NAMES)
-    assert len(_ALL_STEP_NAMES) == 38
+    assert len(_ALL_STEP_NAMES) == 39
 
 
 def test_every_emg_step_declares_some_metadata_and_is_json_safe():
@@ -168,12 +169,12 @@ def test_describe_steps_prefix_filter_separates_ventilator_from_emg():
     assert not names & set(_EMG_STEP_NAMES)
 
 
-def test_all_sixty_two_built_in_steps_still_describe_without_error():
+def test_all_sixty_three_built_in_steps_still_describe_without_error():
     descriptions = describe_steps()
-    assert len(descriptions) == 62
+    assert len(descriptions) == 63
     with_metadata = [
         d
         for d in descriptions
         if d.parameters or d.output_artifacts or d.input_artifacts
     ]
-    assert len(with_metadata) == 62
+    assert len(with_metadata) == 63

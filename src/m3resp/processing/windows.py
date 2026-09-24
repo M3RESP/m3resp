@@ -205,11 +205,47 @@ def rolling_arv(
     )
 
 
+def rolling_median_absolute(
+    values: np.ndarray,
+    *,
+    window_length: int,
+    center: bool = True,
+    min_periods: int = 1,
+) -> np.ndarray:
+    """Rolling median of the absolute signal (median absolute value envelope).
+
+    The median ignores short spikes (for example heartbeat leftovers) that
+    would pull an RMS or ARV envelope up, which is why the multidomain results use
+    it. Near the start and end the window is shorter (``min_periods``).
+
+    Args:
+        values (np.ndarray): Input data to compute the envelope for.
+        window_length (int): The size in samples of the rolling window.
+        center (bool): If True, the window is centered around each point.
+            Defaults to True.
+        min_periods (int): The minimum number of samples needed in a window.
+            Defaults to 1.
+
+    Returns:
+        np.ndarray: The rolling median absolute value envelope.
+    """
+
+    absolute = pd.Series(np.abs(values))
+    return np.asarray(
+        absolute.rolling(
+            window=window_length,
+            min_periods=min_periods,
+            center=center,
+        ).median()
+    )
+
+
 #: Envelope methods `rolling_envelope` dispatches over. RMS is the default
 #: everywhere an EMG envelope is computed: it is the method respiratory-sEMG
 #: literature specifies, and ARV differs from it by more than a constant
-#: factor on real, bursty sEMG, so the two are not interchangeable.
-ENVELOPE_METHODS = ("rms", "arv")
+#: factor on real, bursty sEMG, so the two are not interchangeable. "median"
+#: (median absolute value) resists short spikes such as heartbeat leftovers.
+ENVELOPE_METHODS = ("rms", "arv", "median")
 
 
 def rolling_envelope(
@@ -230,7 +266,7 @@ def rolling_envelope(
     Args:
         values (np.ndarray): Input data to compute the envelope for.
         window_length (int): The size in samples of the rolling window.
-        method (str): The envelope method to use. Must be one of "rms" or "arv".
+        method (str): The envelope method to use: "rms", "arv" or "median".
             Defaults to "rms".
         center (bool): If True, the window is centered around each point. If False,
             the window is right-aligned. Defaults to True.
@@ -244,7 +280,11 @@ def rolling_envelope(
     normalized = str(method).lower()
     if normalized not in ENVELOPE_METHODS:
         raise ValueError(f"method must be one of {ENVELOPE_METHODS}; got {method!r}.")
-    compute = rolling_rms if normalized == "rms" else rolling_arv
+    compute = {
+        "rms": rolling_rms,
+        "arv": rolling_arv,
+        "median": rolling_median_absolute,
+    }[normalized]
     return compute(
         values,
         window_length=window_length,

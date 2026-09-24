@@ -376,3 +376,68 @@ def slopesum_baseline(
         "baseline_running_mean_signal": running_mean_signal,
         "baseline_running_std_signal": running_std_signal,
     }
+
+
+@register_step(
+    "emg.subtract_baseline",
+    reads={
+        "session": "session",
+        "processed_emg": "processed_emg",
+        "baseline": "baseline",
+    },
+    writes=("processed_emg_baseline_subtracted", "baseline_subtracted"),
+    summary="Subtract the baseline from the EMG envelope, clipped at zero.",
+    description="Replace the envelope with the envelope minus the baseline, set to zero wherever it would go below zero, and pass on a zero baseline. Run after emg.moving_baseline or emg.slopesum_baseline, and map the outputs back onto 'processed_emg' and 'baseline' with out: so breath detection, on/offset, amplitude and time product all measure against the corrected envelope.",
+    category="baseline",
+    modality="emg",
+    parameters_reviewed=True,
+    session_writes=("session.processed.emg",),
+    input_artifacts=(
+        _SESSION_ARTIFACT,
+        StepArtifact(
+            name="processed_emg",
+            artifact_type="emg_processed_bundle",
+            description="Processed EMG bundle supplying the envelope.",
+        ),
+        StepArtifact(
+            name="baseline",
+            artifact_type="signal_array",
+            description="Baseline to subtract, one value per envelope sample.",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="processed_emg_baseline_subtracted",
+            artifact_type="emg_processed_bundle",
+            description="The same bundle with the corrected envelope.",
+        ),
+        StepArtifact(
+            name="baseline_subtracted",
+            artifact_type="signal_array",
+            description="A zero baseline, since the envelope is already corrected.",
+        ),
+    ),
+)
+def subtract_baseline(
+    session: M3Session, processed_emg: Any, baseline: Any
+) -> dict[str, Any]:
+    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    baseline_values = np.asarray(baseline, dtype=float)
+    if baseline_values.shape != envelope.shape:
+        raise ValueError(
+            "emg.subtract_baseline: baseline and envelope must have the same "
+            f"length; got {baseline_values.shape} and {envelope.shape}."
+        )
+    corrected = {
+        **processed_emg,
+        "envelope": np.clip(envelope - baseline_values, 0.0, None),
+        "envelope_before_baseline_subtraction": envelope,
+    }
+    session.processed["emg"] = corrected
+    if session.emg is not None:
+        session.emg.envelope = corrected["envelope"]
+    _record_step(session, "emg.subtract_baseline", metadata={"clipped_at": 0.0})
+    return {
+        "processed_emg_baseline_subtracted": corrected,
+        "baseline_subtracted": np.zeros_like(envelope),
+    }

@@ -72,6 +72,11 @@ def _load_biopac_txt(path: str) -> dict[str, Any]:
     i.e. a title line, a ``msec/sample`` sampling-interval line, a
     ``N channels`` line, then two lines per channel (label, unit), a ``CHn``
     column header, a per-channel sample-count row, and finally the samples.
+
+    Some exports start every row with a time column (header ``min`` before
+    ``CH1``). That column is skipped, so channel ``i`` is always ``CH(i+1)``;
+    the time axis is rebuilt from the sampling interval instead. Its header is
+    kept in ``metadata["skipped_time_column"]``.
     Returns the same ``(array, dataframe, metadata)``-shaped dict as
     :meth:`ReSurfEMGAdapter.load`, with ``array`` channel-major
     ``(n_channels, n_samples)`` and ``metadata["fs"]`` populated.
@@ -97,6 +102,14 @@ def _load_biopac_txt(path: str) -> dict[str, Any]:
             # "Paw - TSD104A - Blood Pressure, DA100C" -> "Paw"
             labels.append(label_line.split(" - ")[0].strip())
             units.append(unit_line.strip())
+        column_header = [
+            name.strip() for name in handle.readline().rstrip("\r\n").split("\t")
+        ]
+
+    # A leading time column ("min") comes before CH1 in some exports.
+    first_column = column_header[0] if column_header else ""
+    has_time_column = bool(first_column) and not first_column.upper().startswith("CH")
+    first_channel_column = 1 if has_time_column else 0
 
     # 3 title/rate/channel lines + 2 lines per channel + column-header row
     # + per-channel sample-count row precede the numeric samples.
@@ -106,7 +119,7 @@ def _load_biopac_txt(path: str) -> dict[str, Any]:
         sep="\t",
         skiprows=skiprows,
         names=labels,
-        usecols=range(n_channels),
+        usecols=range(first_channel_column, first_channel_column + n_channels),
         engine="c",
     )
     array = dataframe.to_numpy(dtype=float).T  # channel-major (n_channels, n_samples)
@@ -118,6 +131,8 @@ def _load_biopac_txt(path: str) -> dict[str, Any]:
         "file_dir": str(Path(path).parent),
         "file_extension": "txt",
     }
+    if has_time_column:
+        metadata["skipped_time_column"] = first_column
     return {"array": array, "dataframe": dataframe, "metadata": metadata}
 
 

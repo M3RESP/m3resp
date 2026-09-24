@@ -226,6 +226,37 @@ def detect_occluded_breath_peaks(
     )
 
 
+def merge_close_peaks(
+    peak_indices: np.ndarray,
+    values: np.ndarray,
+    *,
+    min_distance_samples: int,
+) -> np.ndarray:
+    """Merge peaks that are closer together than ``min_distance_samples``.
+
+    Peak detection can report one breath's flat top as two or three peaks a
+    few samples apart. Going through the peaks in time order, a peak closer
+    than ``min_distance_samples`` to the last kept peak replaces it only if
+    it is higher in ``values``; otherwise it is dropped. On a tie the earlier
+    peak is kept.
+
+    Returns the kept peak indices in time order.
+    """
+
+    peaks = np.sort(np.asarray(peak_indices, dtype=int))
+    if peaks.size < 2:
+        return peaks
+    data = np.asarray(values)
+    kept = [int(peaks[0])]
+    for peak in peaks[1:]:
+        if peak - kept[-1] < min_distance_samples:
+            if data[peak] > data[kept[-1]]:
+                kept[-1] = int(peak)
+        else:
+            kept.append(int(peak))
+    return np.asarray(kept, dtype=int)
+
+
 def detect_pressure_dip_breaths(
     pressure: np.ndarray,
     *,
