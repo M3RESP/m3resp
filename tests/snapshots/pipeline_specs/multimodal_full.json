@@ -31,7 +31,7 @@
       "out": {},
       "uses": "eit.load",
       "with": {
-        "file": "@eit_file",
+        "file_path": "@eit_file",
         "vendor": "draeger"
       }
     },
@@ -41,7 +41,7 @@
       "out": {},
       "uses": "emg.load",
       "with": {
-        "file": "@emg_file"
+        "file_path": "@emg_file"
       }
     },
     {
@@ -50,7 +50,7 @@
       "out": {},
       "uses": "ventilator.load",
       "with": {
-        "file": "@vent_file"
+        "file_path": "@vent_file"
       }
     },
     {
@@ -149,7 +149,7 @@
     {
       "id": "pixel_tiv",
       "in": {
-        "filtered_eit": "filtered_eit",
+        "eit_data": "filtered_eit",
         "signal": "global_impedance"
       },
       "out": {},
@@ -205,9 +205,9 @@
       },
       "uses": "emg.preprocess",
       "with": {
-        "channel": 0,
+        "channel": 1,
         "envelope_window_seconds": 0.5,
-        "high_pass_hz": 80
+        "high_pass_hz": 20
       }
     },
     {
@@ -233,14 +233,23 @@
       }
     },
     {
+      "id": "slopesum_baseline",
+      "in": {},
+      "out": {},
+      "uses": "emg.slopesum_baseline",
+      "with": {
+        "percentile": 33.0,
+        "step_seconds": 1.0,
+        "window_seconds": 30.0
+      }
+    },
+    {
       "id": "detect_breaths_emg",
       "in": {},
       "out": {},
       "uses": "emg.detect_breaths",
       "with": {
-        "half_window_seconds": 0.5,
-        "min_breath_width_seconds": 0.5,
-        "prominence_factor": 0.05
+        "min_breath_width_seconds": 1.0
       }
     },
     {
@@ -259,17 +268,6 @@
         "flow_channel": 1,
         "pressure_channel": 0,
         "volume_channel": 2
-      }
-    },
-    {
-      "id": "slopesum_baseline",
-      "in": {},
-      "out": {},
-      "uses": "emg.slopesum_baseline",
-      "with": {
-        "percentile": 33.0,
-        "step_seconds": 1.0,
-        "window_seconds": 30.0
       }
     },
     {

@@ -47,11 +47,11 @@ steps:
   # -- Loading ---------------------------------------------------------------
   - id: load
     uses: emg.load
-    with: { file: "@emg_file" }
+    with: { file_path: "@emg_file" }
 
   - id: load_ventilator
     uses: ventilator.load
-    with: { file: "@vent_file" }
+    with: { file_path: "@vent_file" }
 
   - id: ventilator_channels
     uses: ventilator.channels
@@ -61,9 +61,12 @@ steps:
   # Channel 1 ("EMGdi") is the diaphragm EMG channel in this fixture; channel
   # 0 ("ECG") is a dedicated reference ECG channel used for peak detection
   # below instead of the (also ECG-contaminated) EMG channel itself.
+  # ECG gating below recomputes the envelope from the gated signal, so one
+  # computed here would be discarded; envelope_window_seconds still sets the
+  # window that gating uses.
   - id: preprocess
     uses: emg.preprocess
-    with: { channel: 1, envelope_window_seconds: 0.5 }
+    with: { channel: 1, envelope_window_seconds: 0.25, compute_envelope: false }
     out: { processed_emg: processed_emg_before_ecg }
 
   - id: ecg_detect_peaks
@@ -78,20 +81,24 @@ steps:
     out: { processed_emg_after_ecg: processed_emg }
 
   # -- EMG breath detection ---------------------------------------------------
+  # The baseline comes first: a breath is a rise above the local quiet level,
+  # which drifts over a recording, and the detection threshold is taken from
+  # the envelope above that level. It depends only on the envelope, not on the
+  # peaks, so there is no circularity.
+  - id: moving_baseline
+    uses: emg.moving_baseline
+    with: { window_seconds: 7.5, step_seconds: 0.2, percentile: 33.0 }
+
   # min_breath_width_seconds is narrower than the 1.0 s default: this
   # fixture's "quiet breathing" envelope bursts are shorter than that,
   # so the default finds zero breaths - see docs/pipelines.md "Channel
   # selection and time-base rules".
   - id: detect_breaths
     uses: emg.detect_breaths
-    with: { min_breath_width_seconds: 0.5, half_window_seconds: 0.5 }
+    with: { min_breath_width_seconds: 0.5 }
 
   - id: peak_indices
     uses: emg.peak_indices
-
-  - id: moving_baseline
-    uses: emg.moving_baseline
-    with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
 
   - id: onoffpeak_baseline_crossing
     uses: emg.onoffpeak_baseline_crossing
@@ -113,7 +120,7 @@ steps:
   # -- Ventilator breath and Pocc-manoeuvre detection -------------------------
   - id: detect_ventilator_breath
     uses: ventilator.detect_breaths
-    with: { breath_width_seconds: 0.5 }
+    with: { breath_width_seconds: 0.25 }
 
   - id: find_occluded_breaths
     uses: ventilator.find_occluded_breaths

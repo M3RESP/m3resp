@@ -35,7 +35,7 @@ class TestEmgLoad:
             {
                 "name": "emg-load",
                 "inputs": {"emg_file": str(EMG_PATH)},
-                "steps": [{"uses": "emg.load", "with": {"file": "@emg_file"}}],
+                "steps": [{"uses": "emg.load", "with": {"file_path": "@emg_file"}}],
             }
         )
 
@@ -71,7 +71,10 @@ class TestEmgLoad:
                     "steps": [
                         {
                             "uses": "emg.load",
-                            "with": {"file": "@emg_file", "loader_options": "nope"},
+                            "with": {
+                                "file_path": "@emg_file",
+                                "loader_options": "nope",
+                            },
                         }
                     ],
                 }
@@ -98,7 +101,7 @@ class TestEmgLoad:
             {
                 "name": "emg-load-injected",
                 "inputs": {"emg_file": "unused.Poly5"},
-                "steps": [{"uses": "emg.load", "with": {"file": "@emg_file"}}],
+                "steps": [{"uses": "emg.load", "with": {"file_path": "@emg_file"}}],
             },
             session=session,
         )

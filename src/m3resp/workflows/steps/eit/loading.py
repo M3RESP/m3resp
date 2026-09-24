@@ -1,4 +1,4 @@
-"""Registered EIT loading/slicing pipeline steps."""
+"""Registered EIT loading pipeline steps."""
 
 from __future__ import annotations
 
@@ -9,13 +9,12 @@ from m3resp.adapters.eitprocessing_adapter import (
     continuous_data_to_signal,
 )
 from m3resp.core.session import M3Session
+from m3resp.data.signals import Signal
 from m3resp.workflows.registry import (
-    ANY_ARTIFACT_TYPE,
     StepArtifact,
     StepParameter,
     register_step,
 )
-from m3resp.workflows.utils import slice_signal_by_mode
 
 from ._shared import (
     _EITPROCESSING,
@@ -33,6 +32,7 @@ from ._shared import (
         "raw_global_impedance",
         "eit_sequence",
         "raw_global_impedance_signal",
+        "raw_pixel_impedance_signal",
     ),
     summary="Load an EIT recording into the session.",
     description="Load a vendor EIT recording file through EITProcessingAdapter and expose the raw pixel/global-impedance data.",
@@ -43,7 +43,7 @@ from ._shared import (
     input_artifacts=(_SESSION_ARTIFACT,),
     parameters=(
         StepParameter(
-            name="file",
+            name="file_path",
             value_type="path",
             required=True,
             path_kind="file",
@@ -58,11 +58,49 @@ from ._shared import (
             description="Recording vendor. Required unless a custom loader was injected into the adapter.",
         ),
         StepParameter(
+            name="sample_frequency",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="Hz",
+            minimum=0,
+            description=(
+                "Sampling rate of the recording. Left unset, Draeger files are "
+                "read from the file itself, Timpel assumes 50 Hz and Sentec "
+                "50.2 Hz. Setting it on a Draeger file warns if it disagrees "
+                "with what the file says."
+            ),
+        ),
+        StepParameter(
+            name="first_frame",
+            value_type="integer",
+            required=False,
+            default=0,
+            minimum=0,
+            description="Index of the first frame to read. Defaults to the start of the recording.",
+        ),
+        StepParameter(
+            name="max_frames",
+            value_type="integer",
+            required=False,
+            default=None,
+            minimum=1,
+            description=(
+                "Stop after this many frames. Left unset, the whole recording "
+                "is read; a recording shorter than this is read in full."
+            ),
+        ),
+        StepParameter(
             name="loader_options",
             value_type="mapping",
             required=False,
             default=None,
-            description="Extra keyword arguments forwarded to M3Session.load_eit().",
+            description=(
+                "Remaining keyword arguments for the vendor loader (its "
+                "label/name/description metadata). The reading parameters "
+                "above are declared in their own right and should be set "
+                "there, not here."
+            ),
             advanced=True,
         ),
     ),
@@ -93,13 +131,21 @@ from ._shared import (
             required=False,
             description="Native Signal wrapping the raw global impedance, when present.",
         ),
+        StepArtifact(
+            name="raw_pixel_impedance_signal",
+            artifact_type="signal",
+            description="Native Signal wrapping the raw pixel impedance.",
+        ),
     ),
 )
 def load(
     session: M3Session,
     *,
-    file: str,
+    file_path: str,
     vendor: str | None = None,
+    sample_frequency: float | None = None,
+    first_frame: int = 0,
+    max_frames: int | None = None,
     loader_options: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     if loader_options is not None and not isinstance(loader_options, Mapping):
@@ -108,7 +154,26 @@ def load(
             f"for M3Session.load_eit(), got {type(loader_options).__name__}."
         )
 
-    session.load_eit(file, vendor=vendor, **dict(loader_options or {}))
+    extra = dict(loader_options or {})
+    # The three reading parameters are declared in their own right, so a GUI
+    # can offer them. Accepting them a second time through the bag would let
+    # a spec set one value in each and silently pick a winner.
+    duplicated = {"sample_frequency", "first_frame", "max_frames"} & extra.keys()
+    if duplicated:
+        raise ValueError(
+            f"eit.load: {', '.join(sorted(duplicated))} "
+            f"{'is' if len(duplicated) == 1 else 'are'} declared parameter(s) "
+            "of this step and must be set directly, not inside "
+            "'loader_options'."
+        )
+
+    read_options: dict[str, Any] = {"first_frame": first_frame}
+    if sample_frequency is not None:
+        read_options["sample_frequency"] = sample_frequency
+    if max_frames is not None:
+        read_options["max_frames"] = max_frames
+
+    session.load_eit(file_path, vendor=vendor, **read_options, **extra)
     recording = session.eit
     assert recording is not None
 
@@ -123,13 +188,38 @@ def load(
         )
         session.signals.add(raw_global_impedance_signal)
 
+    # The pixel impedance is a signal in its own right, not just the vendor
+    # object downstream steps are handed. It carries the same category as the
+    # global impedance - both are impedances - and is told apart by its
+    # channel.
+    raw_pixel_impedance_signal = Signal(
+        values=recording.raw.pixel_impedance,
+        time=recording.raw.time,
+        sample_frequency=getattr(recording.raw, "sample_frequency", None),
+        unit=getattr(recording.raw, "unit", None),
+        name=getattr(recording.raw, "name", None)
+        or getattr(recording.raw, "label", None),
+        modality="eit",
+        category="impedance",
+        channel="pixel_impedance",
+        processing_state="raw",
+        source="eitprocessing",
+    )
+    session.signals.add(raw_pixel_impedance_signal)
+
     _record_step(
         session,
         "eit.load",
         metadata=_upstream_metadata(
             source_function="eitprocessing.datahandling.loading.load_eit_data",
             operation="eit.load",
-            parameters={"vendor": vendor, "loader_options": dict(loader_options or {})},
+            parameters={
+                "vendor": vendor,
+                "sample_frequency": sample_frequency,
+                "first_frame": first_frame,
+                "max_frames": max_frames,
+                "loader_options": extra,
+            },
         ),
     )
     return {
@@ -137,64 +227,5 @@ def load(
         "raw_global_impedance": recording.global_impedance,
         "eit_sequence": recording.data,
         "raw_global_impedance_signal": raw_global_impedance_signal,
-    }
-
-
-@register_step(
-    "eit.slice",
-    reads={"signal": "raw_eit"},
-    writes=("result",),
-    summary="Slice an EIT signal by sample index or time.",
-    description="Slice any upstream EIT signal by sample index or time window, e.g. to select a detection window.",
-    category="preprocessing",
-    modality="eit",
-    optional_packages=_EITPROCESSING,
-    input_artifacts=(
-        StepArtifact(
-            name="signal",
-            # Genuine passthrough - this step accepts *any* upstream EIT
-            # signal (raw, filtered, global impedance, ...), not one fixed
-            # type, so it uses the "any" sentinel rather than a specific
-            # artifact type (Phase 10 artifact-type compatibility check).
-            artifact_type=ANY_ARTIFACT_TYPE,
-            default_context_key="raw_eit",
-            description="Upstream EIT signal to slice (any signal type).",
-            compatibility_only=True,
-        ),
-    ),
-    parameters=(
-        StepParameter(
-            name="start",
-            value_type="number",
-            required=True,
-            description="Slice start: a sample index (mode='index') or seconds (mode='time').",
-        ),
-        StepParameter(
-            name="end",
-            value_type="number",
-            required=True,
-            description="Slice end: a sample index (mode='index') or seconds (mode='time').",
-        ),
-        StepParameter(
-            name="mode",
-            value_type="choice",
-            default="index",
-            choices=("index", "time"),
-            description="Whether 'start'/'end' are sample indices or seconds.",
-        ),
-    ),
-    output_artifacts=(
-        StepArtifact(
-            name="result",
-            artifact_type=ANY_ARTIFACT_TYPE,
-            description="Sliced signal, of the same type as the input.",
-            compatibility_only=True,
-        ),
-    ),
-)
-def slice_signal(
-    signal: Any, *, start: float, end: float, mode: str = "index"
-) -> dict[str, Any]:
-    return {
-        "result": slice_signal_by_mode(signal, start=start, end=end, slicing_mode=mode)
+        "raw_pixel_impedance_signal": raw_pixel_impedance_signal,
     }

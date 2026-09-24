@@ -1,4 +1,32 @@
-"""Shared interval and onset/offset primitives."""
+"""Shared interval and onset/offset primitives.
+
+---------------------------------------------------------------------------
+Provenance
+----------
+Portions of this module are derived from ReSurfEMG.
+
+    Source:     https://github.com/resurfemg-org/ReSurfEMG
+    Revision:   m3resp-integration (c63668689030e4581d5f985e7d09d3a8c01e7a77)
+    Original:   resurfemg/postprocessing/event_detection.py::
+                onoffpeak_baseline_crossing, onoffpeak_slope_extrapolation
+    Copyright:  Copyright (c) 2022 Netherlands eScience Center and
+                University of Twente
+    License:    Apache License, Version 2.0
+
+Modified for M3RESP:
+    - `onoffpeak_baseline_crossing` renamed to
+      `onoff_from_baseline_crossings`, `onoffpeak_slope_extrapolation` renamed
+      to `onoff_from_slope`.
+    - Parameters renamed and reorganized as keyword-only arguments.
+    - `baseline_crossings` extracted as a named function from the crossing
+      calculation both upstream functions perform inline.
+    - `sample_intervals_to_breath_events` below is independent M3RESP code
+      (conversion to `BreathEvent`), not derived from ReSurfEMG.
+
+The original copyright and license notices are retained per Apache-2.0 §4.
+Full attribution notice: see top-level NOTICE.md.
+---------------------------------------------------------------------------
+"""
 
 from __future__ import annotations
 
@@ -24,13 +52,15 @@ def onoff_from_baseline_crossings(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[bool]]:
     """Find peak starts/ends by nearest baseline crossings around peaks.
 
-
-    This function calculates the peaks of each breath using the
-    slopesum baseline of envelope data.
+    The start of each peak is the last crossing of the baseline before it,
+    and the end is the first crossing after it. Starts and ends that fall on
+    the wrong side of a peak, or overlap a neighbouring peak's window, are
+    marked invalid. Any baseline can be used, e.g. the moving or slope-sum
+    baseline of an EMG envelope, or the moving baseline of airway pressure.
 
     Args:
-        values (numpy.ndarray): Envelope signal.
-        baseline (numpy.ndarray): Baseline signal of EMG data for baseline detection.
+        values (numpy.ndarray): Signal, e.g. an EMG envelope or airway pressure.
+        baseline (numpy.ndarray): Baseline of `values`, one value per sample.
         peak_indices (numpy.ndarray): List of peak indices for which to find on- and offset.
 
     Returns:
