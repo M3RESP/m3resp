@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from m3resp.adapters import ReSurfEMGAdapter
+from m3resp.adapters import ReSurfEMGNative
 from m3resp.core.exceptions import OptionalDependencyError
 
 pytest.importorskip("resurfemg")
@@ -29,7 +29,7 @@ class TestOptionalDependencyBehavior:
     actually invoked (not at `m3resp` import time)."""
 
     @pytest.fixture
-    def blocked_adapter(self, monkeypatch: pytest.MonkeyPatch) -> ReSurfEMGAdapter:
+    def blocked_adapter(self, monkeypatch: pytest.MonkeyPatch) -> ReSurfEMGNative:
         real_import = builtins.__import__
 
         def _blocking_import(name: str, *args: Any, **kwargs: Any) -> Any:
@@ -38,49 +38,49 @@ class TestOptionalDependencyBehavior:
             return real_import(name, *args, **kwargs)
 
         monkeypatch.setattr(builtins, "__import__", _blocking_import)
-        return ReSurfEMGAdapter()
+        return ReSurfEMGNative()
 
-    def test_detect_ecg_peaks(self, blocked_adapter: ReSurfEMGAdapter):
+    def test_detect_ecg_peaks(self, blocked_adapter: ReSurfEMGNative):
         with pytest.raises(OptionalDependencyError):
             blocked_adapter.detect_ecg_peaks(np.zeros(100), sample_frequency=100.0)
 
-    def test_gate_ecg(self, blocked_adapter: ReSurfEMGAdapter):
+    def test_gate_ecg(self, blocked_adapter: ReSurfEMGNative):
         with pytest.raises(OptionalDependencyError):
             blocked_adapter.gate_ecg(np.zeros(100), [10, 20])
 
-    def test_wavelet_denoise_ecg(self, blocked_adapter: ReSurfEMGAdapter):
+    def test_wavelet_denoise_ecg(self, blocked_adapter: ReSurfEMGNative):
         with pytest.raises(OptionalDependencyError):
             blocked_adapter.wavelet_denoise_ecg(
                 np.zeros(100), [10, 20], sample_frequency=100.0
             )
 
-    def test_moving_baseline(self, blocked_adapter: ReSurfEMGAdapter):
+    def test_moving_baseline(self, blocked_adapter: ReSurfEMGNative):
         with pytest.raises(OptionalDependencyError):
             blocked_adapter.moving_baseline(
                 np.zeros(100), window_samples=10, step_samples=5
             )
 
-    def test_slopesum_baseline(self, blocked_adapter: ReSurfEMGAdapter):
+    def test_slopesum_baseline(self, blocked_adapter: ReSurfEMGNative):
         with pytest.raises(OptionalDependencyError):
             blocked_adapter.slopesum_baseline(
                 np.zeros(100), window_samples=10, step_samples=5, sample_frequency=100.0
             )
 
-    def test_snr_pseudo(self, blocked_adapter: ReSurfEMGAdapter):
+    def test_snr_pseudo(self, blocked_adapter: ReSurfEMGNative):
         with pytest.raises(OptionalDependencyError):
             blocked_adapter.snr_pseudo(
                 np.zeros(100), [10, 20], np.zeros(100), sample_frequency=100.0
             )
 
-    def test_pocc_quality(self, blocked_adapter: ReSurfEMGAdapter):
+    def test_pocc_quality(self, blocked_adapter: ReSurfEMGNative):
         with pytest.raises(OptionalDependencyError):
             blocked_adapter.pocc_quality(np.zeros(100), [10, 20], [15, 25], [1.0, 1.0])
 
-    def test_interpeak_distance(self, blocked_adapter: ReSurfEMGAdapter):
+    def test_interpeak_distance(self, blocked_adapter: ReSurfEMGNative):
         with pytest.raises(OptionalDependencyError):
             blocked_adapter.interpeak_distance([10, 20], [10, 20])
 
-    def test_percentage_under_baseline(self, blocked_adapter: ReSurfEMGAdapter):
+    def test_percentage_under_baseline(self, blocked_adapter: ReSurfEMGNative):
         with pytest.raises(OptionalDependencyError):
             blocked_adapter.percentage_under_baseline(
                 np.zeros(100),
@@ -91,19 +91,19 @@ class TestOptionalDependencyBehavior:
                 sample_frequency=100.0,
             )
 
-    def test_detect_local_high_aub(self, blocked_adapter: ReSurfEMGAdapter):
+    def test_detect_local_high_aub(self, blocked_adapter: ReSurfEMGNative):
         with pytest.raises(OptionalDependencyError):
             blocked_adapter.detect_local_high_aub(np.array([1.0, 2.0, 3.0]))
 
-    def test_detect_extreme_time_products(self, blocked_adapter: ReSurfEMGAdapter):
+    def test_detect_extreme_time_products(self, blocked_adapter: ReSurfEMGNative):
         with pytest.raises(OptionalDependencyError):
             blocked_adapter.detect_extreme_time_products(np.array([1.0, 2.0, 3.0]))
 
-    def test_detect_non_consecutive_manoeuvres(self, blocked_adapter: ReSurfEMGAdapter):
+    def test_detect_non_consecutive_manoeuvres(self, blocked_adapter: ReSurfEMGNative):
         with pytest.raises(OptionalDependencyError):
             blocked_adapter.detect_non_consecutive_manoeuvres([0, 100], [50])
 
-    def test_evaluate_bell_curve_error(self, blocked_adapter: ReSurfEMGAdapter):
+    def test_evaluate_bell_curve_error(self, blocked_adapter: ReSurfEMGNative):
         with pytest.raises(OptionalDependencyError):
             blocked_adapter.evaluate_bell_curve_error(
                 [10, 20],
@@ -114,11 +114,11 @@ class TestOptionalDependencyBehavior:
                 sample_frequency=100.0,
             )
 
-    def test_evaluate_event_timing(self, blocked_adapter: ReSurfEMGAdapter):
+    def test_evaluate_event_timing(self, blocked_adapter: ReSurfEMGNative):
         with pytest.raises(OptionalDependencyError):
             blocked_adapter.evaluate_event_timing([1.0, 2.0], [1.1, 2.1])
 
-    def test_evaluate_respiratory_rates(self, blocked_adapter: ReSurfEMGAdapter):
+    def test_evaluate_respiratory_rates(self, blocked_adapter: ReSurfEMGNative):
         with pytest.raises(OptionalDependencyError):
             blocked_adapter.evaluate_respiratory_rates([10, 20], 10.0, 12.0)
 
@@ -129,8 +129,8 @@ class TestValidation:
     acceptance criterion)."""
 
     @pytest.fixture
-    def adapter(self) -> ReSurfEMGAdapter:
-        return ReSurfEMGAdapter()
+    def adapter(self) -> ReSurfEMGNative:
+        return ReSurfEMGNative()
 
     def test_detect_ecg_peaks_rejects_non_integer_valued_frequency(self, adapter):
         with pytest.raises(ValueError, match="integer"):

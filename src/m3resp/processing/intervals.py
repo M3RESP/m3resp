@@ -36,7 +36,7 @@ import numpy as np
 
 from m3resp.data.events import BreathEvent
 from m3resp.core.events import BreathEvent
-from m3resp.processing.emg.shared import _compute_derivative
+from m3resp.emg.processing.shared import _compute_derivative
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

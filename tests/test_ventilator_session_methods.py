@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from m3resp.adapters import ReSurfEMGAdapter
+from m3resp.adapters import ReSurfEMGNative
 from m3resp.adapters.ventilator_adapter import SUGGESTED_LOWPASS_HZ
 from m3resp.core.exceptions import (
     MissingModalityDataError,
@@ -38,7 +38,7 @@ def _payload() -> dict:
 
 def _loaded_session() -> M3Session:
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: _payload()),
+        emg_adapter=ReSurfEMGNative(loader=lambda path, **kwargs: _payload()),
     )
     session.load_ventilator("subject.txt")
     return session
@@ -78,7 +78,7 @@ class TestPreprocessVentilator:
         """
 
         session = M3Session(
-            emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: _payload()),
+            emg_adapter=ReSurfEMGNative(loader=lambda path, **kwargs: _payload()),
         )
         session.load_ventilator("subject.txt", name="mdn")
         result = session.preprocess_ventilator(name="mdn", lowpass_hz=5.0)

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
-from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
+from m3resp.adapters.resurfemg_adapter import ReSurfEMGNative
 from m3resp.adapters.ventilator_adapter import (
     VentilatorAdapter,
     infer_ventilator_duration,
@@ -132,7 +132,7 @@ class M3Session:
     def __init__(
         self,
         eit_adapter: EITProcessingAdapter | None = None,
-        emg_adapter: ReSurfEMGAdapter | None = None,
+        emg_adapter: ReSurfEMGNative | None = None,
         metadata: SessionMetadata | dict[str, Any] | None = None,
         allow_overwrite: bool = False,
         ventilator_adapter: Any | None = None,
@@ -154,7 +154,7 @@ class M3Session:
         """
 
         self.eit_adapter = eit_adapter or EITProcessingAdapter()
-        self.emg_adapter = emg_adapter or ReSurfEMGAdapter()
+        self.emg_adapter = emg_adapter or ReSurfEMGNative()
         # Ventilator processing is native (`VentilatorAdapter` wraps no upstream
         # library), but *loading* borrows whichever adapter owns the file the
         # ventilator channels arrived in: the sEMG's multi-channel export, or

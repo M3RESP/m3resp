@@ -55,7 +55,7 @@ from m3resp.presets import (
     get_preset,
     register_preset,
 )
-from m3resp.processing.emg import ReSurfEMG
+from m3resp.emg.processing import ReSurfEMG
 from m3resp.processing import interpolate_to_time
 from m3resp.synchronization import (
     compute_offsets_from_timestamps,
@@ -103,6 +103,7 @@ __all__ = [
     "QualityAnnotation",
     "QualityFlag",
     "QualityReport",
+    "ReSurfEMG",
     "RecordingSession",
     "Signal",
     "SignalCollection",

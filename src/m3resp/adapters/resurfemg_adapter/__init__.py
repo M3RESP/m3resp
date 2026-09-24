@@ -20,7 +20,7 @@ from ._shared import POSTPROCESSING_FUNCTIONS
 from ._signals import peak_indices_from_events, ventilator_signals
 
 
-class ReSurfEMGAdapter(
+class ReSurfEMGNative(
     _CoreMixin,
     _EcgMixin,
     _BaselineMixin,
@@ -50,7 +50,7 @@ class ReSurfEMGAdapter(
 
 __all__ = [
     "POSTPROCESSING_FUNCTIONS",
-    "ReSurfEMGAdapter",
+    "ReSurfEMGNative",
     "peak_indices_from_events",
     "ventilator_signals",
 ]
