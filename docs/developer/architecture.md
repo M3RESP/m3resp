@@ -196,6 +196,7 @@ src/m3resp/
 │                                           tables.py (row-shaping helpers)
 ├── visualization/                      Session overview and synchronization plots
 └── synthetic/                          Synthetic data generators for tests/examples
+```
 
 Rule of thumb for "where does my new EIT/EMG/multimodal functionality go":
 
