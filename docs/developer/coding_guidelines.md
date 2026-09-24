@@ -40,23 +40,23 @@ reads it back afterwards. This is the convention already used throughout
 function with optional diagnostic/intermediate outputs rather than
 inventing a new toggle.
 
-## Pick fields by producer semantics, not by inspecting the value
+## Pick fields by what the algorithm does, not by inspecting the value
 
-Some types offer more than one field to express what looks like the same
-kind of information (for example `ParameterResult.breath_id` vs.
-`breath_ids`, or `event_id` vs. `start_time`/`end_time`). When a type does
-this, which field a given piece of code uses must be decided once, at
-implementation time, based on what the *producing algorithm* actually
-computed, never dynamically, based on inspecting the value itself (e.g.
-"use `breath_id` if the list has exactly one element").
+Some types offer two or more fields for what seems like the same thing:
+`ParameterResult.breath_id` vs. `breath_ids`, or `event_id` vs.
+`start_time`/`end_time`. When that happens, decide which field to use once,
+when writing the code, based on what the algorithm actually computes. Don't
+decide it while the code runs by looking at the value (like "use
+`breath_id` if there's only one element in the list").
 
-Concretely: an algorithm whose method is "aggregate a value over a set of
-breaths" always populates `breath_ids`, even in a run where that set
-happens to contain only one breath, because the claim being made
-("this is an aggregate over a breath-set") doesn't change with how many
-elements the set has. `breath_id` is reserved for algorithms that are
-inherently single-breath by design. See the discussion on
-[PR #24](https://github.com/M3RESP/m3resp/pull/24) for the full reasoning.
+In practice: if an algorithm aggregates a value over a set of breaths, it
+always writes to `breath_ids`, even on a run where that set has just one
+breath. The claim "this is an aggregate over a set" doesn't change just
+because the set happens to be size one. Use `breath_id` for algorithms that
+are single-breath by design.
+
+See [PR #24](https://github.com/M3RESP/m3resp/pull/24) for the full
+reasoning.
 
 ## Name the shared primitive by what it computes; name the domain quantity by its literature term
 
