@@ -1,0 +1,164 @@
+<!-- ============ 3. CHECK ============ -->
+<div class="view" id="view-check">
+  <!-- ===== A. Quality flags & run report ===== -->
+  <div class="card" id="sectionQualityRun">
+    <div class="card-head"><h3>Quality flags &amp; run report</h3><span class="hint">everything produced while <code>multimodal-full</code> ran</span></div>
+    <div class="card-body" style="padding:0;">
+      <div class="dock tall">
+        <div class="dock-tabs">
+          <div class="dock-tab active" data-dock="qflags">Quality checks <span class="n">86/96</span></div>
+          <div class="dock-tab" data-dock="runlog">Run log <span class="n">47</span></div>
+          <div class="dock-tab" data-dock="prov">Provenance</div>
+        </div>
+        <div class="dock-body" id="rdockQflags" data-dock="qflags" style="padding:12px 14px;">
+          <table class="qtable">
+            <thead><tr><th>Severity</th><th>Modality</th><th>Check</th><th>Result</th><th>Note</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="sev-pill ok">info</span></td>
+                <td><span class="pmod-pill vent">ventilator</span></td>
+                <td><code>pocc_quality</code></td>
+                <td class="pval">1/2 passed</td>
+                <td class="pnote">per-breath check, see run log for the producing step</td>
+              </tr>
+              <tr>
+                <td><span class="sev-pill ok">info</span></td>
+                <td><span class="pmod-pill vent">ventilator</span></td>
+                <td><code>detect_non_consecutive_manoeuvres</code></td>
+                <td class="pval">1/2 passed</td>
+                <td class="pnote">per-breath check, see run log for the producing step</td>
+              </tr>
+              <tr>
+                <td><span class="sev-pill ok">info</span></td>
+                <td><span class="pmod-pill emg">emg</span></td>
+                <td><code>percentage_under_baseline</code></td>
+                <td class="pval">17/19 passed</td>
+                <td class="pnote">per-breath check, see run log for the producing step</td>
+              </tr>
+              <tr>
+                <td><span class="sev-pill ok">info</span></td>
+                <td><span class="pmod-pill emg">emg</span></td>
+                <td><code>evaluate_event_timing</code></td>
+                <td class="pval">12/13 passed</td>
+                <td class="pnote">per-breath check, see run log for the producing step</td>
+              </tr>
+              <tr>
+                <td><span class="sev-pill warn">warning</span></td>
+                <td><span class="pmod-pill emg">emg</span></td>
+                <td><code>evaluate_event_timing_unmatched</code></td>
+                <td class="pval">0/1 passed</td>
+                <td class="pnote">6 event(s) had no paired counterpart and were not assessed.</td>
+              </tr>
+              <tr>
+                <td><span class="sev-pill ok">info</span></td>
+                <td><span class="pmod-pill emg">emg</span></td>
+                <td><code>evaluate_bell_curve_error</code></td>
+                <td class="pval">2/19 passed</td>
+                <td class="pnote">per-breath check, see run log for the producing step</td>
+              </tr>
+              <tr>
+                <td><span class="sev-pill ok">info</span></td>
+                <td><span class="pmod-pill emg">emg</span></td>
+                <td><code>detect_local_high_aub</code></td>
+                <td class="pval">0/19 passed</td>
+                <td class="pnote">per-breath check, see run log for the producing step</td>
+              </tr>
+              <tr>
+                <td><span class="sev-pill ok">info</span></td>
+                <td><span class="pmod-pill emg">emg</span></td>
+                <td><code>detect_extreme_time_products</code></td>
+                <td class="pval">0/19 passed</td>
+                <td class="pnote">per-breath check, see run log for the producing step</td>
+              </tr>
+              <tr>
+                <td><span class="sev-pill ok">info</span></td>
+                <td><span class="pmod-pill emg">emg</span></td>
+                <td><code>evaluate_respiratory_rates</code></td>
+                <td class="pval">1/1 passed</td>
+                <td class="pnote">per-breath check, see run log for the producing step</td>
+              </tr>
+              <tr>
+                <td><span class="sev-pill ok">info</span></td>
+                <td><span class="pmod-pill emg">emg</span></td>
+                <td><code>interpeak_dist</code></td>
+                <td class="pval">1/1 passed</td>
+                <td class="pnote">per-breath check, see run log for the producing step</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="dock-body hidden" id="rdockRunlog" data-dock="runlog" style="padding:12px 14px;">
+<div class="log-line ok">run <b>multimodal-full</b> · run_id 9907d215dda2 · m3resp 0.1.0 · started 12:42:52Z</div>
+<div class="log-line"><span class="t">+ 0.324s</span>eit.load                            323.6 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.226s</span>emg.load                            902.2 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.227s</span>ventilator.load                       1.1 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.241s</span>session.sync_raw                     14.0 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.313s</span>eit.detect_rates                     72.2 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.427s</span>eit.mdn_filter                      114.1 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.430s</span>eit.global_impedance                  2.8 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.432s</span>eit.detect_breaths                    2.1 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.432s</span>eit.normalize_breaths                 0.1 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.434s</span>eit.continuous_tiv                    2.2 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.451s</span>eit.eeli                             17.0 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.821s</span>eit.pixel_breaths                   369.3 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.844s</span>eit.pixel_tiv                        23.5 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.868s</span>eit.roi_tiv_lungspace                23.3 ms  ok</div>
+<div class="log-line"><span class="t">+ 2.496s</span>eit.roi_amplitude_lungspace         628.6 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.281s</span>eit.roi_watershed                   785.1 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.285s</span>eit.roi_filter_by_size                3.2 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.289s</span>emg.preprocess                        4.3 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.295s</span>emg.ecg_detect_peaks                  5.8 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.298s</span>emg.ecg_gating                        3.8 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.311s</span>emg.detect_breaths                   12.7 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.311s</span>emg.peak_indices                      0.0 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.311s</span>ventilator.channels                   0.0 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.373s</span>emg.slopesum_baseline                61.8 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.373s</span>emg.onoffpeak_baseline_crossing       0.4 ms  ok</div>
+<div class="log-line"><span class="t">+ 4.505s</span>emg.time_to_peak                   1131.3 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.627s</span>emg.pseudo_slope                   1122.4 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.627s</span>emg.amplitude                         0.0 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.630s</span>emg.time_product                      3.4 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.649s</span>emg.area_under_baseline              18.4 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.649s</span>emg.respiratory_rate                  0.2 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.649s</span>ventilator.find_occluded_breaths      0.4 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.650s</span>ventilator.pocc_intervals             0.7 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.651s</span>ventilator.pocc_time_product          0.5 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.651s</span>ventilator.pocc_quality               0.7 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.652s</span>ventilator.detect_breaths             0.4 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.652s</span>ventilator.respiratory_rate           0.1 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.652s</span>ventilator.detect_non_consecutive_manoeuvres    0.4 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.652s</span>ventilator.normalize_breaths          0.3 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.653s</span>emg.snr_pseudo                        0.9 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.676s</span>emg.percentage_under_baseline        22.9 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.677s</span>emg.detect_local_high_aub             0.6 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.678s</span>emg.detect_extreme_time_products      0.6 ms  ok</div>
+<div class="log-line"><span class="t">+10.000s</span>emg.evaluate_bell_curve_error      4322.3 ms  ok</div>
+<div class="log-line"><span class="t">+10.000s</span>emg.evaluate_event_timing             0.7 ms  ok</div>
+<div class="log-line"><span class="t">+10.001s</span>emg.evaluate_respiratory_rates        0.5 ms  ok</div>
+<div class="log-line"><span class="t">+10.002s</span>emg.interpeak_dist                    0.7 ms  ok</div>
+<div class="log-line ok">47/47 steps completed · total 10.014s · status: succeeded</div>
+        </div>
+        <div class="dock-body hidden" id="rdockProv" data-dock="prov" style="padding:12px 14px;">
+          <div class="prov-row"><div class="k">Pipeline</div><div class="v">multimodal-full</div></div>
+          <div class="prov-row"><div class="k">Run id</div><div class="v">9907d215dda2452d</div></div>
+          <div class="prov-row"><div class="k">m3resp version</div><div class="v">0.1.0</div></div>
+          <div class="prov-row"><div class="k">Started</div><div class="v">2026-07-30T12:42:52Z</div></div>
+          <div class="prov-row"><div class="k">Finished</div><div class="v">2026-07-30T12:43:02Z · 10.014s</div></div>
+          <div class="prov-row"><div class="k">Status</div><div class="v">succeeded — 47/47 steps</div></div>
+          <div class="prov-row"><div class="k">Inputs</div><div class="v">m3resp_multimodal_1_eit_draeger.bin, m3resp_multimodal_1_emg.Poly5, m3resp_multimodal_1_ventilator.Poly5</div></div>
+          <p style="margin:14px 0 0;font-size:12px;color:var(--text-dim);">Editing a step's parameters and re-running invalidates only its downstream closure — for example, changing <b>emg.snr_pseudo</b>'s threshold invalidates <code>emg_time_product</code>, <code>emg_pseudo_slope</code>, the quality summary and <code>export.session_summary</code>, computed from <code>session_reads</code>/<code>session_writes</code> (see <b>2 · Design</b>).</p>
+          <button class="tb-btn primary" style="margin-top:12px;">Rerun 4 affected steps</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="check-confirm-bar" id="checkConfirmBar">
+    <div class="check-confirm-text">
+      <b>Reviewed the quality checks and run log?</b>
+      <span>Confirming unlocks <b>4 · Results</b> — the parameters, saved values, and plots this run produced.</span>
+    </div>
+    <button class="tb-btn primary" id="confirmResultsBtn">Confirm &amp; continue →</button>
+  </div>
+</div>
+

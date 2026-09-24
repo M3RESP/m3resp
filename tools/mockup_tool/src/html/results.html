@@ -1,0 +1,179 @@
+<!-- ============ 4. RESULTS ============ -->
+<div class="view" id="view-results">
+  <div class="card" id="sectionParams">
+    <div class="card-head"><h3>Parameters &amp; saved values</h3><span class="hint">computed per step, written to <code>parameters.csv</code> / <code>parameter_results.csv</code> / <code>summary.json</code></span></div>
+    <div class="card-body">
+      <div class="review-top" style="margin-bottom:18px;">
+        <div class="metric-card">
+          <div class="label">EIT respiratory rate</div>
+          <div class="value">13.9<span class="unit">br/min</span></div>
+          <div class="sub">eit.detect_rates · Welch, 30 s window</div>
+          <svg class="spark" viewBox="0 0 200 34" preserveAspectRatio="none"><polyline points="0,20 15,16 30,22 45,14 60,18 75,10 90,16 105,12 120,17 135,11 150,15 165,9 180,14 200,12" fill="none" stroke="var(--eit)" stroke-width="2"/></svg>
+        </div>
+        <div class="metric-card">
+          <div class="label">EIT heart rate (removed)</div>
+          <div class="value">95.8<span class="unit">bpm</span></div>
+          <div class="sub">eit.detect_rates · removed via eit.mdn_filter</div>
+          <svg class="spark" viewBox="0 0 200 34" preserveAspectRatio="none"><polyline points="0,18 15,20 30,13 45,19 60,15 75,21 90,14 105,18 120,12 135,16 150,10 165,15 180,13 200,17" fill="none" stroke="var(--eit)" stroke-width="2"/></svg>
+        </div>
+        <div class="metric-card">
+          <div class="label">EMG SNR (pseudo), mean</div>
+          <div class="value">0.879<span class="unit">a.u.</span></div>
+          <div class="sub">emg.snr_pseudo · mean over 19 breaths</div>
+          <svg class="spark" viewBox="0 0 200 34" preserveAspectRatio="none"><polyline points="0,16 15,17 30,15 45,18 60,14 75,17 90,15 105,16 120,14 135,17 150,15 165,16 180,14 200,16" fill="none" stroke="var(--emg)" stroke-width="2"/></svg>
+        </div>
+        <div class="metric-card">
+          <div class="label">EMG % under baseline, mean</div>
+          <div class="value">37.7<span class="unit">%</span></div>
+          <div class="sub">emg.percentage_under_baseline · mean over 19 breaths</div>
+          <svg class="spark" viewBox="0 0 200 34" preserveAspectRatio="none"><polyline points="0,24 15,20 30,22 45,15 60,19 75,12 90,16 105,10 120,14 135,9 150,13 165,8 180,11 200,7" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>
+        </div>
+      </div>
+      <div class="params-toolbar">
+        <input class="params-search" id="paramsSearch" placeholder="Filter by name…">
+        <div class="mod-chip on" data-pmod="eit">EIT</div>
+        <div class="mod-chip on" data-pmod="emg">EMG</div>
+        <div class="mod-chip on" data-pmod="vent">Ventilator</div>
+        <div class="mod-chip on" data-pmod="generic">Session</div>
+        <div class="tb-spacer"></div>
+        <span class="params-count" id="paramsCount">16 values</span>
+      </div>
+      <div style="max-height:420px;overflow:auto;">
+        <table class="ptable" id="paramsTable">
+          <thead><tr><th>Modality</th><th>Name</th><th>Value</th><th>Saved to</th><th>Note</th></tr></thead>
+          <tbody>
+              <tr data-mod="eit">
+                <td><span class="pmod-pill eit">eit</span></td>
+                <td><code>respiratory_rate</code></td>
+                <td class="pval">13.9<span style="color:var(--text-faint);font-weight:500;"> br/min</span></td>
+                <td><span class="type-chip">parameter_results.csv</span></td>
+                <td class="pnote">eit.detect_rates · Welch, 30 s window</td>
+              </tr>
+              <tr data-mod="eit">
+                <td><span class="pmod-pill eit">eit</span></td>
+                <td><code>heart_rate</code></td>
+                <td class="pval">95.8<span style="color:var(--text-faint);font-weight:500;"> bpm</span></td>
+                <td><span class="type-chip">parameter_results.csv</span></td>
+                <td class="pnote">eit.detect_rates · removed via eit.mdn_filter</td>
+              </tr>
+              <tr data-mod="eit">
+                <td><span class="pmod-pill eit">eit</span></td>
+                <td><code>pixel_breaths — valid fraction</code></td>
+                <td class="pval">84.2<span style="color:var(--text-faint);font-weight:500;"> %</span></td>
+                <td><span class="type-chip">parameter_result_arrays.npz</span></td>
+                <td class="pnote">eit.pixel_breaths · 11212/13320 valid pixel-breaths</td>
+              </tr>
+              <tr data-mod="eit">
+                <td><span class="pmod-pill eit">eit</span></td>
+                <td><code>pixel_tivs — valid fraction</code></td>
+                <td class="pval">100.0<span style="color:var(--text-faint);font-weight:500;"> %</span></td>
+                <td><span class="type-chip">parameter_result_arrays.npz</span></td>
+                <td class="pnote">eit.pixel_tiv · 13/13 breaths valid</td>
+              </tr>
+              <tr data-mod="eit">
+                <td><span class="pmod-pill eit">eit</span></td>
+                <td><code>watershed_lungspace_mask</code></td>
+                <td class="pval">302 / 1024<span style="color:var(--text-faint);font-weight:500;"> px</span></td>
+                <td><span class="type-chip">parameter_result_arrays.npz</span></td>
+                <td class="pnote">eit.roi_watershed · 29.5% of pixels included</td>
+              </tr>
+              <tr data-mod="eit">
+                <td><span class="pmod-pill eit">eit</span></td>
+                <td><code>tiv_lungspace_mask</code></td>
+                <td class="pval">301 / 1024<span style="color:var(--text-faint);font-weight:500;"> px</span></td>
+                <td><span class="type-chip">parameter_result_arrays.npz</span></td>
+                <td class="pnote">eit.roi_tiv_lungspace · threshold 0.15</td>
+              </tr>
+              <tr data-mod="emg">
+                <td><span class="pmod-pill emg">emg</span></td>
+                <td><code>snr_pseudo — mean</code></td>
+                <td class="pval">0.879<span style="color:var(--text-faint);font-weight:500;"> a.u.</span></td>
+                <td><span class="type-chip">parameter_results.csv</span></td>
+                <td class="pnote">emg.snr_pseudo · mean over 19 breaths</td>
+              </tr>
+              <tr data-mod="emg">
+                <td><span class="pmod-pill emg">emg</span></td>
+                <td><code>percentage_under_baseline — mean</code></td>
+                <td class="pval">37.7<span style="color:var(--text-faint);font-weight:500;"> %</span></td>
+                <td><span class="type-chip">parameter_results.csv</span></td>
+                <td class="pnote">emg.percentage_under_baseline · mean over 19 breaths</td>
+              </tr>
+              <tr data-mod="emg">
+                <td><span class="pmod-pill emg">emg</span></td>
+                <td><code>interpeak_dist_ecg_median</code></td>
+                <td class="pval">2.123<span style="color:var(--text-faint);font-weight:500;"> s</span></td>
+                <td><span class="type-chip">parameter_results.csv</span></td>
+                <td class="pnote">emg.interpeak_dist · ECG-peak spacing</td>
+              </tr>
+              <tr data-mod="emg">
+                <td><span class="pmod-pill emg">emg</span></td>
+                <td><code>interpeak_dist_emg_median</code></td>
+                <td class="pval">2.484<span style="color:var(--text-faint);font-weight:500;"> s</span></td>
+                <td><span class="type-chip">parameter_results.csv</span></td>
+                <td class="pnote">emg.interpeak_dist · EMG-breath spacing</td>
+              </tr>
+              <tr data-mod="emg">
+                <td><span class="pmod-pill emg">emg</span></td>
+                <td><code>ecg_gate_mask — gate width</code></td>
+                <td class="pval">205<span style="color:var(--text-faint);font-weight:500;"> samples</span></td>
+                <td><span class="type-chip">parameter_result_arrays.npz</span></td>
+                <td class="pnote">emg.ecg_gating · fill_method=1, envelope 0.5 s RMS</td>
+              </tr>
+              <tr data-mod="vent">
+                <td><span class="pmod-pill vent">ventilator</span></td>
+                <td><code>pocc_quality_dp_up_90 (breath 0)</code></td>
+                <td class="pval">0.0568<span style="color:var(--text-faint);font-weight:500;"> cmH₂O</span></td>
+                <td><span class="type-chip">parameter_results.csv</span></td>
+                <td class="pnote">ventilator.pocc_quality · dp_up_90 criterion</td>
+              </tr>
+              <tr data-mod="vent">
+                <td><span class="pmod-pill vent">ventilator</span></td>
+                <td><code>pocc_quality_dp_up_90 (breath 1)</code></td>
+                <td class="pval">0.0611<span style="color:var(--text-faint);font-weight:500;"> cmH₂O</span></td>
+                <td><span class="type-chip">parameter_results.csv</span></td>
+                <td class="pnote">ventilator.pocc_quality · dp_up_90 criterion</td>
+              </tr>
+              <tr data-mod="generic">
+                <td><span class="pmod-pill generic">session</span></td>
+                <td><code>raw_alignment.method</code></td>
+                <td class="pval">manual_offset<span style="color:var(--text-faint);font-weight:500;"> —</span></td>
+                <td><span class="type-chip">summary.json</span></td>
+                <td class="pnote">session.sync_raw</td>
+              </tr>
+              <tr data-mod="generic">
+                <td><span class="pmod-pill generic">session</span></td>
+                <td><code>raw_alignment.offset_seconds</code></td>
+                <td class="pval">eit 0.0 · emg −2.0 · vent 0.0<span style="color:var(--text-faint);font-weight:500;"> s</span></td>
+                <td><span class="type-chip">summary.json / parameters.csv</span></td>
+                <td class="pnote">session.sync_raw</td>
+              </tr>
+              <tr data-mod="generic">
+                <td><span class="pmod-pill generic">session</span></td>
+                <td><code>raw_alignment.cropped_samples (emg)</code></td>
+                <td class="pval">4096<span style="color:var(--text-faint);font-weight:500;"> samples</span></td>
+                <td><span class="type-chip">summary.json</span></td>
+                <td class="pnote">session.sync_raw · at offset −2.0 s</td>
+              </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== C. Plots ===== -->
+  <div class="card" id="sectionPlots">
+    <div class="card-head"><h3>Plots</h3><span class="hint">discovered from the modules this pipeline used</span></div>
+    <div class="card-body">
+      <div class="plots-layout">
+        <div class="plots-list">
+          <div class="palette-scroll" id="plotsList"></div>
+        </div>
+        <div class="plots-viz" id="plotsViz">
+          <div class="plots-viz-empty" id="plotsVizEmpty">Tick a plot on the left to visualize it here — figures.dir output is discovered from the same step registry the Design canvas uses, so only modules this pipeline actually ran show up.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
