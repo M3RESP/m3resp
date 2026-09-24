@@ -132,7 +132,7 @@ class _BaselineMixin:
         if moving_average_samples is None:
             moving_average_samples = fs // 2
         if percentile_window_samples is None:
-            percentile_window_samples = fs // 2
+            percentile_window_samples = fs
 
         moving_baseline = self.moving_baseline(
             envelope=array,
@@ -144,7 +144,7 @@ class _BaselineMixin:
         running_series = pd.Series(moving_baseline)
 
         running_baseline = running_series.rolling(
-            window=moving_average_samples,
+            window=window_samples,
             min_periods=1,
             center=True,
         )
@@ -165,7 +165,7 @@ class _BaselineMixin:
             end_index = min([n_samples - 1, index + window_samples])
             baseline[
                 index : min([index + percentile_window_samples, n_samples - 1])
-            ] = np.nanpercentile(
+            ] = 1.2 * np.nanpercentile(
                 augmented_array[start_index:end_index], augmented_percentile
             )
 

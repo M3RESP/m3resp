@@ -30,7 +30,6 @@ Full attribution notice: see top-level NOTICE.md.
 ---------------------------------------------------------------------------
 """
 
-
 from __future__ import annotations
 
 import warnings
@@ -481,9 +480,7 @@ class _QualityMixin:
             )
 
             plus_index = (
-                3 - (end_index - start_index)
-                if end_index - start_index < 3
-                else 0
+                3 - (end_index - start_index) if end_index - start_index < 3 else 0
             )
 
             x_data = time[start_index : end_index + 1 + plus_index]
@@ -525,9 +522,7 @@ class _QualityMixin:
                 np.abs(
                     _signal[start_index : end_index + 1]
                     - (
-                        bell_curve(
-                            time[start_index : end_index + 1], *popt
-                        )
+                        bell_curve(time[start_index : end_index + 1], *popt)
                         + y_nadir[peak_number]
                     )
                 ),
@@ -543,8 +538,8 @@ class _QualityMixin:
 
         return (
             np.asarray(valid_peak),
-            np.asarray(percentage_bell_error),
             np.asarray(bell_error),
+            np.asarray(percentage_bell_error),
             np.asarray(y_nadir),
             np.asarray(fitted_parameters),
         )

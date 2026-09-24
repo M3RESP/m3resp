@@ -40,7 +40,7 @@ from .signals import peak_indices_from_events, ventilator_signals
 
 
 class _DefaultsMixin:
-    #TODO
+    # TODO
     def _preprocess_default(
         self,
         recording: Any,
@@ -149,7 +149,8 @@ class _DefaultsMixin:
                 ),
             },
         }
-#TODO
+
+    # TODO
     def _detect_breaths_default(
         self,
         processed_emg: Any,
@@ -197,7 +198,8 @@ class _DefaultsMixin:
             )
 
         return events
-#TODO
+
+    # TODO
     def _postprocess_default(
         self: _PostprocessingOpsProtocol,
         processed_emg: Any,

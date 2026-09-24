@@ -34,9 +34,9 @@ def load(
 ) -> EMGRecording:
     """Load an EMG recording through the Stage 1 adapter."""
 
-    from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
+    from m3resp.adapters.resurfemg_adapter import ReSurfEMGNative
 
-    emg_adapter = adapter or ReSurfEMGAdapter()
+    emg_adapter = adapter or ReSurfEMGNative()
     recording = emg_adapter.load(str(path), **kwargs)
     raw = recording.get("array") if isinstance(recording, dict) else None
     dataframe = recording.get("dataframe") if isinstance(recording, dict) else None

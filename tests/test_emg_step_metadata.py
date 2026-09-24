@@ -115,7 +115,7 @@ def test_ecg_removal_steps_need_resurfemg():
 
 
 def test_ecg_gating_fill_method_choices_match_adapter_validation():
-    from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
+    from m3resp.adapters.resurfemg_adapter import ReSurfEMGNative
 
     description = describe_step("emg.ecg_gating")
     fill_method = next(p for p in description.parameters if p.name == "fill_method")
@@ -123,9 +123,7 @@ def test_ecg_gating_fill_method_choices_match_adapter_validation():
     assert fill_method.default == 1
     # Cross-check against the adapter's own runtime validation, not just
     # the docstring/comment.
-    assert (
-        ReSurfEMGAdapter.gate_ecg.__doc__ and "0" in ReSurfEMGAdapter.gate_ecg.__doc__
-    )
+    assert ReSurfEMGNative.gate_ecg.__doc__ and "0" in ReSurfEMGNative.gate_ecg.__doc__
 
 
 def test_snr_pseudo_flags_are_optional_matching_conditional_behavior():

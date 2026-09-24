@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from m3resp.adapters import ReSurfEMGAdapter
+from m3resp.adapters import ReSurfEMGNative
 from m3resp.core.session import M3Session
 from m3resp.modalities.ventilator import VentilatorRecording
 from m3resp.synchronization.cropping import ventilator_payload, ventilator_raw
@@ -31,7 +31,7 @@ def _payload(n_samples: int = 100, fs: float = 10.0) -> dict:
 def _session(payload: dict | None = None) -> M3Session:
     data = payload if payload is not None else _payload()
     return M3Session(
-        emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: data),
+        emg_adapter=ReSurfEMGNative(loader=lambda path, **kwargs: data),
     )
 
 
@@ -78,7 +78,7 @@ class TestLoadVentilator:
             eit_adapter=EITProcessingAdapter(
                 loader=lambda path, vendor=None, **kwargs: {"path": path}
             ),
-            emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: _payload()),
+            emg_adapter=ReSurfEMGNative(loader=lambda path, **kwargs: _payload()),
         )
         session.load_eit("subject.eit")
         session.load_emg("subject.edf")
@@ -108,8 +108,8 @@ class TestAdapterInjection:
     def test_a_dedicated_adapter_can_be_injected(self):
         ventilator_payload_dict = _payload()
         session = M3Session(
-            emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: {"emg": True}),
-            ventilator_adapter=ReSurfEMGAdapter(
+            emg_adapter=ReSurfEMGNative(loader=lambda path, **kwargs: {"emg": True}),
+            ventilator_adapter=ReSurfEMGNative(
                 loader=lambda path, **kwargs: ventilator_payload_dict
             ),
         )

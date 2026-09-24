@@ -34,10 +34,9 @@ from typing import Any, overload
 import numpy as np
 
 from m3resp.core.exceptions import OptionalDependencyError, MutuallyExclusiveArgsError
-from m3resp.processing.emg.shared import (
+from m3resp.emg.processing.shared import (
     _require_sampling_frequency,
     _validate_incompatible_kwargs,
-    _validate_to_samples,
 )
 from m3resp.processing.filters import capture_value
 

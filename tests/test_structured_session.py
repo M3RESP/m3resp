@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 
 from m3resp import M3Session
-from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
+from m3resp.adapters import EITProcessingAdapter, ReSurfEMGNative
 from m3resp.core.exceptions import VariantAlreadyExistsError
 from m3resp.data import ParameterResult, QualityFlag, Signal
 
@@ -86,7 +86,7 @@ def test_preprocess_eit_with_custom_callable_does_not_populate_collections():
 
 
 def test_preprocess_emg_populates_signals_on_default_adapter_path():
-    emg_adapter = ReSurfEMGAdapter()
+    emg_adapter = ReSurfEMGNative()
     emg_adapter.preprocess = lambda *args, **kwargs: _fake_emg_preprocessed()  # type: ignore[method-assign]
     session = M3Session(emg_adapter=emg_adapter)
     session.raw["emg"] = SimpleNamespace(data=object())
@@ -100,7 +100,7 @@ def test_preprocess_emg_populates_signals_on_default_adapter_path():
 
 
 def test_postprocess_emg_populates_parameter_results_and_quality():
-    emg_adapter = ReSurfEMGAdapter()
+    emg_adapter = ReSurfEMGNative()
     emg_adapter.preprocess = lambda *args, **kwargs: _fake_emg_preprocessed()  # type: ignore[method-assign]
     emg_adapter.postprocess = lambda *args, **kwargs: {  # type: ignore[method-assign]
         "computed": {
@@ -141,7 +141,7 @@ def test_session_stores_eit_and_emg_signals_in_the_same_collection():
 
     eit_adapter = EITProcessingAdapter()
     eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
-    emg_adapter = ReSurfEMGAdapter()
+    emg_adapter = ReSurfEMGNative()
     emg_adapter.preprocess = lambda *args, **kwargs: _fake_emg_preprocessed()  # type: ignore[method-assign]
 
     session = M3Session(eit_adapter=eit_adapter, emg_adapter=emg_adapter)
@@ -239,7 +239,7 @@ def test_preprocess_eit_distinct_variants_coexist_without_touching_default():
 
 
 def test_preprocess_emg_raises_on_duplicate_variant():
-    emg_adapter = ReSurfEMGAdapter()
+    emg_adapter = ReSurfEMGNative()
     emg_adapter.preprocess = lambda *args, **kwargs: _fake_emg_preprocessed()  # type: ignore[method-assign]
     session = M3Session(emg_adapter=emg_adapter)
     session.raw["emg"] = SimpleNamespace(data=object())

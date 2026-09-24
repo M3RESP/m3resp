@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter, ventilator_signals
+from m3resp.adapters.resurfemg_adapter import ReSurfEMGNative, ventilator_signals
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.core.session import M3Session
 
@@ -47,7 +47,7 @@ def _session(
     from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
 
     return M3Session(
-        emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: payloads[str(path)]),
+        emg_adapter=ReSurfEMGNative(loader=lambda path, **kwargs: payloads[str(path)]),
         eit_adapter=(
             EITProcessingAdapter(
                 loader=lambda path, vendor=None, **kwargs: eit_sequence

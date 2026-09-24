@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from m3resp import BreathEvent, M3Session
-from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
+from m3resp.adapters import EITProcessingAdapter, ReSurfEMGNative
 
 
 def test_session_loads_modalities_with_injected_adapters():
@@ -12,7 +12,7 @@ def test_session_loads_modalities_with_injected_adapters():
         eit_adapter=EITProcessingAdapter(
             loader=lambda path, vendor=None, **kwargs: {"path": path, "vendor": vendor}
         ),
-        emg_adapter=ReSurfEMGAdapter(
+        emg_adapter=ReSurfEMGNative(
             loader=lambda path, **kwargs: {"path": path, "kind": "emg"}
         ),
     )
@@ -28,7 +28,7 @@ def test_session_loads_modalities_with_injected_adapters():
 def test_detection_alignment_and_export(tmp_path):
     session = M3Session(
         eit_adapter=EITProcessingAdapter(loader=lambda *args, **kwargs: {"eit": True}),
-        emg_adapter=ReSurfEMGAdapter(loader=lambda *args, **kwargs: {"emg": True}),
+        emg_adapter=ReSurfEMGNative(loader=lambda *args, **kwargs: {"emg": True}),
     )
     session.load_eit("subject.eit", vendor="sentec")
     session.load_emg("subject.edf")
@@ -62,7 +62,7 @@ def test_session_event_helpers_keep_events_dict_as_backing_store():
 
 def test_session_normalizes_ventilator_breaths_after_emg_postprocessing():
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(loader=lambda *args, **kwargs: {"emg": True})
+        emg_adapter=ReSurfEMGNative(loader=lambda *args, **kwargs: {"emg": True})
     )
     session.processed["emg"] = {"filtered": True}
 

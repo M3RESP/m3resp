@@ -20,7 +20,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from m3resp.adapters import ReSurfEMGAdapter
+from m3resp.adapters import ReSurfEMGNative
 
 pytest.importorskip("resurfemg")
 
@@ -64,7 +64,7 @@ def test_preprocess_reproduces_resurfemg_filtering_and_envelope_exactly():
     envelope_window_samples = int(envelope_window_seconds * fs)
     expected_envelope = full_rolling_arv(expected_filtered, envelope_window_samples)
 
-    adapter = ReSurfEMGAdapter()
+    adapter = ReSurfEMGNative()
     processed = adapter.preprocess(
         {"array": [raw], "metadata": {"fs": fs}},
         high_pass_hz=high_pass_hz,
@@ -91,7 +91,7 @@ def test_preprocess_envelope_defaults_to_rms_not_arv():
     fs = 1000.0
     raw = _synthetic_emg_signal(fs=fs)
     recording = {"array": [raw], "metadata": {"fs": fs}}
-    adapter = ReSurfEMGAdapter()
+    adapter = ReSurfEMGNative()
 
     processed = adapter.preprocess(recording, high_pass_hz=80.0, low_pass_hz=250.0)
 
@@ -111,7 +111,7 @@ def test_preprocess_bandpass_defaults_to_the_literature_range():
     low enough to double as ECG suppression - `emg.ecg_gating` owns that."""
 
     fs = 2000.0
-    adapter = ReSurfEMGAdapter()
+    adapter = ReSurfEMGNative()
 
     processed = adapter.preprocess(
         {"array": [_synthetic_emg_signal(fs=fs)], "metadata": {"fs": fs}}
@@ -126,7 +126,7 @@ def test_detect_breaths_reproduces_resurfemg_peak_detection_exactly():
 
     fs = 1000.0
     raw = _synthetic_emg_signal(fs=fs)
-    adapter = ReSurfEMGAdapter()
+    adapter = ReSurfEMGNative()
     processed = adapter.preprocess({"array": [raw], "metadata": {"fs": fs}})
 
     min_width_samples = int(1.0 * fs)
@@ -167,7 +167,7 @@ def test_detect_ecg_peaks_reproduces_resurfemg_exactly():
     signal = _synthetic_ecg_contaminated_signal(fs=fs)
     expected = detect_ecg_peaks(signal, int(fs))
 
-    adapter = ReSurfEMGAdapter()
+    adapter = ReSurfEMGNative()
     actual = adapter.detect_ecg_peaks(signal, sample_frequency=fs)
 
     np.testing.assert_array_equal(actual, expected)
@@ -185,7 +185,7 @@ def test_gate_ecg_reproduces_resurfemg_exactly_for_every_fill_method(fill_method
 
     expected = gating(signal, peaks, gate_width=205, method=fill_method)
 
-    adapter = ReSurfEMGAdapter()
+    adapter = ReSurfEMGNative()
     actual = adapter.gate_ecg(
         signal, peaks, gate_width_samples=205, fill_method=fill_method
     )
@@ -209,7 +209,7 @@ def test_wavelet_denoise_ecg_reproduces_resurfemg_exactly_including_padding():
         wavelet_denoising(signal, peaks, int(fs))
     )
 
-    adapter = ReSurfEMGAdapter()
+    adapter = ReSurfEMGNative()
     actual_cleaned, actual_decomposition, actual_thresholds, actual_mask = (
         adapter.wavelet_denoise_ecg(signal, peaks, sample_frequency=fs)
     )
@@ -236,7 +236,7 @@ def test_moving_baseline_reproduces_resurfemg_exactly():
         envelope, window_samples, step_samples, set_percentile=33.0
     )
 
-    adapter = ReSurfEMGAdapter()
+    adapter = ReSurfEMGNative()
     actual = adapter.moving_baseline(
         envelope,
         window_samples=window_samples,
@@ -264,7 +264,7 @@ def test_slopesum_baseline_reproduces_resurfemg_exactly():
         augm_percentile=25.0,
     )
 
-    adapter = ReSurfEMGAdapter()
+    adapter = ReSurfEMGNative()
     actual_baseline, actual_mean, actual_std, actual_series = adapter.slopesum_baseline(
         envelope,
         window_samples=window_samples,

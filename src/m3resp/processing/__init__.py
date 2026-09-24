@@ -1,6 +1,6 @@
 """Shared signal-processing primitives used by modality adapters."""
 
-from m3resp.processing.emg import ReSurfEMG
+from m3resp.emg.processing import ReSurfEMG
 from m3resp.processing.filters import (
     bandpass_filter,
     bandstop_filter,
@@ -77,7 +77,6 @@ __all__ = [
     "detect_pressure_dip_breaths",
     "detect_ventilator_breath_peaks",
     "estimate_peep",
-    "estimated_ecg_subtraction",
     "fraction_flag",
     "harmonic_notch_filter",
     "highpass_filter",

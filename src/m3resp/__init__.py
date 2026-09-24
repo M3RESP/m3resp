@@ -46,7 +46,7 @@ from m3resp.presets import (
     get_pipeline,
     register_pipeline,
 )
-from m3resp.processing.emg import ReSurfEMG
+from m3resp.emg.processing import ReSurfEMG
 from m3resp.synchronization import (
     compute_offsets_from_timestamps,
     link_breaths_by_time,
@@ -88,6 +88,7 @@ __all__ = [
     "QualityAnnotation",
     "QualityFlag",
     "QualityReport",
+    "ReSurfEMG",
     "RecordingSession",
     "Signal",
     "SignalCollection",
