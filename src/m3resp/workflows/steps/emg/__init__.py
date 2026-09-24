@@ -57,6 +57,7 @@ from .quality_snr import (
     percentage_under_baseline,
     snr_pseudo,
 )
+from .selection import remove_invalid_breaths
 
 __all__ = [
     "amplitude",
@@ -79,6 +80,7 @@ __all__ = [
     "percentage_under_baseline",
     "preprocess",
     "pseudo_slope",
+    "remove_invalid_breaths",
     "respiratory_rate",
     "slopesum_baseline",
     "snr_pseudo",

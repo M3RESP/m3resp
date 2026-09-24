@@ -39,6 +39,7 @@ _EMG_STEP_NAMES = [
     "emg.evaluate_bell_curve_error",
     "emg.evaluate_event_timing",
     "emg.evaluate_respiratory_rates",
+    "emg.remove_invalid_breaths",
 ]
 
 #: Ventilator steps, split out of the `emg.*` namespace once the
@@ -70,15 +71,16 @@ _QUALITY_STEP_NAMES = [
     "emg.evaluate_bell_curve_error",
     "emg.evaluate_event_timing",
     "emg.evaluate_respiratory_rates",
+    "emg.remove_invalid_breaths",
 ]
 
 
-def test_all_thirty_five_emg_and_ventilator_steps_are_registered_and_described():
+def test_all_thirty_six_emg_and_ventilator_steps_are_registered_and_described():
     emg = {d.name for d in describe_steps(prefix="emg.")}
     ventilator = {d.name for d in describe_steps(prefix="ventilator.")}
     assert emg == set(_EMG_STEP_NAMES)
     assert ventilator == set(_VENTILATOR_STEP_NAMES)
-    assert len(_ALL_STEP_NAMES) == 35
+    assert len(_ALL_STEP_NAMES) == 36
 
 
 def test_every_emg_step_declares_some_metadata_and_is_json_safe():
@@ -93,7 +95,7 @@ def test_every_emg_step_declares_some_metadata_and_is_json_safe():
         json.dumps(description.as_dict())
 
 
-def test_ten_quality_steps_are_all_categorized_quality():
+def test_eleven_quality_steps_are_all_categorized_quality():
     for name in _QUALITY_STEP_NAMES:
         assert describe_step(name).category == "quality", name
 
@@ -164,12 +166,12 @@ def test_describe_steps_prefix_filter_separates_ventilator_from_emg():
     assert not names & set(_EMG_STEP_NAMES)
 
 
-def test_all_fifty_nine_built_in_steps_still_describe_without_error():
+def test_all_sixty_built_in_steps_still_describe_without_error():
     descriptions = describe_steps()
-    assert len(descriptions) == 59
+    assert len(descriptions) == 60
     with_metadata = [
         d
         for d in descriptions
         if d.parameters or d.output_artifacts or d.input_artifacts
     ]
-    assert len(with_metadata) == 59
+    assert len(with_metadata) == 60
