@@ -27,7 +27,7 @@ ReSurfEMGAdapter
 m3resp Signal / BreathEvent / ParameterResult / QualityFlag
 ```
 
-## `EITProcessingAdapter` (`src/m3resp/adapters/eitprocessing_adapter.py`)
+## `EITProcessingAdapter` (`src/m3resp/adapters/eitprocessing_adapter/`)
 
 | Method | Responsibility |
 |---|---|
@@ -41,11 +41,11 @@ m3resp Signal / BreathEvent / ParameterResult / QualityFlag
 | `to_parameters(preprocessed)` | **Conversion boundary.** Turns a `preprocess()` result into `list[ParameterResult]` (TIV, EELI, rate, ...). |
 | `to_quality_flags(preprocessed)` | **Conversion boundary.** Turns a `preprocess()` result into `list[QualityFlag]`. |
 
-## `ReSurfEMGAdapter` (`src/m3resp/adapters/resurfemg_adapter.py`)
+## `ReSurfEMGAdapter` (`src/m3resp/adapters/resurfemg_adapter/`)
 
 | Method | Responsibility |
 |---|---|
-| `load(path, **kwargs)` | Load an EMG/ventilator file. |
+| `load(path, **kwargs)` | Load an EMG file (also used by `VentilatorAdapter` for ventilator channels stored in the same file as the EMG). |
 | `preprocess(signal, **kwargs)` | Filtering + envelope, matching `resurfemg.preprocessing`. |
 | `detect_breaths(signal, **kwargs)` | Returns `list[BreathEvent]` directly - already converted. |
 | `compute_features(...)` | Amplitude/AUC/pseudo-slope/time-to-peak and related per-breath features. |
@@ -53,7 +53,21 @@ m3resp Signal / BreathEvent / ParameterResult / QualityFlag
 | `to_parameters(postprocessed)` | **Conversion boundary.** Turns a `postprocess()` result into `list[ParameterResult]`. |
 | `to_quality_flags(postprocessed)` | **Conversion boundary.** Turns a `postprocess()` result into `list[QualityFlag]` (native `resurfemg` clinical quality checks). |
 | `available_postprocessing()` / `postprocess(...)` / `run_postprocessing_function(category, function_name, ...)` | Discover and call `resurfemg.postprocessing` functions not covered by a named wrapper above, without leaving the adapter boundary. |
-| `detect_ecg_peaks`, `gate_ecg`, `wavelet_denoise_ecg`, `moving_baseline`, `slopesum_baseline`, `snr_pseudo`, `pocc_quality`, `interpeak_distance`, `percentage_under_baseline`, `detect_local_high_aub`, `detect_extreme_time_products`, `detect_non_consecutive_manoeuvres`, `evaluate_bell_curve_error`, `evaluate_event_timing`, `evaluate_respiratory_rates` | Individual ECG-removal, baseline, and clinical quality operations, exposed one-to-one for the declarative pipeline engine (`workflows/steps/emg.py`) and custom composition. |
+| `detect_ecg_peaks`, `gate_ecg`, `wavelet_denoise_ecg`, `moving_baseline`, `slopesum_baseline`, `snr_pseudo`, `pocc_quality`, `interpeak_distance`, `percentage_under_baseline`, `detect_local_high_aub`, `detect_extreme_time_products`, `detect_non_consecutive_manoeuvres`, `evaluate_bell_curve_error`, `evaluate_event_timing`, `evaluate_respiratory_rates` | Individual ECG-removal, baseline, and clinical quality operations, exposed one-to-one for the declarative pipeline engine (`workflows/steps/emg/` and `workflows/steps/ventilator/`) and custom composition. |
+
+## `VentilatorAdapter` (`src/m3resp/adapters/ventilator_adapter/`)
+
+Ventilator pressure/flow/volume data has its own adapter, available on the
+session as `session.ventilator_adapter`. It does not read files itself: it
+hands each file to the adapter that already knows the format.
+
+| Method | Responsibility |
+|---|---|
+| `load(path, **kwargs)` | Load a ventilator recording from one of three sources: a file shared with the EMG (read by `ReSurfEMGAdapter`), an EIT `.bin` file that stores ventilator waveforms next to the impedance frames (read by `EITProcessingAdapter`), or any other format with a reader registered for its file extension. `source="eit"`/`"emg"`/`"ventilator"` picks the source explicitly; otherwise `.bin` is read as EIT and everything else as EMG. |
+| `preprocess(recording, **kwargs)` | Split the recording into pressure/flow/volume channels and filter them. |
+| `detect_breaths(processed, **kwargs)` | Returns `list[BreathEvent]` directly - already converted. |
+| `to_signals(processed_ventilator)` | **Conversion boundary.** Turns a `preprocess()` result into `list[Signal]`. |
+| `to_parameters` / `to_quality_flags` | Return empty lists: ventilator preprocessing computes no parameters or quality checks. Pocc and ventilator quality results come from the `ventilator.*` steps instead. |
 
 ## Regression guarantee
 
@@ -74,6 +88,6 @@ the test is wrong. See [testing.md](testing.md).
    method if the shape doesn't fit those three).
 3. Add a regression test asserting your wrapper's output matches calling the
    upstream function directly.
-4. Optionally register a `workflows/steps/*.py` step so the operation is also
+4. Optionally register a step under `workflows/steps/` so the operation is also
    reachable from a declarative YAML/JSON pipeline (see
    [pipeline-contracts.md](pipeline-contracts.md)).

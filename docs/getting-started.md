@@ -2,7 +2,7 @@
 
 ## Installation
 
-M3Resp currently supports Python 3.12 and 3.13. For a local source checkout,
+M3Resp currently supports Python 3.12, 3.13, and 3.14. For a local source checkout,
 install the base package with:
 
 ```bash
