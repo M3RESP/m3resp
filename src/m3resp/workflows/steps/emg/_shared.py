@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
@@ -85,17 +86,52 @@ def _record_step(
     )
 
 
+def resolve_emg_source(processed_emg: Any, source: str | None, step_name: str) -> str:
+    """The bundle key an EMG step should read, given an optional explicit one.
+
+    Band-pass filtering and ECG removal are two separate steps and each keeps
+    its own result: ``"filtered"`` is the band-passed signal, ``"ecg_cleaned"``
+    the one with the heartbeat removed. With no explicit ``source``, a step
+    works on the most-processed trace available - the cleaned one where an
+    ECG-removal step has already run, the band-passed one otherwise. That is
+    the ``clean`` -> ``filt`` order ReSurfEMG resolves signals in, and it lets
+    two removal steps chain without either naming a key.
+    """
+
+    if not isinstance(processed_emg, Mapping):
+        raise TypeError(f"{step_name} needs a processed EMG bundle.")
+
+    key = source
+    if key is None:
+        key = (
+            "ecg_cleaned"
+            if processed_emg.get("ecg_cleaned") is not None
+            else "filtered"
+        )
+    if processed_emg.get(key) is None:
+        raise ValueError(
+            f"{step_name} source {key!r} is not present in processed_emg; "
+            f"available keys: {sorted(processed_emg.keys())}."
+        )
+    return key
+
+
 def _update_session_after_ecg_removal(
     session: M3Session,
     processed_emg_after_ecg: dict[str, Any],
 ) -> None:
-    """Update `session.processed["emg"]` and the `EMGRecording` filtered/
-    envelope fields so existing breath detection operates on the
-    ECG-cleaned data (mirrors what `M3Session.preprocess_emg` does)."""
+    """Update `session.processed["emg"]` and the `EMGRecording` signal fields
+    so existing breath detection operates on the ECG-cleaned data (mirrors
+    what `M3Session.preprocess_emg` does).
+
+    `filtered` keeps the band-passed signal: ECG removal writes its result to
+    `ecg_cleaned`, so both stages stay available.
+    """
 
     session.processed["emg"] = processed_emg_after_ecg
     if session.emg is not None:
         session.emg.filtered = processed_emg_after_ecg.get("filtered")
+        session.emg.ecg_cleaned = processed_emg_after_ecg.get("ecg_cleaned")
         session.emg.envelope = processed_emg_after_ecg.get("envelope")
 
 
@@ -135,21 +171,6 @@ def _require_equal_length(**named_arrays: Any) -> None:
     lengths = {name: len(array) for name, array in named_arrays.items()}
     if len(set(lengths.values())) > 1:
         raise ValueError(f"Arrays must have equal length; got {lengths}.")
-
-
-def _mask_invalid(values: Any, validity: Any) -> np.ndarray:
-    """Replace entries at invalid breath positions with NaN, preserving
-    array length/index alignment with 'peak_indices'. 'start_end_validity'
-    (from 'emg.onoffpeak_baseline_crossing') flags breaths whose onset/
-    offset window overlaps a neighboring breath or was never found; letting
-    those silently through would make an overlapping/degenerate window
-    masquerade as a real measurement."""
-
-    array = np.array(values, dtype=float, copy=True)
-    valid = np.asarray(validity, dtype=bool)
-    _require_equal_length(values=array, validity=valid)
-    array[~valid] = np.nan
-    return array
 
 
 def _breath_metadata(peak_index: Any, *, fs: float | None = None) -> dict[str, Any]:

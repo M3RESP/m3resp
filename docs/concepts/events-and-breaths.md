@@ -4,12 +4,10 @@
 
 `Event` is for something that happens at a single instant, like a detected
 heartbeat: it has a `time`, a `name`, which `modality` it came from, and an
-optional `confidence` (how sure the detector was). It also has an `id`
-(auto-generated, in-memory only) so other Layer 1 objects can point back at
-this specific event - see `ParameterResult.event_id` in
-[parameters.md](parameters.md), used e.g. to attach a blood-gas value to the
-timepoint it was drawn at, or a validation value to a labeled intervention
-like a Baydur maneuver.
+optional `confidence` (how sure the detector was). It also has an `id`, so
+other objects can point back at this specific event - for example to attach
+a blood-gas value to the timepoint it was drawn at, or a validation value to
+a labeled intervention like a Baydur maneuver. See [`id`](#id) below.
 
 `BreathEvent` is different: a breath is not instantaneous, it spans a
 period, so instead of one `time` it has `start_time` and `end_time` (plus
@@ -24,12 +22,9 @@ instead of each modality inventing its own breath class. That is what lets
 breaths from different modalities be compared and matched later (see
 [synchronization.md](synchronization.md)).
 
-There is deliberately no `BreathCollection` type (a dedicated container
-class). Breaths just live inside `session.events`, the same plain
-dictionary from Stage 1, under keys like `"eit_breaths"`. This is
-intentional: since Stage 1 code already depends on that dictionary shape,
-introducing a second, separate container for breaths would fork (split
-into two competing systems) rather than unify the API.
+Breaths are not kept in a container class of their own. They live inside
+`session.events`, the same plain dictionary from Stage 1, under keys like
+`"eit_breaths"` - see [Where breath/event lists live](#where-breathevent-lists-live).
 
 `m3resp.core.events` defines two timestamped types shared across modalities.
 
@@ -59,10 +54,13 @@ a modality can have multiple signals at different sampling rates, so
 `BreathEvent` below, for the same reason. All three are `None` when an event
 wasn't derived from indexing into a specific signal.
 
+### `id`
+
 `id` is generated automatically (an in-memory identifier, not persisted or
 globally unique like Layer 2's ids) so other Layer 1 objects can reference
 this exact event, e.g. `ParameterResult.event_id`. It's excluded from
 equality so two structurally identical events still compare equal.
+`BreathEvent.id` works the same way.
 
 ## `BreathEvent`
 

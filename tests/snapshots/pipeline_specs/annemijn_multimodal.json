@@ -30,7 +30,7 @@
       "out": {},
       "uses": "eit.load",
       "with": {
-        "file": "@eit_file",
+        "file_path": "@eit_file",
         "vendor": "draeger"
       }
     },
@@ -40,7 +40,7 @@
       "out": {},
       "uses": "emg.load",
       "with": {
-        "file": "@emg_file"
+        "file_path": "@emg_file"
       }
     },
     {
@@ -139,7 +139,7 @@
     {
       "id": "step_011_eit_pixel_tiv",
       "in": {
-        "filtered_eit": "filtered_eit",
+        "eit_data": "filtered_eit",
         "signal": "global_impedance"
       },
       "out": {},
@@ -187,24 +187,7 @@
       }
     },
     {
-      "id": "step_015_emg_detect_breaths",
-      "in": {},
-      "out": {},
-      "uses": "emg.detect_breaths",
-      "with": {
-        "half_window_seconds": 0.5,
-        "min_breath_width_seconds": 1.0
-      }
-    },
-    {
-      "id": "step_016_emg_peak_indices",
-      "in": {},
-      "out": {},
-      "uses": "emg.peak_indices",
-      "with": {}
-    },
-    {
-      "id": "step_017_emg_slopesum_baseline",
+      "id": "step_015_emg_slopesum_baseline",
       "in": {},
       "out": {},
       "uses": "emg.slopesum_baseline",
@@ -213,6 +196,22 @@
         "step_seconds": 1.0,
         "window_seconds": 30.0
       }
+    },
+    {
+      "id": "step_016_emg_detect_breaths",
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_breaths",
+      "with": {
+        "min_breath_width_seconds": 1.0
+      }
+    },
+    {
+      "id": "step_017_emg_peak_indices",
+      "in": {},
+      "out": {},
+      "uses": "emg.peak_indices",
+      "with": {}
     },
     {
       "id": "step_018_emg_onoffpeak_baseline_crossing",

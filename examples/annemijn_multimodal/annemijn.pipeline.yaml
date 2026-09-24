@@ -42,10 +42,10 @@ inputs:
 steps:
   # Load
   - uses: eit.load
-    with: { file: "@eit_file", vendor: draeger }
+    with: { file_path: "@eit_file", vendor: draeger }
 
   - uses: emg.load
-    with: { file: "@emg_file" }
+    with: { file_path: "@emg_file" }
 
   # There is no robust general-purpose automatic sync method, so the offset is
   # supplied manually. This value was found interactively with the marimo
@@ -92,7 +92,7 @@ steps:
     in:  { signal: global_impedance }
 
   - uses: eit.pixel_tiv
-    in:  { signal: global_impedance, filtered_eit: filtered_eit }
+    in:  { signal: global_impedance, eit_data: filtered_eit }
 
   # EMG processing
   # Biopac channels: 0 = Paw (airway pressure), 1 = diaphragm sEMG,
@@ -125,13 +125,15 @@ steps:
     with: { source: filtered, fill_method: 1 }
     out: { processed_emg_after_ecg: processed_emg }
 
-  - uses: emg.detect_breaths
-    with: { min_breath_width_seconds: 1.0, half_window_seconds: 0.5 }
-
-  - uses: emg.peak_indices
-
+  # The baseline comes first: a breath is a rise above the local quiet level,
+  # and the detection threshold is taken from the envelope above that level.
   - uses: emg.slopesum_baseline
     with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
+
+  - uses: emg.detect_breaths
+    with: { min_breath_width_seconds: 1.0 }
+
+  - uses: emg.peak_indices
 
   - uses: emg.onoffpeak_baseline_crossing
 

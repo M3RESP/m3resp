@@ -31,7 +31,7 @@
       "out": {},
       "uses": "eit.load",
       "with": {
-        "file": "@eit_file",
+        "file_path": "@eit_file",
         "vendor": "draeger"
       }
     },
@@ -41,7 +41,7 @@
       "out": {},
       "uses": "emg.load",
       "with": {
-        "file": "@emg_file"
+        "file_path": "@emg_file"
       }
     },
     {
@@ -50,7 +50,7 @@
       "out": {},
       "uses": "ventilator.load",
       "with": {
-        "file": "@vent_file"
+        "file_path": "@vent_file"
       }
     },
     {
@@ -140,7 +140,7 @@
     {
       "id": "step_011_eit_pixel_tiv",
       "in": {
-        "filtered_eit": "filtered_eit",
+        "eit_data": "filtered_eit",
         "signal": "global_impedance"
       },
       "out": {},
@@ -155,7 +155,7 @@
       },
       "uses": "emg.preprocess",
       "with": {
-        "channel": 0,
+        "channel": 1,
         "envelope_window_seconds": 0.5,
         "high_pass_hz": 80
       }
@@ -183,36 +183,7 @@
       }
     },
     {
-      "id": "step_015_emg_detect_breaths",
-      "in": {},
-      "out": {},
-      "uses": "emg.detect_breaths",
-      "with": {
-        "half_window_seconds": 0.5,
-        "min_breath_width_seconds": 0.5,
-        "prominence_factor": 0.05
-      }
-    },
-    {
-      "id": "step_016_emg_peak_indices",
-      "in": {},
-      "out": {},
-      "uses": "emg.peak_indices",
-      "with": {}
-    },
-    {
-      "id": "step_017_ventilator_channels",
-      "in": {},
-      "out": {},
-      "uses": "ventilator.channels",
-      "with": {
-        "flow_channel": 1,
-        "pressure_channel": 0,
-        "volume_channel": 2
-      }
-    },
-    {
-      "id": "step_018_emg_slopesum_baseline",
+      "id": "step_015_emg_slopesum_baseline",
       "in": {},
       "out": {},
       "uses": "emg.slopesum_baseline",
@@ -220,6 +191,33 @@
         "percentile": 33.0,
         "step_seconds": 1.0,
         "window_seconds": 30.0
+      }
+    },
+    {
+      "id": "step_016_emg_detect_breaths",
+      "in": {},
+      "out": {},
+      "uses": "emg.detect_breaths",
+      "with": {
+        "min_breath_width_seconds": 1.0
+      }
+    },
+    {
+      "id": "step_017_emg_peak_indices",
+      "in": {},
+      "out": {},
+      "uses": "emg.peak_indices",
+      "with": {}
+    },
+    {
+      "id": "step_018_ventilator_channels",
+      "in": {},
+      "out": {},
+      "uses": "ventilator.channels",
+      "with": {
+        "flow_channel": 1,
+        "pressure_channel": 0,
+        "volume_channel": 2
       }
     },
     {

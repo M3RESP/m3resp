@@ -44,7 +44,7 @@ from ._shared import (
         StepParameter(
             name="window_seconds",
             value_type="number",
-            default=30.0,
+            default=7.5,
             unit="s",
             minimum=0,
             description="Moving-percentile window length.",
@@ -52,7 +52,7 @@ from ._shared import (
         StepParameter(
             name="step_seconds",
             value_type="number",
-            default=1.0,
+            default=0.2,
             unit="s",
             minimum=0,
             description="Step between successive baseline windows.",
@@ -84,8 +84,8 @@ def moving_baseline(
     session: M3Session,
     processed_emg: Any,
     *,
-    window_seconds: float = 30.0,
-    step_seconds: float = 1.0,
+    window_seconds: float = 7.5,
+    step_seconds: float = 0.2,
     percentile: float = 33.0,
 ) -> dict[str, Any]:
     _require_positive_seconds("window_seconds", window_seconds)
