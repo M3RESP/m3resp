@@ -302,7 +302,6 @@ def detect_occluded_breath_peaks(
             arg_name1="min_width_seconds",
             arg_name2="min_width_s",
             arg_value1=min_width_seconds,
-            # arg_value2=min_width_s,
             default_value=0.1,
             kwargs=kwargs,
         )
@@ -312,7 +311,6 @@ def detect_occluded_breath_peaks(
             arg_name1="distance_seconds",
             arg_name2="distance_s",
             arg_value1=distance_seconds,
-            # arg_value2=distance_s,
             default_value=0.5,
             kwargs=kwargs,
         )

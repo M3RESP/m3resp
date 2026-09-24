@@ -296,7 +296,6 @@ def onoff_from_slope(
     return peak_starts, peak_ends, valid_starts, valid_ends, valid_peaks
 
 
-# TODO
 def sample_intervals_to_breath_events(
     *,
     start_indices: Sequence[int],
@@ -334,7 +333,6 @@ def sample_intervals_to_breath_events(
     ]
 
 
-# TODO
 def _sample_to_time(
     sample_index: int,
     *,
@@ -349,7 +347,6 @@ def _sample_to_time(
     return float(sample_index) / float(sample_frequency)
 
 
-# TODO
 def _scipy_signal() -> ModuleType:
     try:
         from scipy import signal  # noqa: PLC0415

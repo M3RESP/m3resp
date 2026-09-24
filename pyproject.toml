@@ -138,6 +138,7 @@ unfixable = [
     "B905",   # autofill strictness of zip (think about preferred behavior)
 ]
 extend-safe-fixes = [
+    "D202",   # No blank lines allowed after function docstring
     "D415",   # First line should end with a period, question mark, or exclamation point
     "D300",   # Use triple double quotes `"""`
     "D200",   # One-line docstring should fit on one line
