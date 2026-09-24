@@ -198,6 +198,38 @@ class TestReSurfEMGAdapterConversions:
         }
         assert not by_name["time_to_peak"].is_scalar
 
+    def test_to_parameters_splits_respiratory_rate_into_median_and_per_breath(self):
+        """The respiratory rate arrives as (median rate, rate of each breath).
+        The two parts have different shapes, so they become two results."""
+
+        adapter = ReSurfEMGAdapter()
+        postprocessed = {
+            "computed": {
+                "features": {
+                    "respiratory_rate": (12.0, np.array([11.5, 12.0, np.nan])),
+                }
+            }
+        }
+
+        parameters = adapter.to_parameters(postprocessed)
+
+        by_name = {p.name: p for p in parameters}
+        assert set(by_name) == {
+            "respiratory_rate",
+            "respiratory_rate_breath_to_breath",
+        }
+        median = by_name["respiratory_rate"]
+        assert median.is_scalar
+        assert median.value == 12.0
+        assert median.unit == "breaths/min"
+        assert median.metric_type == "respiratory_rate"
+        per_breath = by_name["respiratory_rate_breath_to_breath"]
+        assert not per_breath.is_scalar
+        # NaN marks an outlier breath and must be kept, not dropped.
+        np.testing.assert_array_equal(per_breath.value, [11.5, 12.0, np.nan])
+        assert per_breath.unit == "breaths/min"
+        assert per_breath.method == "resurfemg.respiratory_rate"
+
     def test_to_quality_flags_converts_results_and_skipped_functions(self):
         adapter = ReSurfEMGAdapter()
         postprocessed = {
