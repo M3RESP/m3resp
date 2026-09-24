@@ -62,7 +62,7 @@ outputs:
 
 steps:
   - uses: eit.load
-    with: { file: "@eit_file", vendor: "@vendor" }
+    with: { file_path: "@eit_file", vendor: "@vendor" }
 
   - uses: eit.detect_rates
     in:  { signal: raw_eit }        # override which context key feeds this param

@@ -118,9 +118,12 @@ come from several devices.
   `resurfemg` implements ventilator preprocessing, which is why ventilator
   channels were previously used unfiltered. Its defaults are native, built on
   `m3resp.processing.filters` and `m3resp.processing.peaks`.
-  - `preprocess()` splits a recording into pressure/flow/volume and low-passes
-    each channel (20 Hz default, clamped below Nyquist; `lowpass_hz=None`
-    disables it). Unfiltered arrays stay available under `"raw"`.
+  - `preprocess()` splits a recording into pressure/flow/volume and returns the
+    channels as the ventilator recorded them. Low-passing ventilator waveforms
+    is not standard practice, so no filter is applied unless `lowpass_hz` is
+    given (clamped below Nyquist); `SUGGESTED_LOWPASS_HZ` (20 Hz) is offered as
+    a starting point. When a cutoff is used the unfiltered arrays stay
+    available under `"raw"`.
   - `to_signals()` emits `modality="ventilator"` with a per-channel `category`
     (`airway_pressure`/`airflow`/`volume`), so a ventilator's three quantities
     are finally distinguishable. Ventilator data has never reached

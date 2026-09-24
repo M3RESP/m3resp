@@ -17,23 +17,112 @@ from m3resp.synchronization.ventilator import (
 )
 
 from ._channels import CHANNEL_CATEGORIES
+from ._eit_source import DEFAULT_EIT_CHANNELS, ventilator_payload_from_sequence
+from ._loaders import registered_ventilator_loader
 from ._protocols import _DefaultsProtocol
 
-_CHANNEL_NAMES = ("pressure", "flow", "volume")
+#: File suffixes whose ventilator waveforms live inside an EIT recording.
+_EIT_SUFFIXES = (".bin",)
+
+
+def resolve_ventilator_source(path: Any, source: str | None = None) -> str:
+    """Which modality's file a ventilator recording arrives in.
+
+    ``"eit"`` or ``"emg"`` when the ventilator waveforms are carried inside
+    that modality's own file, which means they share its clock: aligning that
+    modality aligns the ventilator channels with it, and they must not also be
+    shifted by a ventilator offset of their own.
+
+    Resolution order: an explicit `source` always wins; otherwise a loader
+    registered for the path's extension via `register_ventilator_loader`
+    decides it; otherwise ``"eit"`` for a `.bin` suffix, ``"emg"`` for
+    anything else, since the multi-channel export shared with the sEMG is the
+    common case.
+
+    A standalone ventilator or monitor export has no host modality and is
+    aligned on its own, which is what `M3Session.synchronize_raw_modalities`'
+    ventilator offset is for.
+    """
+
+    if source is not None:
+        if source not in {"eit", "emg", "ventilator"}:
+            raise ValueError(
+                f"Ventilator load `source` must be 'eit', 'emg' or "
+                f"'ventilator', got {source!r}."
+            )
+        return source
+
+    registered = registered_ventilator_loader(path)
+    if registered is not None:
+        return registered[1]
+
+    return "eit" if str(path).lower().endswith(_EIT_SUFFIXES) else "emg"
 
 
 class _CoreMixin:
-    def __init__(self, loader: Callable[..., Any] | None = None):
+    def __init__(
+        self,
+        loader: Callable[..., Any] | None = None,
+        *,
+        eit_loader: Callable[..., Any] | None = None,
+    ):
         self._loader = loader
+        self._eit_loader = eit_loader
 
     def load(self, path: str, **kwargs: Any) -> Any:
-        """Load a ventilator recording.
+        """Load a ventilator recording, from any of three sources.
 
-        Ventilator channels usually arrive in the same multi-channel file as the
-        sEMG, so without an injected loader this delegates to
-        :class:`~m3resp.adapters.resurfemg_adapter.ReSurfEMGAdapter`, which
-        already handles those formats (including Biopac text exports).
+        Ventilator data can reach m3resp three ways:
+
+        * a multi-channel file shared with the sEMG (Biopac exports and
+          friends), read by
+          :class:`~m3resp.adapters.resurfemg_adapter.ReSurfEMGAdapter`;
+        * an EIT ``*.bin``, where the device stores ventilator waveforms
+          beside the impedance frames (Draeger Medibus fields, Timpel columns),
+          read through :class:`~m3resp.adapters.eitprocessing_adapter.EITProcessingAdapter`
+          and unpacked by :mod:`._eit_source`;
+        * a third-party format neither of the above knows about, read by a
+          reader registered via :func:`~._loaders.register_ventilator_loader`.
+
+        Which source applies is a property of the file, not of the caller,
+        and dispatch follows that: an explicit ``source="eit"``/``"emg"``/
+        ``"ventilator"`` always wins, otherwise a loader registered for the
+        path's extension is used, otherwise it is by suffix - ``.bin`` is
+        EIT, everything else is the sEMG path. See
+        :func:`resolve_ventilator_source`. ``ventilator_channels=`` selects
+        which channels to pull from an EIT recording (default
+        pressure/flow/volume; a Draeger pressure pod additionally offers
+        esophageal, transpulmonary, and gastric pressure).
+
+        The two built-in sources can be replaced per instance with an
+        injected callable: ``loader=`` for the sEMG-file path, ``eit_loader=``
+        for the EIT one. A registered third-party loader is not per instance -
+        it is used automatically wherever its extension is loaded. All three
+        return the same ``{"array", "metadata"}`` payload (or, for the EIT
+        source, an object `_eit_source` can unpack into one), so nothing
+        downstream of loading needs to know which source a recording came
+        from - except synchronization, which does: waveforms read out of the
+        EIT or sEMG file share that modality's clock, which is what `source`
+        records.
         """
+
+        explicit_source = kwargs.pop("source", None)
+        if explicit_source is None:
+            registered = registered_ventilator_loader(path)
+            if registered is not None:
+                loader, source = registered
+                if source == "eit":
+                    reader_kwargs = dict(kwargs)
+                    reader_kwargs.pop("ventilator_channels", None)
+                    reader_kwargs.pop("fs", None)
+                    sequence = loader(str(path), **reader_kwargs)
+                    return self._eit_payload(sequence, **kwargs)
+                return loader(str(path), **kwargs)
+
+        source = resolve_ventilator_source(path, explicit_source)
+
+        if source == "eit":
+            return self._load_from_eit(path, **kwargs)
 
         if self._loader is not None:
             return self._loader(path, **kwargs)
@@ -41,6 +130,29 @@ class _CoreMixin:
         from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
 
         return ReSurfEMGAdapter().load(path, **kwargs)
+
+    def _load_from_eit(self, path: str, **kwargs: Any) -> dict[str, Any]:
+        """Load ventilator channels out of an EIT recording."""
+
+        eit_kwargs = dict(kwargs)
+        eit_kwargs.pop("ventilator_channels", None)
+        eit_kwargs.pop("fs", None)
+
+        if self._eit_loader is not None:
+            sequence = self._eit_loader(path, **eit_kwargs)
+        else:
+            from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
+
+            sequence = EITProcessingAdapter().load(str(path), **eit_kwargs)
+
+        return self._eit_payload(sequence, **kwargs)
+
+    def _eit_payload(self, sequence: Any, **kwargs: Any) -> dict[str, Any]:
+        """Unpack an already-loaded EIT sequence into a ventilator payload."""
+
+        channels = kwargs.get("ventilator_channels", DEFAULT_EIT_CHANNELS)
+        fs = kwargs.get("fs")
+        return ventilator_payload_from_sequence(sequence, channels=channels, fs=fs)
 
     def preprocess(self, recording: Any, **kwargs: Any) -> Any:
         """Split into channels and filter, or defer to a provided callable."""
@@ -77,11 +189,23 @@ class _CoreMixin:
     def to_signals(self, processed_ventilator: Any) -> list[Signal]:
         """Convert a preprocessed ventilator bundle into `Signal` objects.
 
-        One signal per channel per processing state: the unfiltered channel as
-        ``"raw"`` and the filtered one as ``"processed"``. Each carries
-        ``modality="ventilator"`` with the channel's physical quantity in
-        ``category``, so a ventilator's pressure, flow and volume stay
-        distinguishable instead of collapsing into one tag.
+        One signal per resolved channel per processing state. Preprocessing
+        does not filter unless asked, so by default that is one ``"raw"``
+        signal per channel; when a cutoff was requested the filtered version
+        is emitted alongside it as ``"processed"``. Each
+        carries ``modality="ventilator"``, the channel's physical quantity in
+        ``category``, its unique key in ``channel``, and the instrument it came
+        from in ``source``.
+
+        Those three axes are what let one session hold several pressures at
+        once, including two airway pressures measured by different devices:
+        they share a ``category`` and differ in ``channel``/``source``, so
+        `SignalCollection.for_category("airway_pressure")` returns both instead
+        of one overwriting the other.
+
+        Units are passed through exactly as the vendor reported them and are
+        never converted, so comparing two channels of one quantity has to
+        account for their units (Draeger reports volume in mL, Timpel in L).
         """
 
         if (
@@ -103,12 +227,22 @@ class _CoreMixin:
             else None
         )
 
+        specs = processed_ventilator.get("specs") or {}
+        # Every channel the recording actually yielded, not a fixed three, so
+        # an esophageal or a second airway pressure reaches `session.signals`.
+        keys = list(processed_ventilator.get("channels") or raw or filtered)
+
         signals: list[Signal] = []
-        for name in _CHANNEL_NAMES:
-            category = CHANNEL_CATEGORIES[name]
+        for key in keys:
+            spec = specs.get(key)
+            category = (
+                spec.category
+                if spec is not None
+                else CHANNEL_CATEGORIES.get(key.split("__", 1)[0])
+            )
             channel_sources: tuple[tuple[Any, ProcessingState], ...] = (
-                (raw.get(name), "raw"),
-                (filtered.get(name), "processed"),
+                (raw.get(key), "raw"),
+                (filtered.get(key), "processed"),
             )
             for values, processing_state in channel_sources:
                 if values is None:
@@ -119,12 +253,12 @@ class _CoreMixin:
                         values=values,
                         time=np.arange(values.shape[0], dtype=float) / sample_frequency,
                         sample_frequency=sample_frequency,
-                        unit=units.get(name),
-                        name=f"ventilator_{name}",
+                        unit=units.get(key),
+                        name=f"ventilator_{key}",
                         modality="ventilator",
                         category=category,
-                        channel=name,
-                        source="m3resp",
+                        channel=key,
+                        source=(spec.origin if spec is not None else None) or "m3resp",
                         processing_state=processing_state,
                         method=method if processing_state == "processed" else None,
                     )

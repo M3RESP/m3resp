@@ -9,7 +9,7 @@
 | `resurfemg.postprocessing.event_detection.detect_emg_breaths` | `session.detect_emg_breaths()` -> `BreathEvent` objects (see [../concepts/events-and-breaths.md](../concepts/events-and-breaths.md)) |
 | `resurfemg.postprocessing.features.*` / `resurfemg.postprocessing.quality_assessment.*` called by hand | `session.postprocess_emg(...)`, then read `session.parameter_results` (`ParameterResult`) and `session.quality` (`QualityFlag`) - populated via `ReSurfEMGAdapter.to_parameters`/`to_quality_flags` (see [../developer/adapters.md](../developer/adapters.md)) |
 | Calling an arbitrary `resurfemg.postprocessing` function not covered above | `ReSurfEMGAdapter.run_postprocessing_function(category, function_name, *args, **kwargs)`, or `session.emg_adapter.run_postprocessing_function(...)` |
-| Manual ECG gating/wavelet-denoising/estimated-subtraction calls | The corresponding `ReSurfEMGAdapter` method (`gate_ecg`, `wavelet_denoise_ecg`, ...), or the matching `emg.*` step in the declarative pipeline engine - see "ECG-removal alternatives" in [../pipelines.md](../pipelines.md) |
+| Manual ECG gating/wavelet-denoising calls | The corresponding `ReSurfEMGAdapter` method (`gate_ecg`, `wavelet_denoise_ecg`, ...), or the matching `emg.*` step in the declarative pipeline engine - see "ECG-removal alternatives" in [../pipelines.md](../pipelines.md) |
 
 See [../tutorials/emg-only.md](../tutorials/emg-only.md) for a full end-to-end example, and [../migration.md](../migration.md) for cross-modality bookkeeping that applies to EMG the same way it does to EIT.
 

@@ -73,6 +73,77 @@ def add_to_collection(collection: Any, value: Any) -> None:
         collection.add(value)
 
 
+def filter_pixels_preserving_gaps(
+    pixel_impedance: Any,
+    *,
+    operation: str,
+    apply: Callable[[np.ndarray], Any],
+    captures: dict[str, Any] | None = None,
+) -> np.ndarray:
+    """Filter the measured pixels with `apply`; leave unmeasured pixels missing.
+
+    A pixel that was never measured - outside the electrode plane, or switched
+    off - is NaN for the whole recording, and must still be NaN afterwards.
+    Replacing it with zero would enter a real impedance reading where there was
+    no measurement, and everything downstream would treat it as data.
+
+    A Butterworth filter cannot be evaluated on NaN, so the unmeasured pixels
+    are given a placeholder for the duration of the call and set back to NaN in
+    the result. Nothing leaks between pixels: `apply` filters along time
+    (axis 0) and each pixel's time course is filtered independently, so a
+    placeholder can never reach a measured pixel.
+
+    A pixel that was measured but lost *some* samples is a different case: it
+    cannot be filtered without inventing the missing stretch, and quietly
+    emptying it would lose a real pixel. That is rejected here instead.
+
+    Pass the `captures` dict `apply` writes its diagnostics into to have the
+    unmeasured pixels blanked there too, so a diagnostic plot shows them as
+    absent rather than as a flat zero trace.
+    """
+
+    values = np.asarray(pixel_impedance, dtype=float)
+    missing = np.isnan(values)
+    if not missing.any():
+        return np.asarray(apply(values))
+
+    # Axis 0 is time; the remaining axes are the pixel grid.
+    n_samples = values.shape[0]
+    missing_per_pixel = missing.sum(axis=0)
+    partly_missing = (missing_per_pixel > 0) & (missing_per_pixel < n_samples)
+    if partly_missing.any():
+        examples = ", ".join(
+            "(" + ", ".join(str(int(axis)) for axis in position) + ")"
+            for position in np.argwhere(partly_missing)[:5]
+        )
+        raise ValueError(
+            f"{operation}: {int(partly_missing.sum())} pixel(s) are missing "
+            f"samples for part of the recording only (e.g. at {examples}). "
+            "A Butterworth filter cannot span a gap, so these cannot be "
+            "filtered without inventing the missing samples. Repair or drop "
+            "those pixels first. Pixels missing for the whole recording need "
+            "no action - they stay missing through the filter."
+        )
+
+    unmeasured = missing_per_pixel == n_samples
+    placeholder = values.copy()
+    placeholder[:, unmeasured] = 0.0
+    filtered = np.array(apply(placeholder), dtype=float, copy=True)
+    filtered[:, unmeasured] = np.nan
+
+    # The placeholder also reached any full-size array `apply` recorded as a
+    # diagnostic (the unfiltered and filtered pixel data); blank it there too
+    # so no capture claims a reading for a pixel that was never measured.
+    for key, captured in list((captures or {}).items()):
+        recorded = np.asarray(captured)
+        if recorded.shape == values.shape:
+            blanked = recorded.astype(float, copy=True)
+            blanked[:, unmeasured] = np.nan
+            captures[key] = blanked  # type: ignore[index]
+
+    return filtered
+
+
 def _breath_intervals_to_dicts(breath_intervals: Any) -> list[dict[str, Any]]:
     return [
         {

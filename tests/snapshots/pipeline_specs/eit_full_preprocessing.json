@@ -30,7 +30,7 @@
       "out": {},
       "uses": "eit.load",
       "with": {
-        "file": "@eit_file",
+        "file_path": "@eit_file",
         "vendor": "@vendor"
       }
     },
@@ -53,9 +53,7 @@
       },
       "out": {},
       "uses": "eit.mdn_filter",
-      "with": {
-        "label": "mdn_filtered"
-      }
+      "with": {}
     },
     {
       "id": "global_impedance",
@@ -79,28 +77,37 @@
     },
     {
       "id": "normalize_breaths",
-      "in": {},
+      "in": {
+        "breath_intervals": "breath_intervals"
+      },
       "out": {},
       "uses": "eit.normalize_breaths",
       "with": {}
     },
     {
       "id": "continuous_tiv",
-      "in": {},
+      "in": {
+        "signal": "global_impedance"
+      },
       "out": {},
       "uses": "eit.continuous_tiv",
       "with": {}
     },
     {
       "id": "eeli",
-      "in": {},
+      "in": {
+        "signal": "global_impedance"
+      },
       "out": {},
       "uses": "eit.eeli",
       "with": {}
     },
     {
       "id": "pixel_breaths",
-      "in": {},
+      "in": {
+        "eit_data": "filtered_eit",
+        "timing_data": "global_impedance"
+      },
       "out": {},
       "uses": "eit.pixel_breaths",
       "with": {
@@ -109,7 +116,10 @@
     },
     {
       "id": "pixel_tiv",
-      "in": {},
+      "in": {
+        "eit_data": "filtered_eit",
+        "signal": "global_impedance"
+      },
       "out": {},
       "uses": "eit.pixel_tiv",
       "with": {
@@ -118,7 +128,10 @@
     },
     {
       "id": "roi_tiv_lungspace",
-      "in": {},
+      "in": {
+        "eit_data": "filtered_eit",
+        "timing_data": "global_impedance"
+      },
       "out": {},
       "uses": "eit.roi_tiv_lungspace",
       "with": {
@@ -127,7 +140,10 @@
     },
     {
       "id": "roi_amplitude_lungspace",
-      "in": {},
+      "in": {
+        "eit_data": "filtered_eit",
+        "timing_data": "global_impedance"
+      },
       "out": {},
       "uses": "eit.roi_amplitude_lungspace",
       "with": {
@@ -136,7 +152,10 @@
     },
     {
       "id": "roi_watershed",
-      "in": {},
+      "in": {
+        "eit_data": "filtered_eit",
+        "timing_data": "global_impedance"
+      },
       "out": {},
       "uses": "eit.roi_watershed",
       "with": {

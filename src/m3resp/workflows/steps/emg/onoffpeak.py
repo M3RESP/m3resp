@@ -17,6 +17,7 @@ from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
+    _per_breath_flags,
     _record_step,
     _upstream_metadata,
 )
@@ -172,11 +173,18 @@ def interpeak_dist(
 @register_step(
     "emg.onoffpeak_baseline_crossing",
     reads={
+        "session": "session",
         "processed_emg": "processed_emg",
         "baseline": "baseline",
         "peak_indices": "peak_indices",
     },
-    writes=("start_indices", "end_indices", "start_end_validity"),
+    writes=(
+        "start_indices",
+        "end_indices",
+        "start_end_validity",
+        "start_end_validity_flags",
+    ),
+    session_writes=("session.quality",),
     summary="Find EMG breath on/offset indices by baseline crossing.",
     description="Find each breath's onset/offset sample indices where the envelope crosses the baseline.",
     category="detection",
@@ -184,6 +192,7 @@ def interpeak_dist(
     alternatives=("emg.onoffpeak_slope_extrapolation",),
     parameters_reviewed=True,
     input_artifacts=(
+        _SESSION_ARTIFACT,
         StepArtifact(
             name="processed_emg",
             artifact_type="emg_processed_bundle",
@@ -216,21 +225,49 @@ def interpeak_dist(
             artifact_type="boolean_array",
             description="Whether each breath's onset/offset window is valid (found, non-overlapping).",
         ),
+        StepArtifact(
+            name="start_end_validity_flags",
+            artifact_type="quality_flag_list",
+            description="QualityFlag per breath for the onset/offset window, also added to the session's quality flags.",
+        ),
     ),
 )
 def onoffpeak_baseline_crossing(
-    processed_emg: Any, baseline: Any, peak_indices: Any
+    session: M3Session, processed_emg: Any, baseline: Any, peak_indices: Any
 ) -> dict[str, Any]:
-    import numpy as np
-
     envelope = np.asarray(processed_emg["envelope"], dtype=float)
-    start_indices, end_indices, _valid_starts, _valid_ends, valid_peaks = (
+    fs = float(processed_emg["fs"])
+    start_indices, end_indices, valid_starts, valid_ends, valid_peaks = (
         onoff_from_baseline_crossings(envelope, baseline, peak_indices)
     )
+    start_end_validity = np.asarray(valid_peaks, dtype=bool)
+
+    # One flag per breath, so breaths whose window overlaps a neighbour show
+    # up in the session's quality summary. The features of these breaths are
+    # still computed; the flag is what marks them.
+    flags = _per_breath_flags(
+        "start_end_validity",
+        start_end_validity,
+        modality="emg",
+        peak_indices=peak_indices,
+        fs=fs,
+    )
+    for index, flag in enumerate(flags):
+        flag.metadata.update(
+            {
+                "start_sample_index": int(start_indices[index]),
+                "end_sample_index": int(end_indices[index]),
+                "valid_start": bool(valid_starts[index]),
+                "valid_end": bool(valid_ends[index]),
+            }
+        )
+        session.quality.add(flag)
+
     return {
         "start_indices": start_indices,
         "end_indices": end_indices,
-        "start_end_validity": np.asarray(valid_peaks, dtype=bool),
+        "start_end_validity": start_end_validity,
+        "start_end_validity_flags": flags,
     }
 
 

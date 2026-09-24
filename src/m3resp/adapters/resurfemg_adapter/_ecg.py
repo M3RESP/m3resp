@@ -70,9 +70,10 @@ class _EcgMixin:
     ) -> np.ndarray:
         """Gate (remove) ECG peaks from `signal` around `peak_indices`.
 
-        Eliminate peaks (e.g. QRS) from emg_raw using gates
-        of width gate_width. The gate either filled by zeros or interpolation.
-        The filling method for the gate is encoded as follows:
+        Eliminate peaks (e.g. QRS) from the signal using gates of width
+        `gate_width_samples`. The gate is filled by one of the following
+        methods, selected by `fill_method`:
+
         - 0: Filled with zeros
         - 1: Interpolation samples before and after (default)
         - 2: Fill with average of prior segment if exists, otherwise fill with post segment

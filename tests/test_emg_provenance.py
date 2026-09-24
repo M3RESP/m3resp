@@ -35,7 +35,7 @@ def test_upstream_backed_step_records_the_shared_provenance_schema():
             "name": "provenance-smoke",
             "inputs": {"emg_file": str(EMG_PATH)},
             "steps": [
-                {"uses": "emg.load", "with": {"file": "@emg_file"}},
+                {"uses": "emg.load", "with": {"file_path": "@emg_file"}},
                 {
                     "uses": "emg.preprocess",
                     "with": {"channel": 0},
@@ -72,14 +72,15 @@ def test_upstream_backed_step_records_the_shared_provenance_schema():
 
 
 def test_native_primitive_step_records_m3resp_as_the_source_package():
-    # A flat pressure signal never crosses its own median baseline, which
+    # A flat pressure signal never crosses its own moving baseline, which
     # trips an unrelated pre-existing edge case in
     # onoff_from_baseline_crossings (no crossing found after the last peak);
-    # dip below PEEP around each peak so real crossings exist.
+    # dip below PEEP around each peak so real crossings exist. The dips are
+    # short, as occlusions are, so the 33rd-percentile baseline stays at PEEP.
     peep = 5.0
     pressure = [peep] * 200
     for center in (50, 150):
-        for offset in range(-20, 20):
+        for offset in range(-5, 5):
             pressure[center + offset] = peep - 2.0
 
     result = run_pipeline(
@@ -120,7 +121,7 @@ def test_each_migrated_step_call_adds_exactly_one_provenance_record():
             "name": "provenance-count-smoke",
             "inputs": {"emg_file": str(EMG_PATH)},
             "steps": [
-                {"uses": "emg.load", "with": {"file": "@emg_file"}},
+                {"uses": "emg.load", "with": {"file_path": "@emg_file"}},
                 {
                     "uses": "emg.preprocess",
                     "with": {"channel": 0},
