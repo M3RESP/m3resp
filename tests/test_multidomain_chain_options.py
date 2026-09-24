@@ -111,11 +111,12 @@ class TestNotchBeforeBandpass:
         return signal, ReSurfEMGAdapter().preprocess(recording, **settings, **kwargs)
 
     def test_notch_first_equals_notching_the_raw_signal_then_band_passing(self):
+        # `_preprocess` skips the test when resurfemg is missing, so it runs
+        # before the resurfemg import below.
+        signal, processed = self._preprocess(notch_before_bandpass=True)
         from resurfemg.preprocessing.filtering import emg_bandpass_butter
 
         from m3resp.processing.filters import harmonic_notch_filter
-
-        signal, processed = self._preprocess(notch_before_bandpass=True)
 
         expected = emg_bandpass_butter(
             emg_raw=harmonic_notch_filter(
@@ -129,11 +130,10 @@ class TestNotchBeforeBandpass:
         assert processed["filter"]["notch_before_bandpass"] is True
 
     def test_default_order_is_unchanged(self):
+        signal, processed = self._preprocess()
         from resurfemg.preprocessing.filtering import emg_bandpass_butter
 
         from m3resp.processing.filters import harmonic_notch_filter
-
-        signal, processed = self._preprocess()
 
         expected = harmonic_notch_filter(
             emg_bandpass_butter(
