@@ -126,7 +126,7 @@ steps:
   # default) rather than a raw ecg_channel index.
   - id: preprocess
     uses: emg.preprocess
-    with: { channel: 0, high_pass_hz: 80, envelope_window_seconds: 0.5 }
+    with: { channel: 0, high_pass_hz: 20, envelope_window_seconds: 0.5 }
     out: { processed_emg: processed_emg_before_ecg }
 
   - id: ecg_detect_peaks
