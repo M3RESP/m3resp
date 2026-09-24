@@ -44,15 +44,15 @@ steps:
   # -- Loading -----------------------------------------------------------------
   - id: load_eit
     uses: eit.load
-    with: { file: "@eit_file", vendor: draeger }
+    with: { file_path: "@eit_file", vendor: draeger }
 
   - id: load_emg
     uses: emg.load
-    with: { file: "@emg_file" }
+    with: { file_path: "@emg_file" }
 
   - id: load_ventilator
     uses: ventilator.load
-    with: { file: "@vent_file" }
+    with: { file_path: "@vent_file" }
 
   # -- Raw synchronization, before any preprocessing ----------------------------
   - id: sync_raw
@@ -99,7 +99,7 @@ steps:
 
   - id: pixel_tiv
     uses: eit.pixel_tiv
-    in:  { signal: global_impedance, filtered_eit: filtered_eit }
+    in:  { signal: global_impedance, eit_data: filtered_eit }
     with: { tiv_timing: continuous }
 
   - id: roi_tiv_lungspace
@@ -139,15 +139,23 @@ steps:
     with: { fill_method: 1 }
     out: { processed_emg_after_ecg: processed_emg }
 
-  # min_breath_width_seconds/prominence_factor are tuned down from their
-  # defaults (1.0 s / 0.5): this fixture's synthetic envelope bursts are
-  # narrower and lower-contrast than those defaults assume, and the tuned
-  # values recover exactly the configured 14 breaths/min (respiratory_rate_bpm
-  # in the generator config) - see docs/pipelines.md "Channel selection and
-  # time-base rules".
+  # The baseline comes first: a breath is a rise above the local quiet level,
+  # and the detection threshold is taken from the envelope above that level.
+  - id: slopesum_baseline
+    uses: emg.slopesum_baseline
+    with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
+
+  # min_breath_width_seconds/prominence_factor are set below their defaults
+  # (1.0 s / 0.5) because this synthetic recording's EMG bursts are narrower
+  # and weaker than the defaults expect. Known issue: detection still finds
+  # too many breaths here (about 20-24 in 60 s, where the generator config
+  # sets 14 breaths/min). On this recording the slope-sum baseline sits above
+  # the envelope, so prominence_factor has no effect, and heartbeat bumps left
+  # after ECG gating are picked up as extra peaks. Treat the EMG breath count
+  # from this example as unreliable until that is fixed.
   - id: detect_breaths_emg
     uses: emg.detect_breaths
-    with: { min_breath_width_seconds: 0.5, half_window_seconds: 0.5, prominence_factor: 0.05 }
+    with: { min_breath_width_seconds: 0.5, prominence_factor: 0.05 }
 
   - id: peak_indices
     uses: emg.peak_indices
@@ -158,10 +166,6 @@ steps:
       pressure_channel: 0
       flow_channel: 1
       volume_channel: 2
-
-  - id: slopesum_baseline
-    uses: emg.slopesum_baseline
-    with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
 
   - id: onoffpeak_baseline_crossing
     uses: emg.onoffpeak_baseline_crossing

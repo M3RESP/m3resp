@@ -38,15 +38,15 @@ GRANULAR_SPEC = {
     "name": "emg-granular-postprocess",
     "inputs": {"emg_file": str(EMG_PATH), "vent_file": str(VENT_PATH)},
     "steps": [
-        {"uses": "emg.load", "with": {"file": "@emg_file"}},
-        {"uses": "ventilator.load", "with": {"file": "@vent_file"}},
+        {"uses": "emg.load", "with": {"file_path": "@emg_file"}},
+        {"uses": "ventilator.load", "with": {"file_path": "@vent_file"}},
         {
             "uses": "emg.preprocess",
             "with": {"channel": 0, "high_pass_hz": 80, "envelope_window_seconds": 0.5},
         },
         {
             "uses": "emg.detect_breaths",
-            "with": {"min_breath_width_seconds": 1.0, "half_window_seconds": 0.5},
+            "with": {"min_breath_width_seconds": 1.0},
         },
         {"uses": "emg.peak_indices"},
         {
@@ -76,9 +76,7 @@ def test_granular_emg_pipeline_matches_monolithic_postprocess():
     reference_session.preprocess_emg(
         channel=0, high_pass_hz=80, envelope_window_seconds=0.5
     )
-    reference_session.detect_emg_breaths(
-        min_breath_width_seconds=1.0, half_window_seconds=0.5
-    )
+    reference_session.detect_emg_breaths(min_breath_width_seconds=1.0)
     ventilator = reference_session.emg_adapter.load(str(VENT_PATH), verbose=False)
     reference = reference_session.postprocess_emg(
         ventilator=ventilator,

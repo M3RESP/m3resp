@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from typing import Any
 
@@ -25,12 +26,12 @@ from m3resp.processing.peaks import (
     detect_occluded_breath_peaks,
     detect_ventilator_breath_peaks,
 )
+from m3resp.processing.ventilator import estimate_peep
 from m3resp.processing.windows import rolling_envelope
 
 from ._protocols import _PostprocessingOpsProtocol
 from ._shared import (
     _category_for_function,
-    _mask_invalid,
     _missing_postprocessing_dependency,
     _normalize_selected_postprocessing,
     _require_emg_recording,
@@ -47,8 +48,9 @@ class _DefaultsMixin:
         channel: int = 0,
         high_pass_hz: float = 20.0,
         low_pass_hz: float | None = None,
-        envelope_window_seconds: float = 0.5,
+        envelope_window_seconds: float = 0.25,
         envelope_method: str = "rms",
+        compute_envelope: bool = True,
         notch_base_frequency: float | None = None,
         notch_max_frequency: float | None = None,
         notch_quality_factor: float = 30.0,
@@ -69,6 +71,12 @@ class _DefaultsMixin:
         equivalent on real bursty sEMG. The choice is recorded in the returned
         ``"filter"`` mapping so a later envelope recomputation (e.g. after ECG
         gating) reuses the same method rather than silently switching.
+
+        ``compute_envelope=False`` skips the envelope. Use it when ECG gating
+        follows: gating replaces the band-passed signal and recomputes the
+        envelope from the gated trace, so one computed here would be thrown
+        away. The window and method are still recorded, so the gating step
+        reuses the settings requested here.
 
         ``notch_base_frequency`` opts into harmonic notch filtering (e.g.
         ``50.0`` for mains hum, or a co-recorded EIT device's frame rate, which
@@ -118,12 +126,19 @@ class _DefaultsMixin:
                 max_frequency=notch_max_frequency or (fs / 2),
                 quality_factor=notch_quality_factor,
             )
-        envelope_window_samples = max(1, int(envelope_window_seconds * fs))
-        envelope = rolling_envelope(
-            filtered,
-            window_length=envelope_window_samples,
-            method=envelope_method,
-        )
+        # ECG gating replaces the band-passed signal and recomputes the
+        # envelope from the gated trace, so an envelope computed here would be
+        # discarded. `compute_envelope=False` skips it; the window and method
+        # are still recorded below, so the gating step recomputes with the
+        # settings asked for here.
+        envelope = None
+        if compute_envelope:
+            envelope_window_samples = max(1, int(envelope_window_seconds * fs))
+            envelope = rolling_envelope(
+                filtered,
+                window_length=envelope_window_samples,
+                method=envelope_method,
+            )
 
         return {
             **recording,
@@ -154,10 +169,30 @@ class _DefaultsMixin:
         processed_emg: Any,
         *,
         min_breath_width_seconds: float = 1.0,
-        half_window_seconds: float = 0.5,
+        baseline: Any = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
-        """Run ReSurfEMG EMG breath detection and return common rows."""
+        """Run ReSurfEMG EMG breath detection and return common rows.
+
+        A breath is a rise above the *local* quiet level, not above zero. The
+        detection threshold is taken from the envelope above ``baseline``, so
+        electrode drift is removed before the threshold is set. Without a
+        baseline the threshold is set against zero and the drift inflates it,
+        which drops genuine breaths wherever the quiet level has risen; that
+        case warns, as it does in ReSurfEMG. Compute the baseline first, with
+        ``emg.moving_baseline`` or ``emg.slopesum_baseline``.
+
+        ReSurfEMG detects breath *peaks* only. Onset and offset are a separate
+        measurement, made either by baseline crossing or by slope
+        extrapolation - never as a window around the peak - and they can fail
+        to be found, which is why they carry their own validity flag. Run
+        ``emg.onoffpeak_baseline_crossing`` to obtain them.
+
+        `BreathEvent` currently requires an interval, so each event is emitted
+        with ``start_time == end_time == peak_time``: a zero-length breath at
+        the peak, marked ``boundaries_measured: False``. That is a placeholder
+        for a measurement not yet made, not a claim about the breath's extent.
+        """
 
         if not isinstance(processed_emg, dict) or "envelope" not in processed_emg:
             raise UnsupportedWorkflowError(
@@ -169,29 +204,39 @@ class _DefaultsMixin:
         fs = float(processed_emg["fs"])
         envelope = processed_emg["envelope"]
         min_width_samples = max(1, int(min_breath_width_seconds * fs))
-        half_window_samples = max(1, int(half_window_seconds * fs))
+
+        if baseline is None:
+            warnings.warn(
+                "EMG baseline not defined; detecting breath peaks relative to "
+                "zero. Run `emg.moving_baseline` or `emg.slopesum_baseline` "
+                "before `emg.detect_breaths` so the detection threshold "
+                "follows the drifting quiet level.",
+                UserWarning,
+                stacklevel=2,
+            )
 
         peak_indices = detect_emg_breath_peaks(
             envelope,
+            baseline=baseline,
             min_peak_width_samples=min_width_samples,
             **kwargs,
         )
 
         events = []
         for peak_index in peak_indices:
-            start_index = max(0, int(peak_index) - half_window_samples)
-            end_index = min(len(envelope) - 1, int(peak_index) + half_window_samples)
+            peak_time = int(peak_index) / fs
             events.append(
                 {
-                    "start_time": start_index / fs,
-                    "end_time": end_index / fs,
-                    "peak_time": int(peak_index) / fs,
-                    "start_index": start_index,
+                    "start_time": peak_time,
+                    "end_time": peak_time,
+                    "peak_time": peak_time,
+                    "start_index": int(peak_index),
                     "peak_index": int(peak_index),
-                    "end_index": end_index,
+                    "end_index": int(peak_index),
                     "sample_frequency": fs,
                     "signal_name": processed_emg["channel"],
                     "source": "resurfemg.detect_emg_breaths",
+                    "metadata": {"boundaries_measured": False},
                 }
             )
 
@@ -322,7 +367,7 @@ class _DefaultsMixin:
             pocc_indices = np.asarray([], dtype=int)
             if enabled(("event_detection", "find_occluded_breaths")):
                 if peep is None:
-                    peep = float(np.nanmedian(p_vent))
+                    peep = estimate_peep(p_vent, v_vent)
                 pocc_indices = np.asarray(
                     detect_occluded_breath_peaks(
                         p_vent,
@@ -374,7 +419,6 @@ class _DefaultsMixin:
 
         start_indices = None
         end_indices = None
-        start_end_validity = None
         if len(peak_indices_array) and baseline is not None:
             if enabled(("event_detection", "onoffpeak_baseline_crossing")):
                 computed["event_detection"]["onoffpeak_baseline_crossing"] = (
@@ -384,10 +428,9 @@ class _DefaultsMixin:
                         peak_indices_array,
                     )
                 )
-                start_indices, end_indices, _valid_starts, _valid_ends, valid_peaks = (
+                start_indices, end_indices, _valid_starts, _valid_ends, _valid_peaks = (
                     computed["event_detection"]["onoffpeak_baseline_crossing"]
                 )
-                start_end_validity = np.asarray(valid_peaks, dtype=bool)
             slope_window_samples = max(1, int(slope_window_seconds * fs))
             if enabled(("event_detection", "onoffpeak_slope_extrapolation")):
                 computed["event_detection"]["onoffpeak_slope_extrapolation"] = (
@@ -407,17 +450,14 @@ class _DefaultsMixin:
                         end_indices,
                     )
                     computed["features"]["time_to_peak"] = (
-                        _mask_invalid(absolute_times, start_end_validity),
-                        _mask_invalid(percent_times, start_end_validity),
+                        absolute_times,
+                        percent_times,
                     )
                 if enabled(("features", "pseudo_slope")):
-                    computed["features"]["pseudo_slope"] = _mask_invalid(
-                        pseudo_slope(
-                            envelope,
-                            start_indices,
-                            end_indices,
-                        ),
-                        start_end_validity,
+                    computed["features"]["pseudo_slope"] = pseudo_slope(
+                        envelope,
+                        start_indices,
+                        end_indices,
                     )
                 if enabled(("features", "amplitude")):
                     computed["features"]["amplitude"] = amplitude_at_peaks(
@@ -426,15 +466,12 @@ class _DefaultsMixin:
                         baseline,
                     )
                 if enabled(("features", "time_product")):
-                    computed["features"]["time_product"] = _mask_invalid(
-                        window_integral(
-                            envelope,
-                            fs,
-                            start_indices,
-                            end_indices,
-                            baseline,
-                        ),
-                        start_end_validity,
+                    computed["features"]["time_product"] = window_integral(
+                        envelope,
+                        fs,
+                        start_indices,
+                        end_indices,
+                        baseline,
                     )
                 if enabled(("features", "area_under_baseline")):
                     areas, references = area_under_baseline(
@@ -447,8 +484,8 @@ class _DefaultsMixin:
                         baseline,
                     )
                     computed["features"]["area_under_baseline"] = (
-                        _mask_invalid(areas, start_end_validity),
-                        _mask_invalid(references, start_end_validity),
+                        areas,
+                        references,
                     )
             else:
                 skipped["features"] = (

@@ -26,7 +26,6 @@ from __future__ import annotations
 from .baseline import moving_baseline, slopesum_baseline
 from .ecg_detection import ecg_detect_peaks
 from .ecg_gating import ecg_gating
-from .ecg_removal import ecg_estimated_subtraction
 from .ecg_wavelet import ecg_wavelet_denoising
 from .features import (
     amplitude,
@@ -58,6 +57,7 @@ from .quality_snr import (
     percentage_under_baseline,
     snr_pseudo,
 )
+from .selection import remove_invalid_breaths
 
 __all__ = [
     "amplitude",
@@ -66,7 +66,6 @@ __all__ = [
     "detect_extreme_time_products",
     "detect_local_high_aub",
     "ecg_detect_peaks",
-    "ecg_estimated_subtraction",
     "ecg_gating",
     "ecg_wavelet_denoising",
     "evaluate_bell_curve_error",
@@ -81,6 +80,7 @@ __all__ = [
     "percentage_under_baseline",
     "preprocess",
     "pseudo_slope",
+    "remove_invalid_breaths",
     "respiratory_rate",
     "slopesum_baseline",
     "snr_pseudo",

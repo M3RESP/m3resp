@@ -290,6 +290,7 @@ def test_every_registered_step_has_reviewed_parameters():
 
 _AUDITED_SESSION_STEPS = frozenset(
     {
+        "eit.butterworth_filter",
         "eit.detect_rates",
         "eit.eeli",
         "eit.load",
@@ -305,7 +306,6 @@ _AUDITED_SESSION_STEPS = frozenset(
         "emg.detect_extreme_time_products",
         "emg.detect_local_high_aub",
         "emg.ecg_detect_peaks",
-        "emg.ecg_estimated_subtraction",
         "emg.ecg_gating",
         "emg.ecg_wavelet_denoising",
         "emg.evaluate_bell_curve_error",
@@ -314,8 +314,10 @@ _AUDITED_SESSION_STEPS = frozenset(
         "emg.interpeak_dist",
         "emg.load",
         "emg.moving_baseline",
+        "emg.onoffpeak_baseline_crossing",
         "emg.percentage_under_baseline",
         "emg.preprocess",
+        "emg.remove_invalid_breaths",
         "emg.slopesum_baseline",
         "emg.snr_pseudo",
         "export.rotarc_result",

@@ -18,22 +18,35 @@ from ._shared import (
     _record_step,
     _update_session_after_ecg_removal,
     _upstream_metadata,
+    resolve_emg_source,
 )
 
 
 def _build_gate_mask(
-    n_samples: int, peak_indices: Any, *, gate_width_samples: int
+    n_samples: int, peak_indices: Any, *, gate_width_samples: int, fill_method: int
 ) -> np.ndarray:
     """A boolean mask marking the (clipped-to-bounds) gated region around
-    each peak. Purely descriptive - built from the same effective gate
-    width used for the cleaned array, but never fed back into it."""
+    each peak. Purely descriptive - it reports which samples the cleaned
+    array had replaced, and is never fed back into it.
+
+    The blanked region depends on the fill method. ReSurfEMG's RMS fill
+    (method 3) spans ``int(peak +/- gate_width / 2)`` while the zero,
+    interpolation and prior-segment fills (methods 0, 1, 2) span
+    ``peak +/- gate_width // 2``. On an odd gate width - the 205-sample
+    default among them - the RMS fill starts one sample earlier. The
+    arithmetic below mirrors each case so the mask names exactly the samples
+    that were replaced."""
 
     mask = np.zeros(n_samples, dtype=bool)
-    half_width = gate_width_samples // 2
     for peak in peak_indices:
-        start = max(0, int(peak) - half_width)
-        end = min(n_samples, int(peak) + half_width + 1)
-        mask[start:end] = True
+        if fill_method == 3:
+            start = int(int(peak) - gate_width_samples / 2)
+            end = int(int(peak) + gate_width_samples / 2)
+        else:
+            half_width = gate_width_samples // 2
+            start = int(peak) - half_width
+            end = int(peak) + half_width
+        mask[max(0, start) : min(n_samples, end)] = True
     return mask
 
 
@@ -60,7 +73,7 @@ def _build_gate_mask(
         "session.signals",
         "session.parameter_results",
     ),
-    alternatives=("emg.ecg_wavelet_denoising", "emg.ecg_estimated_subtraction"),
+    alternatives=("emg.ecg_wavelet_denoising",),
     mutually_exclusive_parameters=(("gate_width_seconds", "gate_width_samples"),),
     input_artifacts=(
         _SESSION_ARTIFACT,
@@ -79,8 +92,9 @@ def _build_gate_mask(
         StepParameter(
             name="source",
             value_type="string",
-            default="filtered",
-            description="Key into processed_emg to gate.",
+            required=False,
+            default=None,
+            description="Key into processed_emg to gate. Defaults to the most-processed trace present: the ECG-cleaned signal when an earlier removal step produced one, otherwise the band-passed signal.",
         ),
         StepParameter(
             name="gate_width_seconds",
@@ -153,7 +167,7 @@ def ecg_gating(
     processed_emg: Any,
     ecg_peak_indices: Any,
     *,
-    source: str = "filtered",
+    source: str | None = None,
     gate_width_seconds: float | None = None,
     gate_width_samples: int | None = None,
     fill_method: int = 1,
@@ -184,11 +198,7 @@ def ecg_gating(
             "emg.ecg_gating: set only one of gate_width_seconds or "
             "gate_width_samples, not both."
         )
-    if source not in processed_emg:
-        raise ValueError(
-            f"emg.ecg_gating source {source!r} is not present in processed_emg; "
-            f"available keys: {sorted(processed_emg.keys())}."
-        )
+    source = resolve_emg_source(processed_emg, source, "emg.ecg_gating")
 
     array = np.asarray(processed_emg[source], dtype=float)
     fs = float(processed_emg["fs"])
@@ -206,7 +216,10 @@ def ecg_gating(
         fill_method=fill_method,
     )
     gate_mask = _build_gate_mask(
-        len(array), ecg_peak_indices, gate_width_samples=effective_gate_width_samples
+        len(array),
+        ecg_peak_indices,
+        gate_width_samples=effective_gate_width_samples,
+        fill_method=fill_method,
     )
 
     original_filter = processed_emg.get("filter") or {}
@@ -235,7 +248,10 @@ def ecg_gating(
 
     processed_emg_after_ecg = {
         **processed_emg,
-        "filtered": gated,
+        # Band-passing and gating are separate steps: "filtered" keeps the
+        # band-passed signal and the gated one lands beside it, so what
+        # gating did stays visible and recomputable.
+        "ecg_cleaned": gated,
         "envelope": envelope,
         # Carry the *effective* envelope settings forward, so a later
         # recomputation off this bundle reuses what was actually applied here

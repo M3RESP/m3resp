@@ -52,7 +52,10 @@ def _fixture_path() -> str:
 _SPEC: dict[str, Any] = {
     "name": "eit-gap-migration-equivalence",
     "steps": [
-        {"uses": "eit.load", "with": {"file": _fixture_path(), "vendor": "draeger"}},
+        {
+            "uses": "eit.load",
+            "with": {"file_path": _fixture_path(), "vendor": "draeger"},
+        },
         {
             "uses": "eit.detect_rates",
             "in": {"signal": "raw_eit"},

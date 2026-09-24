@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from m3resp.adapters.resurfemg_adapter import ventilator_signals
+from m3resp.adapters.ventilator_adapter import DEFAULT_CHANNELS
 from m3resp.core.session import M3Session
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 
@@ -25,7 +27,7 @@ from ._shared import _RESURFEMG, _SESSION_ARTIFACT
     input_artifacts=(_SESSION_ARTIFACT,),
     parameters=(
         StepParameter(
-            name="file",
+            name="file_path",
             value_type="path",
             required=True,
             path_kind="file",
@@ -41,12 +43,12 @@ from ._shared import _RESURFEMG, _SESSION_ARTIFACT
         ),
     ),
 )
-def load(session: M3Session, *, file: str) -> dict[str, Any]:
+def load(session: M3Session, *, file_path: str) -> dict[str, Any]:
     # Delegates to the session method - the same shape as `emg.load` calling
     # `session.load_emg` - so provenance and `session.raw` bookkeeping happen
     # in one place. The step still emits the raw payload dict, which is what
     # `ventilator.channels` downstream expects.
-    session.load_ventilator(file, verbose=False)
+    session.load_ventilator(file_path, verbose=False)
     recording = session.ventilator
     assert recording is not None
     return {"ventilator_raw": recording.data}
@@ -57,8 +59,8 @@ def load(session: M3Session, *, file: str) -> dict[str, Any]:
     aliases=("emg.ventilator_channels",),
     reads={"ventilator_raw": "ventilator_raw"},
     writes=("ventilator_signals",),
-    summary="Split a raw ventilator recording into pressure/flow/volume channels.",
-    description="Split a raw ventilator recording into named pressure/flow/volume channel arrays plus sample frequency.",
+    summary="Split a raw ventilator recording into its named channels.",
+    description="Split a raw ventilator recording into named channel arrays plus sample frequency, resolving channels by label where the recording provides them.",
     category="preprocessing",
     modality="ventilator",
     input_artifacts=(
@@ -71,25 +73,37 @@ def load(session: M3Session, *, file: str) -> dict[str, Any]:
     ),
     parameters=(
         StepParameter(
+            name="channels",
+            value_type="list",
+            default=DEFAULT_CHANNELS,
+            description="Quantities to extract, found by channel label. Beyond the three standard ones a pressure pod can also supply 'esophageal_pressure', 'transpulmonary_pressure' or 'gastric_pressure'.",
+        ),
+        StepParameter(
             name="pressure_channel",
             value_type="integer",
-            default=0,
+            required=False,
+            default=None,
             minimum=0,
-            description="Channel index of airway pressure.",
+            description="Explicit column index for airway pressure, overriding the label match. The way to read an unlabelled recording whose columns are not in the default order.",
+            advanced=True,
         ),
         StepParameter(
             name="flow_channel",
             value_type="integer",
-            default=1,
+            required=False,
+            default=None,
             minimum=0,
-            description="Channel index of flow.",
+            description="Explicit column index for flow, overriding the label match.",
+            advanced=True,
         ),
         StepParameter(
             name="volume_channel",
             value_type="integer",
-            default=2,
+            required=False,
+            default=None,
             minimum=0,
-            description="Channel index of volume.",
+            description="Explicit column index for volume, overriding the label match.",
+            advanced=True,
         ),
         StepParameter(
             name="fs",
@@ -112,13 +126,25 @@ def load(session: M3Session, *, file: str) -> dict[str, Any]:
 def channels(
     ventilator_raw: Any,
     *,
-    pressure_channel: int = 0,
-    flow_channel: int = 1,
-    volume_channel: int = 2,
+    channels: Sequence[str] = DEFAULT_CHANNELS,
+    pressure_channel: int | None = None,
+    flow_channel: int | None = None,
+    volume_channel: int | None = None,
     fs: float | None = None,
 ) -> dict[str, Any]:
+    """Split a ventilator recording into channels found by name.
+
+    `channels` selects which quantities to extract - the three standard ones
+    by default, but a recording from a pressure pod can also be asked for
+    ``esophageal_pressure``, ``transpulmonary_pressure`` or
+    ``gastric_pressure``. The per-channel index parameters override the name
+    match with an explicit column, and remain the way to read an unlabelled
+    recording whose columns are not in the default order.
+    """
+
     signals = ventilator_signals(
         ventilator_raw,
+        channels=tuple(channels),
         pressure_channel=pressure_channel,
         flow_channel=flow_channel,
         volume_channel=volume_channel,

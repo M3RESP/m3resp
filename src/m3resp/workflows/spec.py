@@ -37,10 +37,17 @@ from m3resp.core.exceptions import PipelineSpecError
 from m3resp.core.path_helper import resolve_optional_path
 
 #: schema_version values this release of m3resp understands.
+#:
+#: Versions are whole numbers; there are deliberately no "1.1"-style minor
+#: versions. The number increases only when a spec file that used to load
+#: stops loading. Adding an optional key that older files simply lack is
+#: backwards compatible and does not bump it, so a spec written today keeps
+#: saying ``schema_version: 1`` for as long as it keeps working. Widening
+#: this tuple is all a future release needs to accept further versions.
 _SUPPORTED_SCHEMA_VERSIONS = (1,)
 
 
-#: Phase 6.2: replaces the old "any explicit export step present" heuristic.
+#: Now it replaces the old "any explicit export step present" heuristic.
 #: ``None`` means "not stated" - only ever valid for a legacy (unversioned)
 #: spec, where the effective mode is inferred from the spec's steps with a
 #: diagnostic; a versioned spec must state it whenever ``dir`` is set.
@@ -285,7 +292,7 @@ def dump_spec(
     rather than silently overwriting one a person wrote.
     """
 
-    target = Path(path).expanduser()
+    target = Path(path).expanduser().resolve()
     resolved_format = format or ("json" if target.suffix.lower() == ".json" else "yaml")
     payload = spec_to_dict(spec)
     if resolved_format == "json":

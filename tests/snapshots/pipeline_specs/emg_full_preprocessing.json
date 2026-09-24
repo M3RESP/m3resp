@@ -30,7 +30,7 @@
       "out": {},
       "uses": "emg.load",
       "with": {
-        "file": "@emg_file"
+        "file_path": "@emg_file"
       }
     },
     {
@@ -39,7 +39,7 @@
       "out": {},
       "uses": "ventilator.load",
       "with": {
-        "file": "@vent_file"
+        "file_path": "@vent_file"
       }
     },
     {
@@ -62,7 +62,8 @@
       "uses": "emg.preprocess",
       "with": {
         "channel": 1,
-        "envelope_window_seconds": 0.5
+        "compute_envelope": false,
+        "envelope_window_seconds": 0.25
       }
     },
     {
@@ -90,12 +91,22 @@
       }
     },
     {
+      "id": "moving_baseline",
+      "in": {},
+      "out": {},
+      "uses": "emg.moving_baseline",
+      "with": {
+        "percentile": 33.0,
+        "step_seconds": 0.2,
+        "window_seconds": 7.5
+      }
+    },
+    {
       "id": "detect_breaths",
       "in": {},
       "out": {},
       "uses": "emg.detect_breaths",
       "with": {
-        "half_window_seconds": 0.5,
         "min_breath_width_seconds": 0.5
       }
     },
@@ -105,17 +116,6 @@
       "out": {},
       "uses": "emg.peak_indices",
       "with": {}
-    },
-    {
-      "id": "moving_baseline",
-      "in": {},
-      "out": {},
-      "uses": "emg.moving_baseline",
-      "with": {
-        "percentile": 33.0,
-        "step_seconds": 1.0,
-        "window_seconds": 30.0
-      }
     },
     {
       "id": "onoffpeak_baseline_crossing",
@@ -172,7 +172,7 @@
       "out": {},
       "uses": "ventilator.detect_breaths",
       "with": {
-        "breath_width_seconds": 0.5
+        "breath_width_seconds": 0.25
       }
     },
     {

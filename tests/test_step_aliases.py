@@ -42,7 +42,7 @@ _LEGACY_SPEC = {
     "name": "legacy-ids",
     "inputs": {"vent_file": "recording.txt"},
     "steps": [
-        {"uses": "emg.load_ventilator", "with": {"file": "@vent_file"}},
+        {"uses": "emg.load_ventilator", "with": {"file_path": "@vent_file"}},
         {"uses": "emg.ventilator_channels"},
         {"uses": "emg.detect_ventilator_breath"},
     ],

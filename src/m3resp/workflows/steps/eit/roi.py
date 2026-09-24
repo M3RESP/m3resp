@@ -9,6 +9,7 @@ import numpy as np
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult
 from m3resp.workflows.registry import (
+    ANY_ARTIFACT_TYPE,
     StepArtifact,
     StepParameter,
     register_step,
@@ -118,10 +119,10 @@ def _pixel_mask_to_parameter_result(
     ),
 )
 def roi_tiv_lungspace(
+    *,
     eit_data: Any,
     timing_data: Any,
     session: M3Session,
-    *,
     threshold: float = 0.15,
 ) -> dict[str, Any]:
     _validate_unit_threshold(threshold, step="eit.roi_tiv_lungspace", param="threshold")
@@ -226,10 +227,10 @@ def roi_tiv_lungspace(
     ),
 )
 def roi_amplitude_lungspace(
+    *,
     eit_data: Any,
     timing_data: Any,
     session: M3Session,
-    *,
     threshold: float = 0.15,
 ) -> dict[str, Any]:
     """Threshold mean pixel amplitude into a lung-space mask.
@@ -335,10 +336,10 @@ def roi_amplitude_lungspace(
     ),
 )
 def roi_watershed(
+    *,
     eit_data: Any,
     timing_data: Any,
     session: M3Session,
-    *,
     threshold_fraction: float = 0.15,
 ) -> dict[str, Any]:
     _validate_unit_threshold(
@@ -383,9 +384,12 @@ def roi_watershed(
     input_artifacts=(
         StepArtifact(
             name="mask",
-            artifact_type="roi_mask",
-            description="Lung-space mask to filter, e.g. from 'eit.roi_watershed'.",
-            compatibility_only=True,
+            artifact_type=ANY_ARTIFACT_TYPE,
+            description=(
+                "Lung-space mask to filter. Either form works: the upstream "
+                "mask a mask step writes (e.g. 'watershed_lungspace_mask') or "
+                "its native counterpart (e.g. 'watershed_lungspace_result')."
+            ),
         ),
         _SESSION_ARTIFACT,
     ),
@@ -423,8 +427,8 @@ def roi_watershed(
 )
 def roi_filter_by_size(
     mask: Any,
-    session: M3Session,
     *,
+    session: M3Session,
     min_region_size: int = 10,
     connectivity: Literal[1, 2] = 1,
 ) -> dict[str, Any]:

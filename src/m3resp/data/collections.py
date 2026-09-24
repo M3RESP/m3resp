@@ -39,7 +39,7 @@ class SignalCollection:
         two distinct results that happen to compare equal both get added.
         """
 
-        if not any(existing is signal for existing in self.items):
+        if not any(signal is existing for existing in self.items):
             self.items.append(signal)
         return signal
 
@@ -80,7 +80,7 @@ class ParameterResultCollection:
         """Append `parameter`, unless this exact object is already present
         (see `SignalCollection.add`)."""
 
-        if not any(existing is parameter for existing in self.items):
+        if not any(parameter is existing for existing in self.items):
             self.items.append(parameter)
         return parameter
 
