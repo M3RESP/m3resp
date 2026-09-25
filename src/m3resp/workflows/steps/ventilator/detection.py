@@ -19,6 +19,7 @@ from m3resp.processing.metrics import (
 )
 from m3resp.processing.peaks import (
     detect_occluded_breath_peaks,
+    detect_pressure_dip_breaths,
     detect_ventilator_breath_peaks,
 )
 from m3resp.processing.ventilator import estimate_peep
@@ -124,6 +125,77 @@ def detect_breaths(
         start_index=0,
         end_index=len(volume) - 1,
         width_samples=width_samples,
+    )
+    return {"ventilator_breath_indices": np.asarray(indices, dtype=int)}
+
+
+@register_step(
+    "ventilator.detect_pressure_breaths",
+    reads={"ventilator_signals": "ventilator_signals"},
+    writes=("ventilator_breath_indices",),
+    summary="Detect spontaneous breaths from dips in the airway pressure.",
+    description="Detect spontaneous breaths as dips in the airway pressure (breathing in through a mouthpiece or mask lowers it), for recordings without a ventilator volume channel. Not for mechanically ventilated breaths.",
+    category="detection",
+    modality="ventilator",
+    input_artifacts=(
+        StepArtifact(
+            name="ventilator_signals",
+            artifact_type="ventilator_channel_bundle",
+            description="Ventilator channel bundle from 'ventilator.channels' with a 'pressure' channel.",
+        ),
+    ),
+    parameters=(
+        StepParameter(
+            name="smoothing_seconds",
+            value_type="number",
+            default=0.2,
+            unit="s",
+            minimum=0,
+            description="Moving-average window that removes fast noise before dips are found.",
+        ),
+        StepParameter(
+            name="min_depth",
+            value_type="number",
+            default=0.15,
+            minimum=0,
+            description="Smallest dip that counts as a breath, in the pressure's own unit (e.g. cmH2O).",
+        ),
+        StepParameter(
+            name="min_interval_seconds",
+            value_type="number",
+            default=2.0,
+            unit="s",
+            minimum=0,
+            description="Shortest time between two breaths (2 s allows up to 30 breaths/min).",
+        ),
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="ventilator_breath_indices",
+            artifact_type="index_array",
+            description="Sample index of the lowest point of each pressure dip.",
+        ),
+    ),
+)
+def detect_pressure_breaths(
+    ventilator_signals: Any,
+    *,
+    smoothing_seconds: float = 0.2,
+    min_depth: float = 0.15,
+    min_interval_seconds: float = 2.0,
+) -> dict[str, Any]:
+    pressure = ventilator_signals.get("pressure")
+    if pressure is None:
+        raise MissingModalityDataError(
+            "ventilator.detect_pressure_breaths needs a 'pressure' channel; ask "
+            "ventilator.channels for it (e.g. pressure_channel=0)."
+        )
+    indices = detect_pressure_dip_breaths(
+        pressure,
+        sample_frequency=float(ventilator_signals["fs"]),
+        smoothing_seconds=smoothing_seconds,
+        min_depth=min_depth,
+        min_interval_seconds=min_interval_seconds,
     )
     return {"ventilator_breath_indices": np.asarray(indices, dtype=int)}
 

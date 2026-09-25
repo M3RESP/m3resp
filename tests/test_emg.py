@@ -10,6 +10,7 @@ import pytest
 
 from m3resp import BreathEvent, M3Session
 from m3resp.adapters import ReSurfEMGAdapter
+from m3resp.core.exceptions import UnresolvedChannelError
 from m3resp.io import load_emg
 from m3resp.modalities.emg import load as load_emg_recording
 from m3resp.visualization import (
@@ -122,6 +123,29 @@ class TestDetectionBaseline:
             ReSurfEMGAdapter().detect_breaths(
                 processed, min_breath_width_seconds=0.5, baseline=drift
             )
+
+
+def test_default_detection_finds_fast_breathing():
+    """At 22 breaths/min each burst is under a second wide. The default
+    minimum breath width (0.5 s) must still find every breath; the old 1.0 s
+    default found none."""
+
+    pytest.importorskip("resurfemg")
+    np = pytest.importorskip("numpy")
+
+    fs = 100.0
+    time = np.arange(0, 60, 1 / fs)
+    breath_period_seconds = 60 / 22
+    phase = (time % breath_period_seconds) / breath_period_seconds
+    # Each burst takes the first 35 % of the breath: about 0.95 s.
+    envelope = np.where(phase < 0.35, np.sin(np.pi * phase / 0.35), 0.0)
+
+    events = ReSurfEMGAdapter().detect_breaths(
+        {"envelope": envelope, "fs": fs, "channel": "EMGdi"},
+        baseline=np.zeros_like(envelope),
+    )
+
+    assert len(events) == 22
 
 
 class TestDetectedBreathBoundaries:
@@ -243,6 +267,55 @@ def test_default_preprocess_updates_emg_recording_with_fake_signal():
     assert len(processed["envelope"]) == len(fake_signal)
     assert session.emg.filtered is processed["filtered"]
     assert session.emg.envelope is processed["envelope"]
+
+
+class TestEMGChannelChoice:
+    """When no channel is given, the EMG channel is picked from the channel
+    names. A channel named ECG is never analysed as breathing EMG, and when
+    the names do not tell which channel is the breathing muscle, the user is
+    asked instead of channel 0 being used silently."""
+
+    @staticmethod
+    def _session(labels):
+        pytest.importorskip("resurfemg")
+        np = pytest.importorskip("numpy")
+
+        fs = 1000.0
+        time = np.arange(5000, dtype=float) / fs
+        array = np.asarray([np.sin(2 * np.pi * 100 * time) * (i + 1) for i in range(2)])
+        session = M3Session(
+            emg_adapter=ReSurfEMGAdapter(
+                loader=lambda *args, **kwargs: {
+                    "array": array,
+                    "dataframe": None,
+                    "metadata": {"fs": fs, "labels": labels, "units": ["uV", "uV"]},
+                }
+            )
+        )
+        session.load_emg("subject.Poly5")
+        return session
+
+    def test_the_ecg_channel_is_skipped(self):
+        session = self._session(["ECG", "EMGdi"])
+
+        processed = session.preprocess_emg()
+
+        assert processed["channel"] == 1
+
+    def test_unclear_channel_names_ask_for_a_channel(self):
+        session = self._session(["emg_0", "emg_1"])
+
+        with pytest.raises(
+            UnresolvedChannelError, match=r"0 \('emg_0'\), 1 \('emg_1'\)"
+        ):
+            session.preprocess_emg()
+
+    def test_a_given_channel_is_always_used(self):
+        session = self._session(["emg_0", "emg_1"])
+
+        processed = session.preprocess_emg(channel=0)
+
+        assert processed["channel"] == 0
 
 
 def test_emg_overview_y_axis_labels_include_amplitude_and_units():
@@ -529,7 +602,8 @@ def test_emg_real_data_pipeline_uses_committed_poly5_sample():
     assert len(processed["envelope"]) == len(processed["raw_channel"])
     assert session.emg.filtered is processed["filtered"]
     assert session.emg.envelope is processed["envelope"]
-    assert session.emg.channel == 0
+    # Channel 0 is named 'ECG' and channel 1 'EMGdi': the EMG channel is picked.
+    assert session.emg.channel == 1
     assert session.emg.fs == processed["fs"]
 
     events = session.detect_emg_breaths()
@@ -549,6 +623,44 @@ def test_emg_real_data_pipeline_uses_committed_poly5_sample():
         len(postprocessing["computed"]["event_detection"]["detect_ventilator_breath"])
         > 0
     )
+
+
+def test_emg_preset_runs_end_to_end_and_reports_respiratory_rate():
+    """`session.run_pipeline("emg")` on a made-up recording breathing at
+    12 breaths/min. This once crashed while saving the respiratory rate."""
+
+    pytest.importorskip("resurfemg")
+    np = pytest.importorskip("numpy")
+
+    fs = 2048.0
+    duration_seconds = 60.0
+    breath_period_seconds = 5.0  # 12 breaths/min
+    burst_seconds = 1.5
+    rng = np.random.default_rng(0)
+    time = np.arange(int(fs * duration_seconds)) / fs
+    breathing_in = (time % breath_period_seconds) < burst_seconds
+    emg_uv = rng.normal(0.0, 2.0, time.size) + breathing_in * rng.normal(
+        0.0, 50.0, time.size
+    )
+    session = M3Session(
+        emg_adapter=ReSurfEMGAdapter(
+            loader=lambda *args, **kwargs: {
+                "array": np.asarray([emg_uv]),
+                "dataframe": None,
+                "metadata": {"fs": fs, "labels": ["EMG"], "units": ["uV"]},
+            }
+        )
+    )
+    session.load_emg("synthetic.Poly5")
+
+    session.run_pipeline("emg")
+
+    rates = {
+        p.name: p for p in session.parameter_results if p.name.startswith("respiratory")
+    }
+    assert rates["respiratory_rate"].value == pytest.approx(12.0, abs=1.0)
+    per_breath = rates["respiratory_rate_breath_to_breath"].value
+    assert len(per_breath) == len(session.events["emg_breaths"]) - 1
 
 
 def test_run_postprocessing_function_exposes_resurfemg_functions():

@@ -8,7 +8,7 @@ import numpy as np
 
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult, Signal
-from m3resp.processing.windows import rolling_arv
+from m3resp.processing.windows import ENVELOPE_METHODS, rolling_envelope
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 
 from ._shared import (
@@ -104,6 +104,15 @@ from ._shared import (
             description="Envelope recomputation window on the cleaned signal. Defaults to the original preprocessing window.",
             advanced=True,
         ),
+        StepParameter(
+            name="envelope_method",
+            value_type="string",
+            required=False,
+            default=None,
+            choices=ENVELOPE_METHODS,
+            description="Envelope method for the recomputation on the cleaned signal. Defaults to the method preprocessing used, so the two cannot disagree.",
+            advanced=True,
+        ),
     ),
     output_artifacts=(
         StepArtifact(
@@ -152,6 +161,7 @@ def ecg_wavelet_denoising(
     wavelet_type: str = "db2",
     fixed_threshold: float = 4.5,
     envelope_window_seconds: float | None = None,
+    envelope_method: str | None = None,
 ) -> dict[str, Any]:
     source = resolve_emg_source(processed_emg, source, "emg.ecg_wavelet_denoising")
 
@@ -172,8 +182,14 @@ def ecg_wavelet_denoising(
         )
     )
 
-    original_window_seconds = (processed_emg.get("filter") or {}).get(
-        "envelope_window_seconds"
+    original_filter = processed_emg.get("filter") or {}
+    original_window_seconds = original_filter.get("envelope_window_seconds")
+    # Same kind of envelope as preprocessing made, so this step cannot
+    # silently switch method (it always used ARV before).
+    effective_envelope_method = (
+        envelope_method
+        if envelope_method is not None
+        else original_filter.get("envelope_method") or "rms"
     )
     effective_envelope_window_seconds = (
         envelope_window_seconds
@@ -183,7 +199,11 @@ def ecg_wavelet_denoising(
     envelope = processed_emg.get("envelope")
     if effective_envelope_window_seconds is not None:
         envelope_window_samples = max(1, int(effective_envelope_window_seconds * fs))
-        envelope = rolling_arv(cleaned, window_length=envelope_window_samples)
+        envelope = rolling_envelope(
+            cleaned,
+            window_length=envelope_window_samples,
+            method=effective_envelope_method,
+        )
 
     processed_emg_after_ecg = {
         **processed_emg,
@@ -191,6 +211,11 @@ def ecg_wavelet_denoising(
         # `emg_signal_for_analysis`.
         "ecg_cleaned": cleaned,
         "envelope": envelope,
+        "filter": {
+            **original_filter,
+            "envelope_window_seconds": effective_envelope_window_seconds,
+            "envelope_method": effective_envelope_method,
+        },
     }
     _update_session_after_ecg_removal(session, processed_emg_after_ecg)
 
@@ -205,6 +230,7 @@ def ecg_wavelet_denoising(
         "original_length": original_length,
         "padded_length": padded_length,
         "effective_envelope_window_seconds": effective_envelope_window_seconds,
+        "effective_envelope_method": effective_envelope_method,
     }
     ecg_wavelet_cleaned_signal = Signal(
         values=cleaned,

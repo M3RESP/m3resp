@@ -15,6 +15,7 @@ from m3resp.workflows.registry import describe_step, describe_steps
 
 _EMG_STEP_NAMES = [
     "emg.load",
+    "emg.slice",
     "emg.preprocess",
     "emg.detect_breaths",
     "emg.peak_indices",
@@ -49,6 +50,7 @@ _VENTILATOR_STEP_NAMES = [
     "ventilator.load",
     "ventilator.channels",
     "ventilator.detect_breaths",
+    "ventilator.detect_pressure_breaths",
     "ventilator.find_occluded_breaths",
     "ventilator.pocc_intervals",
     "ventilator.pocc_time_product",
@@ -75,12 +77,12 @@ _QUALITY_STEP_NAMES = [
 ]
 
 
-def test_all_thirty_six_emg_and_ventilator_steps_are_registered_and_described():
+def test_all_thirty_eight_emg_and_ventilator_steps_are_registered_and_described():
     emg = {d.name for d in describe_steps(prefix="emg.")}
     ventilator = {d.name for d in describe_steps(prefix="ventilator.")}
     assert emg == set(_EMG_STEP_NAMES)
     assert ventilator == set(_VENTILATOR_STEP_NAMES)
-    assert len(_ALL_STEP_NAMES) == 36
+    assert len(_ALL_STEP_NAMES) == 38
 
 
 def test_every_emg_step_declares_some_metadata_and_is_json_safe():
@@ -166,12 +168,12 @@ def test_describe_steps_prefix_filter_separates_ventilator_from_emg():
     assert not names & set(_EMG_STEP_NAMES)
 
 
-def test_all_sixty_built_in_steps_still_describe_without_error():
+def test_all_sixty_two_built_in_steps_still_describe_without_error():
     descriptions = describe_steps()
-    assert len(descriptions) == 60
+    assert len(descriptions) == 62
     with_metadata = [
         d
         for d in descriptions
         if d.parameters or d.output_artifacts or d.input_artifacts
     ]
-    assert len(with_metadata) == 60
+    assert len(with_metadata) == 62

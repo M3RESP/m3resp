@@ -36,9 +36,9 @@ EXAMPLE_SPECS: dict[str, Path] = {
     "multimodal_example": EXAMPLES_DIR
     / "multimodal_example"
     / "multimodal.pipeline.yaml",
-    "annemijn_multimodal": EXAMPLES_DIR
-    / "annemijn_multimodal"
-    / "annemijn.pipeline.yaml",
+    "multidomain_recording1_a2": EXAMPLES_DIR
+    / "multidomain_recording1"
+    / "recording1_a2.pipeline.yaml",
     "eit_full_preprocessing": EXAMPLES_DIR
     / "eit_full_preprocessing"
     / "eit-full.pipeline.yaml",
