@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from m3resp import BreathEvent, M3Session
-from m3resp.emg.processing import ReSurfEMG
+from m3resp.emg import ReSurfEMG
 from m3resp.io import load_emg
 from m3resp.modalities.emg import load as load_emg_recording
 from m3resp.visualization import (

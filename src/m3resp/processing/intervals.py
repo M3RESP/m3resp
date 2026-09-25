@@ -36,7 +36,7 @@ import numpy as np
 
 from m3resp.data.events import BreathEvent
 from m3resp.core.events import BreathEvent
-from m3resp.emg.processing.shared import _compute_derivative
+from m3resp.processing.windows import compute_derivative
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -72,6 +72,10 @@ def _validate_peak_indices(peak_indexes: np.ndarray, **kwargs) -> tuple[bool, bo
     upslope = "previous_downslope" in kwargs and "new_upslope" in kwargs
     previous_downslope = kwargs.get("previous_downslope", 0)
     new_upslope = kwargs.get("new_upslope", 0)
+
+    if peak_number >= len(peak_ends):
+        msg = f"peak_number {peak_number} is out of range for peak_ends of length {len(peak_ends)}"
+        raise IndexError(msg)
 
     end_index = peak_ends[peak_number]
     peak_index = peak_indexes[peak_number]
@@ -116,7 +120,7 @@ def _validate_peak_indices(peak_indexes: np.ndarray, **kwargs) -> tuple[bool, bo
         valid_ends[peak_number - 1] = previous_end_validity
         valid_starts[peak_number] = current_start_validity
 
-    return valid_starts[peak_number], valid_ends[peak_number]
+    return bool(valid_starts[peak_number]), bool(valid_ends[peak_number])
 
 
 def onoff_from_baseline_crossings(
@@ -135,6 +139,10 @@ def onoff_from_baseline_crossings(
     Args:
         signal (numpy.ndarray): Envelope signal.
         baseline (numpy.ndarray): Baseline signal of EMG data for baseline detection.
+        peak_indices (numpy.ndarray): List of peak indices for which to find on-
+            and offset.
+        signal (numpy.ndarray): Signal, e.g. an EMG envelope or airway pressure.
+        baseline (numpy.ndarray): Baseline of `values`, one value per sample.
         peak_indices (numpy.ndarray): List of peak indices for which to find on-
             and offset.
 
@@ -173,6 +181,7 @@ def onoff_from_baseline_crossings(
             start_index=peak_starts[peak_number],
             valid_starts=valid_starts,
             valid_ends=valid_ends,
+            peak_ends=peak_ends,
         )
 
     valid_peaks = [
@@ -217,7 +226,7 @@ def onoff_from_slope(
     scipy_signal = _scipy_signal()
     _signal = np.asarray(signal)
     _peak_indexes = np.asarray(peak_indices, dtype=int)
-    derivative = _compute_derivative(_signal, sample_frequency)
+    derivative = compute_derivative(_signal, sample_frequency)
 
     # get the local minima and maxima in the derivative
     max_upslope_indices = scipy_signal.argrelextrema(
@@ -288,6 +297,7 @@ def onoff_from_slope(
             valid_ends=valid_ends,
             previous_downslope=previous_downslope,
             new_upslope=new_upslope,
+            peak_ends=peak_ends,
         )
     # valid peaks have valid starts and ends
     valid_peaks = [

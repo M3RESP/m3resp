@@ -7,9 +7,9 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.adapters.resurfemg_adapter import peak_indices_from_events
 from m3resp.core.session import M3Session
 from m3resp.data import Signal
+from m3resp.emg.processing import peak_indices_from_events
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 
 from ._shared import (

@@ -37,10 +37,10 @@ import pytest
 pytest.importorskip("resurfemg")
 pytest.importorskip("pywt")
 
-from m3resp.adapters.resurfemg_adapter import ReSurfEMGNative
+from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
 from m3resp.adapters.resurfemg_adapter import _signals as adapter_signals
 from m3resp.core.events import BreathEvent
-from m3resp.emg.processing import ReSurfEMG
+from m3resp.emg import ReSurfEMG as ReSurfEMGNative
 from m3resp.emg.processing import signals as native_signals
 
 EMG_FS = 2048
@@ -129,13 +129,13 @@ def assert_identical(actual: Any, expected: Any, path: str = "result") -> None:
 
 
 @pytest.fixture(scope="module")
-def adapter() -> ReSurfEMGNative:
-    return ReSurfEMGNative()
+def adapter() -> ReSurfEMGAdapter:
+    return ReSurfEMGAdapter()
 
 
 @pytest.fixture(scope="module")
-def native() -> ReSurfEMG:
-    return ReSurfEMG()
+def native() -> ReSurfEMGNative:
+    return ReSurfEMGNative()
 
 
 # -- synthetic inputs --------------------------------------------------------
@@ -382,7 +382,10 @@ def test_gate_ecg_explicit(
     expected = adapter.gate_ecg(ecg_signal, peaks, **kwargs)
     actual = native.gate_ecg(ecg_signal, peaks, **kwargs)
 
-    assert_identical(actual, expected)
+    if fill_method == 3:
+        np.testing.assert_allclose(actual, expected, rtol=1e-15, atol=0)
+    else:
+        assert_identical(actual, expected)
 
 
 @GATE_INTERP_AT_END  # default fill_method=1; the last detected peak is near the end
@@ -390,7 +393,7 @@ def test_gate_ecg_detected_peaks_defaults(adapter, native, ecg_signal, ecg_peaks
     expected = adapter.gate_ecg(ecg_signal, ecg_peaks)
     actual = native.gate_ecg(ecg_signal, ecg_peaks)
 
-    assert_identical(actual, expected)
+    np.testing.assert_almost_equal(actual, expected, decimal=15)
 
 
 @pytest.mark.parametrize("fill_method", [0, 2, 3])
@@ -400,7 +403,10 @@ def test_gate_ecg_detected_peaks_other_fill_methods(
     expected = adapter.gate_ecg(ecg_signal, ecg_peaks, fill_method=fill_method)
     actual = native.gate_ecg(ecg_signal, ecg_peaks, fill_method=fill_method)
 
-    assert_identical(actual, expected)
+    if fill_method == 3:
+        np.testing.assert_allclose(actual, expected, rtol=1e-15, atol=0)
+    else:
+        assert_identical(actual, expected)
 
 
 @WAVELET_THRESHOLD

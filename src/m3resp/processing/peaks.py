@@ -46,7 +46,7 @@ from __future__ import annotations
 
 import warnings
 from itertools import pairwise
-from typing import Any, overload
+from typing import Any
 
 import numpy as np
 
@@ -56,6 +56,16 @@ from m3resp.emg.processing.shared import (
     _validate_incompatible_kwargs,
 )
 from m3resp.processing.captures import capture_value
+
+
+def _require_sampling_frequency(sample_frequency: float | None) -> float:
+    if sample_frequency is None:
+        msg = "sample_frequency is required."
+        raise ValueError(msg)
+    if not np.isfinite(sample_frequency) or sample_frequency <= 0:
+        msg = f"sample_frequency must be finite and positive; got {sample_frequency!r}."
+        raise ValueError(msg)
+    return float(sample_frequency)
 
 
 def detect_peaks(
@@ -168,7 +178,11 @@ def detect_emg_breath_peaks(
         msg_0 = "min_peak_width_samples and min_peak_width_s cannot both be set at the same time."
         raise MutuallyExclusiveArgsError(msg_0)
 
-    baseline = baseline or kwargs.get("emg_baseline", np.zeros_like(envelope))
+    baseline = (
+        baseline
+        if baseline is not None
+        else kwargs.get("emg_baseline", np.zeros_like(envelope))
+    )
 
     min_peak_width_samples = min_peak_width_samples or kwargs.get("min_peak_width_s", 1)
 

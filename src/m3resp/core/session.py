@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
-from m3resp.adapters.resurfemg_adapter import ReSurfEMGNative
 from m3resp.adapters.ventilator_adapter import (
     VentilatorAdapter,
     infer_ventilator_duration,
@@ -32,6 +29,7 @@ from m3resp.data.events import BreathEvent, reuse_matching_breaths
 from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
 from m3resp.data.processing import ProcessingHistory
+from m3resp.emg import ReSurfEMG
 from m3resp.export.session_export import export_session_summary
 from m3resp.modalities.eit import (
     EITLoaderChoice,
@@ -87,6 +85,12 @@ from m3resp.synchronization.sync_methods import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+    from pathlib import Path
+
+    from m3resp.core.events import BreathEvent
+    from m3resp.data.linked_breath import LinkedBreath
+    from m3resp.data.parameters import ParameterResult
     from m3resp.datamodel.recorder import DataModelRecorder
 
 ALIGNMENT_EVENT_LISTS = {
@@ -132,7 +136,7 @@ class M3Session:
     def __init__(
         self,
         eit_adapter: EITProcessingAdapter | None = None,
-        emg_adapter: ReSurfEMGNative | None = None,
+        emg_adapter: ReSurfEMG | None = None,
         metadata: SessionMetadata | dict[str, Any] | None = None,
         allow_overwrite: bool = False,
         ventilator_adapter: Any | None = None,
@@ -154,7 +158,7 @@ class M3Session:
         """
 
         self.eit_adapter = eit_adapter or EITProcessingAdapter()
-        self.emg_adapter = emg_adapter or ReSurfEMGNative()
+        self.emg_adapter = emg_adapter or ReSurfEMG()
         # Ventilator processing is native (`VentilatorAdapter` wraps no upstream
         # library), but *loading* borrows whichever adapter owns the file the
         # ventilator channels arrived in: the sEMG's multi-channel export, or

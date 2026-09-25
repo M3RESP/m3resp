@@ -46,6 +46,7 @@ from m3resp.datamodel import (
     export_store,
     validate_store,
 )
+from m3resp.emg import ReSurfEMG
 from m3resp.presets import (
     EITPreset,
     EMGPreset,

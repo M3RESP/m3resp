@@ -7,7 +7,8 @@ from typing import Any
 
 import pytest
 
-from m3resp.adapters import EITProcessingAdapter, ReSurfEMGNative
+from m3resp.adapters import EITProcessingAdapter
+from m3resp.emg import ReSurfEMG
 from m3resp.core.session import M3Session
 from m3resp.data import (
     BreathEvent,
@@ -47,7 +48,7 @@ def test_recorder_mirrors_loads_and_provenance_into_store():
         eit_adapter=EITProcessingAdapter(
             loader=lambda path, vendor=None, **kwargs: {"path": path, "vendor": vendor}
         ),
-        emg_adapter=ReSurfEMGNative(loader=lambda path, **kwargs: {"path": path}),
+        emg_adapter=ReSurfEMG(loader=lambda path, **kwargs: {"path": path}),
     )
     store = DataModelStore()
     session.datamodel = DataModelRecorder(session, store)
