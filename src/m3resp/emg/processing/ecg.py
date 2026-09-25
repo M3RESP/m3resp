@@ -439,7 +439,7 @@ class _EcgMixin:
                 std_estimate[nb_level, : window_length // 2] = std_estimate[
                     nb_level, window_length // 2
                 ]
-                std_estimate[nb_level, -window_length // 2] = std_estimate[
+                std_estimate[nb_level, -window_length // 2 :] = std_estimate[
                     nb_level, -window_length // 2
                 ]
             return std_estimate
@@ -533,10 +533,11 @@ class _EcgMixin:
         wxd = np.copy(coeffs_unpacked)
 
         for level in range(levels):
-            threshold = fixed_threshold & std_estimate[level, :]
+            threshold = fixed_threshold * std_estimate[level, :]
             wxd[level, 1, :] = threshold_wavelets(
                 coeffs_unpacked[level, 1, :], hard_thresholding, threshold
             )
+            thresholds[level, :] = threshold
 
         # Wavelet reconstruction
         reconstructed_signal = pywt.iswt(

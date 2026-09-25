@@ -1,6 +1,6 @@
 """Shared signal-processing primitives used by modality adapters."""
 
-from m3resp.emg.processing import ReSurfEMG
+# from m3resp.emg import ReSurfEMG
 from m3resp.processing.filters import (
     bandpass_filter,
     bandstop_filter,

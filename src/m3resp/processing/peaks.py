@@ -29,16 +29,23 @@ from __future__ import annotations
 
 import warnings
 from itertools import pairwise
-from typing import Any, overload
+from typing import Any
 
 import numpy as np
 
-from m3resp.core.exceptions import OptionalDependencyError, MutuallyExclusiveArgsError
-from m3resp.emg.processing.shared import (
-    _require_sampling_frequency,
-    _validate_incompatible_kwargs,
-)
+from m3resp.core.exceptions import MutuallyExclusiveArgsError, OptionalDependencyError
+from m3resp.core.utilities import _validate_incompatible_kwargs
 from m3resp.processing.filters import capture_value
+
+
+def _require_sampling_frequency(sample_frequency: float | None) -> float:
+    if sample_frequency is None:
+        msg = "sample_frequency is required."
+        raise ValueError(msg)
+    if not np.isfinite(sample_frequency) or sample_frequency <= 0:
+        msg = f"sample_frequency must be finite and positive; got {sample_frequency!r}."
+        raise ValueError(msg)
+    return float(sample_frequency)
 
 
 def detect_peaks(

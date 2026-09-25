@@ -37,6 +37,7 @@ from m3resp.datamodel import (
     export_store,
     validate_store,
 )
+from m3resp.emg import ReSurfEMG
 from m3resp.presets import (
     EITPipeline,
     EMGPipeline,
@@ -46,7 +47,6 @@ from m3resp.presets import (
     get_pipeline,
     register_pipeline,
 )
-from m3resp.emg.processing import ReSurfEMG
 from m3resp.synchronization import (
     compute_offsets_from_timestamps,
     link_breaths_by_time,

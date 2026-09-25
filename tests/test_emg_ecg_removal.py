@@ -164,7 +164,7 @@ class TestPreprocessEnvelopeSkipping:
 
     @staticmethod
     def _preprocess(**kwargs):
-        from m3resp.adapters import ReSurfEMGNative
+        from m3resp.emg import ReSurfEMG
 
         fs = 2048.0
         rng = np.random.default_rng(0)
@@ -172,7 +172,7 @@ class TestPreprocessEnvelopeSkipping:
             "array": [rng.normal(size=8192)],
             "metadata": {"fs": fs, "labels": ["EMGdi"], "units": ["uV"]},
         }
-        return ReSurfEMGNative().preprocess(recording, **kwargs)
+        return ReSurfEMG().preprocess(recording, **kwargs)
 
     def test_envelope_is_computed_by_default(self):
         processed = self._preprocess()

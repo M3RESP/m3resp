@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from importlib import import_module
 
 from m3resp.emg import ReSurfEMG
 
@@ -49,8 +50,10 @@ def test_preprocess_reproduces_resurfemg_filtering_and_envelope_exactly():
     `test_preprocess_envelope_defaults_to_rms_not_arv` below.
     """
 
-    from resurfemg.preprocessing.envelope import full_rolling_arv
-    from resurfemg.preprocessing.filtering import emg_bandpass_butter
+    full_rolling_arv = import_module(
+        "resurfemg.preprocessing.envelope"
+    ).full_rolling_arv
+    from resurfemg.preprocessing.filtering import emg_bandpass_butter  # noqa: PLC0415
 
     fs = 1000.0
     raw = _synthetic_emg_signal(fs=fs)
@@ -85,7 +88,7 @@ def test_preprocess_envelope_defaults_to_rms_not_arv():
     here instead of going unnoticed.
     """
 
-    from resurfemg.preprocessing.envelope import full_rolling_arv
+    full_rolling_arv = import_module("resurfemg.preprocessing.envelope").full_rolling_arv
     from resurfemg.preprocessing.filtering import emg_bandpass_butter
 
     fs = 1000.0

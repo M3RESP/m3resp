@@ -47,8 +47,27 @@ from .shared import (
     _require_index_array,
     _require_integer_valued_sample_frequency,
     _require_percentile,
-    bell_curve,
 )
+
+
+def _bell_curve(
+    x_values: np.ndarray, amplitudes: float, time_shift: float, steepness_factor: float
+) -> np.ndarray:
+    """Calculate a shifted, smoothed and amplified bell curve.
+
+    This function calculates a bell curve on the samples of x, shifted by
+    b, amplified by a for a standard amplitude of 1.
+
+    Args:
+        x_values (numpy.ndarray): X values to calculate the bell_curve for.
+        amplitudes (float): Amplitude of the bell-curve.
+        time_shift (float): Time shift of the bell-curve along the x-axis.
+        steepness_factor (float): Steepness factor of bell-curve.
+
+    Returns:
+        numpy.ndarray: Bell curve values.
+    """
+    return amplitudes * np.exp(-((x_values - time_shift) ** 2) / steepness_factor**2)
 
 
 class _QualityMixin:
@@ -500,7 +519,7 @@ class _QualityMixin:
             # TODO port math operations module!
             try:
                 popt, *_ = curve_fit(
-                    bell_curve,
+                    _bell_curve,
                     x_data,
                     y_data,
                     bounds=(
@@ -522,7 +541,7 @@ class _QualityMixin:
                 np.abs(
                     _signal[start_index : end_index + 1]
                     - (
-                        bell_curve(time[start_index : end_index + 1], *popt)
+                        _bell_curve(time[start_index : end_index + 1], *popt)
                         + y_nadir[peak_number]
                     )
                 ),

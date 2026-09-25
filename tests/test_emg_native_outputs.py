@@ -81,7 +81,7 @@ class TestEmgLoad:
             )
 
     def test_injected_loader_still_produces_native_signals(self):
-        from m3resp.adapters.resurfemg_adapter import ReSurfEMGNative
+        from m3resp.adapters.resurfemg_adapter import ReSurfEMG
 
         fake_array = np.asarray([[0.0, 1.0, 0.0, -1.0], [2.0, 2.0, 2.0, 2.0]])
 
@@ -96,7 +96,7 @@ class TestEmgLoad:
                 },
             }
 
-        session = M3Session(emg_adapter=ReSurfEMGNative(loader=fake_loader))
+        session = M3Session(emg_adapter=ReSurfEMG(loader=fake_loader))
         result = run_pipeline(
             {
                 "name": "emg-load-injected",

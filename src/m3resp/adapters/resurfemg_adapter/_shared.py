@@ -319,28 +319,3 @@ def _unavailable_postprocessing_result(
         "peak_indices": peak_indices,
         "settings": settings,
     }
-
-
-def _compute_derivative(
-    array: np.ndarray, fs: float, window_length_samples: int | None = None
-) -> np.ndarray:
-    """Calculate the first derivative of a signal.
-    If window_length_samples is given, the signal is smoothed before derivative calculation.
-    Args:
-        array (numpy.ndarray): Signal to calculate the derivative over.
-        fs (int): Sampling rate.
-        window_length_samples (int, optional): Centralised averaging window length in samples.
-    Returns:
-        numpy.ndarray: The 1st derivative of the signal, length len(signal)-1.
-    """
-    if window_length_samples is not None:
-        array_moving_average = (
-            pd.Series(array)
-            .rolling(window=window_length_samples, center=True)
-            .mean()
-            .to_numpy(dtype=float)
-        )
-        derivative = (array_moving_average[1:] - array_moving_average[:-1]) * fs
-    else:
-        derivative = (array[1:] - array[:-1]) * fs
-    return derivative

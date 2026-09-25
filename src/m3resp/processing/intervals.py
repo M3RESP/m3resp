@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from m3resp.core.events import BreathEvent
-from m3resp.emg.processing.shared import _compute_derivative
+from m3resp.processing.windows import compute_derivative
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -136,6 +136,10 @@ def onoff_from_baseline_crossings(
         baseline (numpy.ndarray): Baseline signal of EMG data for baseline detection.
         peak_indices (numpy.ndarray): List of peak indices for which to find on-
             and offset.
+        signal (numpy.ndarray): Signal, e.g. an EMG envelope or airway pressure.
+        baseline (numpy.ndarray): Baseline of `values`, one value per sample.
+        peak_indices (numpy.ndarray): List of peak indices for which to find on-
+            and offset.
 
     Returns:
         tuple:
@@ -216,7 +220,7 @@ def onoff_from_slope(
     scipy_signal = _scipy_signal()
     _signal = np.asarray(signal)
     _peak_indexes = np.asarray(peak_indices, dtype=int)
-    derivative = _compute_derivative(_signal, sample_frequency)
+    derivative = compute_derivative(_signal, sample_frequency)
 
     # get the local minima and maxima in the derivative
     max_upslope_indices = scipy_signal.argrelextrema(
