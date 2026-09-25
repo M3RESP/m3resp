@@ -24,23 +24,42 @@ from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
 from m3resp.data.processing import ProcessingHistory
 from m3resp.export.session_export import export_session_summary
-from m3resp.modalities.eit import EITRecording
+from m3resp.modalities.eit import EITRecording, frame_window, keep_frames
 from m3resp.modalities.eit import load as load_eit_recording
 from m3resp.modalities.emg import EMGRecording
+from m3resp.modalities.emg import keep_samples as keep_emg_samples
 from m3resp.modalities.emg import load as load_emg_recording
-from m3resp.modalities.ventilator import VentilatorRecording
+from m3resp.modalities.emg import sample_window as emg_sample_window
+from m3resp.modalities.names import VENTILATOR, normalize_modality
+from m3resp.modalities.ventilator import (
+    DEFAULT_VENTILATOR_NAME,
+    VentilatorRecording,
+    cut_seconds_off_ends,
+    ventilator_clock,
+    ventilator_payload,
+    ventilator_raw,
+    ventilator_recordings,
+)
+from m3resp.modalities.ventilator import keep_samples as keep_ventilator_samples
 from m3resp.modalities.ventilator import load as load_ventilator_recording
-from m3resp.synchronization.alignment import align_events_by_modality_offset
-from m3resp.synchronization.cropping import (
-    VENTILATOR,
-    crop_loaded_modality,
-    normalize_modality,
+from m3resp.modalities.ventilator import sample_window as ventilator_sample_window
+from m3resp.synchronization.alignment import (
+    align_events_by_modality_offset,
+    normalize_offset_key,
     offsets_relative_to_reference,
-    raw_synchronization_traces,
     resolve_alignment_offsets,
+    ventilator_start_key,
 )
 from m3resp.synchronization.linking import link_breaths_by_time
 from m3resp.synchronization.multimodal_parameters import compute_multimodal_parameters
+from m3resp.synchronization.raw_traces import raw_synchronization_traces
+from m3resp.synchronization.start_times import (
+    loaded_modalities,
+    recording_start_time,
+    shared_clock_shift,
+    shared_clock_shifts,
+    shift_trace,
+)
 from m3resp.synchronization.ventilator import (
     infer_ventilator_duration,
     infer_ventilator_fs,
@@ -58,10 +77,10 @@ ALIGNMENT_EVENT_LISTS = {
 }
 
 
-#: Name the first ventilator recording is filed under when the caller does not
-#: give one. It is also the recording `session.ventilator` and
-#: `session.raw["ventilator"]` point at, so single-recording code is unchanged.
-DEFAULT_VENTILATOR_NAME = "default"
+#: `DEFAULT_VENTILATOR_NAME` (imported above) is the name the first ventilator
+#: recording is filed under when the caller does not give one. It is also the
+#: recording `session.ventilator` and `session.raw["ventilator"]` point at, so
+#: single-recording code is unchanged.
 
 
 def set_ventilator_raw(raw: dict[str, Any], recording: Any) -> None:
@@ -69,13 +88,13 @@ def set_ventilator_raw(raw: dict[str, Any], recording: Any) -> None:
 
     ``"ventilator"`` is canonical; ``"vent"`` is the key Stage 1 shipped and is
     still read by existing notebooks and specs. Both reference the *same*
-    object, and cropping mutates the underlying payload in place, so the two
+    object, and slicing changes the underlying payload in place, so the two
     views can never drift apart.
 
     `M3Session.load_ventilator` passes a `VentilatorRecording` here, matching
     what `raw["eit"]`/`raw["emg"]` hold. A bare payload dict (what Stage 1
     stored) is still accepted, and
-    `m3resp.synchronization.cropping.ventilator_payload` unwraps either shape.
+    `m3resp.modalities.ventilator.ventilator_payload` unwraps either shape.
     """
 
     raw[VENTILATOR] = recording
@@ -117,6 +136,11 @@ class M3Session:
         # primary one, so code that only ever loads one is unaffected.
         self.ventilators: dict[str, VentilatorRecording] = {}
         self.raw: dict[str, Any] = {}
+        # Where each recording's first sample sits on the shared clock, in
+        # seconds, set by `synchronize_raw_modalities`. Empty means every
+        # recording is taken to have started at the same moment. See
+        # `m3resp.synchronization.start_times`.
+        self.start_times: dict[str, float] = {}
         self.processed: dict[str, Any] = {}
         # Named alternate preprocessing results, e.g. for algorithms that
         # need the same raw recording preprocessed differently (see
@@ -425,33 +449,63 @@ class M3Session:
         offset_seconds: float | Mapping[str, float] = 0.0,
         reference_modality: str | None = None,
     ) -> dict[str, Any]:
-        """Crop loaded raw modality signals before downstream processing."""
+        """Set when each loaded recording started, on one shared clock.
+
+        `offset_seconds` gives each modality's start time in seconds, for
+        example ``{"emg": 5.0}`` for "EMG started 5 s after EIT", or
+        ``{"emg": -5.0}`` for "EMG started 5 s before EIT". A single number
+        is the EMG start time. Start times are counted from the start of
+        `reference_modality`, which is therefore always 0.
+
+        ``"ventilator"`` is the start time of the standalone ventilator
+        recordings (those loaded with ``source="ventilator"``). When two of
+        them started at different moments, give one its own start time with
+        ``"ventilator:<name>"``, the name it was loaded under, e.g.
+        ``{"ventilator": 0.0, "ventilator:monitor": 12.5}``. Ventilator data
+        that came inside the EIT or EMG file always uses that file's start
+        time.
+
+        No samples are removed: every recording keeps its full length. The
+        start times are stored in `session.start_times` and are added to
+        breath times only when modalities are compared
+        (`synchronize_multimodal_breaths`, `link_breaths`), so each
+        modality's own results stay on its own clock. Calling this again
+        replaces the start times rather than adding to them. See
+        `m3resp.synchronization.start_times`.
+
+        Returns ``{modality: {"start_time_seconds": ...}}`` for every loaded
+        modality, plus a ``"ventilator:<name>"`` entry for each standalone
+        ventilator recording given its own start time.
+        """
 
         if method != "manual_offset":
             raise ValueError("Stage 1 supports only method='manual_offset'")
 
         configured_offsets = resolve_alignment_offsets(offset_seconds)
+        self._check_ventilator_start_keys(configured_offsets)
         resolved_reference = self._resolve_raw_alignment_reference(reference_modality)
         offsets = offsets_relative_to_reference(configured_offsets, resolved_reference)
+        self.start_times = {
+            modality: float(offset) for modality, offset in offsets.items()
+        }
+
         synchronized: dict[str, Any] = {}
         traces: dict[str, Any] = {}
-        for modality, offset in offsets.items():
-            before_traces = raw_synchronization_traces(self, modality)
-            n_samples = crop_loaded_modality(self, modality, float(offset))
-            after_traces = raw_synchronization_traces(self, modality)
-            for trace_name, before_trace in before_traces.items():
-                after_trace = after_traces.get(trace_name)
-                if after_trace is not None:
-                    traces[trace_name] = {
-                        "before": before_trace,
-                        "after": after_trace,
-                        "offset_seconds": float(offset),
-                    }
-            if n_samples:
-                synchronized[modality] = {
-                    "offset_seconds": float(offset),
-                    "cropped_samples": n_samples,
+        for modality in loaded_modalities(self):
+            start_time = recording_start_time(self, modality)
+            synchronized[modality] = {"start_time_seconds": start_time}
+            shift = shared_clock_shift(self, modality)
+            for trace_name, before in raw_synchronization_traces(
+                self, modality
+            ).items():
+                traces[trace_name] = {
+                    "before": before,
+                    "after": shift_trace(before, shift),
+                    "start_time_seconds": start_time,
                 }
+        for key in self.start_times:
+            if key.startswith(ventilator_start_key("")):
+                synchronized[key] = {"start_time_seconds": self.start_times[key]}
 
         self.processed["raw_synchronization"] = traces
         self.parameters["raw_alignment"] = {
@@ -460,8 +514,8 @@ class M3Session:
             "requested_reference_modality": reference_modality,
             "offset_seconds": offsets,
             "configured_offset_seconds": configured_offsets,
+            "start_time_seconds": dict(self.start_times),
             "synchronized_modalities": sorted(synchronized),
-            "cropped_samples": synchronized,
         }
         self._record(
             "synchronize_raw_modalities",
@@ -470,7 +524,7 @@ class M3Session:
                 "reference_modality": resolved_reference,
                 "offset_seconds": offsets,
                 "configured_offset_seconds": configured_offsets,
-                "cropped_samples": synchronized,
+                "start_time_seconds": dict(self.start_times),
             },
         )
         return synchronized
@@ -481,11 +535,13 @@ class M3Session:
         """Keep only the part of the loaded EMG recording between two times.
 
         Times are in seconds from the start of the recording as it is now
-        (after any earlier cropping, such as `synchronize_raw_modalities`).
-        ``end_seconds=None`` keeps everything up to the end. Ventilator
-        channels recorded in the same file (for example airway pressure on a
-        Biopac export) are cut the same way, so they stay lined up with the
-        EMG. After slicing, times count from the new start.
+        (after any earlier slicing). ``end_seconds=None`` keeps everything up
+        to the end. Ventilator channels recorded in the same file (for
+        example airway pressure on a Biopac export) are cut the same way, so
+        they stay lined up with the EMG. After slicing, EMG times count from
+        the new start, and the EMG start time in `session.start_times` moves
+        later by `start_seconds`, so the EMG stays lined up with the other
+        modalities.
 
         Run this before `preprocess_emg`. The removed samples are gone from
         the loaded recording; reload the file to get them back.
@@ -495,31 +551,213 @@ class M3Session:
         data = recording.data if recording is not None else None
         if not isinstance(data, dict) or "array" not in data:
             raise MissingModalityDataError("slice_emg needs a loaded EMG recording.")
-        fs = float(data["metadata"]["fs"])
-        n_samples = np.asarray(data["array"]).shape[-1]
-        duration = n_samples / fs
-        end = duration if end_seconds is None else float(end_seconds)
-        start = float(start_seconds)
-        if not 0.0 <= start < end <= duration:
-            raise ValueError(
-                f"slice_emg: need 0 <= start < end <= {duration:.3f} s (the "
-                f"recording's length); got start={start_seconds!r}, "
-                f"end={end_seconds!r}."
-            )
+        window = emg_sample_window(recording, start_seconds, end_seconds)
+        removed_end_seconds = (
+            window.n_samples - window.end_index
+        ) / window.sample_frequency
 
-        start_sample = round(start * fs)
-        end_sample = round(end * fs)
-        removed_start = crop_loaded_modality(self, "emg", -start_sample / fs)
-        removed_end = crop_loaded_modality(self, "emg", (n_samples - end_sample) / fs)
+        keep_emg_samples(recording, window.start_index, window.end_index)
+        # Ventilator channels from the same file share the EMG's clock, so the
+        # same stretch of time is cut off both ends of them, counted at their
+        # own sampling rate.
+        for item in ventilator_recordings(self):
+            if ventilator_clock(item) == "emg":
+                cut_seconds_off_ends(item, window.shift_seconds, removed_end_seconds)
+        self.start_times["emg"] = (
+            self.start_times.get("emg", 0.0) + window.shift_seconds
+        )
         summary = {
-            "start_seconds": start,
-            "end_seconds": end,
-            "removed_samples_start": removed_start,
-            "removed_samples_end": removed_end,
-            "kept_samples": end_sample - start_sample,
+            "start_seconds": window.start_seconds,
+            "end_seconds": window.end_seconds,
+            "removed_samples_start": window.start_index,
+            "removed_samples_end": window.n_samples - window.end_index,
+            "kept_samples": window.end_index - window.start_index,
         }
         self.parameters["emg_slice"] = summary
         self._record("slice_emg", "emg", parameters=summary)
+        return summary
+
+    def slice_eit(
+        self, start_seconds: float, end_seconds: float | None = None
+    ) -> dict[str, Any]:
+        """Keep only the part of the loaded EIT recording between two times.
+
+        Times are in seconds from the first frame of the recording as it is
+        now (after any earlier slicing), not the time of day stored in the
+        file. ``end_seconds=None`` keeps everything up to the end. The kept
+        part runs from the first frame at or after `start_seconds` up to,
+        but not including, the first frame at or after `end_seconds`.
+
+        The cutting itself is done by `eitprocessing`
+        (`EITProcessingAdapter.slice_sequence`): pixel data, global
+        impedance, the pressure/flow channels and the vendor's markers are
+        all cut to the same frames. A ventilator recording loaded from the
+        same EIT file is cut at exactly those frames too, so it stays lined
+        up with the EIT. EIT frame times keep their original values; the EIT
+        start time in `session.start_times` moves later by the part cut off
+        the front, so the EIT stays lined up with the other recordings.
+
+        Run this before `preprocess_eit`. The removed frames are gone from
+        the loaded recording; reload the file to get them back. Signals
+        already added to `session.signals` when loading keep the full
+        recording.
+        """
+
+        recording = self.eit
+        if recording is None or recording.data is None:
+            raise MissingModalityDataError("slice_eit needs a loaded EIT recording.")
+        if self.processed_variants["eit"]:
+            raise ValueError(
+                "slice_eit must run before preprocess_eit: the EIT has already "
+                "been preprocessed, and those results would still cover the "
+                "whole recording. Reload the file, slice, then preprocess."
+            )
+
+        window = frame_window(recording, start_seconds, end_seconds)
+
+        # Ventilator data loaded from the same EIT file has one sample per EIT
+        # frame, so it is cut at exactly the same frames.
+        on_eit_clock = [
+            item
+            for item in ventilator_recordings(self)
+            if ventilator_clock(item) == "eit"
+        ]
+        for item in on_eit_clock:
+            payload = ventilator_payload(item)
+            if (
+                payload is not None
+                and np.asarray(payload["array"]).shape[-1] != window.n_samples
+            ):
+                raise ValueError(
+                    "slice_eit: a ventilator recording from the EIT file has "
+                    f"{np.asarray(payload['array']).shape[-1]} samples but the "
+                    f"EIT has {window.n_samples} frames, so they cannot be cut "
+                    "at the same frames."
+                )
+
+        keep_frames(
+            recording, window.start_index, window.end_index, adapter=self.eit_adapter
+        )
+        for item in on_eit_clock:
+            keep_ventilator_samples(item, window.start_index, window.end_index)
+
+        self.start_times["eit"] = (
+            self.start_times.get("eit", 0.0) + window.shift_seconds
+        )
+        summary = {
+            "start_seconds": window.start_seconds,
+            "end_seconds": window.end_seconds,
+            "removed_frames_start": window.start_index,
+            "removed_frames_end": window.n_samples - window.end_index,
+            "kept_frames": window.end_index - window.start_index,
+            "ventilator_recordings_cut": len(on_eit_clock),
+        }
+        self.parameters["eit_slice"] = summary
+        self._record("slice_eit", "eit", parameters=summary)
+        return summary
+
+    def slice_ventilator(
+        self,
+        start_seconds: float,
+        end_seconds: float | None = None,
+        *,
+        name: str | None = None,
+    ) -> dict[str, Any]:
+        """Keep only the part of standalone ventilator recordings between two
+        times.
+
+        "Standalone" means a ventilator or monitor export with a clock of its
+        own, loaded with ``load_ventilator(path, source="ventilator")``.
+        Ventilator data that came inside the EIT or EMG file is on that
+        file's clock and is cut with it by `slice_eit` or `slice_emg`;
+        asking to cut it here raises an error, since cutting it alone would
+        move it out of line with its host recording.
+
+        `name` cuts only the recording loaded under that name. Without it,
+        every standalone ventilator recording is cut.
+
+        Times are in seconds from the start of the recording as it is now
+        (after any earlier slicing). ``end_seconds=None`` keeps everything up
+        to the end. After slicing, the recording's times count from the new
+        start, and its start time moves later by `start_seconds`: it is
+        stored under its own ``"ventilator:<name>"`` entry in
+        `session.start_times`, so the recording stays lined up with the
+        other modalities and no other recording moves.
+
+        Run this before `preprocess_ventilator`. The removed samples are
+        gone from the loaded recording; reload the file to get them back.
+        """
+
+        named = self.ventilators or (
+            {DEFAULT_VENTILATOR_NAME: ventilator_raw(self)}
+            if ventilator_raw(self) is not None
+            else {}
+        )
+        if not named:
+            raise MissingModalityDataError(
+                "slice_ventilator needs a loaded ventilator recording."
+            )
+        if name is not None:
+            if name not in named:
+                raise MissingModalityDataError(
+                    f"No ventilator recording named {name!r}. Loaded: {sorted(named)}."
+                )
+            named = {name: named[name]}
+        standalone = {
+            name: recording
+            for name, recording in named.items()
+            if ventilator_clock(recording) == VENTILATOR
+        }
+        if not standalone:
+            hosts = sorted(
+                {ventilator_clock(recording) for recording in named.values()}
+            )
+            raise ValueError(
+                "slice_ventilator: the loaded ventilator data came inside the "
+                f"{' and '.join(h.upper() for h in hosts)} file, so it is on "
+                "that file's clock. Cut it together with its host recording "
+                f"using {' or '.join(f'slice_{h}' for h in hosts)}. To load a "
+                "standalone ventilator export, pass source='ventilator' to "
+                "load_ventilator."
+            )
+        if self.processed_variants[VENTILATOR]:
+            raise ValueError(
+                "slice_ventilator must run before preprocess_ventilator: the "
+                "ventilator data has already been preprocessed, and those "
+                "results would still cover the whole recording. Reload the "
+                "file, slice, then preprocess."
+            )
+
+        windows = {
+            key: ventilator_sample_window(
+                recording, start_seconds, end_seconds, name=key
+            )
+            for key, recording in standalone.items()
+        }
+        for key, window in windows.items():
+            # Read the start time before storing anything, so a recording that
+            # still used the shared "ventilator" entry keeps its value.
+            new_start = (
+                recording_start_time(self, VENTILATOR, key) + window.shift_seconds
+            )
+            keep_ventilator_samples(
+                standalone[key], window.start_index, window.end_index
+            )
+            self.start_times[ventilator_start_key(key)] = new_start
+        summary = {
+            "start_seconds": float(start_seconds),
+            "end_seconds": None if end_seconds is None else float(end_seconds),
+            "recordings": {
+                key: {
+                    "removed_samples_start": window.start_index,
+                    "removed_samples_end": window.n_samples - window.end_index,
+                    "kept_samples": window.end_index - window.start_index,
+                }
+                for key, window in windows.items()
+            },
+        }
+        self.parameters["ventilator_slice"] = summary
+        self._record("slice_ventilator", VENTILATOR, parameters=summary)
         return summary
 
     def detect_eit_breaths(self, *, variant: str | None = None, **kwargs: Any) -> Any:
@@ -672,6 +910,11 @@ class M3Session:
         matching `synchronize_raw_modalities`. `self.parameters["alignment"]`
         keeps both: `offset_seconds` (relative, what was actually applied) and
         `configured_offset_seconds` (the raw per-modality values passed in).
+
+        The start times set by `synchronize_raw_modalities` are added on top,
+        so the shifted breaths are on the shared clock. The two add up:
+        `offset_seconds` is only for a further correction after detection.
+        `start_time_shift_seconds` records what was added for each modality.
         """
 
         if method != "manual_offset":
@@ -691,6 +934,11 @@ class M3Session:
         # put (offset 0) and every other modality move by its offset *relative
         # to* the reference.
         offsets = offsets_relative_to_reference(configured_offsets, resolved_reference)
+        start_time_shifts = shared_clock_shifts(self)
+        total_offsets = {
+            modality: offset + start_time_shifts.get(modality, 0.0)
+            for modality, offset in offsets.items()
+        }
         synchronized: dict[str, Any] = {}
         aligned_event_lists: list[str] = []
         missing_event_lists: list[str] = []
@@ -701,7 +949,7 @@ class M3Session:
                 continue
             if not isinstance(events, list):
                 continue
-            synchronized[name] = align_events_by_modality_offset(events, offsets)
+            synchronized[name] = align_events_by_modality_offset(events, total_offsets)
             aligned_event_lists.append(name)
 
         self.processed["synchronized"] = synchronized
@@ -712,6 +960,7 @@ class M3Session:
             "fallback_reference_modality": fallback_reference,
             "offset_seconds": offsets,
             "configured_offset_seconds": configured_offsets,
+            "start_time_shift_seconds": start_time_shifts,
             "aligned_event_lists": aligned_event_lists,
             "missing_event_lists": missing_event_lists,
         }
@@ -743,19 +992,23 @@ class M3Session:
 
         Prefers the aligned breath lists produced by
         `synchronize_multimodal_breaths` (``self.processed["synchronized"]``)
-        over the raw per-modality event lists in ``self.events``, so breaths
-        are matched on a common time axis whenever alignment has already
-        been run.
+        over the per-modality event lists in ``self.events``. A list that was
+        not aligned there is moved onto the shared clock here, using the
+        start times from `synchronize_raw_modalities`, so breaths are always
+        matched on one time axis.
         """
 
         synchronized = self.processed.get("synchronized")
         if not isinstance(synchronized, dict):
             synchronized = {}
+        start_time_shifts = shared_clock_shifts(self)
 
         def _breaths(name: str) -> list[BreathEvent] | None:
             events = synchronized.get(name)
             if events is None:
                 events = self.events.get(name)
+                if isinstance(events, list):
+                    events = align_events_by_modality_offset(events, start_time_shifts)
             return events
 
         self.linked_breaths = link_breaths_by_time(
@@ -873,9 +1126,33 @@ class M3Session:
             return VENTILATOR, None
         return "eit", "eit"
 
+    def _check_ventilator_start_keys(self, offsets: Mapping[str, float]) -> None:
+        """Refuse a ``"ventilator:<name>"`` start time that would be ignored:
+        one for a recording that is not loaded, or for ventilator data that
+        came inside the EIT or EMG file (which uses that file's start time)."""
+
+        prefix = ventilator_start_key("")
+        for key in offsets:
+            if not key.startswith(prefix):
+                continue
+            name = key[len(prefix) :]
+            recording = self.ventilators.get(name)
+            if recording is None:
+                raise ValueError(
+                    f"Start time {key!r}: no ventilator recording named "
+                    f"{name!r}. Loaded: {sorted(self.ventilators) or 'none'}."
+                )
+            clock = ventilator_clock(recording)
+            if clock != VENTILATOR:
+                raise ValueError(
+                    f"Start time {key!r}: ventilator recording {name!r} came "
+                    f"inside the {clock.upper()} file, so it always uses the "
+                    f"{clock!r} start time. Give that one instead."
+                )
+
     def _resolve_raw_alignment_reference(self, reference_modality: str | None) -> str:
         if reference_modality is not None:
-            return normalize_modality(reference_modality)
+            return normalize_offset_key(reference_modality)
         if VENTILATOR in self.raw or "vent" in self.raw:
             return VENTILATOR
         if "eit" in self.raw:

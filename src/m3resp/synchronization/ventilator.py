@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 
 from m3resp.core.events import BreathEvent, Event, coerce_breath_event
-from m3resp.synchronization.cropping import VENTILATOR
+from m3resp.modalities.names import VENTILATOR
 
 
 def iter_ventilator_detections(detections: Any) -> list[Any]:
@@ -103,8 +103,7 @@ def infer_ventilator_duration(
     shape = np.asarray(array).shape
     if not shape:
         return None
-    # Same convention as the cropping helpers: channels first unless the
-    # array is stored one row per sample.
+    # Channels first unless the array is stored one row per sample.
     axis = 1 if len(shape) > 1 and shape[1] >= shape[0] else 0
     n_samples = shape[axis]
     return n_samples / float(fs) if n_samples else None

@@ -387,7 +387,7 @@ def _check_artifact_type_compatibility(
     produced the context key it's bound to ("compilation validates
     ... artifact compatibility"), unless either side
     declares :data:`ANY_ARTIFACT_TYPE` (a genuine passthrough, e.g.
-    ``eit.slice``). Only checked when *both* sides declare a type - this is
+    ``eit.slice_signal``). Only checked when *both* sides declare a type - this is
     additive metadata, backfilled module by module, so an undeclared type on
     either side is simply skipped rather than flagged."""
 

@@ -208,11 +208,21 @@ Run `m3resp steps` to see the full list with descriptions. The main groups are:
 
 | Prefix | What it covers |
 |---|---|
-| `eit.*` | Load, slice, filter, detect rates/breaths, compute TIV/EELI/pixel TIV |
+| `eit.*` | Load, cut (the recording or one signal), filter, detect rates/breaths, compute TIV/EELI/pixel TIV |
 | `emg.*` | Load (EMG/ventilator), preprocess, detect breaths, compute per-function baseline/event-detection/feature/quality-assessment postprocessing steps |
-| `session.*` | Cross-modality operations (raw signal synchronization) |
+| `session.*` | Cross-modality operations (setting each recording's start time) |
 | `metric.*` | Reduction steps (e.g. coefficient of variation of intervals) |
 | `export.*` | Write results to disk (scalar files, JSON, session summary, ROTARC result) |
+
+Cutting steps follow one naming rule:
+
+| Step | What it cuts |
+|---|---|
+| `emg.slice_recording`, `eit.slice_recording` | The whole loaded recording in the session, with anything recorded in the same file. The recording's start time moves with it, so it stays lined up with the other recordings. Times are seconds from the first sample. |
+| `ventilator.slice_recording` | Every standalone ventilator recording (loaded with `source: ventilator`), the same way. Ventilator data that came inside the EIT or EMG file is cut with that file's recording instead. |
+| `eit.slice_signal` | One signal passed along in the workflow (an m3resp `Signal`, or eitprocessing data). The loaded recording is not changed. In time mode, times are the signal's own time values (the time of day, for data read from an EIT file). |
+
+`emg.slice` and `eit.slice`, the names used before, still work in specs.
 
 ## Adding a custom step
 
@@ -295,7 +305,8 @@ Every step also writes its raw/compatibility output(s) unchanged (existing consu
 | Step | Reads (besides `session`) | Key parameters | Native writes | Implementation |
 |---|---|---|---|---|
 | `emg.load` | — | `file_path`, `loader_options` | `raw_emg_signals` (one `Signal`/channel) | upstream loader |
-| `emg.slice` | — | `start_seconds`, `end_seconds` (optional; default: to the end) | `emg_slice` (kept window, samples removed at each end) | native (cuts `session.raw`; ventilator channels from the same file are cut too) |
+| `emg.slice_recording` (formerly `emg.slice`) | — | `start_seconds`, `end_seconds` (optional; default: to the end) | `emg_slice` (kept window, samples removed at each end) | native (cuts `session.raw`; ventilator channels from the same file are cut too) |
+| `ventilator.slice_recording` | — | `start_seconds`, `end_seconds` (optional; default: to the end) | `ventilator_slice` (kept window and samples removed at each end, per recording) | native (cuts every standalone ventilator recording; refuses ventilator data from the EIT/EMG file) |
 | `emg.preprocess` | — | `channel`, `high_pass_hz` (default 20), `low_pass_hz` (default 500, Nyquist-capped), `envelope_window_seconds`, `envelope_method` (`"rms"` default / `"arv"` / `"median"`), `notch_base_frequency`, `notch_quality_factor`, `notch_before_bandpass` (default `false`) | — (raw `processed_emg` dict) | upstream + native notch filter |
 | `emg.ecg_detect_peaks` | `processed_emg` | `ecg_channel`, `source` (default `"raw_channel"`), `peak_fraction`, `peak_width_seconds`, `peak_distance_seconds`, `bandpass_filter` | `ecg_peak_events` (one `Event`/peak), `ecg_peak_count_result` | upstream |
 | `emg.ecg_gating` | `processed_emg`, `ecg_peak_indices` | `source` (default `"filtered"`), `gate_width_seconds` **xor** `gate_width_samples`, `fill_method` (0-3), `envelope_window_seconds`, `envelope_method` (defaults to preprocessing's) | `ecg_gated_signal`, `ecg_gate_mask_result` (array) | upstream |

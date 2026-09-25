@@ -156,19 +156,22 @@ src/m3resp/
 │                                           reads files through the EMG/EIT adapters above
 │
 ├── processing/                         Shared, modality-neutral building blocks: filters, peaks,
-│                                           windows, intervals, metrics, quality, ecg
+│                                           windows, intervals, metrics, quality, ecg,
+│                                           slicing (cutting one signal to a window)
 │
 ├── synchronization/                    Alignment, resampling, breath linking, multimodal
 │   │                                       parameters (Milestone 2.5, see concepts/synchronization.md)
-│   ├── alignment.py                    manual-offset + timestamp-derived offsets
+│   ├── alignment.py                    manual-offset + timestamp-derived offsets; resolving
+│   │                                       offset_seconds keys (incl. "ventilator:<name>")
 │   ├── offset_estimation.py            manual-offset passthrough (no robust automatic
 │   │                                       sync method; protocol-specific estimators live in
 │   │                                       tools/visualization_tools/utils/, not in the package)
 │   ├── timebase.py                     Timebase - common time-axis representation
 │   ├── resampling.py                   resample_signal - common time base
 │   ├── linking.py                      link_breaths_by_time - nearest-neighbor breath linking
-│   ├── cropping.py                     raw-modality offset resolution + in-place cropping,
-│   │                                       used by M3Session.synchronize_raw_modalities
+│   ├── start_times.py                  per-recording start times on a shared clock,
+│   │                                       set by M3Session.synchronize_raw_modalities
+│   ├── raw_traces.py                   before/after traces for the raw synchronization plot
 │   ├── ventilator.py                   ventilator breath-detection normalization into BreathEvents
 │   └── multimodal_parameters.py        compute_timing_delay / compute_event_agreement /
 │                                           compute_breath_duration_difference /
@@ -177,11 +180,11 @@ src/m3resp/
 ├── workflows/                          Stage 1's declarative step-registry engine (YAML/JSON specs)
 │   └── steps/                          add a new @register_step here for a custom, composable step
 │       ├── eit/                        eit.* steps, split by pipeline stage
-│       │                                   (filtering/pixel/roi/loading/signals)
+│       │                                   (filtering/pixel/roi/loading/slicing/signals)
 │       ├── emg/                        emg.* steps, split by pipeline stage
-│       │                                   (baseline/ecg_*/features/quality_*/...)
-│       ├── ventilator/                 ventilator.* steps (loading, breath and Pocc
-│       │                                   detection, quality)
+│       │                                   (baseline/ecg_*/features/quality_*/slicing/...)
+│       ├── ventilator/                 ventilator.* steps (loading, slicing, breath and
+│       │                                   Pocc detection, quality)
 │       └── sync.py, session.py,        sync.*/session.* (cross-modality timing),
 │           metrics.py, export.py           metric.*, export.* steps
 │
@@ -191,7 +194,12 @@ src/m3resp/
 │   ├── eit.py, emg.py, multimodal.py   add a new preset here
 │   └── registry.py                     register_pipeline(name, cls)
 │
-├── modalities/                         Recording types and load helpers per modality (EIT, EMG, ventilator)
+├── modalities/                         Recording types per modality (EIT, EMG, ventilator) and what
+│   │                                       can be done to one recording: load it, cut it to a
+│   │                                       time window (see concepts/slicing.md)
+│   ├── eit.py, emg.py, ventilator.py   load(); frame_window/sample_window + keep_frames/keep_samples
+│   ├── names.py                        modality names and accepted spellings ("vent" -> "ventilator")
+│   └── time_window.py                  TimeWindow - which samples of a recording to keep
 ├── export/                             session_export.py (Stage 1 + Milestone 2.6 structured export),
 │                                           tables.py (row-shaping helpers)
 ├── visualization/                      Session overview and synchronization plots

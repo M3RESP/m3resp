@@ -276,9 +276,11 @@ class TestVentilatorInheritsItsHostsClock:
 
     Waveforms read out of the EIT `*.bin` or the sEMG export are samples of
     that recording's own time base. They are copied into a separate array
-    rather than kept as a view, so aligning the host has to crop them too - and
-    must not also shift them by a ventilator offset, which would move them
-    twice.
+    rather than kept as a view, so cutting the host has to cut them too - and
+    they must not be cut on their own, which would move them out of line with
+    their host. (Cutting the EIT together with a `*.bin`-sourced ventilator is
+    tested in tests/test_eit_slice.py, which needs a real eitprocessing
+    Sequence.)
     """
 
     def test_a_bin_is_recognised_as_carrying_the_eit_clock(self):
@@ -289,103 +291,97 @@ class TestVentilatorInheritsItsHostsClock:
         assert resolve_ventilator_source("study.txt", "ventilator") == "ventilator"
 
     def test_a_bin_sourced_recording_reports_the_eit_clock(self):
-        from m3resp.synchronization.cropping import ventilator_clock
+        from m3resp.modalities.ventilator import ventilator_clock
 
         session = _session({}, eit_sequence=_Sequence())
         session.load_ventilator("study.bin")
         assert ventilator_clock(session.ventilator) == "eit"
 
-    def test_cropping_eit_also_crops_a_bin_sourced_ventilator(self):
-        from m3resp.synchronization.cropping import crop_loaded_modality
-
+    def test_a_bin_sourced_recording_is_not_cut_on_its_own(self):
         session = _session({}, eit_sequence=_Sequence())
         session.load_ventilator("study.bin")
         before = session.ventilator.data["array"].shape[1]
 
-        crop_loaded_modality(session, "eit", 1.0)
-        assert session.ventilator.data["array"].shape[1] == before - int(1.0 * FS)
-
-    def test_the_ventilator_offset_does_not_move_a_bin_sourced_recording(self):
-        from m3resp.synchronization.cropping import crop_loaded_modality
-
-        session = _session({}, eit_sequence=_Sequence())
-        session.load_ventilator("study.bin")
-        before = session.ventilator.data["array"].shape[1]
-
-        assert crop_loaded_modality(session, "ventilator", 1.0) == 0
+        with pytest.raises(ValueError, match="slice_eit"):
+            session.slice_ventilator(1.0)
         assert session.ventilator.data["array"].shape[1] == before
 
     def test_an_semg_sourced_recording_reports_the_emg_clock(self):
-        from m3resp.synchronization.cropping import ventilator_clock
+        from m3resp.modalities.ventilator import ventilator_clock
 
         session = _session({"study.txt": _payload(["Paw", "Flow", "Volume"])})
         session.load_ventilator("study.txt")
         assert ventilator_clock(session.ventilator) == "emg"
 
     def test_a_standalone_export_keeps_its_own_clock(self):
-        from m3resp.synchronization.cropping import ventilator_clock
+        from m3resp.modalities.ventilator import ventilator_clock
 
         session = _session({"monitor.txt": _payload(["Paw", "Flow", "Volume"])})
         session.load_ventilator("monitor.txt", source="ventilator")
         assert ventilator_clock(session.ventilator) == "ventilator"
 
-    def test_cropping_emg_also_crops_the_ventilator_it_carried(self):
-        from m3resp.synchronization.cropping import crop_loaded_modality
-
-        session = _session({"study.txt": _payload(["Paw", "Flow", "Volume"])})
+    def test_cutting_emg_also_cuts_the_ventilator_it_carried(self):
+        session = _session(
+            {
+                "emg.txt": _payload(["EMGdi"]),
+                "study.txt": _payload(["Paw", "Flow", "Volume"]),
+            }
+        )
+        session.load_emg("emg.txt")
         session.load_ventilator("study.txt")
         before = session.ventilator.data["array"].shape[1]
 
-        crop_loaded_modality(session, "emg", 1.0)
+        session.slice_emg(1.0)
         after = session.ventilator.data["array"].shape[1]
         assert after == before - int(1.0 * FS)
 
-    def test_the_ventilator_offset_does_not_move_a_hosted_recording_again(self):
-        from m3resp.synchronization.cropping import crop_loaded_modality
-
+    def test_a_hosted_recording_is_not_cut_on_its_own(self):
         session = _session({"study.txt": _payload(["Paw", "Flow", "Volume"])})
         session.load_ventilator("study.txt")
         before = session.ventilator.data["array"].shape[1]
 
-        # Already aligned with the sEMG it came from: a ventilator offset must
-        # be a no-op for it, or it would be shifted twice.
-        assert crop_loaded_modality(session, "ventilator", 1.0) == 0
+        # It stays lined up with the sEMG it came from: cutting it alone
+        # would move it out of line, so it is refused.
+        with pytest.raises(ValueError, match="slice_emg"):
+            session.slice_ventilator(1.0)
         assert session.ventilator.data["array"].shape[1] == before
 
-    def test_a_standalone_export_is_cropped_by_the_ventilator_offset(self):
-        from m3resp.synchronization.cropping import crop_loaded_modality
-
+    def test_a_standalone_export_is_cut_by_slice_ventilator(self):
         session = _session({"monitor.txt": _payload(["Paw", "Flow", "Volume"])})
         session.load_ventilator("monitor.txt", source="ventilator")
         before = session.ventilator.data["array"].shape[1]
 
-        crop_loaded_modality(session, "ventilator", 1.0)
+        session.slice_ventilator(1.0)
         assert session.ventilator.data["array"].shape[1] == before - int(1.0 * FS)
 
-    def test_a_standalone_export_is_untouched_by_the_emg_offset(self):
-        from m3resp.synchronization.cropping import crop_loaded_modality
-
-        session = _session({"monitor.txt": _payload(["Paw", "Flow", "Volume"])})
+    def test_a_standalone_export_is_untouched_by_slice_emg(self):
+        session = _session(
+            {
+                "emg.txt": _payload(["EMGdi"]),
+                "monitor.txt": _payload(["Paw", "Flow", "Volume"]),
+            }
+        )
+        session.load_emg("emg.txt")
         session.load_ventilator("monitor.txt", source="ventilator")
         before = session.ventilator.data["array"].shape[1]
 
-        crop_loaded_modality(session, "emg", 1.0)
+        session.slice_emg(1.0)
         assert session.ventilator.data["array"].shape[1] == before
 
     def test_each_recording_follows_its_own_host(self):
-        from m3resp.synchronization.cropping import crop_loaded_modality
-
         session = _session(
             {
+                "emg.txt": _payload(["EMGdi"]),
                 "study.txt": _payload(["Paw", "Flow", "Volume"]),
                 "monitor.txt": _payload(["Paw", "Flow", "Volume"]),
             }
         )
+        session.load_emg("emg.txt")
         session.load_ventilator("study.txt")
         session.load_ventilator("monitor.txt", name="monitor", source="ventilator")
         hosted = session.ventilators["default"].data["array"].shape[1]
         standalone = session.ventilators["monitor"].data["array"].shape[1]
 
-        crop_loaded_modality(session, "emg", 1.0)
+        session.slice_emg(1.0)
         assert session.ventilators["default"].data["array"].shape[1] < hosted
         assert session.ventilators["monitor"].data["array"].shape[1] == standalone

@@ -94,6 +94,26 @@ class EITProcessingAdapter:
         add_to_collection(sequence.continuous_data, global_impedance)
         return global_impedance
 
+    def slice_sequence(self, sequence: Any, start_index: int, end_index: int) -> Any:
+        """Return a copy of `sequence` keeping frames `start_index` up to (not
+        including) `end_index`.
+
+        Uses `eitprocessing`'s own `Sequence.select_by_index`, which cuts the
+        pixel data, every continuous signal (global impedance, pressures,
+        flow) and the vendor's markers to the same frames. The time values
+        are kept as they were, so the first kept frame keeps its original
+        time stamp.
+        """
+
+        select_by_index = getattr(sequence, "select_by_index", None)
+        if select_by_index is None:
+            raise TypeError(
+                "Slicing EIT data needs an eitprocessing Sequence (or an "
+                "object with select_by_index); got "
+                f"{type(sequence).__name__}."
+            )
+        return select_by_index(start=start_index, end=end_index)
+
     # -- Phase 1: reusable adapter operations ----------------------------------
     #
     # Small public methods, each wrapping exactly one `eitprocessing` operation.

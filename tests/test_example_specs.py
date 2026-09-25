@@ -168,11 +168,13 @@ def test_multimodal_full_example_runs_end_to_end():
 
     # Full EMG/ventilator chain, through the clinical quality steps.
     assert len(result.value("ecg_peak_indices")) > 0
-    # The recording's muscle pressure (p_mus) has 14 breath efforts; the first
-    # is cut off at the start of the EMG, so 13 are detectable. A count well
-    # above this means the detector is picking up noise or heartbeats (as it
-    # did on the weak channel 0).
-    assert len(result.value("emg_breath_events")) == 13
+    # The recording's muscle pressure (p_mus) has 14 breath efforts. When the
+    # -2 s EMG offset cut the first 2 s off the EMG, the first breath sat too
+    # close to the new start to be found, so only 13 were. The offset now sets
+    # the EMG start time and keeps every sample (#118), so all 14 are found.
+    # A count well above this means the detector is picking up noise or
+    # heartbeats (as it did on the weak channel 0).
+    assert len(result.value("emg_breath_events")) == 14
     assert len(result.value("ventilator_breath_indices")) > 0
 
     # Native collections were populated exactly once, not duplicated.

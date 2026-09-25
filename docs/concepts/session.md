@@ -133,7 +133,9 @@ as before.
 | `preprocess_eit(variant=None, **kwargs)` | Filter/derive EIT signals; populates `signals`/`parameter_results`/`quality`. |
 | `preprocess_emg(variant=None, **kwargs)` | Filter/derive EMG signals; populates `signals`. |
 | `preprocess_ventilator(variant=None, **kwargs)` | Split and filter ventilator pressure/flow/volume; populates `signals`. |
-| `synchronize_raw_modalities(...)` | Align raw signals across modalities before processing. |
+| `slice_ventilator(start_seconds, end_seconds=None)` | Keep only a time window of every standalone ventilator recording (loaded with `source="ventilator"`); run before `preprocess_ventilator`. |
+| `slice_eit(start_seconds, end_seconds=None)` | Keep only a time window of the loaded EIT recording (and any ventilator data from the same file); run before `preprocess_eit`. |
+| `synchronize_raw_modalities(...)` | Set each recording's start time on a shared clock (`session.start_times`); no samples are removed. |
 | `detect_eit_breaths(variant=None, **kwargs)` | Detect EIT breaths -> `session.events["eit_breaths"]`. |
 | `detect_emg_breaths(variant=None, **kwargs)` | Detect EMG breaths -> `session.events["emg_breaths"]`. |
 | `detect_ventilator_breaths(variant=None, **kwargs)` | Detect ventilator breaths -> `session.events["ventilator_breaths"]`. |

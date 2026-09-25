@@ -17,8 +17,12 @@ import pytest
 
 from m3resp.adapters import ReSurfEMGAdapter
 from m3resp.core.session import M3Session
-from m3resp.modalities.ventilator import VentilatorRecording
-from m3resp.synchronization.cropping import ventilator_payload, ventilator_raw
+from m3resp.modalities.ventilator import (
+    VentilatorRecording,
+    keep_samples,
+    ventilator_payload,
+    ventilator_raw,
+)
 
 
 def _payload(n_samples: int = 100, fs: float = 10.0) -> dict:
@@ -137,61 +141,41 @@ class TestPayloadUnwrapping:
         assert ventilator_payload(value) is None
 
 
-class TestCroppingALoadedRecording:
-    def test_crops_the_payload_in_place(self):
+class TestCuttingALoadedRecording:
+    # `keep_samples` is what `slice_ventilator`, `slice_emg` and `slice_eit`
+    # use to cut ventilator data. Keeping samples 10 to 100 at 10 Hz removes
+    # the first second.
+    def test_cuts_the_payload_in_place(self):
         session = _session()
-        # `source="ventilator"` marks this a standalone recording with a
-        # clock of its own. Without it the ".txt" suffix means the
-        # multi-channel export sharing the EMG clock, which is aligned
-        # with the EMG and must not also take a ventilator offset.
         session.load_ventilator("subject.txt", source="ventilator")
 
-        session.synchronize_raw_modalities(
-            offset_seconds={"ventilator": 1.0}, reference_modality="eit"
-        )
+        keep_samples(session.ventilator, 10, 100)
 
         assert session.ventilator.data["array"].shape[1] == 90
 
     def test_refreshes_the_recordings_convenience_fields(self):
-        # Mirrors `_crop_emg_recording`: `.raw` must not keep pointing at the
-        # pre-crop array after the payload is cropped.
+        # `.raw` must not keep pointing at the array from before the cut.
         session = _session()
-        # `source="ventilator"` marks this a standalone recording with a
-        # clock of its own. Without it the ".txt" suffix means the
-        # multi-channel export sharing the EMG clock, which is aligned
-        # with the EMG and must not also take a ventilator offset.
         session.load_ventilator("subject.txt", source="ventilator")
 
-        session.synchronize_raw_modalities(
-            offset_seconds={"ventilator": 1.0}, reference_modality="eit"
-        )
+        keep_samples(session.ventilator, 10, 100)
 
         assert session.ventilator.raw is session.ventilator.data["array"]
         assert session.ventilator.raw.shape[1] == 90
 
-    def test_both_raw_keys_observe_the_crop(self):
+    def test_both_raw_keys_observe_the_cut(self):
         session = _session()
-        # `source="ventilator"` marks this a standalone recording with a
-        # clock of its own. Without it the ".txt" suffix means the
-        # multi-channel export sharing the EMG clock, which is aligned
-        # with the EMG and must not also take a ventilator offset.
         session.load_ventilator("subject.txt", source="ventilator")
 
-        session.synchronize_raw_modalities(
-            offset_seconds={"vent": 1.0}, reference_modality="eit"
-        )
+        keep_samples(session.raw["vent"], 10, 100)
 
         assert session.raw["vent"].data["array"].shape[1] == 90
         assert session.raw["ventilator"] is session.raw["vent"]
 
-    def test_a_legacy_bare_dict_is_still_cropped(self):
-        session = _session()
+    def test_a_legacy_bare_dict_is_still_cut(self):
         payload = _payload()
-        session.raw["vent"] = payload
 
-        session.synchronize_raw_modalities(
-            offset_seconds={"ventilator": 1.0}, reference_modality="eit"
-        )
+        keep_samples(payload, 10, 100)
 
         assert payload["array"].shape[1] == 90
 

@@ -17,21 +17,22 @@ from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
     "session.sync_raw",
     reads={"session": "session"},
     writes=("sync_summary",),
-    summary="Crop raw modality signals by a manual time offset before processing.",
+    summary="Set each recording's start time on a shared clock, from a manual offset.",
     description=(
-        "Direct cross-modality session operation: crops each loaded raw "
-        "modality signal so they share a common start time, using a fixed "
-        "manual offset per modality. Run before per-modality preprocessing."
+        "Direct cross-modality session operation: stores a start time per "
+        "loaded recording (a fixed manual offset per modality) so all "
+        "recordings share one clock. No samples are removed; the start times "
+        "are applied when breaths are compared across modalities."
     ),
     category="synchronization",
     session_reads=("session.raw",),
-    session_writes=("session.raw", "session.parameters.raw_alignment"),
+    session_writes=("session.start_times", "session.parameters.raw_alignment"),
     input_artifacts=(
         StepArtifact(
             name="session",
             artifact_type="m3session",
             default_context_key="session",
-            description="Backing M3Session whose raw modality signals are cropped in place.",
+            description="Backing M3Session whose recordings get a start time.",
             public=False,
         ),
     ),

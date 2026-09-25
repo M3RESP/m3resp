@@ -5,8 +5,8 @@ time offset that aligns two devices recording the same subject on
 **independent clocks** — e.g. a Draeger EIT device (~50 Hz frame rate) and a
 Biopac amplifier (2 kHz) carrying airway pressure (Paw) and diaphragm sEMG.
 The two files share no common timestamp, so the offset between them has to be
-recovered from the signals themselves before the recordings can be cropped
-onto a common window.
+recovered from the signals themselves before the recordings can be placed
+on a common clock.
 
 **This is a marimo-viewer utility, not part of the installable `m3resp`
 package.** The estimators here are protocol-specific — they were tuned
@@ -18,7 +18,8 @@ find an offset by hand for a given recording, then hardcode the result as
 `manual_offset_seconds` in your pipeline spec (see the Annemijn example).
 
 > **Estimate vs. apply.** `M3Session.synchronize_raw_modalities`
-> (`session.sync_raw`) *applies* a known offset by cropping. This module
+> (`session.sync_raw`) *applies* a known offset by setting each recording's
+> start time. This module
 > *finds* the offset, for interactive/manual use only. They are complementary.
 
 ---
@@ -284,4 +285,4 @@ knob (`detection_rate_hz`, `search_window_seconds`, `plateau_guard_seconds`,
 - **Constant offset only.** Both estimators assume a single constant offset (plus
   an optional linear `stretch`). They do not model non-linear drift.
 - **Needs the un-cropped sEMG.** When this artifact exists, the edge lives in the
-  EIT-off tail; estimate before any synchronization crop removes it.
+  EIT-off tail; estimate before any `slice_emg` call removes it.

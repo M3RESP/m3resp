@@ -7,7 +7,7 @@ from dataclasses import replace
 from typing import Any, overload
 
 from m3resp.core.events import BreathEvent, Event
-from m3resp.synchronization.cropping import normalize_modality
+from m3resp.modalities.names import VENTILATOR, normalize_modality
 
 
 @overload
@@ -129,3 +129,47 @@ def compute_offsets_from_timestamps(
         )
     reference_time = timestamps[reference_modality]
     return {modality: value - reference_time for modality, value in timestamps.items()}
+
+
+def ventilator_start_key(name: str) -> str:
+    """The `session.start_times` / `offset_seconds` key for one standalone
+    ventilator recording, e.g. ``"ventilator:monitor"``."""
+
+    return f"{VENTILATOR}:{name}"
+
+
+def normalize_offset_key(key: str) -> str:
+    """Canonicalize an `offset_seconds` / `start_times` key.
+
+    A modality name is normalized as by `normalize_modality`. A key for one
+    ventilator recording (``"vent:Monitor"``, ``"ventilator:Monitor"``) keeps
+    the recording's name exactly as given, since names are case-sensitive.
+    """
+
+    head, separator, name = str(key).partition(":")
+    if not separator:
+        return normalize_modality(key)
+    return f"{normalize_modality(head)}:{name}"
+
+
+def resolve_alignment_offsets(
+    offset_seconds: float | Mapping[str, float],
+) -> dict[str, float]:
+    if isinstance(offset_seconds, Mapping):
+        offsets = {"eit": 0.0, "emg": 0.0, VENTILATOR: 0.0}
+        for modality, offset in offset_seconds.items():
+            offsets[normalize_offset_key(modality)] = float(offset)
+        return offsets
+    return {"eit": 0.0, "emg": float(offset_seconds), VENTILATOR: 0.0}
+
+
+def offsets_relative_to_reference(
+    offsets: Mapping[str, float],
+    reference_modality: str,
+) -> dict[str, float]:
+    reference = normalize_offset_key(reference_modality)
+    reference_offset = float(offsets.get(reference, 0.0))
+    return {
+        normalize_offset_key(modality): float(offset) - reference_offset
+        for modality, offset in offsets.items()
+    }

@@ -15,12 +15,11 @@ import numpy as np
 
 from m3resp.core.events import BreathEvent
 from m3resp.core.session import M3Session, set_ventilator_raw
-from m3resp.synchronization.alignment import align_events_by_modality_offset
-from m3resp.synchronization.cropping import (
-    VENTILATOR,
-    normalize_modality,
+from m3resp.modalities.names import VENTILATOR, normalize_modality
+from m3resp.modalities.ventilator import keep_samples, ventilator_raw
+from m3resp.synchronization.alignment import (
+    align_events_by_modality_offset,
     resolve_alignment_offsets,
-    ventilator_raw,
 )
 from m3resp.synchronization.ventilator import normalize_ventilator_breath
 
@@ -81,16 +80,14 @@ class TestLegacyAliasStillWorks:
         session.raw["vent"] = recording
         assert ventilator_raw(session) is recording
 
-    def test_cropping_through_one_key_is_visible_through_the_other(self):
-        # Both keys reference the same object and cropping mutates in place,
+    def test_cutting_through_one_key_is_visible_through_the_other(self):
+        # Both keys reference the same object and cutting changes it in place,
         # so the two views can never drift apart.
         session = M3Session()
         recording = _recording(n_samples=100, fs=10.0)
         set_ventilator_raw(session.raw, recording)
 
-        session.synchronize_raw_modalities(
-            offset_seconds={"ventilator": 1.0}, reference_modality="eit"
-        )
+        keep_samples(session.raw["vent"], 10, 100)
 
         assert session.raw["vent"]["array"].shape[1] == 90
         assert session.raw["ventilator"]["array"] is session.raw["vent"]["array"]

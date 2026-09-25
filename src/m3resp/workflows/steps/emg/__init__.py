@@ -58,6 +58,7 @@ from .quality_snr import (
     snr_pseudo,
 )
 from .selection import remove_invalid_breaths
+from .slicing import slice_recording
 
 __all__ = [
     "amplitude",
@@ -82,6 +83,7 @@ __all__ = [
     "pseudo_slope",
     "remove_invalid_breaths",
     "respiratory_rate",
+    "slice_recording",
     "slopesum_baseline",
     "snr_pseudo",
     "time_product",

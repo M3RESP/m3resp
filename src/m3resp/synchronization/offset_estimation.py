@@ -4,8 +4,8 @@ When two devices record the same subject on independent clocks -- for example a
 Draeger EIT device (~50 Hz frame rate) and a Biopac amplifier (2 kHz) carrying
 airway pressure (Paw) plus diaphragm sEMG -- the recordings share no common
 timestamp and must be aligned before analysis. :meth:`M3Session.
-synchronize_raw_modalities` *applies* a known offset (it crops the modalities
-onto a common window), but it does not *find* it. This module supplies the
+synchronize_raw_modalities` *applies* a known offset (it sets each
+recording's start time on a shared clock), but it does not *find* it. This module supplies the
 missing estimation stage.
 
 There is currently no robust, general-purpose automatic sync method, so the

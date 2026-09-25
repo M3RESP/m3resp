@@ -42,7 +42,7 @@
       "out": {
         "result": "selected_eit"
       },
-      "uses": "eit.slice",
+      "uses": "eit.slice_signal",
       "with": {
         "end": 1550,
         "mode": "index",
@@ -86,7 +86,7 @@
       "out": {
         "result": "detection_signal"
       },
-      "uses": "eit.slice",
+      "uses": "eit.slice_signal",
       "with": {
         "end": 1550,
         "mode": "index",

@@ -30,7 +30,7 @@ from .signals import (
     global_impedance,
     normalize_breaths,
 )
-from .slicing import slice_signal
+from .slicing import slice_recording, slice_signal
 
 __all__ = [
     "_ALLOWED_PIXEL_BREATH_PHASE_MODES",
@@ -49,5 +49,6 @@ __all__ = [
     "roi_filter_by_size",
     "roi_tiv_lungspace",
     "roi_watershed",
+    "slice_recording",
     "slice_signal",
 ]

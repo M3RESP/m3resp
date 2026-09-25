@@ -302,6 +302,7 @@ _AUDITED_SESSION_STEPS = frozenset(
         "eit.roi_filter_by_size",
         "eit.roi_tiv_lungspace",
         "eit.roi_watershed",
+        "eit.slice_recording",
         "emg.detect_breaths",
         "emg.detect_extreme_time_products",
         "emg.detect_local_high_aub",
@@ -318,7 +319,7 @@ _AUDITED_SESSION_STEPS = frozenset(
         "emg.percentage_under_baseline",
         "emg.preprocess",
         "emg.remove_invalid_breaths",
-        "emg.slice",
+        "emg.slice_recording",
         "emg.slopesum_baseline",
         "emg.snr_pseudo",
         "export.rotarc_result",
@@ -332,6 +333,7 @@ _AUDITED_SESSION_STEPS = frozenset(
         "ventilator.pocc_intervals",
         "ventilator.pocc_quality",
         "ventilator.pocc_time_product",
+        "ventilator.slice_recording",
     }
 )
 

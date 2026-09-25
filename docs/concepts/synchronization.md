@@ -6,14 +6,15 @@ This module's job is lining up data from different modalities (EIT/EMG/
 ventilator) that were recorded on separate clocks or files, so they can be
 compared on one shared time axis. Key pieces:
 
-- `session.synchronize_raw_modalities(...)` shifts the raw signals in time,
-  before any processing, using a manual offset you supply (for example
+- `session.synchronize_raw_modalities(...)` gives each recording a start
+  time on one shared clock, using a manual offset you supply (for example
   "EMG started 5 seconds after EIT"). The offset is a single number in
   seconds that you provide; the package applies it but never measures it
   (`estimate_sync_offset` only supports `method="manual"`). How you arrive
-  at that number is up to you, and filtered signals are fine for the job:
-  the shift is applied to the raw signals, so every processing step
-  downstream sees the same aligned timeline.
+  at that number is up to you, and filtered signals are fine for the job.
+  No samples are removed: a three-hour pressure recording stays three hours
+  long beside a thirty-minute EIT recording that started 90 minutes in. See
+  "Start times" below.
 - `session.synchronize_multimodal_breaths(...)` does the same thing but for
   already-detected events (breaths), not raw signals.
 - `resample_signal(...)` is a standalone utility that changes a signal's
@@ -52,10 +53,57 @@ modalities, deliberately kept modest: manual offset, timestamp alignment,
 resampling, and nearest-neighbor breath linking. Clock-drift correction is
 intentionally out of scope.
 
+## Start times
+
+`session.synchronize_raw_modalities(offset_seconds=..., reference_modality=...)`
+stores one number per recording in `session.start_times`: the time, in
+seconds on the shared clock, at which that recording's first sample was
+taken. The reference recording starts at 0; a negative value means a
+recording started earlier than the reference, a positive value later.
+Calling it again replaces the start times.
+
+Each modality's own results stay on that recording's own clock, so
+`session.events["emg_breaths"]` still gives times from the start of the EMG
+file. The start times are added only where modalities are compared -
+`synchronize_multimodal_breaths`, `link_breaths` and
+`plot_synchronization_comparison`:
+
+```text
+time on the shared clock = own time - own first time + start time
+```
+
+"Own first time" is 0 s for EMG and ventilator data. EIT files carry the
+time of day instead (a Draeger file can start at 36528.6 s), so the EIT's
+first time value is taken off first. A ventilator recording that came inside
+the EIT or EMG file uses that modality's start time.
+
+Standalone ventilator recordings (loaded with `source="ventilator"`) share
+the `"ventilator"` start time. When two of them started at different moments
+- a ventilator export and a separate monitor export, say - give one its own
+start time with `"ventilator:<name>"`, the name it was loaded under:
+
+```python
+session.load_ventilator("ventilator.txt", source="ventilator")
+session.load_ventilator("monitor.csv", source="ventilator", name="monitor")
+session.synchronize_raw_modalities(
+    offset_seconds={"eit": 0.0, "ventilator": -30.0, "ventilator:monitor": 12.5},
+    reference_modality="eit",
+)
+```
+
+A recording with its own entry uses it; the others use `"ventilator"`. A
+name that is not loaded, or one for ventilator data inside the EIT or EMG
+file, is refused.
+
+Cutting a recording (`slice_emg`, `slice_eit`, `slice_ventilator`) moves its
+start time later by the part cut off the front, so it stays lined up with the
+other recordings. See [Cutting data to a time window](slicing.md).
+
 ## Aligning raw signals and events
 
-- `session.synchronize_raw_modalities(...)` aligns raw signals before
-  per-modality processing.
+- `session.synchronize_raw_modalities(...)` sets each recording's start time
+  (see above). Run it before or after per-modality processing; it changes no
+  samples.
 - `session.synchronize_multimodal_breaths(method="manual_offset", offset_seconds=..., reference_modality=...)`
   shifts already-detected event lists (`session.events`) onto a common time
   axis. `offset_seconds` accepts either a single float or a per-modality

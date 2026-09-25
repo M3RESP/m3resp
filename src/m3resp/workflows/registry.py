@@ -45,7 +45,7 @@ _NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
 _RESERVED_OUTPUT_NAMES = frozenset(("session",))
 
 #: Sentinel ``StepArtifact.artifact_type`` for a genuine passthrough step
-#: (e.g. ``eit.slice``, which accepts/returns whatever signal type it was
+#: (e.g. ``eit.slice_signal``, which accepts/returns whatever signal type it was
 #: given) - exempt from the compiler's artifact-type compatibility check
 #: (Phase 10 of the pipeline-structure plan) on whichever side declares it.
 ANY_ARTIFACT_TYPE = "any"

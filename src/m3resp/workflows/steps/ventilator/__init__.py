@@ -26,6 +26,7 @@ from .features import respiratory_rate
 from .loading import channels, load
 from .normalization import normalize_breaths
 from .quality import detect_non_consecutive_manoeuvres
+from .slicing import slice_recording
 
 __all__ = [
     "channels",
@@ -38,4 +39,5 @@ __all__ = [
     "pocc_quality",
     "pocc_time_product",
     "respiratory_rate",
+    "slice_recording",
 ]

@@ -6,9 +6,17 @@ import json
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from loguru import logger
+
+# The signal-cutting helpers moved to `m3resp.processing.slicing`; they stay
+# importable from here so existing imports keep working.
+from m3resp.processing.slicing import (  # noqa: F401
+    slice_by_index,
+    slice_by_time,
+    slice_signal_by_mode,
+)
 
 
 def resolve_output_dir(
@@ -41,30 +49,6 @@ def default_run_timestamp() -> str:
     """The default timestamp format used for timestamped output directories."""
 
     return datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
-
-
-def slice_by_index(data: Any, *, start: int, end: int) -> Any:
-    return data[slice(start, end)]
-
-
-def slice_by_time(data: Any, *, start: float, end: float) -> Any:
-    return data.t[slice(start, end)]
-
-
-def slice_signal_by_mode(
-    data: Any,
-    *,
-    start: float,
-    end: float,
-    slicing_mode: Literal["index", "time"],
-) -> Any:
-    """Slice a signal by sample index or time selector."""
-
-    if slicing_mode == "index":
-        return slice_by_index(data, start=int(start), end=int(end))
-    if slicing_mode == "time":
-        return slice_by_time(data, start=float(start), end=float(end))
-    raise ValueError("slicing_mode must be 'index' or 'time'.")
 
 
 def subject_result_filename(

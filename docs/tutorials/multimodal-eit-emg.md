@@ -19,12 +19,13 @@ data_dir = "data/source/synthetic/20260610_153009"
 session.load_eit(f"{data_dir}/m3resp_multimodal_1_eit_draeger.bin", vendor="draeger")
 session.load_emg(f"{data_dir}/m3resp_multimodal_1_emg.Poly5")
 
-# Step 1 of 3: put the raw signals on a common time axis by discarding
-# samples. A negative offset discards them from the start of that recording,
-# a positive offset from the end. The samples are removed from the loaded
-# recording, so reloading the file is the only way to get them back, and
-# everything downstream - including breath detection - works on what is left.
-# Recordings keep their own lengths: nothing is cut back to a shared window.
+# Step 1 of 3: put the recordings on a common clock by giving each one a
+# start time, in seconds from the start of the reference recording. A
+# negative value means that recording started earlier, a positive value that
+# it started later. No samples are removed: every recording keeps its full
+# length, and each modality's own results (breath times, signals) stay on
+# its own clock. The start times are added when breaths are compared across
+# modalities in steps 2 and 3.
 session.synchronize_raw_modalities(
     method="manual_offset",
     offset_seconds={"eit": 0.0, "emg": 0.0},
@@ -63,7 +64,7 @@ The three steps above do different things and none replaces another:
 
 | Step | What it moves | When |
 |---|---|---|
-| `synchronize_raw_modalities` | The raw signals, by discarding samples - from the start for a negative offset, from the end for a positive one | Before processing |
+| `synchronize_raw_modalities` | Nothing yet - it stores each recording's start time in `session.start_times`, which steps 2 and 3 add to the breath times | Before processing |
 | `synchronize_multimodal_breaths` | The detected breath times, by a further offset that adds to the first | After detection, only if the offset estimate changed |
 | `link_breaths` | Nothing - it pairs EIT with EMG breaths by how close their times are | Last |
 

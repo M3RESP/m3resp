@@ -2,7 +2,7 @@
 
 ``sync.estimate_offset`` returns a manually supplied constant time offset and
 writes it into the pipeline context. Downstream, ``sync.apply_estimated_offset``
-consumes that value and crops the modalities, keeping estimation and
+consumes that value and sets the modalities' start times, keeping estimation and
 application as separate, declarative steps.
 
 There is no robust, general-purpose automatic sync estimator in this package:
@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 from m3resp.core.session import M3Session
-from m3resp.synchronization.cropping import VENTILATOR, normalize_modality
+from m3resp.modalities.names import VENTILATOR, normalize_modality
 from m3resp.synchronization.offset_estimation import estimate_sync_offset
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 
@@ -123,20 +123,20 @@ def estimate_offset(
     writes=("sync_summary",),
     summary="Apply an estimated EIT-to-source offset to the raw modalities.",
     description=(
-        "Crop source-clock raw modalities so they start with the target "
-        "modality, using the offset 'sync.estimate_offset' reported. The "
-        "target modality is held at zero; each source modality is cropped by "
-        "the negative estimate."
+        "Put source-clock recordings on the target modality's clock, using "
+        "the offset 'sync.estimate_offset' reported. The target modality "
+        "starts at zero; each source modality's start time is the negative "
+        "estimate. No samples are removed."
     ),
     category="synchronization",
     session_reads=("session.raw",),
-    session_writes=("session.raw", "session.parameters.raw_alignment"),
+    session_writes=("session.start_times", "session.parameters.raw_alignment"),
     input_artifacts=(
         StepArtifact(
             name="session",
             artifact_type="m3session",
             default_context_key="session",
-            description="Backing M3Session whose raw modality signals are cropped in place.",
+            description="Backing M3Session whose recordings get a start time.",
             public=False,
         ),
         StepArtifact(
@@ -152,13 +152,13 @@ def estimate_offset(
             name="target_modality",
             value_type="string",
             default="eit",
-            description="Modality held at zero offset; every source modality is cropped relative to it.",
+            description="Modality whose start time is zero; every source modality is placed relative to it.",
         ),
         StepParameter(
             name="source_modalities",
             value_type="list",
             default=("emg", VENTILATOR),
-            description="Modalities cropped by the negative estimated offset. Must not include 'target_modality'.",
+            description="Modalities whose start time is the negative estimated offset. Must not include 'target_modality'.",
         ),
     ),
     output_artifacts=(
@@ -176,11 +176,11 @@ def apply_estimated_offset(
     target_modality: str = "eit",
     source_modalities: tuple[str, ...] | list[str] = ("emg", VENTILATOR),
 ) -> dict[str, Any]:
-    """Crop source-clock recordings so they start with the target recording.
+    """Place source-clock recordings on the target recording's clock.
 
     ``sync.estimate_offset`` reports where target ``t=0`` falls on the source
-    clock. The corresponding Stage-1 crop is therefore the negative estimate
-    on each source modality, with the target modality held at zero.
+    clock. Each source recording therefore starts at the negative estimate on
+    the target clock, with the target modality starting at zero.
     """
 
     target = normalize_modality(target_modality)
