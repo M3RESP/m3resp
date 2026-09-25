@@ -17,7 +17,8 @@ session.load_emg(
     "data/source/synthetic/20260610_153009/m3resp_multimodal_1_emg.Poly5"
 )
 
-session.preprocess_emg()      # bandpass filter + envelope -> session.signals
+# Channel 1 carries the breathing muscle signal; channel 0 is mostly noise.
+session.preprocess_emg(channel=1)  # bandpass filter + envelope -> session.signals
 session.detect_emg_breaths()  # -> session.events["emg_breaths"]
 session.postprocess_emg()     # features + quality -> parameter_results/quality
 
@@ -31,7 +32,10 @@ After this:
 - `session.events["emg_breaths"]` has the detected `BreathEvent`s.
 - `session.parameter_results` has amplitude/AUC/pseudo-slope/time-to-peak/
   respiratory-rate `ParameterResult`s (see
-  [../concepts/parameters.md](../concepts/parameters.md)).
+  [../concepts/parameters.md](../concepts/parameters.md)). The respiratory
+  rate comes as two results: `respiratory_rate` (the median, in breaths/min)
+  and `respiratory_rate_breath_to_breath` (one value per breath, NaN for
+  outlier breaths).
 - `session.quality` has the native `resurfemg` clinical quality checks
   (Pocc prerequisites, SNR, baseline crossing, etc.) as `QualityFlag`s.
 - `results/emg-only/` has the structured export files (see
@@ -40,8 +44,13 @@ After this:
 ## The one-call preset
 
 ```python
-session.run_pipeline("emg")
+session.run_pipeline("emg", config={"preprocess": {"channel": 1}})
 ```
+
+When `channel` is not given, the channel is picked from the channel names: a
+channel named ECG is never analysed as EMG, and when the names do not show
+which channel is the breathing muscle (like `emg_0` and `emg_1` here), you get
+an error asking for `channel=` instead of a guess.
 
 Calls `preprocess_emg()`, then ECG peak detection + gating, then
 `detect_emg_breaths()` and `postprocess_emg()` in sequence. Pass

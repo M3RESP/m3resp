@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from importlib import import_module
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from m3resp.core.exceptions import OptionalDependencyError
+from m3resp.core.exceptions import OptionalDependencyError, UnresolvedChannelError
 
 POSTPROCESSING_FUNCTIONS: dict[str, tuple[str, ...]] = {
     "baseline": ("moving_baseline", "slopesum_baseline"),
@@ -71,6 +72,11 @@ def _load_biopac_txt(path: str) -> dict[str, Any]:
     i.e. a title line, a ``msec/sample`` sampling-interval line, a
     ``N channels`` line, then two lines per channel (label, unit), a ``CHn``
     column header, a per-channel sample-count row, and finally the samples.
+
+    Some exports start every row with a time column (header ``min`` before
+    ``CH1``). That column is skipped, so channel ``i`` is always ``CH(i+1)``;
+    the time axis is rebuilt from the sampling interval instead. Its header is
+    kept in ``metadata["skipped_time_column"]``.
     Returns the same ``(array, dataframe, metadata)``-shaped dict as
     :meth:`ReSurfEMGAdapter.load`, with ``array`` channel-major
     ``(n_channels, n_samples)`` and ``metadata["fs"]`` populated.
@@ -96,6 +102,14 @@ def _load_biopac_txt(path: str) -> dict[str, Any]:
             # "Paw - TSD104A - Blood Pressure, DA100C" -> "Paw"
             labels.append(label_line.split(" - ")[0].strip())
             units.append(unit_line.strip())
+        column_header = [
+            name.strip() for name in handle.readline().rstrip("\r\n").split("\t")
+        ]
+
+    # A leading time column ("min") comes before CH1 in some exports.
+    first_column = column_header[0] if column_header else ""
+    has_time_column = bool(first_column) and not first_column.upper().startswith("CH")
+    first_channel_column = 1 if has_time_column else 0
 
     # 3 title/rate/channel lines + 2 lines per channel + column-header row
     # + per-channel sample-count row precede the numeric samples.
@@ -105,7 +119,7 @@ def _load_biopac_txt(path: str) -> dict[str, Any]:
         sep="\t",
         skiprows=skiprows,
         names=labels,
-        usecols=range(n_channels),
+        usecols=range(first_channel_column, first_channel_column + n_channels),
         engine="c",
     )
     array = dataframe.to_numpy(dtype=float).T  # channel-major (n_channels, n_samples)
@@ -117,6 +131,8 @@ def _load_biopac_txt(path: str) -> dict[str, Any]:
         "file_dir": str(Path(path).parent),
         "file_extension": "txt",
     }
+    if has_time_column:
+        metadata["skipped_time_column"] = first_column
     return {"array": array, "dataframe": dataframe, "metadata": metadata}
 
 
@@ -125,6 +141,44 @@ def _require_emg_recording(recording: Any) -> None:
         raise TypeError("EMG preprocessing expects a ReSurfEMG recording dict.")
     if "metadata" not in recording:
         raise TypeError("EMG preprocessing expects recording metadata.")
+
+
+#: Channel names that mark a heart (ECG) reference channel rather than EMG.
+_ECG_LABELS = ("ecg", "ekg")
+
+
+def _choose_emg_channel(n_channels: int, labels: Sequence[str] | None) -> int:
+    """Pick the EMG channel to analyse when the user did not name one.
+
+    - A recording with one channel: that channel.
+    - Otherwise, channels whose name says ECG/EKG are left out. If exactly one
+      channel is left, that one is used.
+    - Otherwise it is unclear which channel is the breathing muscle, so this
+      raises `UnresolvedChannelError` and asks for ``channel=`` instead of
+      guessing.
+    """
+
+    if n_channels == 1:
+        return 0
+    names = list(labels or [])
+    if len(names) == n_channels:
+        candidates = [
+            index
+            for index, name in enumerate(names)
+            if str(name).strip().lower() not in _ECG_LABELS
+        ]
+        if len(candidates) == 1:
+            return candidates[0]
+    channel_list = ", ".join(
+        f"{index} ({names[index]!r})" if index < len(names) else str(index)
+        for index in range(n_channels)
+    )
+    raise UnresolvedChannelError(
+        f"This EMG recording has {n_channels} channels ({channel_list}) and it is "
+        "not clear which one is the breathing muscle. Pass the channel number, "
+        "for example preprocess_emg(channel=1), or "
+        'run_pipeline("emg", config={"preprocess": {"channel": 1}}).'
+    )
 
 
 def _emg_optional_dependency_error() -> OptionalDependencyError:

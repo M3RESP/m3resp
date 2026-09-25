@@ -25,6 +25,7 @@ from m3resp.processing.peaks import (
     detect_emg_breath_peaks,
     detect_occluded_breath_peaks,
     detect_ventilator_breath_peaks,
+    merge_close_peaks,
 )
 from m3resp.processing.ventilator import estimate_peep
 from m3resp.processing.windows import rolling_envelope
@@ -32,6 +33,7 @@ from m3resp.processing.windows import rolling_envelope
 from ._protocols import _PostprocessingOpsProtocol
 from ._shared import (
     _category_for_function,
+    _choose_emg_channel,
     _missing_postprocessing_dependency,
     _normalize_selected_postprocessing,
     _require_emg_recording,
@@ -45,7 +47,7 @@ class _DefaultsMixin:
         self,
         recording: Any,
         *,
-        channel: int = 0,
+        channel: int | None = None,
         high_pass_hz: float = 20.0,
         low_pass_hz: float | None = None,
         envelope_window_seconds: float = 0.25,
@@ -54,8 +56,15 @@ class _DefaultsMixin:
         notch_base_frequency: float | None = None,
         notch_max_frequency: float | None = None,
         notch_quality_factor: float = 30.0,
+        notch_before_bandpass: bool = False,
     ) -> dict[str, Any]:
         """Run the Stage 1 EMG preprocessing pipeline through ReSurfEMG.
+
+        ``channel`` is the number of the EMG channel to analyse. When it is
+        left out, the channel is picked from the channel names: a channel
+        named ECG/EKG is never picked, and if more than one channel could be
+        the breathing muscle, an `UnresolvedChannelError` asks for
+        ``channel=`` rather than guessing.
 
         The band-pass defaults to 20-500 Hz, the range respiratory-sEMG
         literature specifies. The high-pass is deliberately *not* set low
@@ -66,7 +75,9 @@ class _DefaultsMixin:
         band.
 
         ``envelope_method`` selects the envelope computed on the band-passed
-        signal - ``"rms"`` (default) or ``"arv"``. RMS is what the literature
+        signal - ``"rms"`` (default), ``"arv"`` or ``"median"`` (median of the
+        absolute signal, which ignores short spikes such as heartbeat
+        leftovers; used for the multidomain results). RMS is what the literature
         specifies; ARV is kept as an explicit opt-in because it is not an RMS
         equivalent on real bursty sEMG. The choice is recorded in the returned
         ``"filter"`` mapping so a later envelope recomputation (e.g. after ECG
@@ -85,6 +96,11 @@ class _DefaultsMixin:
         ``emg_bandpass_butter`` and before the envelope is computed, so a
         narrow high-pass alone (which only removes the fundamental) doesn't
         leave higher harmonics inside the pass band untouched.
+
+        ``notch_before_bandpass=True`` applies the notch to the raw signal
+        first and band-passes afterwards (the order used for the multidomain
+        results). Both filters are zero-phase, so the two orders differ only
+        slightly, mostly near the start and end of the signal.
         """
 
         try:
@@ -101,31 +117,39 @@ class _DefaultsMixin:
         metadata = dict(recording["metadata"])
         fs = float(metadata["fs"])
         array = recording["array"]
+        if channel is None:
+            channel = _choose_emg_channel(len(array), metadata.get("labels"))
         raw = np.asarray(array[channel], dtype=float)
 
         if low_pass_hz is None:
             low_pass_hz = min(fs / 2 * 0.95, 500)
 
-        filtered = emg_bandpass_butter(
-            emg_raw=raw,
-            high_pass=high_pass_hz,
-            low_pass=low_pass_hz,
-            fs_emg=fs,
-        )
-        if notch_base_frequency is not None:
+        def notch(values: Any, base_frequency: float) -> Any:
             # Default the notch's reach to Nyquist, not `low_pass_hz`: a
             # harmonic landing at or just past the low-pass cutoff (e.g. the
             # EIT frame-rate comb's 10th harmonic sitting on a 500 Hz
             # low-pass edge) is only partially attenuated by the low-pass
             # filter's finite roll-off, so it must still be fully inside the
             # notch's stopband rather than at its boundary.
-            filtered = harmonic_notch_filter(
-                filtered,
-                base_frequency=notch_base_frequency,
+            return harmonic_notch_filter(
+                values,
+                base_frequency=base_frequency,
                 sample_frequency=fs,
                 max_frequency=notch_max_frequency or (fs / 2),
                 quality_factor=notch_quality_factor,
             )
+
+        filtered = raw
+        if notch_base_frequency is not None and notch_before_bandpass:
+            filtered = notch(filtered, notch_base_frequency)
+        filtered = emg_bandpass_butter(
+            emg_raw=filtered,
+            high_pass=high_pass_hz,
+            low_pass=low_pass_hz,
+            fs_emg=fs,
+        )
+        if notch_base_frequency is not None and not notch_before_bandpass:
+            filtered = notch(filtered, notch_base_frequency)
         # ECG gating replaces the band-passed signal and recomputes the
         # envelope from the gated trace, so an envelope computed here would be
         # discarded. `compute_envelope=False` skips it; the window and method
@@ -161,6 +185,9 @@ class _DefaultsMixin:
                 "notch_quality_factor": (
                     notch_quality_factor if notch_base_frequency is not None else None
                 ),
+                "notch_before_bandpass": (
+                    notch_before_bandpass if notch_base_frequency is not None else None
+                ),
             },
         }
 
@@ -168,8 +195,9 @@ class _DefaultsMixin:
         self,
         processed_emg: Any,
         *,
-        min_breath_width_seconds: float = 1.0,
+        min_breath_width_seconds: float = 0.5,
         baseline: Any = None,
+        merge_close_peaks_within_width: bool = False,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
         """Run ReSurfEMG EMG breath detection and return common rows.
@@ -221,6 +249,13 @@ class _DefaultsMixin:
             min_peak_width_samples=min_width_samples,
             **kwargs,
         )
+        if merge_close_peaks_within_width:
+            # One breath's flat top can come out as two or three peaks a few
+            # samples apart; peaks closer than the minimum breath width cannot
+            # be separate breaths, so only the higher one is kept.
+            peak_indices = merge_close_peaks(
+                peak_indices, envelope, min_distance_samples=min_width_samples
+            )
 
         events = []
         for peak_index in peak_indices:
