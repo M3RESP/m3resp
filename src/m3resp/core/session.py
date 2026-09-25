@@ -2,16 +2,55 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
-from m3resp.adapters.resurfemg_adapter import ReSurfEMGNative
+from m3resp.emg import ReSurfEMG as ReSurfEMGNative
 from m3resp.adapters.ventilator_adapter import (
     VentilatorAdapter,
+    infer_ventilator_duration,
+    infer_ventilator_fs,
+    iter_ventilator_detections,
+    normalize_ventilator_breath,
+    primary_channel,
+)
+from m3resp.core.exceptions import MissingModalityDataError, VariantAlreadyExistsError
+from m3resp.core.metadata import SessionMetadata
+from m3resp.core.provenance import ProvenanceRecord, record
+from m3resp.data.collections import (
+    ParameterResultCollection,
+    QualityReport,
+    SignalCollection,
+)
+from m3resp.data.events import BreathEvent, reuse_matching_breaths
+from m3resp.data.linked_breath import LinkedBreath
+from m3resp.data.parameters import ParameterResult
+from m3resp.data.processing import ProcessingHistory
+
+# from m3resp.adapters.resurfemg_adapter import ReSurfEMG
+from m3resp.emg import ReSurfEMG
+from m3resp.export.session_export import export_session_summary
+from m3resp.modalities.eit import EITRecording
+from m3resp.modalities.eit import load as load_eit_recording
+from m3resp.modalities.emg import EMGRecording
+from m3resp.modalities.emg import load as load_emg_recording
+from m3resp.modalities.ventilator import VentilatorRecording
+from m3resp.modalities.ventilator import load as load_ventilator_recording
+from m3resp.synchronization.alignment import align_events_by_modality_offset
+from m3resp.synchronization.cropping import (
+    VENTILATOR,
+    crop_loaded_modality,
+    normalize_modality,
+    offsets_relative_to_reference,
+    raw_synchronization_traces,
+    resolve_alignment_offsets,
+)
+from m3resp.synchronization.linking import link_breaths_by_time
+from m3resp.synchronization.multimodal_parameters import compute_multimodal_parameters
+from m3resp.synchronization.ventilator import (
+>>>>>>> a280cbc (native EMG methods now reside in m3resp.emg and include loaders)
     infer_ventilator_duration,
     infer_ventilator_fs,
     iter_ventilator_detections,
@@ -87,6 +126,12 @@ from m3resp.synchronization.sync_methods import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+    from pathlib import Path
+
+    from m3resp.core.events import BreathEvent
+    from m3resp.data.linked_breath import LinkedBreath
+    from m3resp.data.parameters import ParameterResult
     from m3resp.datamodel.recorder import DataModelRecorder
 
 ALIGNMENT_EVENT_LISTS = {
@@ -132,7 +177,7 @@ class M3Session:
     def __init__(
         self,
         eit_adapter: EITProcessingAdapter | None = None,
-        emg_adapter: ReSurfEMGNative | None = None,
+        emg_adapter: ReSurfEMG | None = None,
         metadata: SessionMetadata | dict[str, Any] | None = None,
         allow_overwrite: bool = False,
         ventilator_adapter: Any | None = None,
@@ -154,7 +199,7 @@ class M3Session:
         """
 
         self.eit_adapter = eit_adapter or EITProcessingAdapter()
-        self.emg_adapter = emg_adapter or ReSurfEMGNative()
+        self.emg_adapter = emg_adapter or ReSurfEMG()
         # Ventilator processing is native (`VentilatorAdapter` wraps no upstream
         # library), but *loading* borrows whichever adapter owns the file the
         # ventilator channels arrived in: the sEMG's multi-channel export, or

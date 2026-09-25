@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from m3resp.adapters import EITProcessingAdapter, ReSurfEMGNative
+from m3resp.adapters import EITProcessingAdapter, ReSurfEMG
 from m3resp.adapters.eitprocessing_adapter import sparse_data_to_interval_data
 from m3resp.core.exceptions import UnsupportedWorkflowError
 from m3resp.data import (
@@ -247,7 +247,7 @@ class TestSparseDataToIntervalData:
 
 class TestReSurfEMGAdapterConversions:
     def test_to_signals_converts_raw_filtered_and_envelope(self):
-        adapter = ReSurfEMGNative()
+        adapter = ReSurfEMG()
         processed_emg = {
             "fs": 100.0,
             "channel": 0,
@@ -267,7 +267,7 @@ class TestReSurfEMGAdapterConversions:
         assert all(s.sample_frequency == 100.0 for s in signals)
 
     def test_to_parameters_converts_feature_values_scalar_and_array(self):
-        adapter = ReSurfEMGNative()
+        adapter = ReSurfEMG()
         postprocessed = {
             "computed": {
                 "features": {
@@ -322,7 +322,7 @@ class TestReSurfEMGAdapterConversions:
         assert per_breath.method == "resurfemg.respiratory_rate"
 
     def test_to_quality_flags_converts_results_and_skipped_functions(self):
-        adapter = ReSurfEMGNative()
+        adapter = ReSurfEMG()
         postprocessed = {
             "computed": {
                 "quality_assessment": {

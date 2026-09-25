@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from m3resp import BreathEvent, M3Session
-from m3resp.adapters import ReSurfEMGAdapter
+from m3resp.emg import ReSurfEMG
 from m3resp.core.exceptions import UnresolvedChannelError
 from m3resp.io import load_emg
 from m3resp.modalities.emg import load as load_emg_recording
@@ -29,7 +29,7 @@ def fake_emg_recording() -> dict[str, Any]:
 
 def test_load_emg_sets_preferred_and_legacy_session_slots():
     session = M3Session(
-        emg_adapter=ReSurfEMGNative(loader=lambda *args, **kwargs: fake_emg_recording())
+        emg_adapter=ReSurfEMG(loader=lambda *args, **kwargs: fake_emg_recording())
     )
 
     returned = session.load_emg("subject.Poly5")
@@ -42,7 +42,7 @@ def test_load_emg_sets_preferred_and_legacy_session_slots():
 
 
 def test_top_level_and_modality_load_helpers_return_recordings():
-    adapter = ReSurfEMGNative(loader=lambda *args, **kwargs: fake_emg_recording())
+    adapter = ReSurfEMG(loader=lambda *args, **kwargs: fake_emg_recording())
 
     top_level = load_emg("subject.Poly5", adapter=adapter)
     modality_level = load_emg_recording("subject.Poly5", adapter=adapter)
@@ -52,7 +52,7 @@ def test_top_level_and_modality_load_helpers_return_recordings():
 
 
 def test_custom_emg_detector_normalization_still_works():
-    adapter = ReSurfEMGNative()
+    adapter = ReSurfEMG()
 
     events = adapter.detect_breaths(
         {"processed": True},
@@ -96,17 +96,17 @@ class TestDetectionBaseline:
         processed, _ = self._drifting_envelope()
 
         with pytest.warns(UserWarning, match="baseline not defined"):
-            ReSurfEMGNative().detect_breaths(processed, min_breath_width_seconds=0.5)
+            ReSurfEMG().detect_breaths(processed, min_breath_width_seconds=0.5)
 
     def test_a_baseline_recovers_breaths_the_drift_would_hide(self):
         pytest.importorskip("resurfemg")
         processed, drift = self._drifting_envelope()
 
         with pytest.warns(UserWarning, match="baseline not defined"):
-            without = ReSurfEMGNative().detect_breaths(
+            without = ReSurfEMG().detect_breaths(
                 processed, min_breath_width_seconds=0.5
             )
-        with_baseline = ReSurfEMGNative().detect_breaths(
+        with_baseline = ReSurfEMG().detect_breaths(
             processed, min_breath_width_seconds=0.5, baseline=drift
         )
 
@@ -118,7 +118,7 @@ class TestDetectionBaseline:
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", UserWarning)
-            ReSurfEMGNative().detect_breaths(
+            ReSurfEMG().detect_breaths(
                 processed, min_breath_width_seconds=0.5, baseline=drift
             )
 
@@ -138,7 +138,7 @@ def test_default_detection_finds_fast_breathing():
     # Each burst takes the first 35 % of the breath: about 0.95 s.
     envelope = np.where(phase < 0.35, np.sin(np.pi * phase / 0.35), 0.0)
 
-    events = ReSurfEMGAdapter().detect_breaths(
+    events = ReSurfEMG().detect_breaths(
         {"envelope": envelope, "fs": fs, "channel": "EMGdi"},
         baseline=np.zeros_like(envelope),
     )
@@ -160,7 +160,7 @@ class TestDetectedBreathBoundaries:
         time = np.arange(0, 20, 1 / fs)
         envelope = np.maximum(np.sin(2 * np.pi * 0.25 * time), 0.0)
 
-        return ReSurfEMGNative().detect_breaths(
+        return ReSurfEMG().detect_breaths(
             {
                 "envelope": envelope,
                 "fs": fs,
@@ -185,7 +185,7 @@ class TestDetectedBreathBoundaries:
 
 
 def test_custom_emg_preprocess_callable_still_works():
-    adapter = ReSurfEMGNative()
+    adapter = ReSurfEMG()
 
     processed = adapter.preprocess(
         {"recording": True},
@@ -197,7 +197,7 @@ def test_custom_emg_preprocess_callable_still_works():
 
 
 def test_custom_emg_compute_callable_still_works():
-    adapter = ReSurfEMGNative()
+    adapter = ReSurfEMG()
     events = [BreathEvent("emg", 0.0, 1.0, extremum_time=0.5)]
 
     features = adapter.compute_features(
@@ -219,7 +219,7 @@ def test_custom_emg_compute_callable_still_works():
 
 
 def test_custom_emg_postprocess_callable_still_works():
-    adapter = ReSurfEMGNative()
+    adapter = ReSurfEMG()
     events = [BreathEvent("emg", 0.0, 1.0, extremum_time=0.5)]
 
     result = adapter.postprocess(
@@ -248,7 +248,7 @@ def test_default_preprocess_updates_emg_recording_with_fake_signal():
     time = np.arange(5000, dtype=float) / fs
     fake_signal = np.sin(2 * np.pi * 100 * time)
     session = M3Session(
-        emg_adapter=ReSurfEMGNative(
+        emg_adapter=ReSurfEMG(
             loader=lambda *args, **kwargs: {
                 "array": np.asarray([fake_signal]),
                 "dataframe": {"kind": "fake-dataframe"},
@@ -282,7 +282,7 @@ class TestEMGChannelChoice:
         time = np.arange(5000, dtype=float) / fs
         array = np.asarray([np.sin(2 * np.pi * 100 * time) * (i + 1) for i in range(2)])
         session = M3Session(
-            emg_adapter=ReSurfEMGAdapter(
+            emg_adapter=ReSurfEMG(
                 loader=lambda *args, **kwargs: {
                     "array": array,
                     "dataframe": None,
@@ -639,7 +639,7 @@ def test_emg_preset_runs_end_to_end_and_reports_respiratory_rate():
         0.0, 50.0, time.size
     )
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(
+        emg_adapter=ReSurfEMG(
             loader=lambda *args, **kwargs: {
                 "array": np.asarray([emg_uv]),
                 "dataframe": None,
@@ -663,7 +663,7 @@ def test_run_postprocessing_function_exposes_resurfemg_functions():
     pytest.importorskip("resurfemg")
     np = pytest.importorskip("numpy")
 
-    adapter = ReSurfEMGNative()
+    adapter = ReSurfEMG()
     baseline = adapter.run_postprocessing_function(
         "baseline",
         "moving_baseline",

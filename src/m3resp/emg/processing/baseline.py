@@ -27,13 +27,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from m3resp.adapters.resurfemg_adapter._shared import (
-    _compute_derivative,
+from m3resp.emg.processing.shared import (
     _require_1d_array,
     _require_integer_valued_sample_frequency,
     _require_percentile,
     _require_positive_int,
 )
+from m3resp.processing.windows import compute_derivative
 
 _MIN_SAMPLES_FOR_LAST_COPY = 2
 
@@ -152,7 +152,7 @@ class _BaselineMixin:
         running_std = np.asarray(running_baseline.std(), dtype=np.float64)
         running_mean = np.asarray(running_baseline.mean(), dtype=np.float64)
 
-        array_derivative = _compute_derivative(
+        array_derivative = compute_derivative(
             array - moving_baseline, fs, moving_average_samples
         )
 

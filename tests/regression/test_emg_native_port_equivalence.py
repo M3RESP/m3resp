@@ -37,10 +37,10 @@ import pytest
 pytest.importorskip("resurfemg")
 pytest.importorskip("pywt")
 
-from m3resp.adapters.resurfemg_adapter import ReSurfEMGNative
+from m3resp.adapters.resurfemg_adapter import ReSurfEMG
 from m3resp.adapters.resurfemg_adapter import _signals as adapter_signals
 from m3resp.core.events import BreathEvent
-from m3resp.emg.processing import ReSurfEMG
+from m3resp.emg import ReSurfEMG
 from m3resp.emg.processing import signals as native_signals
 
 EMG_FS = 2048
@@ -129,8 +129,8 @@ def assert_identical(actual: Any, expected: Any, path: str = "result") -> None:
 
 
 @pytest.fixture(scope="module")
-def adapter() -> ReSurfEMGNative:
-    return ReSurfEMGNative()
+def adapter() -> ReSurfEMG:
+    return ReSurfEMG()
 
 
 @pytest.fixture(scope="module")

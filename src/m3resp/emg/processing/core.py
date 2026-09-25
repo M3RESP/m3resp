@@ -10,6 +10,8 @@ import numpy as np
 from m3resp.core.events import BreathEvent, coerce_breath_events
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
 from m3resp.data import ParameterResult, QualityFlag, Signal
+
+# from m3resp.emg.io.loaders import load
 from m3resp.processing.quality import quality_flag_from_result, skipped_quality_flag
 
 from .shared import (
@@ -17,7 +19,6 @@ from .shared import (
     POSTPROCESSING_FUNCTIONS,
     _as_parameter_value,
     _computed_category,
-    _load_biopac_txt,
 )
 
 if TYPE_CHECKING:
@@ -25,42 +26,19 @@ if TYPE_CHECKING:
 
     from m3resp.data.signals import ProcessingState
 
+    from .protocols import _DefaultsProtocol
+
 
 class _CoreMixin:
-    def __init__(self, loader: Callable[..., Any] | None = None):
-        self._loader = loader
+    # def __init__(self):#, loader: Callable[..., Any] | None = None):
+    # self._loader = loader
 
-    # TODO
-    def load(self, path: str, **kwargs: Any) -> Any:
-        """Load EMG data through `resurfemg` or an injected loader."""
-        if self._loader is not None:
-            return self._loader(path, **kwargs)
+    # def load(self, path: str, **kwargs: Any) -> Any:
+    #     # """Load EMG data through m3resp or an injected loader."""
+    #     # if self._loader is not None:
+    #     #     return self._loader(path, **kwargs)
 
-        # Biopac/AcqKnowledge tab-delimited text exports (used by the
-        # eit_emg_annemijn dataset) are not one of resurfemg's supported
-        # extensions and, unlike .npy/.csv, carry their sample rate and channel
-        # labels in a text header. Parse them ourselves so `metadata["fs"]`
-        # (required by `_preprocess_default`) is populated.
-        if str(path).lower().endswith(".txt"):
-            return _load_biopac_txt(path)
-
-        try:
-            from resurfemg.data_connector.converter_functions import load_file
-        except ImportError as exc:
-            msg = (
-                "EMG support requires the optional dependency `resurfemg`. "
-                'Install with `pip install "m3resp[emg]"` or inject a loader.'
-            )
-            raise OptionalDependencyError(
-                msg
-            ) from exc
-
-        array, dataframe, metadata = load_file(path, **kwargs)
-        return {
-            "array": array,
-            "dataframe": dataframe,
-            "metadata": metadata,
-        }
+    #     return load(path, **kwargs)
 
     # TODO
     def preprocess(self, signal: Any, **kwargs: Any) -> Any:
@@ -103,9 +81,7 @@ class _CoreMixin:
                 "EMG feature extraction needs an upstream callable in Stage 1. "
                 "Pass `compute=callable`."
             )
-            raise UnsupportedWorkflowError(
-                msg
-            )
+            raise UnsupportedWorkflowError(msg)
         return compute(signal, events, **kwargs)
 
     # TODO
@@ -113,9 +89,7 @@ class _CoreMixin:
         """Convert preprocessed EMG channel arrays into `Signal` objects."""
         if not isinstance(processed_emg, dict) or "fs" not in processed_emg:
             msg = "to_signals expects processed EMG data from preprocess_emg()."
-            raise UnsupportedWorkflowError(
-                msg
-            )
+            raise UnsupportedWorkflowError(msg)
 
         fs = float(processed_emg["fs"])
         channel = processed_emg.get("channel")
@@ -234,10 +208,10 @@ class _CoreMixin:
     ) -> Any:
         """Call any exposed `resurfemg.postprocessing` function by name."""
         if function_name not in POSTPROCESSING_FUNCTIONS.get(category, ()):
-            msg = f"Unknown ReSurfEMG postprocessing function {category}.{function_name}."
-            raise ValueError(
-                msg
+            msg = (
+                f"Unknown ReSurfEMG postprocessing function {category}.{function_name}."
             )
+            raise ValueError(msg)
 
         try:
             module = import_module(_POSTPROCESSING_MODULES[category])
@@ -246,8 +220,6 @@ class _CoreMixin:
                 "EMG postprocessing requires the optional dependency `resurfemg`. "
                 'Install with `pip install "m3resp[emg]"`.'
             )
-            raise OptionalDependencyError(
-                msg
-            ) from exc
+            raise OptionalDependencyError(msg) from exc
 
         return getattr(module, function_name)(*args, **kwargs)
