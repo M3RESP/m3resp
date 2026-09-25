@@ -108,22 +108,24 @@ def _gate_fill_interp(gating_context: _GateContext) -> np.ndarray:
     if gating_context.gated_indexes.size == 0:
         return gating_context.array_gated
     # get the indices of the samples right before and after each gate
-    pre = np.clip(
-        gating_context.gate_start_indexes - 1,
-        0,
-        gating_context.max_samples,
-        dtype=np.int64,
-    )
-    post = np.clip(
-        gating_context.gate_end_indexes + 1,
-        0,
-        gating_context.max_samples,
-        dtype=np.int64,
-    )
+    half = gating_context.half_gate_width
+    pre_idx = gating_context.peaks - half - 1
+    post_idx = gating_context.peaks + half + 1
+    max_s = gating_context.max_samples
+    pre_in = (pre_idx >= 0) & (pre_idx < max_s)
+    post_in = (post_idx >= 0) & (post_idx < max_s)
     # pre_values and post_values are the corresponding values of the array for each
     # pre and post gate index, and 0 elsewhere
-    pre_values = np.where(pre, gating_context.array_original[pre], 0.0)
-    post_values = np.where(post, gating_context.array_original[post], 0.0)
+    pre_values = np.where(
+        pre_in,
+        gating_context.array_original[np.clip(pre_idx, 0, max_s - 1).astype(np.intp)],
+        0.0,
+    )
+    post_values = np.where(
+        post_in,
+        gating_context.array_original[np.clip(post_idx, 0, max_s - 1).astype(np.intp)],
+        0.0,
+    )
     # find the peak each gate is associated with
     parent_peak = _find_corresponding_peaks(gating_context)
     # compute the interpolation fraction for each element within the gate.

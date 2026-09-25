@@ -48,7 +48,7 @@ class _LoaderMixin:
             msg = "file_path should be a str."
             raise TypeError(msg)
         if self._loader is not None:
-            return self._loader(path, **kwargs)
+            return self._loader(file_path, **kwargs)
         file_extension = Path(file_path).name.split(".")[-1].lower()
         loaders = {
             "poly5": _load_poly5,
