@@ -101,7 +101,13 @@ The four keys for each step:
 
 A spec with no top-level `schema_version` key is parsed by the permissive legacy parser: unknown top-level/step keys are silently ignored, and a non-boolean `outputs.*` flag (e.g. `"yes"`) is coerced with `bool()` behind a `FutureWarning` rather than rejected. This exists for backward compatibility with specs written before Stage 2; new specs should set `schema_version: 1`.
 
-A versioned spec (`schema_version: 1`) is parsed strictly by a pydantic model: an unknown key anywhere (top level, a step, `outputs`, `experiment`, `execution`) is a hard `PipelineSpecError`, every boolean must be a real YAML/JSON boolean, and `outputs.mode` must be set explicitly whenever `outputs.dir` is set (see "Output modes" below — a legacy spec may still omit it and let the engine infer it). Both parsers build the same `PipelineSpec`/`StepSpec` dataclasses, so the engine, `compile_pipeline`, and every step behave identically either way; only what gets accepted at parse time differs. Four of the six example specs under `examples/` use `schema_version: 1`; the other two are the smaller introductory ones (`multimodal_example`, `multidomain_recording1_a2`) which are kept legacy on purpose, as a lower-ceremony starting point.
+A versioned spec (`schema_version: 1`) is parsed strictly by a pydantic model:
+
+- An unknown key anywhere (top level, a step, `outputs`, `experiment`, `execution`) is a hard `PipelineSpecError`.
+- Every boolean must be a real YAML/JSON boolean. In YAML that means unquoted `true`/`false` (`yes`/`no` and `on`/`off` also work); quoted strings such as `"yes"`, and `y`/`n`, are rejected. In JSON, only `true`/`false`.
+- `outputs.mode` must be set whenever `outputs.dir` is set. Legacy specs may still omit it and let the engine infer it (see "Output modes" below).
+
+Both parsers build the same `PipelineSpec`/`StepSpec` dataclasses, so the engine, `compile_pipeline`, and every step behave identically either way; only what gets accepted at parse time differs. Four of the six example specs under `examples/` use `schema_version: 1`; the other two are the smaller introductory ones (`multimodal_example`, `multidomain_recording1_a2`) which are kept legacy on purpose, as a lower-ceremony starting point.
 
 ### Step ids
 
