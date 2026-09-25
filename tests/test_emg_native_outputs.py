@@ -81,7 +81,7 @@ class TestEmgLoad:
             )
 
     def test_injected_loader_still_produces_native_signals(self):
-        from m3resp.adapters.resurfemg_adapter import ReSurfEMG
+        from m3resp.emg import ReSurfEMG
 
         fake_array = np.asarray([[0.0, 1.0, 0.0, -1.0], [2.0, 2.0, 2.0, 2.0]])
 

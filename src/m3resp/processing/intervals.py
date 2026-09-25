@@ -72,6 +72,10 @@ def _validate_peak_indices(peak_indexes: np.ndarray, **kwargs) -> tuple[bool, bo
     previous_downslope = kwargs.get("previous_downslope", 0)
     new_upslope = kwargs.get("new_upslope", 0)
 
+    if peak_number >= len(peak_ends):
+        msg = f"peak_number {peak_number} is out of range for peak_ends of length {len(peak_ends)}"
+        raise IndexError(msg)
+
     end_index = peak_ends[peak_number]
     peak_index = peak_indexes[peak_number]
     # If the start index is after the peak index, mark the start as invalid
@@ -115,7 +119,7 @@ def _validate_peak_indices(peak_indexes: np.ndarray, **kwargs) -> tuple[bool, bo
         valid_ends[peak_number - 1] = previous_end_validity
         valid_starts[peak_number] = current_start_validity
 
-    return valid_starts[peak_number], valid_ends[peak_number]
+    return bool(valid_starts[peak_number]), bool(valid_ends[peak_number])
 
 
 def onoff_from_baseline_crossings(
@@ -176,6 +180,7 @@ def onoff_from_baseline_crossings(
             start_index=peak_starts[peak_number],
             valid_starts=valid_starts,
             valid_ends=valid_ends,
+            peak_ends=peak_ends,
         )
 
     valid_peaks = [
@@ -291,6 +296,7 @@ def onoff_from_slope(
             valid_ends=valid_ends,
             previous_downslope=previous_downslope,
             new_upslope=new_upslope,
+            peak_ends=peak_ends,
         )
     # valid peaks have valid starts and ends
     valid_peaks = [

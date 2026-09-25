@@ -15,7 +15,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from m3resp.adapters.resurfemg_adapter import ReSurfEMG, ventilator_signals
+from m3resp.adapters.resurfemg_adapter import ventilator_signals
+from m3resp.emg import ReSurfEMG
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.core.session import M3Session
 

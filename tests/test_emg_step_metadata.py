@@ -115,7 +115,7 @@ def test_ecg_removal_steps_need_resurfemg():
 
 
 def test_ecg_gating_fill_method_choices_match_adapter_validation():
-    from m3resp.adapters.resurfemg_adapter import ReSurfEMG
+    from m3resp.emg import ReSurfEMG
 
     description = describe_step("emg.ecg_gating")
     fill_method = next(p for p in description.parameters if p.name == "fill_method")

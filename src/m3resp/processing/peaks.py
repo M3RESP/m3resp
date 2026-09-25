@@ -158,7 +158,11 @@ def detect_emg_breath_peaks(
         msg_0 = "min_peak_width_samples and min_peak_width_s cannot both be set at the same time."
         raise MutuallyExclusiveArgsError(msg_0)
 
-    baseline = baseline or kwargs.get("emg_baseline", np.zeros_like(envelope))
+    baseline = (
+        baseline
+        if baseline is not None
+        else kwargs.get("emg_baseline", np.zeros_like(envelope))
+    )
 
     min_peak_width_samples = min_peak_width_samples or kwargs.get("min_peak_width_s", 1)
 

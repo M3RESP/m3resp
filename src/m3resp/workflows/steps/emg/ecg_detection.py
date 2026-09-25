@@ -174,7 +174,7 @@ def ecg_detect_peaks(
         peak_fraction=peak_fraction,
         peak_width_samples=peak_width_samples,
         peak_distance_samples=peak_distance_samples,
-        bandpass_filter=bandpass_filter,
+        apply_bandpass_filter=bandpass_filter,
     )
 
     detection_parameters = {
@@ -184,7 +184,7 @@ def ecg_detect_peaks(
         "requested_peak_distance_seconds": peak_distance_seconds,
         "effective_peak_width_samples": peak_width_samples,
         "effective_peak_distance_samples": peak_distance_samples,
-        "bandpass_filter": bandpass_filter,
+        "apply_bandpass_filter": bandpass_filter,
     }
     events = [
         Event(

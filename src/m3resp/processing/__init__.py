@@ -61,7 +61,7 @@ from m3resp.processing.windows import (
 
 __all__ = [
     "ENVELOPE_METHODS",
-    "ReSurfEMG",
+    # "ReSurfEMG",
     "amplitude_at_peaks",
     "area_under_baseline",
     "bandpass_filter",
