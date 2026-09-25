@@ -1,6 +1,6 @@
 """Options added so a pipeline can reproduce the multidomain results chain:
-median envelope, merging close peaks, notch before band-pass, subtracting the
-baseline, and the wavelet step keeping the preprocessing envelope method."""
+median envelope, merging close peaks, notch before band-pass, and the wavelet
+step keeping the preprocessing envelope method."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ import pytest
 from m3resp import M3Session
 from m3resp.processing.peaks import merge_close_peaks
 from m3resp.processing.windows import rolling_envelope, rolling_rms
-from m3resp.workflows.steps.emg.baseline import subtract_baseline
 
 FS = 2000.0
 
@@ -75,27 +74,6 @@ class TestMergeClosePeaks:
         kept = merge_close_peaks([10, 20, 30], values, min_distance_samples=10)
 
         assert kept.tolist() == [10, 20, 30]
-
-
-def test_subtract_baseline_clips_at_zero_and_passes_a_zero_baseline():
-    session = M3Session()
-    processed = {"envelope": np.array([1.0, 2.0, 0.5, 3.0]), "fs": FS}
-    baseline = np.array([1.5, 1.0, 1.0, 1.0])
-
-    result = subtract_baseline(session, processed, baseline)
-
-    corrected = result["processed_emg_baseline_subtracted"]
-    np.testing.assert_array_equal(corrected["envelope"], [0.0, 1.0, 0.0, 2.0])
-    np.testing.assert_array_equal(result["baseline_subtracted"], np.zeros(4))
-    np.testing.assert_array_equal(
-        corrected["envelope_before_baseline_subtraction"], processed["envelope"]
-    )
-    assert session.processed["emg"] is corrected
-
-
-def test_subtract_baseline_refuses_a_baseline_of_another_length():
-    with pytest.raises(ValueError, match="same length"):
-        subtract_baseline(M3Session(), {"envelope": np.ones(4)}, np.ones(3))
 
 
 class TestNotchBeforeBandpass:

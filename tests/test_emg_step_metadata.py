@@ -21,7 +21,6 @@ _EMG_STEP_NAMES = [
     "emg.peak_indices",
     "emg.moving_baseline",
     "emg.slopesum_baseline",
-    "emg.subtract_baseline",
     "emg.ecg_detect_peaks",
     "emg.ecg_gating",
     "emg.ecg_wavelet_denoising",

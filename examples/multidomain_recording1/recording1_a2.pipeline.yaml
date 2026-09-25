@@ -3,7 +3,9 @@
 # (tools/visualization_tools/paper_results_v2.py, "_canonical_pipeline"),
 # with its adaptive harmonic subtraction (RLS) stage left out: A2 is recorded
 # with EIT off, so the only periodic interference left is mains hum, which the
-# fixed 50 Hz notch removes.
+# fixed 50 Hz notch removes. Its "Baseline offset correction" is also left
+# out: the baseline goes to breath detection separately and the envelope is
+# not changed.
 #
 # Recording1 ("TestPS3" on disk, see analysis/paper_2026_results/windows.py):
 #   * Biopac -- 2000 Hz, tab-delimited .txt: a time column, then
@@ -16,7 +18,7 @@
 #     session are not used.
 #
 # Expected result (the notebook's own chain on the same window): 9 breaths at
-# 146.2, 152.2, 158.2, 164.9, 171.0, 177.1, 183.5, 189.7 and 196.2 s;
+# 146.2, 152.2, 158.3, 164.9, 171.0, 177.1, 183.5, 189.7 and 196.2 s;
 # respiratory rate 9.72 breaths/min; 77 ECG peaks. Each breath comes about
 # 1.2 s before the Paw peak of the same breath; the Paw breath at 141 s has no
 # EMG breath because its burst starts before the window.
@@ -78,20 +80,13 @@ steps:
   - uses: emg.ecg_wavelet_denoising
     in: { processed_emg: processed_emg_before_ecg }
     with: { source: filtered, levels: 4, fixed_threshold: 4.5, hard_thresholding: true }
-    out: { processed_emg_after_ecg: processed_emg_ecg_removed }
+    out: { processed_emg_after_ecg: processed_emg }
 
   # Stages 3-4: moving baseline (33rd percentile over 7.5 s, updated every
-  # 0.2 s), then subtracted from the envelope and clipped at zero. The
-  # corrected envelope and a zero baseline become 'processed_emg' and
-  # 'baseline', so everything after this measures against them.
+  # 0.2 s). The envelope itself is left unchanged: breath detection,
+  # on/offset, amplitude and time product all measure against this baseline.
   - uses: emg.moving_baseline
-    in: { processed_emg: processed_emg_ecg_removed }
     with: { window_seconds: 7.5, step_seconds: 0.2, percentile: 33.0 }
-    out: { baseline: envelope_baseline }
-
-  - uses: emg.subtract_baseline
-    in: { processed_emg: processed_emg_ecg_removed, baseline: envelope_baseline }
-    out: { processed_emg_baseline_subtracted: processed_emg, baseline_subtracted: baseline }
 
   # Stage 5: breath detection. Bursts at least 0.7 s wide with prominence
   # factor 0.4; peaks closer than 0.7 s are merged into one breath (the

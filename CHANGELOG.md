@@ -59,8 +59,6 @@ change:
 - `emg.preprocess`: `notch_before_bandpass` (notch the raw signal first, as
   the multidomain results chain does) and `envelope_method: median` (median of the absolute
   signal, which ignores short spikes such as heartbeat leftovers).
-- `emg.subtract_baseline`: a new step that subtracts the baseline from the
-  envelope, clipped at zero, and passes on a zero baseline.
 - `emg.detect_breaths`: `merge_close_peaks_within_width` merges peaks closer
   than the minimum breath width, keeping the higher one.
 
