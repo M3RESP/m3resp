@@ -1,16 +1,30 @@
 name: Release
 
+# Pushing a tag like v0.2.0 builds the package and creates a GitHub release
+# with the built files attached. Nothing is uploaded to PyPI.
+#
+# The PyPI upload is kept below but only runs when this workflow is started by
+# hand (Actions tab -> Release -> Run workflow) with "publish_to_pypi" ticked.
+# Before that can work: the eit/emg/all extras must stop pointing at git links
+# (PyPI refuses those), and trusted publishing must be set up on pypi.org.
+# A PyPI version number can never be uploaded twice, even after deleting it.
+
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      publish_to_pypi:
+        description: "Upload the built package to PyPI (cannot be undone)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -28,8 +42,85 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install build
 
+      # A tag must name the version written in the package, so the release,
+      # the files and `m3resp.__version__` all agree.
+      - name: Check the tag matches the package version
+        if: github.event_name == 'push'
+        run: |
+          package_version=$(python -c "import re; print(re.search(r'__version__ = \"(.+)\"', open('src/m3resp/__init__.py').read()).group(1))")
+          if [ "${GITHUB_REF_NAME}" != "v${package_version}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match __version__ ${package_version} in src/m3resp/__init__.py."
+            exit 1
+          fi
+
       - name: Build distributions
         run: python -m build --sdist --wheel
+
+      - name: Keep the built files for the next jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  github-release:
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Get the built files
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      # Release notes are this version's section of CHANGELOG.md (from its
+      # "## <version>" heading to the next "## " heading). Versions below 1.0,
+      # and alpha/beta/release-candidate versions, are marked as pre-releases.
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v version="$version" '
+            /^## / { if (found) exit; if (index($0, "## " version) == 1) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > release_notes.md
+
+          notes_option=(--notes-file release_notes.md)
+          if [ ! -s release_notes.md ]; then
+            echo "No '## ${version}' section in CHANGELOG.md; using GitHub's generated notes."
+            notes_option=(--generate-notes)
+          fi
+
+          prerelease_option=()
+          if [[ "$version" == 0.* || "$version" =~ (a|b|rc)[0-9]+$ ]]; then
+            prerelease_option=(--prerelease)
+          fi
+
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --title "m3resp ${version}" \
+            "${notes_option[@]}" \
+            "${prerelease_option[@]}"
+
+  pypi:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_to_pypi
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Get the built files
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

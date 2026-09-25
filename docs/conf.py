@@ -37,7 +37,7 @@ autosummary_generate = True
 autodoc_typehints = "description"
 autodoc_preserve_defaults = True
 napoleon_numpy_docstring = True
-napoleon_google_docstring = False
+napoleon_google_docstring = True
 
 myst_enable_extensions = [
     "colon_fence",

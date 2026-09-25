@@ -145,19 +145,34 @@ class _CoreMixin:
         """Convert computed EMG features into `ParameterResult` objects."""
 
         features = _computed_category(postprocessed, "features")
-        return [
-            ParameterResult(
-                name=name,
-                value=_as_parameter_value(value),
-                modality="emg",
-                method=f"resurfemg.{name}",
-                metadata={
-                    "source_method": f"resurfemg.{name}",
-                    "implementation": "m3resp.processing.metrics",
-                },
+        parameters = []
+        for name, value in features.items():
+            if name == "respiratory_rate":
+                # The respiratory rate comes as a pair: the median rate and
+                # the rate of each breath. The two have different shapes, so
+                # they are saved as two separate results.
+                median_rate, breath_to_breath_rate = value
+                parameters.append(
+                    _emg_parameter(
+                        "respiratory_rate",
+                        float(median_rate),
+                        source_name=name,
+                        unit="breaths/min",
+                    )
+                )
+                parameters.append(
+                    _emg_parameter(
+                        "respiratory_rate_breath_to_breath",
+                        np.asarray(breath_to_breath_rate, dtype=float),
+                        source_name=name,
+                        unit="breaths/min",
+                    )
+                )
+                continue
+            parameters.append(
+                _emg_parameter(name, _as_parameter_value(value), source_name=name)
             )
-            for name, value in features.items()
-        ]
+        return parameters
 
     def to_quality_flags(self, postprocessed: dict[str, Any]) -> list[QualityFlag]:
         """Convert computed EMG quality-assessment results into `QualityFlag`
@@ -238,3 +253,25 @@ class _CoreMixin:
             ) from exc
 
         return getattr(module, function_name)(*args, **kwargs)
+
+
+def _emg_parameter(
+    name: str,
+    value: float | np.ndarray,
+    *,
+    source_name: str,
+    unit: str | None = None,
+) -> ParameterResult:
+    """Build one EMG `ParameterResult` from a computed feature value."""
+
+    return ParameterResult(
+        name=name,
+        value=value,
+        modality="emg",
+        unit=unit,
+        method=f"resurfemg.{source_name}",
+        metadata={
+            "source_method": f"resurfemg.{source_name}",
+            "implementation": "m3resp.processing.metrics",
+        },
+    )

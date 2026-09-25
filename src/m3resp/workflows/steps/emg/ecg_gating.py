@@ -185,7 +185,7 @@ def ecg_gating(
         gate_width_samples (int | None): Gate width in samples. Mutually exclusive with 'gate_width_seconds'.
         fill_method (int): Gate fill strategy.
         envelope_window_seconds (float | None): Envelope recomputation window on the gated signal.
-        envelope_method (str | None): {'rms', 'arv'}, envelope method for the recomputation. Defaults to the method preprocessing used.
+        envelope_method (str | None): {'rms', 'arv', 'median'}, envelope method for the recomputation. Defaults to the method preprocessing used.
 
     Returns:
         ecg_gated_emg (signal_array): Gated EMG array.

@@ -1,0 +1,113 @@
+# Diaphragm sEMG breath detection for Recording1, window A2, as in the multidomain
+# results. The settings are those of the multidomain results notebook
+# (tools/visualization_tools/paper_results_v2.py, "_canonical_pipeline"),
+# with its adaptive harmonic subtraction (RLS) stage left out: A2 is recorded
+# with EIT off, so the only periodic interference left is mains hum, which the
+# fixed 50 Hz notch removes. Its "Baseline offset correction" is also left
+# out: the baseline goes to breath detection separately and the envelope is
+# not changed.
+#
+# Recording1 ("TestPS3" on disk, see analysis/paper_2026_results/windows.py):
+#   * Biopac -- 2000 Hz, tab-delimited .txt: a time column, then
+#               CH1 = Paw (airway pressure, cmH2O), CH2 = EMGdi (diaphragm
+#               sEMG, mV), CH3 = EMGsc (scalene sEMG, mV).
+#   * Window A2 = 140-200 s on the Biopac clock: spontaneous breathing, EIT
+#     off (EIT frames stop at 105.3 s and its interference settles at
+#     119.8 s). There is no EIT data in this window, so this example is EMG
+#     only; the EIT (TestPS_M3Resp_03.bin) and FluxMed files of the same
+#     session are not used.
+#
+# Expected result (the notebook's own chain on the same window): 9 breaths at
+# 146.2, 152.2, 158.3, 164.9, 171.0, 177.1, 183.5, 189.7 and 196.2 s;
+# respiratory rate 9.72 breaths/min; 77 ECG peaks. Each breath comes about
+# 1.2 s before the Paw peak of the same breath; the Paw breath at 141 s has no
+# EMG breath because its burst starts before the window.
+#
+# Run from the repo root with:
+#   python -m m3resp run examples/multidomain_recording1/recording1_a2.pipeline.yaml
+# Paths below are relative to this file's own folder.
+
+name: multidomain_recording1_a2
+
+outputs:
+  dir: ../../output/multidomain-recording1-a2
+  timestamped: true
+  summary_json: true
+  event_csvs: true
+  parameters_csv: true
+  postprocessing: true
+  figures: true
+
+inputs:
+  emg_file: ../../data/source/Test_PS_27072026/EMG_Vent/TestPS3.txt
+
+steps:
+  - uses: emg.load
+    with: { file_path: "@emg_file" }
+
+  # Keep window A2 only. Every filter below starts at the window edge, as in
+  # the notebook, which processes only the selected window. The end is
+  # 200.0005 s because the notebook keeps the sample at exactly 200 s too
+  # (a slice keeps samples before its end time).
+  - uses: emg.slice
+    with: { start_seconds: 140.0, end_seconds: 200.0005 }
+
+  # Stage 1: 50 Hz harmonic notch (Q 30, harmonics up to 950 Hz, just below
+  # Nyquist), then band-pass 20-500 Hz. The notch goes first, as in the
+  # notebook. The envelope is the median of the absolute signal over 850 ms:
+  # the median ignores short spikes such as heartbeat leftovers.
+  - uses: emg.preprocess
+    with:
+      channel: 1
+      notch_base_frequency: 50.0
+      notch_quality_factor: 30.0
+      notch_max_frequency: 950.0
+      notch_before_bandpass: true
+      high_pass_hz: 20.0
+      low_pass_hz: 500.0
+      envelope_method: median
+      envelope_window_seconds: 0.85
+    out: { processed_emg: processed_emg_before_ecg }
+
+  # Stage 2: heartbeat (ECG) removal by wavelet denoising. R peaks are found
+  # in the band-passed EMG itself (there is no separate ECG channel) with
+  # sensitivity 0.2: the library default of 0.4 missed about one beat in six
+  # on these recordings.
+  - uses: emg.ecg_detect_peaks
+    in: { processed_emg: processed_emg_before_ecg }
+    with: { source: filtered, peak_fraction: 0.2 }
+
+  - uses: emg.ecg_wavelet_denoising
+    in: { processed_emg: processed_emg_before_ecg }
+    with: { source: filtered, levels: 4, fixed_threshold: 4.5, hard_thresholding: true }
+    out: { processed_emg_after_ecg: processed_emg }
+
+  # Stages 3-4: moving baseline (33rd percentile over 7.5 s, updated every
+  # 0.2 s). The envelope itself is left unchanged: breath detection,
+  # on/offset, amplitude and time product all measure against this baseline.
+  - uses: emg.moving_baseline
+    with: { window_seconds: 7.5, step_seconds: 0.2, percentile: 33.0 }
+
+  # Stage 5: breath detection. Bursts at least 0.7 s wide with prominence
+  # factor 0.4; peaks closer than 0.7 s are merged into one breath (the
+  # higher is kept), since one breath's flat top can give several peaks.
+  - uses: emg.detect_breaths
+    with:
+      min_breath_width_seconds: 0.7
+      prominence_factor: 0.4
+      merge_close_peaks_within_width: true
+
+  - uses: emg.peak_indices
+
+  # Breath parameters: on/offset by baseline crossing, amplitude, time
+  # product and respiratory rate.
+  - uses: emg.onoffpeak_baseline_crossing
+
+  - uses: emg.amplitude
+
+  - uses: emg.time_product
+
+  - uses: emg.respiratory_rate
+
+  # No explicit export step needed: the `outputs:` section above writes the
+  # summary, event and parameter files into a timestamped folder.
