@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-09-25)
 
 ### The standard EMG pipeline now removes ECG, band-passes 20-500 Hz, and computes an RMS envelope
 
