@@ -1,4 +1,10 @@
-"""Ventilator breath detection normalization into common `BreathEvent`s."""
+"""Turn ventilator breath detections into m3resp `BreathEvent`s.
+
+A breath detector returns either sample indices (one per breath) or objects
+that already have a start and end time. These helpers turn either kind into
+`BreathEvent`s with modality ``"ventilator"``, and read the sampling rate and
+length of a ventilator recording when they are needed to do so.
+"""
 
 from __future__ import annotations
 

@@ -50,3 +50,13 @@ class StepMetadataError(PipelineError):
 
 class UnknownPipelineError(PipelineError):
     """Raised when ``M3Session.run_pipeline`` references an unregistered name."""
+
+
+class UnsynchronizedDataWarning(UserWarning):
+    """Warned when a step compares recordings that were never placed on a
+    shared clock.
+
+    Filter it with ``warnings.simplefilter("ignore", UnsynchronizedDataWarning)``
+    - or better, call ``M3Session.synchronize_raw_modalities`` or
+    ``M3Session.skip_synchronization``.
+    """

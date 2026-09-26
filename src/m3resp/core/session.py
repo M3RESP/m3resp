@@ -10,7 +10,14 @@ import numpy as np
 
 from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
 from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
-from m3resp.adapters.ventilator_adapter import VentilatorAdapter, primary_channel
+from m3resp.adapters.ventilator_adapter import (
+    VentilatorAdapter,
+    infer_ventilator_duration,
+    infer_ventilator_fs,
+    iter_ventilator_detections,
+    normalize_ventilator_breath,
+    primary_channel,
+)
 from m3resp.core.events import BreathEvent
 from m3resp.core.exceptions import MissingModalityDataError, VariantAlreadyExistsError
 from m3resp.core.metadata import SessionMetadata
@@ -30,7 +37,7 @@ from m3resp.modalities.emg import EMGRecording
 from m3resp.modalities.emg import keep_samples as keep_emg_samples
 from m3resp.modalities.emg import load as load_emg_recording
 from m3resp.modalities.emg import sample_window as emg_sample_window
-from m3resp.modalities.names import VENTILATOR, normalize_modality
+from m3resp.modalities.names import VENTILATOR
 from m3resp.modalities.ventilator import (
     DEFAULT_VENTILATOR_NAME,
     VentilatorRecording,
@@ -45,8 +52,9 @@ from m3resp.modalities.ventilator import load as load_ventilator_recording
 from m3resp.modalities.ventilator import sample_window as ventilator_sample_window
 from m3resp.synchronization.alignment import (
     align_events_by_modality_offset,
-    normalize_offset_key,
+    breath_reference_modality,
     offsets_relative_to_reference,
+    raw_reference_modality,
     resolve_alignment_offsets,
     ventilator_start_key,
 )
@@ -60,11 +68,12 @@ from m3resp.synchronization.start_times import (
     shared_clock_shifts,
     shift_trace,
 )
-from m3resp.synchronization.ventilator import (
-    infer_ventilator_duration,
-    infer_ventilator_fs,
-    iter_ventilator_detections,
-    normalize_ventilator_breath,
+from m3resp.synchronization.sync_methods import (
+    MANUAL,
+    NONE,
+    clock_key,
+    recording_keys,
+    warn_if_not_synchronized,
 )
 
 if TYPE_CHECKING:
@@ -141,6 +150,11 @@ class M3Session:
         # recording is taken to have started at the same moment. See
         # `m3resp.synchronization.start_times`.
         self.start_times: dict[str, float] = {}
+        # How each recording was placed on the shared clock ("manual",
+        # "none", ...), keyed like `start_times`. A recording missing here was
+        # never synchronized, and steps that compare it with a recording on
+        # another clock warn. See `m3resp.synchronization.sync_methods`.
+        self.sync_methods: dict[str, str] = {}
         self.processed: dict[str, Any] = {}
         # Named alternate preprocessing results, e.g. for algorithms that
         # need the same raw recording preprocessed differently (see
@@ -188,7 +202,11 @@ class M3Session:
     def load_eit(
         self, path: str | Path, vendor: str | None = None, **kwargs: Any
     ) -> Any:
-        """Load EIT data and store it under `raw["eit"]`."""
+        """Load EIT data and store it under `raw["eit"]`.
+
+        A newly loaded recording has not been synchronized yet: any EIT start
+        time and synchronization record from before are cleared.
+        """
 
         recording = load_eit_recording(
             path,
@@ -198,15 +216,21 @@ class M3Session:
         )
         self.eit = recording
         self.raw["eit"] = recording
+        self._forget_synchronization("eit")
         self._record("load_eit", "eit", path=str(path), vendor=vendor)
         return recording.data
 
     def load_emg(self, path: str | Path, **kwargs: Any) -> Any:
-        """Load EMG data and store it under `raw["emg"]`."""
+        """Load EMG data and store it under `raw["emg"]`.
+
+        A newly loaded recording has not been synchronized yet: any EMG start
+        time and synchronization record from before are cleared.
+        """
 
         recording = load_emg_recording(path, adapter=self.emg_adapter, **kwargs)
         self.emg = recording
         self.raw["emg"] = recording
+        self._forget_synchronization("emg")
         self._record("load_emg", "emg", path=str(path))
         return recording.data
 
@@ -233,6 +257,10 @@ class M3Session:
         Preprocess a named recording with
         `preprocess_ventilator(name=...)`, which qualifies its channel keys so
         the two airway pressures stay distinct in `session.signals`.
+
+        A newly loaded standalone recording has not been synchronized yet: its
+        own start time and synchronization record from before are cleared.
+        Ventilator data from the EIT or EMG file follows that file's clock.
         """
 
         recording = load_ventilator_recording(
@@ -243,6 +271,8 @@ class M3Session:
         if key == DEFAULT_VENTILATOR_NAME or self.ventilator is None:
             self.ventilator = recording
             set_ventilator_raw(self.raw, recording)
+        if ventilator_clock(recording) == VENTILATOR:
+            self._forget_synchronization(ventilator_start_key(key))
         self._record("load_ventilator", VENTILATOR, path=str(path), name=key)
         return recording.data
 
@@ -426,7 +456,14 @@ class M3Session:
             target.flow = result.get(primary_channel(result, "flow") or "")
             target.volume = result.get(primary_channel(result, "volume") or "")
             target.fs = result.get("fs")
+        recording_name = name or primary
         for signal in self.ventilator_adapter.to_signals(result):
+            # Which loaded recording this came from, so its synchronization
+            # can be looked up later (e.g. by the data model recorder). The
+            # channel name alone cannot tell: a `__pod` suffix may mean a second
+            # recording or a pod channel inside the first one.
+            if recording_name is not None:
+                signal.metadata.setdefault("recording", recording_name)
             self.signals.add(signal)
         for parameter in self.ventilator_adapter.to_parameters(result):
             self.parameter_results.add(parameter)
@@ -483,11 +520,13 @@ class M3Session:
 
         configured_offsets = resolve_alignment_offsets(offset_seconds)
         self._check_ventilator_start_keys(configured_offsets)
-        resolved_reference = self._resolve_raw_alignment_reference(reference_modality)
+        resolved_reference = raw_reference_modality(self, reference_modality)
         offsets = offsets_relative_to_reference(configured_offsets, resolved_reference)
         self.start_times = {
             modality: float(offset) for modality, offset in offsets.items()
         }
+        for key in self._synchronizable_keys():
+            self.sync_methods[key] = MANUAL
 
         synchronized: dict[str, Any] = {}
         traces: dict[str, Any] = {}
@@ -904,8 +943,9 @@ class M3Session:
         Previously named `align_modalities`, kept below as an alias.
 
         Offsets are resolved relative to `reference_modality` (or the
-        auto-detected one - see `_resolve_alignment_reference`) before being
-        applied, so the reference modality's own events are shifted by zero and
+        auto-detected one - see
+        `m3resp.synchronization.alignment.breath_reference_modality`) before
+        being applied, so the reference modality's own events are shifted by zero and
         every other modality moves by its offset *relative to* the reference,
         matching `synchronize_raw_modalities`. `self.parameters["alignment"]`
         keeps both: `offset_seconds` (relative, what was actually applied) and
@@ -922,8 +962,8 @@ class M3Session:
 
         configured_offsets = resolve_alignment_offsets(offset_seconds)
         requested_reference = reference_modality
-        resolved_reference, fallback_reference = self._resolve_alignment_reference(
-            reference_modality
+        resolved_reference, fallback_reference = breath_reference_modality(
+            self, reference_modality
         )
         # `configured_offsets` are each modality's raw, independently-configured
         # offset. Applying those directly (as this used to) shifts every
@@ -951,6 +991,9 @@ class M3Session:
                 continue
             synchronized[name] = align_events_by_modality_offset(events, total_offsets)
             aligned_event_lists.append(name)
+        for modality, name in ALIGNMENT_EVENT_LISTS.items():
+            if name in aligned_event_lists:
+                self.sync_methods[clock_key(self, modality)] = MANUAL
 
         self.processed["synchronized"] = synchronized
         self.parameters["alignment"] = {
@@ -987,6 +1030,29 @@ class M3Session:
             method, offset_seconds, reference_modality=reference_modality
         )
 
+    def skip_synchronization(self) -> list[str]:
+        """Use the loaded recordings as they are, without synchronizing them.
+
+        For recordings that really did start at the same moment - for
+        example when one trigger started every device. Each loaded recording
+        that has not been synchronized is recorded as ``"none"`` in
+        `session.sync_methods`, so steps that compare recordings no longer
+        warn, while the choice stays visible in the provenance log and the
+        exported summary. Recordings already synchronized keep their record.
+        Breath lists added directly with `add_events`, without a loaded
+        recording, are covered too. Recordings loaded later are not.
+
+        Returns the recordings marked ``"none"``.
+        """
+
+        skipped = [
+            key for key in self._synchronizable_keys() if key not in self.sync_methods
+        ]
+        for key in skipped:
+            self.sync_methods[key] = NONE
+        self._record("skip_synchronization", parameters={"recordings": skipped})
+        return skipped
+
     def link_breaths(self, *, time_tolerance: float = 0.5) -> list[LinkedBreath]:
         """Link breaths across modalities into `LinkedBreath` objects (Milestone 2.5).
 
@@ -996,12 +1062,25 @@ class M3Session:
         not aligned there is moved onto the shared clock here, using the
         start times from `synchronize_raw_modalities`, so breaths are always
         matched on one time axis.
+
+        Warns (`UnsynchronizedDataWarning`) when the breaths come from
+        recordings on different clocks and one of them was never
+        synchronized; see `skip_synchronization`.
         """
 
         synchronized = self.processed.get("synchronized")
         if not isinstance(synchronized, dict):
             synchronized = {}
         start_time_shifts = shared_clock_shifts(self)
+        warn_if_not_synchronized(
+            self,
+            [
+                modality
+                for modality, name in ALIGNMENT_EVENT_LISTS.items()
+                if synchronized.get(name) or self.events.get(name)
+            ],
+            action="link_breaths",
+        )
 
         def _breaths(name: str) -> list[BreathEvent] | None:
             events = synchronized.get(name)
@@ -1088,6 +1167,26 @@ class M3Session:
         self._record("export_summary", parameters={"output_dir": str(output_path)})
         return output_path
 
+    def _synchronizable_keys(self) -> list[str]:
+        """The `sync_methods` keys a synchronization call covers: every loaded
+        recording with a clock of its own, plus the clock of any breath list
+        added without a loaded recording (e.g. through `add_events`)."""
+
+        keys = recording_keys(self)
+        for modality, name in ALIGNMENT_EVENT_LISTS.items():
+            if self.events.get(name):
+                key = clock_key(self, modality)
+                if key not in keys:
+                    keys.append(key)
+        return keys
+
+    def _forget_synchronization(self, key: str) -> None:
+        """Clear a recording's start time and synchronization record, for a
+        recording that was just (re)loaded."""
+
+        self.start_times.pop(key, None)
+        self.sync_methods.pop(key, None)
+
     def _require_raw(self, modality: str) -> Any:
         if modality not in self.raw:
             raise MissingModalityDataError(
@@ -1116,16 +1215,6 @@ class M3Session:
         if self.datamodel is not None:
             self.datamodel.record_provenance(provenance_record)
 
-    def _resolve_alignment_reference(
-        self,
-        reference_modality: str | None,
-    ) -> tuple[str, str | None]:
-        if reference_modality is not None:
-            return normalize_modality(reference_modality), None
-        if self.events.get("ventilator_breaths"):
-            return VENTILATOR, None
-        return "eit", "eit"
-
     def _check_ventilator_start_keys(self, offsets: Mapping[str, float]) -> None:
         """Refuse a ``"ventilator:<name>"`` start time that would be ignored:
         one for a recording that is not loaded, or for ventilator data that
@@ -1149,17 +1238,6 @@ class M3Session:
                     f"inside the {clock.upper()} file, so it always uses the "
                     f"{clock!r} start time. Give that one instead."
                 )
-
-    def _resolve_raw_alignment_reference(self, reference_modality: str | None) -> str:
-        if reference_modality is not None:
-            return normalize_offset_key(reference_modality)
-        if VENTILATOR in self.raw or "vent" in self.raw:
-            return VENTILATOR
-        if "eit" in self.raw:
-            return "eit"
-        if "emg" in self.raw:
-            return "emg"
-        return "eit"
 
     def _normalize_ventilator_breaths(
         self,

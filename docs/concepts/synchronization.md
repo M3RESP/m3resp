@@ -1,5 +1,8 @@
 # Synchronization and multimodal parameters
 
+For a one-page summary in tables, see
+[Synchronization at a glance](synchronization-overview.md).
+
 ## Plain-language overview
 
 This module's job is lining up data from different modalities (EIT/EMG/
@@ -98,6 +101,51 @@ file, is refused.
 Cutting a recording (`slice_emg`, `slice_eit`, `slice_ventilator`) moves its
 start time later by the part cut off the front, so it stays lined up with the
 other recordings. See [Cutting data to a time window](slicing.md).
+
+## Was each recording synchronized?
+
+A session is meant to hold recordings of the same stretch of real time, so
+steps that compare recordings assume they are on one clock. That only holds
+once each recording has been synchronized. `session.sync_methods` records,
+per recording, how it was placed on the shared clock:
+
+| Key | Recording |
+|---|---|
+| `"eit"`, `"emg"` | the loaded EIT and EMG recordings |
+| `"ventilator:<name>"` | each standalone ventilator recording (loaded with `source="ventilator"`) |
+
+Ventilator data that came inside the EIT or EMG file shares that file's
+clock, so it is always in step with it. The values come from the data
+model's sync vocabulary:
+
+| Value | Set by | Meaning |
+|---|---|---|
+| `"manual"` | `synchronize_raw_modalities`, `synchronize_multimodal_breaths` | a hand-entered offset |
+| `"none"` | `skip_synchronization()` | used as it is, taken to have started with the others |
+
+Steps that compare recordings on different clocks warn
+(`UnsynchronizedDataWarning`) when one of them has no record. They still
+run: the warning says their times are compared as if all recordings started
+at the same moment. The steps that check are `link_breaths` (and so the
+multimodal parameters computed from linked breaths) and
+`emg.evaluate_event_timing`. Nothing is warned when the data all comes from
+one clock, such as EMG with the airway pressure recorded in the same file.
+
+If the recordings really did start together - for example when one trigger
+started every device - say so with `session.skip_synchronization()` (the
+`sync.skip` workflow step). The warnings then stop, and the choice
+stays visible in the provenance log and in the `"synchronization"` section of
+the exported `summary.json`, next to the start times.
+
+Loading a file again gives a new recording that has not been synchronized:
+its start time and record are cleared.
+
+With a data model recorder attached (`session.datamodel`), every
+`SignalStream` carries the same information for its recording:
+`sync_method` (`"manual"`, `"none"`, or empty when never synchronized) and
+`time_offset_ms` (the recording's start time, in milliseconds). They are
+updated after every session action, so a later synchronization, skip, cut
+or reload is reflected in streams recorded earlier.
 
 ## Aligning raw signals and events
 

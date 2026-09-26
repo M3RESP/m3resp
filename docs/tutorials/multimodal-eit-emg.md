@@ -25,7 +25,9 @@ session.load_emg(f"{data_dir}/m3resp_multimodal_1_emg.Poly5")
 # it started later. No samples are removed: every recording keeps its full
 # length, and each modality's own results (breath times, signals) stay on
 # its own clock. The start times are added when breaths are compared across
-# modalities in steps 2 and 3.
+# modalities in steps 2 and 3. Skipping this step makes link_breaths warn
+# that the recordings were never synchronized; if they really did start
+# together, call session.skip_synchronization() instead.
 session.synchronize_raw_modalities(
     method="manual_offset",
     offset_seconds={"eit": 0.0, "emg": 0.0},

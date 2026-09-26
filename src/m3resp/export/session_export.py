@@ -64,6 +64,13 @@ def export_session_summary(
         "quality": _jsonable(session.quality),
         "parameters": _jsonable(parameters),
         "provenance": _jsonable(session.provenance),
+        # Where each recording sits on the shared clock, and how it got there
+        # ("manual", "none", ...). A recording missing from `sync_methods` was
+        # never synchronized.
+        "synchronization": {
+            "start_times": _jsonable(getattr(session, "start_times", {})),
+            "sync_methods": _jsonable(getattr(session, "sync_methods", {})),
+        },
     }
 
     if summary_json:

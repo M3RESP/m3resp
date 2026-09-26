@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from m3resp.core.session import M3Session
-from m3resp.synchronization.ventilator import (
+from m3resp.adapters.ventilator_adapter import (
     iter_ventilator_detections,
     normalize_ventilator_breath,
 )
+from m3resp.core.session import M3Session
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 
 from ._shared import (

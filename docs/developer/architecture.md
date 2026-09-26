@@ -153,7 +153,8 @@ src/m3resp/
 │   ├── resurfemg_adapter/              same shape, for resurfemg (split by
 │   │                                       responsibility: core/ecg/baseline/quality/defaults)
 │   └── ventilator_adapter/             same shape, for ventilator pressure/flow/volume;
-│                                           reads files through the EMG/EIT adapters above
+│                                           reads files through the EMG/EIT adapters above;
+│                                           turns breath detections into BreathEvents (_breaths.py)
 │
 ├── processing/                         Shared, modality-neutral building blocks: filters, peaks,
 │                                           windows, intervals, metrics, quality, ecg,
@@ -162,17 +163,18 @@ src/m3resp/
 ├── synchronization/                    Alignment, resampling, breath linking, multimodal
 │   │                                       parameters (Milestone 2.5, see concepts/synchronization.md)
 │   ├── alignment.py                    manual-offset + timestamp-derived offsets; resolving
-│   │                                       offset_seconds keys (incl. "ventilator:<name>")
+│   │                                       offset_seconds keys (incl. "ventilator:<name>");
+│   │                                       which recording is the reference
 │   ├── offset_estimation.py            manual-offset passthrough (no robust automatic
 │   │                                       sync method; protocol-specific estimators live in
 │   │                                       tools/visualization_tools/utils/, not in the package)
-│   ├── timebase.py                     Timebase - common time-axis representation
 │   ├── resampling.py                   resample_signal - common time base
 │   ├── linking.py                      link_breaths_by_time - nearest-neighbor breath linking
 │   ├── start_times.py                  per-recording start times on a shared clock,
 │   │                                       set by M3Session.synchronize_raw_modalities
+│   ├── sync_methods.py                 which recordings were synchronized, and how; the
+│   │                                       UnsynchronizedDataWarning check
 │   ├── raw_traces.py                   before/after traces for the raw synchronization plot
-│   ├── ventilator.py                   ventilator breath-detection normalization into BreathEvents
 │   └── multimodal_parameters.py        compute_timing_delay / compute_event_agreement /
 │                                           compute_breath_duration_difference /
 │                                           compute_multimodal_parameters
@@ -185,8 +187,8 @@ src/m3resp/
 │       │                                   (baseline/ecg_*/features/quality_*/slicing/...)
 │       ├── ventilator/                 ventilator.* steps (loading, slicing, breath and
 │       │                                   Pocc detection, quality)
-│       └── sync.py, session.py,        sync.*/session.* (cross-modality timing),
-│           metrics.py, export.py           metric.*, export.* steps
+│       └── sync.py, metrics.py,        sync.* (every synchronization step),
+│           export.py                       metric.*, export.* steps
 │
 ├── presets/                            Named, built-in Pipeline presets (Milestone 2.4) - see
 │   │                                       developer/pipeline-contracts.md; NOT the same thing as

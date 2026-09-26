@@ -6,10 +6,14 @@ from __future__ import annotations
 
 import pytest
 
+from m3resp.core.events import BreathEvent
+from m3resp.core.session import M3Session
 from m3resp.modalities.names import normalize_modality
 from m3resp.synchronization.alignment import (
+    breath_reference_modality,
     normalize_offset_key,
     offsets_relative_to_reference,
+    raw_reference_modality,
     resolve_alignment_offsets,
 )
 
@@ -53,3 +57,39 @@ class TestNormalizeOffsetKey:
 
     def test_a_recording_name_keeps_its_case(self):
         assert normalize_offset_key("VENT:Monitor") == "ventilator:Monitor"
+
+
+class TestRawReferenceModality:
+    def test_the_requested_reference_wins(self):
+        session = M3Session()
+        session.raw["emg"] = object()
+        assert raw_reference_modality(session, "Vent:Monitor") == "ventilator:Monitor"
+
+    @pytest.mark.parametrize(
+        "loaded, expected",
+        [
+            (("eit", "emg", "ventilator"), "ventilator"),
+            (("eit", "emg", "vent"), "ventilator"),
+            (("eit", "emg"), "eit"),
+            (("emg",), "emg"),
+            ((), "eit"),
+        ],
+    )
+    def test_without_a_request_the_first_loaded_one_in_order(self, loaded, expected):
+        session = M3Session()
+        for key in loaded:
+            session.raw[key] = object()
+        assert raw_reference_modality(session, None) == expected
+
+
+class TestBreathReferenceModality:
+    def test_the_requested_reference_wins(self):
+        assert breath_reference_modality(M3Session(), "EMG") == ("emg", None)
+
+    def test_ventilator_breaths_make_the_ventilator_the_reference(self):
+        session = M3Session()
+        session.add_events("ventilator_breaths", [BreathEvent("ventilator", 1.0, 2.0)])
+        assert breath_reference_modality(session, None) == ("ventilator", None)
+
+    def test_without_ventilator_breaths_it_falls_back_to_eit(self):
+        assert breath_reference_modality(M3Session(), None) == ("eit", "eit")

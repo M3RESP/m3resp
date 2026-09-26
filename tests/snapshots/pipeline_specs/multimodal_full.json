@@ -57,7 +57,7 @@
       "id": "sync_raw",
       "in": {},
       "out": {},
-      "uses": "session.sync_raw",
+      "uses": "sync.raw_modalities",
       "with": {
         "method": "manual_offset",
         "offset_seconds": {

@@ -1,5 +1,6 @@
 """Coverage for the modules backfilled with Phase 1 step metadata so far:
-``metrics``, ``session``, ``sync``, ``export`` (see plan/stage2/
+``metrics``, ``sync`` (which now also holds the former ``session`` steps),
+``export`` (see plan/stage2/
 3_pipeline_structure_implementation_plan.md, "Concrete Next Actions" item 4).
 
 These check that the declared metadata reflects the step's real behavior
@@ -17,7 +18,7 @@ from m3resp.workflows.registry import describe_step, describe_steps
 
 MIGRATED_STEPS = [
     "metric.interval_cv",
-    "session.sync_raw",
+    "sync.raw_modalities",
     "sync.estimate_offset",
     "sync.apply_estimated_offset",
     "export.scalar_file",
@@ -35,8 +36,8 @@ def test_migrated_steps_declare_parameters_or_artifacts():
         json.dumps(description.as_dict())  # must not raise, for every step
 
 
-def test_session_sync_raw_method_choices_match_supported_methods():
-    description = describe_step("session.sync_raw")
+def test_sync_raw_modalities_method_choices_match_supported_methods():
+    description = describe_step("sync.raw_modalities")
     method = next(p for p in description.parameters if p.name == "method")
     assert method.choices == ("manual_offset",)
     assert method.default == "manual_offset"
@@ -90,7 +91,7 @@ def test_export_scalar_file_and_rotarc_result_share_precision_default():
 
 
 def test_describe_steps_prefix_filters_cover_migrated_modules():
-    for prefix in ("metric.", "session.", "sync.", "export."):
+    for prefix in ("metric.", "sync.", "export."):
         names = {d.name for d in describe_steps(prefix=prefix)}
         assert names, prefix
 

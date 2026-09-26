@@ -29,7 +29,13 @@ from ._shared import (
     category="loading",
     modality="emg",
     optional_packages=_RESURFEMG,
-    session_writes=("session.raw.emg", "session.signals"),
+    session_writes=(
+        "session.raw.emg",
+        "session.signals",
+        # A new recording is not synchronized: its start time is cleared.
+        "session.start_times",
+        "session.sync_methods",
+    ),
     input_artifacts=(_SESSION_ARTIFACT,),
     parameters=(
         StepParameter(

@@ -18,7 +18,7 @@ find an offset by hand for a given recording, then hardcode the result as
 `manual_offset_seconds` in your pipeline spec (see the Annemijn example).
 
 > **Estimate vs. apply.** `M3Session.synchronize_raw_modalities`
-> (`session.sync_raw`) *applies* a known offset by setting each recording's
+> (`sync.raw_modalities`) *applies* a known offset by setting each recording's
 > start time. This module
 > *finds* the offset, for interactive/manual use only. They are complementary.
 

@@ -11,11 +11,8 @@ from m3resp.core.events import BreathEvent
 from m3resp.core.exceptions import UnsupportedWorkflowError
 from m3resp.data import ParameterResult, QualityFlag, Signal
 from m3resp.data.signals import ProcessingState
-from m3resp.synchronization.ventilator import (
-    iter_ventilator_detections,
-    normalize_ventilator_breath,
-)
 
+from ._breaths import iter_ventilator_detections, normalize_ventilator_breath
 from ._channels import CHANNEL_CATEGORIES
 from ._eit_source import DEFAULT_EIT_CHANNELS, ventilator_payload_from_sequence
 from ._loaders import registered_ventilator_loader

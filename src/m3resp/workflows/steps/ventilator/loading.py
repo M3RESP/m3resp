@@ -23,7 +23,13 @@ from ._shared import _RESURFEMG, _SESSION_ARTIFACT
     category="loading",
     modality="ventilator",
     optional_packages=_RESURFEMG,
-    session_writes=("session.raw.ventilator",),
+    session_writes=(
+        "session.raw.ventilator",
+        # A new standalone recording is not synchronized: its start time is
+        # cleared.
+        "session.start_times",
+        "session.sync_methods",
+    ),
     input_artifacts=(_SESSION_ARTIFACT,),
     parameters=(
         StepParameter(

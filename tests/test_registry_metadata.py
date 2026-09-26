@@ -324,9 +324,10 @@ _AUDITED_SESSION_STEPS = frozenset(
         "emg.snr_pseudo",
         "export.rotarc_result",
         "export.session_summary",
-        "session.sync_raw",
         "sync.apply_estimated_offset",
         "sync.estimate_offset",
+        "sync.raw_modalities",
+        "sync.skip",
         "ventilator.detect_non_consecutive_manoeuvres",
         "ventilator.load",
         "ventilator.normalize_breaths",
@@ -392,7 +393,7 @@ def test_describe_steps_filters_by_prefix():
 def test_describe_step_output_is_json_serializable():
     import json
 
-    description = describe_step("session.sync_raw")
+    description = describe_step("sync.raw_modalities")
     json.dumps(description.as_dict())  # must not raise
 
 

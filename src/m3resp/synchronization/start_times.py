@@ -38,9 +38,8 @@ import numpy as np
 
 from m3resp.modalities.names import VENTILATOR, normalize_modality
 from m3resp.modalities.ventilator import (
-    DEFAULT_VENTILATOR_NAME,
     ventilator_clock,
-    ventilator_raw,
+    ventilator_recording,
     ventilator_recordings,
 )
 from m3resp.synchronization.alignment import ventilator_start_key
@@ -63,21 +62,6 @@ def loaded_modalities(session: M3Session) -> list[str]:
     if ventilator_recordings(session):
         loaded.append(VENTILATOR)
     return loaded
-
-
-def ventilator_recording(
-    session: M3Session, name: str | None = None
-) -> tuple[Any, str]:
-    """A loaded ventilator recording and its name; the primary one when
-    `name` is None. Returns ``(None, name)`` when there is none."""
-
-    recordings = getattr(session, "ventilators", {}) or {}
-    if not recordings:
-        # A recording assigned directly to `session.raw["vent"]` has no name.
-        return ventilator_raw(session), name or DEFAULT_VENTILATOR_NAME
-    if name is None:
-        name = session.primary_ventilator_name() or DEFAULT_VENTILATOR_NAME
-    return recordings.get(name), name
 
 
 def recording_start_time(

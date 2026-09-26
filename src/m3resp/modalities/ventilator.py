@@ -181,6 +181,21 @@ def ventilator_recordings(session: M3Session) -> list[Any]:
     return [recording] if recording is not None else []
 
 
+def ventilator_recording(
+    session: M3Session, name: str | None = None
+) -> tuple[Any, str]:
+    """A loaded ventilator recording and its name; the primary one when
+    `name` is None. Returns ``(None, name)`` when there is none."""
+
+    recordings = getattr(session, "ventilators", {}) or {}
+    if not recordings:
+        # A recording assigned directly to `session.raw["vent"]` has no name.
+        return ventilator_raw(session), name or DEFAULT_VENTILATOR_NAME
+    if name is None:
+        name = session.primary_ventilator_name() or DEFAULT_VENTILATOR_NAME
+    return recordings.get(name), name
+
+
 def sample_window(
     recording: Any, start_seconds: float, end_seconds: float | None, *, name: str
 ) -> TimeWindow:

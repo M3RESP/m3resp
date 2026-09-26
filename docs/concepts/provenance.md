@@ -116,6 +116,10 @@ cardinality from `session.processing_history`: one `ProcessingRun` per
 pipeline run and one per session method call, vs. one `ProcessingStep` per
 step inside a pipeline.
 
+Each `SignalStream` also records how its recording was synchronized
+(`sync_method`, `time_offset_ms`), copied from the session; see
+[synchronization.md](synchronization.md).
+
 ```python
 from m3resp.datamodel.recorder import DataModelRecorder
 

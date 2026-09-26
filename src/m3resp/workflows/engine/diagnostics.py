@@ -32,7 +32,7 @@ def _is_number(value: Any) -> bool:
 def _is_number_or_mapping_of_numbers(value: Any) -> bool:
     """A ``number`` parameter also accepts a ``{key: number}`` mapping - the
     recurring "single value, or a per-key override" pattern (e.g.
-    ``session.sync_raw``'s ``offset_seconds``: one offset, or one per
+    ``sync.raw_modalities``'s ``offset_seconds``: one offset, or one per
     modality)."""
 
     if isinstance(value, dict):

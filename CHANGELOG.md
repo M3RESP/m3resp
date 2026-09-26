@@ -2,6 +2,72 @@
 
 ## Unreleased
 
+### Synchronization code and steps tidied up; `Timebase` removed
+
+Every synchronization step is now a `sync.*` step, in one file
+(`m3resp.workflows.steps.sync`):
+
+| Before | Now |
+|---|---|
+| `session.sync_raw` | `sync.raw_modalities` |
+| - | `sync.skip` (new, see #115 below) |
+
+The old name still works in specs, so existing YAML files run unchanged; only
+the new name is listed by `m3resp steps` and the step catalogue. The example
+specs use the new name. The Python module `m3resp.workflows.steps.session` is
+gone; the step functions are now `raw_modalities` and `skip` in
+`m3resp.workflows.steps.sync`.
+
+`m3resp.synchronization.ventilator` was not about synchronization: it turns
+ventilator breath detections into `BreathEvent`s. It moved to the ventilator
+adapter. For code that imported from it:
+
+| Was in `m3resp.synchronization.ventilator` | Now in |
+|---|---|
+| `iter_ventilator_detections`, `normalize_ventilator_breath` | `m3resp.adapters.ventilator_adapter` (still importable from `m3resp.synchronization`) |
+| `infer_ventilator_fs`, `infer_ventilator_duration` | `m3resp.adapters.ventilator_adapter` |
+
+Two smaller moves, with no change in behavior: the rules for which recording
+is the reference when `reference_modality` is not given moved out of
+`M3Session` into `m3resp.synchronization.alignment`
+(`raw_reference_modality`, `breath_reference_modality`), and
+`ventilator_recording` moved from `m3resp.synchronization.start_times` to
+`m3resp.modalities.ventilator`, beside the other ventilator lookups.
+
+`m3resp.synchronization.Timebase` was removed. Nothing used it: a signal's
+own time axis, `TimeWindow` and the per-recording start times now do its job.
+
+### Warn when recordings that were never synchronized are compared (#115)
+
+A session is meant to hold recordings of the same stretch of real time, but
+nothing checked that the recordings had been synchronized. Now:
+
+- `session.sync_methods` records, per recording (`"eit"`, `"emg"`,
+  `"ventilator:<name>"` for each standalone ventilator recording), how it was
+  placed on the shared clock, using the data model's vocabulary: `"manual"`
+  (`synchronize_raw_modalities`, `synchronize_multimodal_breaths`) or `"none"`.
+- `session.skip_synchronization()` (workflow step `sync.skip`) is for
+  recordings that really did start together: it records `"none"`.
+- `link_breaths` and `emg.evaluate_event_timing` warn with
+  `UnsynchronizedDataWarning` when they compare recordings on different
+  clocks and one of them has no record. They do not stop. Data from one clock
+  (EMG with airway pressure from the same file) never warns.
+- **Fix:** `emg.evaluate_event_timing` now compares EMG and ventilator times
+  on the shared clock. Since start times replaced cutting (#118), a
+  standalone ventilator recording with a start time was compared on the
+  wrong clock. Ventilator data from the EMG file gives the same results as
+  before.
+- Loading a file again clears that recording's start time and record: it is a
+  new recording, back at full length, so an earlier start time (for example
+  one moved by slicing) no longer applies.
+- `summary.json` has a new `"synchronization"` section with the start times
+  and the sync methods.
+- With a data model recorder attached, `SignalStream.sync_method` and
+  `SignalStream.time_offset_ms` (the start time in milliseconds) are now
+  filled from the session, and updated after every session action. Ventilator
+  signals from `preprocess_ventilator` carry the name of their recording in
+  `metadata["recording"]`, so each stream is matched to the right recording.
+
 ### Cutting code moved to where it belongs; `m3resp.synchronization.cropping` removed
 
 Synchronization no longer cuts recordings (see "Raw synchronization sets a

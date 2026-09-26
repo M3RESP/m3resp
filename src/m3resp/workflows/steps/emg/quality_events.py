@@ -8,6 +8,10 @@ import numpy as np
 
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult, QualityFlag
+from m3resp.modalities.names import VENTILATOR
+from m3resp.modalities.ventilator import ventilator_recordings
+from m3resp.synchronization.start_times import shared_clock_shift
+from m3resp.synchronization.sync_methods import warn_if_not_synchronized
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 
 from ._shared import (
@@ -183,10 +187,11 @@ def evaluate_bell_curve_error(
         "evaluate_event_timing_unmatched_count",
     ),
     summary="Score the timing agreement between EMG and ventilator breaths.",
-    description="Pair EMG and ventilator breaths index-by-index and score their timing agreement. Any unpaired breaths at the end (from unequal counts) are reported as a separate warning flag, not silently dropped.",
+    description="Pair EMG and ventilator breaths index-by-index and score their timing agreement, comparing their times on the shared clock (each recording's start time is added). Any unpaired breaths at the end (from unequal counts) are reported as a separate warning flag, not silently dropped. Warns when a standalone ventilator recording and the EMG were never synchronized.",
     category="quality",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_reads=("session.start_times", "session.sync_methods"),
     session_writes=("session.quality", "session.parameter_results"),
     parameters_reviewed=True,
     input_artifacts=(
@@ -253,9 +258,18 @@ def evaluate_event_timing(
     unmatched_count = abs(len(peak_indices) - len(ventilator_breath_indices))
     paired_emg_peaks = peak_indices[:paired_count]
     paired_vent_peaks = ventilator_breath_indices[:paired_count]
+    # Each sample index counts from its own recording's first sample; adding
+    # the recording's start time puts both on the shared clock. For airway
+    # pressure recorded in the EMG file the two shifts are equal.
+    if ventilator_recordings(session):
+        warn_if_not_synchronized(
+            session, ["emg", VENTILATOR], action="emg.evaluate_event_timing"
+        )
+    emg_shift = shared_clock_shift(session, "emg")
+    ventilator_shift = shared_clock_shift(session, VENTILATOR)
     result = session.emg_adapter.evaluate_event_timing(
-        paired_emg_peaks / fs,
-        paired_vent_peaks / vent_fs,
+        paired_emg_peaks / fs + emg_shift,
+        paired_vent_peaks / vent_fs + ventilator_shift,
     )
     correct_timing, delta_time = result
 

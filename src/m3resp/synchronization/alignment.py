@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from typing import Any, overload
+from typing import TYPE_CHECKING, Any, overload
 
 from m3resp.core.events import BreathEvent, Event
 from m3resp.modalities.names import VENTILATOR, normalize_modality
+
+if TYPE_CHECKING:
+    from m3resp.core.session import M3Session
 
 
 @overload
@@ -173,3 +176,43 @@ def offsets_relative_to_reference(
         normalize_offset_key(modality): float(offset) - reference_offset
         for modality, offset in offsets.items()
     }
+
+
+def raw_reference_modality(session: M3Session, reference_modality: str | None) -> str:
+    """The recording `M3Session.synchronize_raw_modalities` keeps at start
+    time 0; every other start time is relative to it.
+
+    The one asked for when `reference_modality` is given (a modality, or
+    ``"ventilator:<name>"``). Otherwise the ventilator if one is loaded, then
+    EIT, then EMG; EIT when nothing is loaded.
+    """
+
+    if reference_modality is not None:
+        return normalize_offset_key(reference_modality)
+    if VENTILATOR in session.raw or "vent" in session.raw:
+        return VENTILATOR
+    if "eit" in session.raw:
+        return "eit"
+    if "emg" in session.raw:
+        return "emg"
+    return "eit"
+
+
+def breath_reference_modality(
+    session: M3Session, reference_modality: str | None
+) -> tuple[str, str | None]:
+    """The modality whose breaths `M3Session.synchronize_multimodal_breaths`
+    does not move by an extra offset; every other offset is relative to it.
+
+    The one asked for when `reference_modality` is given. Otherwise the
+    ventilator if there are ventilator breaths, and EIT when there are none.
+
+    Returns ``(reference, fallback)``. `fallback` is ``"eit"`` when EIT was
+    picked only because there were no ventilator breaths, and None otherwise.
+    """
+
+    if reference_modality is not None:
+        return normalize_modality(reference_modality), None
+    if session.events.get("ventilator_breaths"):
+        return VENTILATOR, None
+    return "eit", "eit"

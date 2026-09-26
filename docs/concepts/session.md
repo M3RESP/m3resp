@@ -65,6 +65,8 @@ happens underneath it without anything downstream needing to change.
 | `session.parameter_results` | `preprocess_eit`/`postprocess_emg`/`compute_multimodal_parameters` | [`ParameterResult`](parameters.md) |
 | `session.quality` | `preprocess_eit`/`postprocess_emg` | [`QualityFlag`](quality.md) |
 | `session.linked_breaths` | `session.link_breaths()` | [`LinkedBreath`](synchronization.md) |
+| `session.start_times` | `synchronize_raw_modalities`, the `slice_*` methods | each recording's start time on the shared clock, in seconds; see [synchronization.md](synchronization.md) |
+| `session.sync_methods` | `synchronize_raw_modalities`, `synchronize_multimodal_breaths`, `skip_synchronization` | how each recording was synchronized (`"manual"`, `"none"`); see [synchronization.md](synchronization.md) |
 | `session.provenance` | every instrumented session method | [`ProvenanceRecord`](provenance.md) |
 | `session.processing_history` | every step run through `m3resp.workflows` | [`ProcessingStep`](provenance.md) |
 | `session.datamodel` | opt-in: `session.datamodel = DataModelRecorder(session)` | Layer 2 entities, see [provenance.md](provenance.md) |
@@ -136,6 +138,7 @@ as before.
 | `slice_ventilator(start_seconds, end_seconds=None)` | Keep only a time window of every standalone ventilator recording (loaded with `source="ventilator"`); run before `preprocess_ventilator`. |
 | `slice_eit(start_seconds, end_seconds=None)` | Keep only a time window of the loaded EIT recording (and any ventilator data from the same file); run before `preprocess_eit`. |
 | `synchronize_raw_modalities(...)` | Set each recording's start time on a shared clock (`session.start_times`); no samples are removed. |
+| `skip_synchronization()` | Use the recordings as they are, taken to have started together; records `"none"` so steps that compare recordings do not warn. |
 | `detect_eit_breaths(variant=None, **kwargs)` | Detect EIT breaths -> `session.events["eit_breaths"]`. |
 | `detect_emg_breaths(variant=None, **kwargs)` | Detect EMG breaths -> `session.events["emg_breaths"]`. |
 | `detect_ventilator_breaths(variant=None, **kwargs)` | Detect ventilator breaths -> `session.events["ventilator_breaths"]`. |

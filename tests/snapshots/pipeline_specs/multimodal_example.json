@@ -54,10 +54,10 @@
       }
     },
     {
-      "id": "step_003_session_sync_raw",
+      "id": "step_003_sync_raw_modalities",
       "in": {},
       "out": {},
-      "uses": "session.sync_raw",
+      "uses": "sync.raw_modalities",
       "with": {
         "method": "manual_offset",
         "offset_seconds": {

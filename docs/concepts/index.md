@@ -13,6 +13,7 @@ events-and-breaths
 parameters
 quality
 synchronization
+synchronization-overview
 slicing
 provenance
 ```

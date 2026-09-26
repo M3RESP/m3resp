@@ -163,6 +163,7 @@ class TestStartTimesMoveBreathsWhenLinking:
         session.emg = _emg()
         session.add_events("eit_breaths", [_breath("eit", 36530.5)])
         session.add_events("emg_breaths", [_breath("emg", 2.0)])
+        session.skip_synchronization()
 
         assert own_first_time(session, "eit") == 36528.5
         assert _linked_modalities(session) == [{"eit", "emg"}]

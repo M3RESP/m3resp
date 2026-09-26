@@ -13,15 +13,16 @@ from __future__ import annotations
 
 import numpy as np
 
+from m3resp.adapters.ventilator_adapter import normalize_ventilator_breath
 from m3resp.core.events import BreathEvent
 from m3resp.core.session import M3Session, set_ventilator_raw
 from m3resp.modalities.names import VENTILATOR, normalize_modality
 from m3resp.modalities.ventilator import keep_samples, ventilator_raw
 from m3resp.synchronization.alignment import (
     align_events_by_modality_offset,
+    raw_reference_modality,
     resolve_alignment_offsets,
 )
-from m3resp.synchronization.ventilator import normalize_ventilator_breath
 
 
 def _recording(n_samples: int = 100, fs: float = 10.0) -> dict:
@@ -107,4 +108,4 @@ class TestLegacyAliasStillWorks:
     def test_alignment_reference_is_found_from_a_legacy_raw_key(self):
         session = M3Session()
         session.raw["vent"] = _recording()
-        assert session._resolve_raw_alignment_reference(None) == VENTILATOR
+        assert raw_reference_modality(session, None) == VENTILATOR
