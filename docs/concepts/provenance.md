@@ -127,11 +127,16 @@ session.datamodel = DataModelRecorder(session)
 # ... run pipelines/session methods as usual ...
 
 from m3resp import export_store, validate_store
-export_store(session.datamodel.store, "results/datamodel/")
-validate_store(session.datamodel.store)   # reference checks only, by default
+validate_store(session.datamodel.store)   # a list of problems; empty when none
+export_store(session.datamodel.store, "results/datamodel/")  # checks first
 ```
 
-`validate_store(store, require_complete=True)` additionally checks that each
+`export_store` runs the same checks before writing. If one fails it writes
+nothing and raises `DataModelValidationError`, listing every problem; pass
+`validate=False` to write the store anyway.
+
+`validate_store(store, require_complete=True)` (and
+`export_store(store, path, require_complete=True)`) additionally checks that each
 record carries the descriptive fields the full data model expects (units,
 sampling rate, start time, file checksums) - useful before saving a
 finished dataset, but a store recorded while a session is still running

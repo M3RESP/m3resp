@@ -10,7 +10,9 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from m3resp.core.exceptions import DataModelValidationError
 from m3resp.datamodel.store import DataModelStore
+from m3resp.datamodel.validation import validate_store
 from m3resp.workflows.utils import write_json
 
 #: Table name -> attribute on DataModelStore, in the order the doc lists them.
@@ -31,8 +33,36 @@ _TABLES = (
 )
 
 
-def export_store(store: DataModelStore, out_dir: str | Path) -> dict[str, Path]:
-    """Write one JSON file per table to ``out_dir``. Returns table -> path."""
+def export_store(
+    store: DataModelStore,
+    out_dir: str | Path,
+    *,
+    validate: bool = True,
+    require_complete: bool = False,
+) -> dict[str, Path]:
+    """Write one JSON file per table to ``out_dir``. Returns table -> path.
+
+    The store is checked first with `validate_store`. When a check fails,
+    nothing is written - not even ``out_dir`` - and
+    `DataModelValidationError` is raised, listing every problem.
+
+    By default only the reference checks run (every record points at records
+    that exist, and no time window ends before it starts), which a store
+    recorded from a session passes. ``require_complete=True`` also runs the
+    completeness checks (units, sampling rate, start time, file checksums),
+    for a finished dataset. ``validate=False`` skips the checks and writes the
+    store as it is.
+    """
+
+    if validate:
+        problems = validate_store(store, require_complete=require_complete)
+        if problems:
+            raise DataModelValidationError(problems)
+    elif require_complete:
+        raise ValueError(
+            "require_complete=True has no effect with validate=False: the "
+            "completeness checks are part of the validation. Drop one of them."
+        )
 
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)

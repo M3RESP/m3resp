@@ -41,7 +41,8 @@ foreign keys, meaning it verifies that if one record refers to another
 record by ID, that other record actually exists). This layer supports two
 extra operations the runtime objects do not have: `validate_store()`
 (checks the data is complete and internally consistent) and
-`export_store()` (writes everything out, one JSON file per table).
+`export_store()` (writes everything out, one JSON file per table, after
+running `validate_store()`; a store that fails is not written).
 
 ### How you move from Layer 1 to Layer 2
 
@@ -145,7 +146,8 @@ src/m3resp/
 │   ├── store.py                        DataModelStore (in-memory, FK-checked tables)
 │   ├── recorder.py                     DataModelRecorder - the Layer 1 -> Layer 2 boundary
 │   ├── validation.py                   validate_store() - reference + completeness checks (doc Sec 10)
-│   └── export.py                       export_store() - one JSON file per table
+│   └── export.py                       export_store() - checks the store, then one JSON
+│                                           file per table
 │
 ├── adapters/                           Conversion boundary to the legacy packages - see adapters.md
 │   ├── eitprocessing_adapter/          load/preprocess + to_signals/to_parameters/

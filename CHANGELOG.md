@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### `export_store` checks the data model store before writing it (#75)
+
+`validate_store` had to be called separately, and it only returned a list of
+problems, so a store whose records did not link up could be saved without
+anyone noticing. `export_store` now runs the same checks first. If one fails,
+**nothing is written** (not even the output folder) and a
+`DataModelValidationError` lists every problem (also in its `problems`
+attribute).
+
+| Call | What it does |
+|---|---|
+| `export_store(store, path)` | Checks that every record points at records that exist and that no time window ends before it starts, then writes |
+| `export_store(store, path, require_complete=True)` | Also checks that every record has the details a finished dataset needs (units, sampling rate, start time, file checksums) |
+| `export_store(store, path, validate=False)` | Writes without checking, as before |
+
+A store recorded from a session passes the default checks, so existing
+exports keep working; all the example workflows were checked. Passing
+`require_complete=True` together with `validate=False` raises an error
+instead of being ignored.
+
 ### Synchronization code and steps tidied up; `Timebase` removed
 
 Every synchronization step is now a `sync.*` step, in one file

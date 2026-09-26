@@ -57,14 +57,27 @@ If `session.datamodel = DataModelRecorder(session)` was attached (see
 separately - it is not part of `export_summary`:
 
 ```python
-from m3resp import export_store, validate_store
+from m3resp import export_store
 
-validate_store(session.datamodel.store)
 export_store(session.datamodel.store, "results/datamodel/")
 ```
 
 `export_store` writes one JSON file per entity table (`cases.json`,
 `sessions.json`, `processing_runs.json`, ...).
+
+It checks the store first (`validate_store`): every record must point at
+records that exist, and no time window may end before it starts. If a check
+fails, **nothing is written** and a `DataModelValidationError` lists every
+problem:
+
+| Option | What it does |
+|---|---|
+| `export_store(store, path)` | Checks that the records link up, then writes. A store recorded from a session passes. |
+| `export_store(store, path, require_complete=True)` | Also checks that every record has the details a finished dataset needs (units, sampling rate, start time, file checksums). A store recorded from a session usually does not pass this yet. |
+| `export_store(store, path, validate=False)` | Writes without checking. |
+
+To see the problems without exporting, call `validate_store(store)`; it
+returns them as a list.
 
 ## Declarative pipelines
 

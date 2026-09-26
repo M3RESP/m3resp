@@ -52,6 +52,23 @@ class UnknownPipelineError(PipelineError):
     """Raised when ``M3Session.run_pipeline`` references an unregistered name."""
 
 
+class DataModelValidationError(M3RespError):
+    """Raised by ``export_store`` when the data model store fails its checks,
+    so nothing is written. ``problems`` lists every problem found, in the
+    words of ``validate_store``."""
+
+    def __init__(self, problems: list[str]) -> None:
+        self.problems = list(problems)
+        count = len(self.problems)
+        noun = "problem" if count == 1 else "problems"
+        listed = "\n".join(f"  - {problem}" for problem in self.problems)
+        super().__init__(
+            f"The data model store has {count} {noun}, so nothing was written:\n"
+            f"{listed}\n"
+            "Fix them, or pass validate=False to export_store to save anyway."
+        )
+
+
 class UnsynchronizedDataWarning(UserWarning):
     """Warned when a step compares recordings that were never placed on a
     shared clock.
