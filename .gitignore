@@ -2,6 +2,7 @@ data/*
 output/*
 plan/*
 .venv/*
+.venv*/*
 .conda/*
 *.lock
 **/__pycache__
