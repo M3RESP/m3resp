@@ -72,9 +72,9 @@ cut one of them without moving the others.
   data read from an EIT file that is the time of day stored in the file (a
   Draeger file can start at 36528.6 s), not seconds from the start. The
   recording steps (#1-#3) always use seconds from the start.
-- **Frames are chosen by their time stamps** in `slice_eit`. Draeger time
-  stamps are not perfectly even, so 100 s can hold a few frames more or fewer
-  than 100 s times the sampling rate.
+- **Frames are chosen by their time stamps** in `slice_eit`. Device time
+  stamps can sometimes be not perfectly even, so 100 s can hold a slightly
+  different number of frames than frame rate * 100 s.
 - **Signals added when loading keep the full recording.** Cutting a recording
   does not shorten signals already stored in `session.signals`.
 - **Old step names still work.** `emg.slice` is now `emg.slice_recording`, and
