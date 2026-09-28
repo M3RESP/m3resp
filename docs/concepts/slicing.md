@@ -31,7 +31,7 @@ The step names follow this: `*.slice_recording` cuts a recording, and
 ## All the ways to cut
 
 | # | How you call it | What it cuts | Times given as | Keeps recordings lined up? | Done by |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | 1 | `session.slice_emg(start, end)`<br>step `emg.slice_recording` | The whole loaded EMG recording, plus ventilator channels from the same file (e.g. airway pressure on a Biopac export) | Seconds from the first sample | Yes: the EMG start time moves later | m3resp |
 | 2 | `session.slice_eit(start, end)`<br>step `eit.slice_recording` | The whole loaded EIT recording (pixel data, global impedance, pressure/flow channels, markers), plus ventilator data loaded from the same `.bin` file | Seconds from the first frame | Yes: the EIT start time moves later | eitprocessing (`Sequence.select_by_index`) |
 | 3 | `session.slice_ventilator(start, end, name=None)`<br>step `ventilator.slice_recording` | Standalone ventilator recordings (loaded with `source="ventilator"`): the one named, or all of them | Seconds from the first sample | Yes: each cut recording's start time moves later | m3resp |
@@ -50,7 +50,7 @@ Ventilator data can come from several files, and the file it came in
 decides its clock and so its slicing strategy.
 
 | Ventilator data came from... | Cut it with |
-|---|---|
+| --- | --- |
 | the EMG file (e.g. airway pressure on a Biopac export) | #1 `emg.slice_recording`, together with the EMG |
 | the EIT `.bin` file | #2 `eit.slice_recording`, together with the EIT |
 | its own file (loaded with `source="ventilator"`) | #3 `ventilator.slice_recording` |
@@ -72,20 +72,15 @@ cut one of them without moving the others.
   `session.signals` would keep the full length.
 - **Cut samples are gone** from the loaded recording. Reload the file to get
   them back.
-- **In a workflow, the steps after a cut read the cut part.**
-  `eit.slice_recording` gives the cut recording under the names `eit.load`
-  uses (`raw_eit`, `raw_global_impedance`, `eit_sequence` and the two raw
-  signals), and `emg.slice_recording` under the names `emg.load` uses
-  (`emg_recording`, `raw_emg_signals`). The raw signals of the cut recording
-  replace the uncut ones in `session.signals`.
-- **Time mode of `eit.slice_signal` uses the signal's own time values.**
-  Data read from an EIT file can include timestamps as time of the day,
-  rather than seconds from the start: a Draeger file, for example, can start
-  at 36528.6 s. The `slice_recording` steps (#1-#3), on the other hand,
-  always use seconds from the start.
+- **Time mode of `eit.slice_signal` uses the signal's own time values.** For
+  data read from an EIT file that is the time of day stored in the file (a
+  Draeger file can start at 36528.6 s), not seconds from the start. The
+  recording steps (#1-#3) always use seconds from the start.
 - **Frames are chosen by their time stamps** in `slice_eit`. Device time
   stamps can sometimes be not perfectly even, so 100 s can hold a slightly
   different number of frames than frame rate * 100 s.
+- **Signals added when loading keep the full recording.** Cutting a recording
+  does not shorten signals already stored in `session.signals`.
 - **Old step names still work.** `emg.slice` is now `emg.slice_recording`, and
   `eit.slice` is now `eit.slice_signal`. Specs using the old names run
   unchanged.
@@ -136,7 +131,7 @@ Cut one signal for a detection window, leaving the recording whole:
 ## Where the code lives
 
 | What | File |
-|---|---|
+| --- | --- |
 | Session methods `slice_emg`, `slice_eit`, `slice_ventilator`: what is cut together, start times, provenance record | `src/m3resp/core/session.py` |
 | Cutting one recording: turning start/end times into sample numbers, and keeping those samples | `src/m3resp/modalities/emg.py`, `eit.py`, `ventilator.py` (`sample_window` / `frame_window`, `keep_samples` / `keep_frames`), with `TimeWindow` in `modalities/time_window.py` |
 | The eitprocessing call that cuts EIT data | `src/m3resp/adapters/eitprocessing_adapter/__init__.py` (`EITProcessingAdapter.slice_sequence`) |
