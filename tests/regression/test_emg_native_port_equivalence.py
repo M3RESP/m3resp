@@ -37,7 +37,7 @@ import pytest
 pytest.importorskip("resurfemg")
 pytest.importorskip("pywt")
 
-from m3resp.adapters.resurfemg_adapter import ReSurfEMG as ReSurfEMGAdapter
+from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
 from m3resp.adapters.resurfemg_adapter import _signals as adapter_signals
 from m3resp.core.events import BreathEvent
 from m3resp.emg import ReSurfEMG as ReSurfEMGNative
