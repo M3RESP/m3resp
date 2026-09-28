@@ -43,6 +43,7 @@ class _LoaderMixin:
 
         Raises:
             TypeError: If file_path is not a str.
+            FileNotFoundError: If the file does not exist.
         """
         if not isinstance(file_path, str):
             msg = "file_path should be a str."
