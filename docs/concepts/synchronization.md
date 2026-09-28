@@ -24,7 +24,9 @@ compared on one shared time axis. Key pieces:
 - `resample_signal(...)` is a standalone utility that changes a signal's
   sampling rate to match another signal's, for the cases where you need two
   signals on one shared sample grid (e.g. a sample-by-sample comparison).
-  It's not part of the alignment pipeline above and isn't called
+  It uses linear interpolation between the original samples and applies no
+  anti-aliasing filter, so low-pass filter the signal before lowering its
+  sampling rate. It's not part of the alignment pipeline above and isn't called
   automatically: breath linking and the multimodal parameter calculations
   below work on real-world timestamps (`BreathEvent.start_time`/`end_time`/
   `peak_time`), not sample indices, so most analysis stays at each
