@@ -47,6 +47,9 @@ class _LoaderMixin:
         if not isinstance(file_path, str):
             msg = "file_path should be a str."
             raise TypeError(msg)
+        if not Path(file_path).exists():
+            msg = f"File {file_path} does not exist."
+            raise FileNotFoundError(msg)
         if self._loader is not None:
             return self._loader(file_path, **kwargs)
         file_extension = Path(file_path).name.split(".")[-1].lower()
