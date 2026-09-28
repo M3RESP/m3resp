@@ -7,7 +7,7 @@
     "timepoint": null
   },
   "inputs": {
-    "emg_file": "../../data/source/Test_PS_27072026/EMG_Vent/TestPS3.txt"
+    "emg_file": "../../tests/data/TestPS3.txt"
   },
   "name": "multidomain_recording1_a2",
   "outputs": {

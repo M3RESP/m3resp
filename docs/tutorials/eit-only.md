@@ -17,7 +17,7 @@ from m3resp import M3Session
 session = M3Session()
 
 session.load_eit(
-    "data/source/synthetic/20260610_153009/m3resp_multimodal_1_eit_draeger.bin",
+    "tests/data/m3resp_multimodal_1_eit_draeger.bin",
     vendor="draeger",
 )
 
