@@ -89,6 +89,7 @@ the EIT or EMG file uses that modality's start time.
 
 Standalone ventilator recordings (loaded with `source="ventilator"`) share
 the `"ventilator"` start time. When two of them started at different moments
+
 - a ventilator export and a separate monitor export, say - give one its own
 start time with `"ventilator:<name>"`, the name it was loaded under:
 
@@ -116,7 +117,7 @@ steps that compare recordings assume they are on one shared clock. That assumpti
 `session.sync_methods` records how each recording was placed on the shared clock:
 
 | Key | Recording |
-|---|---|
+| --- | --- |
 | `"eit"`, `"emg"` | the loaded EIT and EMG recordings |
 | `"ventilator:<name>"` | each standalone ventilator recording (loaded with `source="ventilator"`) |
 
@@ -125,7 +126,7 @@ clock, so it is always in step with it. The values come from the data
 model's sync vocabulary:
 
 | Value | Set by | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `"manual"` | `synchronize_raw_modalities`, `synchronize_multimodal_breaths` | a hand-entered offset |
 | `"none"` | `skip_synchronization()` | used as it is, taken to have started with the others |
 
