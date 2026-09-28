@@ -72,7 +72,9 @@ function eitOverviewAt(t){
 
 function sliceLanes(){
   const lanes=[{mod:'eit', label:'EIT · global impedance (real)', color:'var(--eit)', fn:eitOverviewAt}];
-  lanes.push({mod:'emg', label:'EMGdi', color:'var(--emg)', fn:(t,i)=>emgRawAt(t,i)});
+  EMG_CHANNELS.filter(c=>c.on).forEach(c=>{
+    lanes.push({mod:'emg', label:'EMG · '+c.name, color:c.color, fn:c.fn});
+  });
   VENT_CHANNELS.filter(c=>c.on).forEach(c=>{
     lanes.push({mod:'vent', label:'Ventilator · '+c.name, color:c.color, fn:t=>c.fn(ventPhase(t))});
   });

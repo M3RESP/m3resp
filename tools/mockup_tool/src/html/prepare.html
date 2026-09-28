@@ -137,7 +137,40 @@
       </div>
     </div>
     <div class="card-body">
-      <div class="zoom-toolbar" data-zoom-toolbar="emg">
+      <div class="vent-toolbar">
+        <span class="vent-toolbar-label">Signals</span>
+        <div class="vent-checks" id="emgChecks"></div>
+      </div>
+
+      <div class="emg-add" id="emgAdd">
+        <span class="vent-toolbar-label">Add EMG signal</span>
+        <div class="field"><label>Muscle</label>
+          <select id="emgAddMuscle">
+            <option value="di">EMGdi — diaphragm</option>
+            <option value="para">EMGpara — parasternal</option>
+            <option value="scm">EMGscm — sternocleidomastoid</option>
+            <option value="scal">EMGscal — scalene</option>
+            <option value="abd">EMGabd — abdominal</option>
+            <option value="alae">EMGan — alae nasi</option>
+          </select>
+        </div>
+        <div class="field"><label>Side</label>
+          <select id="emgAddSide">
+            <option value="">—</option>
+            <option value="L">left</option>
+            <option value="R">right</option>
+          </select>
+        </div>
+        <div class="field"><label>Source channel</label>
+          <select id="emgAddChannel">
+            <option>ch 0</option><option>ch 1</option><option selected>ch 2</option><option>ch 3</option>
+            <option>ch 4</option><option>ch 5</option><option>ch 6</option><option>ch 7</option>
+          </select>
+        </div>
+        <button class="zoom-btn emg-add-btn" id="emgAddBtn">+ Add signal</button>
+      </div>
+
+      <div class="zoom-toolbar" data-zoom-toolbar="emg" style="margin-top:12px;">
         <span class="vent-toolbar-label">View</span>
         <button class="zoom-btn" data-z="out">− Zoom out</button>
         <button class="zoom-btn" data-z="in">+ Zoom in</button>
@@ -147,10 +180,10 @@
         <span class="hint" style="font-size:11px;color:var(--text-faint);">drag to select a range · Ctrl-scroll to zoom</span>
       </div>
 
-      <div class="eit-img-title eit-plots-title" style="margin-top:14px;">EMGdi — diaphragm sEMG</div>
+      <div class="eit-img-title eit-plots-title" style="margin-top:14px;">EMG signals</div>
       <div class="vent-stack zoom-stack" id="emgStack" data-zoom="emg"></div>
       <div class="eit-time-axis" data-zoom-axis="emg"></div>
-      <p class="slice-note">Channel 1 (<code>EMGdi</code>) is the diaphragm sEMG channel, the one <code>emg.preprocess</code> and <code>emg.ecg_gating</code> operate on. The raw trace still carries ECG — that contamination is what <code>emg.ecg_gating</code> removes before <code>emg.detect_breaths</code> runs.</p>
+      <p class="slice-note">Each EMG signal is one channel of the loaded Poly5 file, labelled with the muscle it records from. All signals share one time axis, so they line up below each other. Channel 1 (<code>EMGdi</code>) is the diaphragm signal that <code>emg.preprocess</code> and <code>emg.ecg_gating</code> work on by default. The raw traces still carry ECG — that is what <code>emg.ecg_gating</code> removes before <code>emg.detect_breaths</code> runs.</p>
     </div>
   </div>
   <!-- Ventilator -->
