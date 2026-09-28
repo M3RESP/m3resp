@@ -127,9 +127,9 @@ class _CoreMixin:
         if self._loader is not None:
             return self._loader(path, **kwargs)
 
-        from m3resp.adapters.resurfemg_adapter import ReSurfEMG
+        from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
 
-        return ReSurfEMG().load(path, **kwargs)
+        return ReSurfEMGAdapter().load(path, **kwargs)
 
     def _load_from_eit(self, path: str, **kwargs: Any) -> dict[str, Any]:
         """Load ventilator channels out of an EIT recording."""

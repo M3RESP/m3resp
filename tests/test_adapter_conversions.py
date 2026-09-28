@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from m3resp.adapters import EITProcessingAdapter, ReSurfEMG
+from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
 from m3resp.adapters.eitprocessing_adapter import _sparse_data_to_parameters
 from m3resp.data import ParameterResult, QualityFlag, Signal
 
@@ -156,7 +156,7 @@ class TestSparseDataToParameters:
 
 class TestReSurfEMGAdapterConversions:
     def test_to_signals_converts_raw_filtered_and_envelope(self):
-        adapter = ReSurfEMG()
+        adapter = ReSurfEMGAdapter()
         processed_emg = {
             "fs": 100.0,
             "channel": 0,
@@ -176,7 +176,7 @@ class TestReSurfEMGAdapterConversions:
         assert all(s.sample_frequency == 100.0 for s in signals)
 
     def test_to_parameters_converts_feature_values_scalar_and_array(self):
-        adapter = ReSurfEMG()
+        adapter = ReSurfEMGAdapter()
         postprocessed = {
             "computed": {
                 "features": {
@@ -231,7 +231,7 @@ class TestReSurfEMGAdapterConversions:
         assert per_breath.method == "resurfemg.respiratory_rate"
 
     def test_to_quality_flags_converts_results_and_skipped_functions(self):
-        adapter = ReSurfEMG()
+        adapter = ReSurfEMGAdapter()
         postprocessed = {
             "computed": {
                 "quality_assessment": {
