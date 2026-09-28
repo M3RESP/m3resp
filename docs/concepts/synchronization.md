@@ -63,7 +63,7 @@ stores one number per recording in `session.start_times`: the time, in
 seconds on the shared clock, at which that recording's first sample was
 taken. The reference recording starts at 0; a negative value means a
 recording started earlier than the reference, a positive value later.
-Calling it again replaces the start times.
+Calling it again replaces the previously set start times.
 
 Each modality's own results stay on that recording's own clock, so
 `session.events["emg_breaths"]` still gives times from the start of the EMG
@@ -98,16 +98,15 @@ A recording with its own entry uses it; the others use `"ventilator"`. A
 name that is not loaded, or one for ventilator data inside the EIT or EMG
 file, is refused.
 
-Cutting a recording (`slice_emg`, `slice_eit`, `slice_ventilator`) moves its
-start time later by the part cut off the front, so it stays lined up with the
-other recordings. See [Cutting data to a time window](slicing.md).
+Cutting a recording (`slice_emg`, `slice_eit`, `slice_ventilator`) shifts its
+start time forwards by the amount of time cut from the beginning of the signals,
+so it stays lined up with the other recordings. See [Cutting data to a time window](slicing.md).
 
 ## Was each recording synchronized?
 
 A session is meant to hold recordings of the same stretch of real time, so
-steps that compare recordings assume they are on one clock. That only holds
-once each recording has been synchronized. `session.sync_methods` records,
-per recording, how it was placed on the shared clock:
+steps that compare recordings assume they are on one shared clock. That assumption only holds once each recording has been synchronized.
+`session.sync_methods` records how each recording was placed on the shared clock:
 
 | Key | Recording |
 |---|---|
