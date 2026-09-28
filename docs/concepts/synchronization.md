@@ -13,8 +13,9 @@ compared on one shared time axis. Key pieces:
   time on one shared clock, using a manual offset you supply (for example
   "EMG started 5 seconds after EIT"). The offset is a single number in
   seconds that you provide; the package applies it but never measures it
-  (`estimate_sync_offset` only supports `method="manual"`). How you arrive
-  at that number is up to you, and filtered signals are fine for the job.
+  (`estimate_sync_offset` only supports `method="manual"`). The step does
+  not read any signal. How you arrive at the number is up to you, for
+  example by comparing filtered signals from both recordings.
   No samples are removed: a three-hour pressure recording stays three hours
   long beside a thirty-minute EIT recording that started 90 minutes in. See
   "Start times" below.
@@ -75,8 +76,10 @@ file. The start times are added only where modalities are compared -
 time on the shared clock = own time - own first time + start time
 ```
 
-"Own first time" is 0 s for EMG and ventilator data. EIT files carry the
-time of day instead (a Draeger file can start at 36528.6 s), so the EIT's
+$$t_{shared} = t_{modality} - t_{modality}(0) + t_{start}$$
+
+"Own first time" ($t_{modality}(0)$) is 0 s for EMG and ventilator data.
+EIT files carry the time of day instead (a Draeger file can start at 36528.6 s), so the EIT's
 first time value is taken off first. A ventilator recording that came inside
 the EIT or EMG file uses that modality's start time.
 
@@ -123,7 +126,8 @@ model's sync vocabulary:
 | `"none"` | `skip_synchronization()` | used as it is, taken to have started with the others |
 
 Steps that compare recordings on different clocks warn
-(`UnsynchronizedDataWarning`) when one of them has no record. They still
+(`UnsynchronizedDataWarning`) when one of them has no entry in
+`session.sync_methods`. They still
 run: the warning says their times are compared as if all recordings started
 at the same moment. The steps that check are `link_breaths` (and so the
 multimodal parameters computed from linked breaths) and
@@ -131,13 +135,13 @@ multimodal parameters computed from linked breaths) and
 one clock, such as EMG with the airway pressure recorded in the same file.
 
 If the recordings really did start together - for example when one trigger
-started every device - say so with `session.skip_synchronization()` (the
-`sync.skip` workflow step). The warnings then stop, and the choice
+started every device - explicitly say so with `session.skip_synchronization()`
+(the `sync.skip` workflow step). The warnings then stop, and the choice
 stays visible in the provenance log and in the `"synchronization"` section of
 the exported `summary.json`, next to the start times.
 
 Loading a file again gives a new recording that has not been synchronized:
-its start time and record are cleared.
+its start time and its entry in `session.sync_methods` are cleared.
 
 With a data model recorder attached (`session.datamodel`), every
 `SignalStream` carries the same information for its recording:

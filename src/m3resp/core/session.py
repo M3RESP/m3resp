@@ -637,9 +637,7 @@ class M3Session:
         the front, so the EIT stays lined up with the other recordings.
 
         Run this before `preprocess_eit`. The removed frames are gone from
-        the loaded recording; reload the file to get them back. Signals
-        already added to `session.signals` when loading keep the full
-        recording.
+        the loaded recording; reload the file to get them back.
         """
 
         recording = self.eit

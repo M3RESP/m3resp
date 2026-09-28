@@ -42,6 +42,7 @@ napoleon_google_docstring = True
 myst_enable_extensions = [
     "colon_fence",
     "deflist",
+    "dollarmath",
     "fieldlist",
     "substitution",
 ]

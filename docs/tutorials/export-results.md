@@ -73,7 +73,7 @@ problem:
 | Option | What it does |
 |---|---|
 | `export_store(store, path)` | Checks that the records link up, then writes. A store recorded from a session passes. |
-| `export_store(store, path, require_complete=True)` | Also checks that every record has the details a finished dataset needs (units, sampling rate, start time, file checksums). A store recorded from a session usually does not pass this yet. |
+| `export_store(store, path, require_complete=True)` | Also checks that every record has the details a finished dataset needs (units, sampling rate, start time, file checksums). While data is being processed some of these are not known yet: the clock time at which a recording started is often missing, and a file only gets a checksum once it is written. So a store recorded from a session usually does not pass this check yet. |
 | `export_store(store, path, validate=False)` | Writes without checking. |
 
 To see the problems without exporting, call `validate_store(store)`; it

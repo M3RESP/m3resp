@@ -1,29 +1,29 @@
 # Cutting data to a time window
 
-M3Resp has several ways to keep only part of your data, for example to
-analyse one ventilator setting, or to leave out a stretch where another
-device disturbed the signal. This page lists all of them and says which one
-to use.
+M3Resp has several ways to work with specific segments of your data, for example to analyse data recorded during a single ventilator setting in a multi-setting protocol, or to leave out an interval where interference from another device disturbed the signal. This page lists all of them and says which one to use to fulfill your requirements.
 
 ## Recording or signal?
 
 The first question is what you want to cut.
 
-- A **recording** is everything loaded from one file, as it came from the
-  device: for an EIT `.bin` file the pixel data, global impedance and every
-  channel stored beside it (airway pressure, flow, CO2, pod pressures), plus
-  the device's markers. It lives in the session (`session.eit`,
-  `session.emg`, `session.ventilators`), and it has its own clock, so each
-  recording has a start time in `session.start_times` (see
+- A **recording** is everything loaded from one file as it came from the
+  device: for example, for an EIT `.bin` file it includes the pixel data,
+  global impedance and every channel stored beside it (airway pressure, flow,
+  CO2, pod pressures), plus the device's markers. It lives in the session
+  (`session.eit`, `session.emg`, `session.ventilators`), and it has its own
+  clock, so each recording has a start time in `session.start_times` (see
   [Synchronization](synchronization.md)). Cutting a recording changes what
-  every later step reads, so anything recorded in the same file is cut with
-  it, and its start time is moved so it stays lined up with the other
-  recordings.
-- A **signal** is one measured or calculated quantity over time: the global
-  impedance, a filtered EIT signal, an EMG envelope. Many signals can come
-  from one recording. Cutting a signal makes a shorter copy for the next
-  workflow step, for example a detection window, and leaves the recording and
-  everything else untouched.
+  every later step reads: when cutting a recording, all the data loaded from
+  that file is cut, and the corresponding start time in `session.start_times`
+  is shifted in time to maintain alignment with the other recordings.
+  When cutting a recording, samples that are cut are completely removed
+  and can only be restored by reloading the recording.
+- A **signal** is a quantity that is measured or calculated over time, like
+  global impedance, a filtered EIT signal, or an EMG envelope.
+  Many signals can come from a single recording. When cutting a signal (for
+  example, to extract a detection window), M3Resp creates a copy of the selected
+  segment for the next workflow steps, and keeps the signal itself and everything
+  else untouched.
 
 The step names follow this: `*.slice_recording` cuts a recording, and
 `*.slice_signal` cuts one signal.
@@ -38,14 +38,16 @@ The step names follow this: `*.slice_recording` cuts a recording, and
 | 4 | step `eit.slice_signal` | One signal in a workflow: an m3resp `Signal`, or eitprocessing data (raw EIT, global impedance, a `Sequence`). The loaded recording is not changed. | Sample numbers (`mode: index`), or the signal's own time values (`mode: time`) | No | eitprocessing for its own data (`[a:b]`, `.t[a:b]`); m3resp for a `Signal` |
 | 5 | `session.load_eit(..., first_frame=, max_frames=)`<br>step `eit.load` | Reads only part of the EIT file in the first place | Frame numbers | Not needed: it happens before anything is lined up | eitprocessing's loader |
 
-In every case the part kept runs from the start time up to, but not
-including, the end time. Leave the end out to keep everything up to the end
-of the recording.
+In cases #1-#4, the extracted segment ranges from the specified `start` to
+the sample immediately before the provided `end`. In cases #1-#3, `end` can
+be left out to keep everything from `start` to the end of the recording;
+`eit.slice_signal` (#4) always needs an `end`. Case #5 takes a first frame
+and a number of frames instead.
 
 ## Which one cuts ventilator data?
 
-It depends on which file the ventilator data came in, because that decides
-its clock.
+Ventilator data can come from several files, and the file it came in
+decides its clock and so its slicing strategy.
 
 | Ventilator data came from... | Cut it with |
 |---|---|
@@ -65,18 +67,19 @@ cut one of them without moving the others.
 - **Cut recordings before preprocessing.** `slice_eit` and `slice_ventilator`
   refuse to run once that modality has been preprocessed, since the
   preprocessed results would still cover the whole recording. `slice_emg`
-  should also be run before `preprocess_emg`.
+  should also be run before `preprocess_emg`: it does not refuse, but it
+  cuts only the loaded EMG, so the filtered EMG and envelope already in
+  `session.signals` would keep the full length.
 - **Cut samples are gone** from the loaded recording. Reload the file to get
   them back.
-- **Time mode of `eit.slice_signal` uses the signal's own time values.** For
-  data read from an EIT file that is the time of day stored in the file (a
-  Draeger file can start at 36528.6 s), not seconds from the start. The
-  recording steps (#1-#3) always use seconds from the start.
+- **Time mode of `eit.slice_signal` uses the signal's own time values.**
+  Data read from an EIT file can include timestamps as time of the day,
+  rather than seconds from the start: a Draeger file, for example, can start
+  at 36528.6 s. The `slice_recording` steps (#1-#3), on the other hand,
+  always use seconds from the start.
 - **Frames are chosen by their time stamps** in `slice_eit`. Device time
   stamps can sometimes be not perfectly even, so 100 s can hold a slightly
   different number of frames than frame rate * 100 s.
-- **Signals added when loading keep the full recording.** Cutting a recording
-  does not shorten signals already stored in `session.signals`.
 - **Old step names still work.** `emg.slice` is now `emg.slice_recording`, and
   `eit.slice` is now `eit.slice_signal`. Specs using the old names run
   unchanged.
