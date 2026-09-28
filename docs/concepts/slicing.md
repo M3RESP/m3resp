@@ -72,15 +72,14 @@ cut one of them without moving the others.
   `session.signals` would keep the full length.
 - **Cut samples are gone** from the loaded recording. Reload the file to get
   them back.
-- **Time mode of `eit.slice_signal` uses the signal's own time values.** For
-  data read from an EIT file that is the time of day stored in the file (a
-  Draeger file can start at 36528.6 s), not seconds from the start. The
-  recording steps (#1-#3) always use seconds from the start.
+- **Time mode of `eit.slice_signal` uses the signal's own time values.**
+  Data read from an EIT file can include timestamps as time of the day,
+  rather than seconds from the start: a Draeger file, for example, can start
+  at 36528.6 s. The `slice_recording` steps (#1-#3), on the other hand,
+  always use seconds from the start.
 - **Frames are chosen by their time stamps** in `slice_eit`. Device time
   stamps can sometimes be not perfectly even, so 100 s can hold a slightly
   different number of frames than frame rate * 100 s.
-- **Signals added when loading keep the full recording.** Cutting a recording
-  does not shorten signals already stored in `session.signals`.
 - **Old step names still work.** `emg.slice` is now `emg.slice_recording`, and
   `eit.slice` is now `eit.slice_signal`. Specs using the old names run
   unchanged.
