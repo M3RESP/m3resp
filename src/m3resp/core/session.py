@@ -687,6 +687,8 @@ class M3Session:
         if not isinstance(data, dict) or "array" not in data:
             raise MissingModalityDataError("slice_emg needs a loaded EMG recording.")
         window = emg_sample_window(recording, start_seconds, end_seconds)
+        if window.sample_frequency is None:
+            raise ValueError("slice_emg: the EMG recording has no sampling rate.")
         removed_end_seconds = (
             window.n_samples - window.end_index
         ) / window.sample_frequency
