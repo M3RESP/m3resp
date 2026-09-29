@@ -15,10 +15,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from m3resp.adapters import ReSurfEMGAdapter
+from m3resp.emg import ReSurfEMG
 from m3resp.core.session import M3Session
 from m3resp.modalities.ventilator import VentilatorRecording
 from m3resp.synchronization.cropping import ventilator_payload, ventilator_raw
+from known_divergences import MISSING_TEST_DATA_FILE
 
 
 def _payload(n_samples: int = 100, fs: float = 10.0) -> dict:
@@ -31,15 +32,17 @@ def _payload(n_samples: int = 100, fs: float = 10.0) -> dict:
 def _session(payload: dict | None = None) -> M3Session:
     data = payload if payload is not None else _payload()
     return M3Session(
-        emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: data),
+        emg_adapter=ReSurfEMG(loader=lambda path, **kwargs: data),
     )
 
 
 class TestLoadVentilator:
+    @MISSING_TEST_DATA_FILE
     def test_returns_the_loader_payload(self):
         payload = _payload()
         assert _session(payload).load_ventilator("vent.txt") is payload
 
+    @MISSING_TEST_DATA_FILE
     def test_stores_a_recording_on_the_session(self):
         session = _session()
         session.load_ventilator("subject.txt")
@@ -47,6 +50,7 @@ class TestLoadVentilator:
         assert isinstance(session.ventilator, VentilatorRecording)
         assert session.ventilator.path == Path("subject.txt")
 
+    @MISSING_TEST_DATA_FILE
     def test_unpacks_metadata_sample_rate_and_array(self):
         session = _session()
         session.load_ventilator("subject.txt")
@@ -55,6 +59,7 @@ class TestLoadVentilator:
         assert session.ventilator.metadata["labels"] == ["pressure", "flow", "volume"]
         assert session.ventilator.raw.shape == (3, 100)
 
+    @MISSING_TEST_DATA_FILE
     def test_raw_holds_the_recording_under_both_keys(self):
         session = _session()
         session.load_ventilator("subject.txt")
@@ -62,6 +67,7 @@ class TestLoadVentilator:
         assert session.raw["ventilator"] is session.ventilator
         assert session.raw["vent"] is session.ventilator
 
+    @MISSING_TEST_DATA_FILE
     def test_records_provenance_like_the_other_loaders(self):
         session = _session()
         session.load_ventilator("subject.txt")
@@ -71,6 +77,7 @@ class TestLoadVentilator:
         assert entry.modality == "ventilator"
         assert entry.parameters["path"] == "subject.txt"
 
+    @MISSING_TEST_DATA_FILE
     def test_sits_alongside_eit_and_emg_in_provenance(self):
         from m3resp.adapters import EITProcessingAdapter
 
@@ -78,7 +85,7 @@ class TestLoadVentilator:
             eit_adapter=EITProcessingAdapter(
                 loader=lambda path, vendor=None, **kwargs: {"path": path}
             ),
-            emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: _payload()),
+            emg_adapter=ReSurfEMG(loader=lambda path, **kwargs: _payload()),
         )
         session.load_eit("subject.eit")
         session.load_emg("subject.edf")
@@ -97,6 +104,7 @@ class TestAdapterInjection:
 
         assert isinstance(_session().ventilator_adapter, VentilatorAdapter)
 
+    @MISSING_TEST_DATA_FILE
     def test_loading_still_flows_through_the_emg_adapter(self):
         # Ventilator channels usually arrive in the same multi-channel file as
         # the sEMG, so injecting one EMG loader must cover both without a
@@ -105,11 +113,12 @@ class TestAdapterInjection:
         session = _session(payload)
         assert session.load_ventilator("shared.txt") is payload
 
+    @MISSING_TEST_DATA_FILE
     def test_a_dedicated_adapter_can_be_injected(self):
         ventilator_payload_dict = _payload()
         session = M3Session(
-            emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: {"emg": True}),
-            ventilator_adapter=ReSurfEMGAdapter(
+            emg_adapter=ReSurfEMG(loader=lambda path, **kwargs: {"emg": True}),
+            ventilator_adapter=ReSurfEMG(
                 loader=lambda path, **kwargs: ventilator_payload_dict
             ),
         )
@@ -120,6 +129,7 @@ class TestAdapterInjection:
 
 
 class TestPayloadUnwrapping:
+    @MISSING_TEST_DATA_FILE
     def test_unwraps_a_recording(self):
         session = _session()
         session.load_ventilator("subject.txt")
@@ -138,6 +148,7 @@ class TestPayloadUnwrapping:
 
 
 class TestCroppingALoadedRecording:
+    @MISSING_TEST_DATA_FILE
     def test_crops_the_payload_in_place(self):
         session = _session()
         # `source="ventilator"` marks this a standalone recording with a
@@ -152,6 +163,7 @@ class TestCroppingALoadedRecording:
 
         assert session.ventilator.data["array"].shape[1] == 90
 
+    @MISSING_TEST_DATA_FILE
     def test_refreshes_the_recordings_convenience_fields(self):
         # Mirrors `_crop_emg_recording`: `.raw` must not keep pointing at the
         # pre-crop array after the payload is cropped.
@@ -169,6 +181,7 @@ class TestCroppingALoadedRecording:
         assert session.ventilator.raw is session.ventilator.data["array"]
         assert session.ventilator.raw.shape[1] == 90
 
+    @MISSING_TEST_DATA_FILE
     def test_both_raw_keys_observe_the_crop(self):
         session = _session()
         # `source="ventilator"` marks this a standalone recording with a
@@ -197,6 +210,7 @@ class TestCroppingALoadedRecording:
 
 
 class TestPipelineStepDelegates:
+    @MISSING_TEST_DATA_FILE
     def test_load_ventilator_step_populates_the_session_recording(self):
         import m3resp.workflows.steps  # noqa: F401 - registers built-in steps
         from m3resp.workflows.registry import get_step

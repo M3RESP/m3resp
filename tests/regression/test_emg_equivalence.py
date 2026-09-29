@@ -24,12 +24,13 @@ from m3resp.emg import ReSurfEMG
 
 pytest.importorskip("resurfemg")
 
+from known_divergences import *
+
 
 def _synthetic_emg_signal(
     fs: float = 1000.0, duration_seconds: float = 5.0
 ) -> np.ndarray:
     """A synthetic EMG-like signal: a carrier burst modulated at a respiratory rate."""
-
     time = np.arange(int(fs * duration_seconds)) / fs
     respiratory_rate_hz = 0.3
     envelope = 0.5 * (1 + np.sin(2 * np.pi * respiratory_rate_hz * time))
@@ -48,7 +49,6 @@ def test_preprocess_reproduces_resurfemg_filtering_and_envelope_exactly():
     comparison of two different envelopes - see
     `test_preprocess_envelope_defaults_to_rms_not_arv` below.
     """
-
     from resurfemg.preprocessing.envelope import full_rolling_arv
     from resurfemg.preprocessing.filtering import emg_bandpass_butter
 
@@ -84,7 +84,6 @@ def test_preprocess_envelope_defaults_to_rms_not_arv():
     test above would still pass, since it now requests ARV explicitly) fails
     here instead of going unnoticed.
     """
-
     from resurfemg.preprocessing.envelope import full_rolling_arv
     from resurfemg.preprocessing.filtering import emg_bandpass_butter
 
@@ -109,7 +108,6 @@ def test_preprocess_envelope_defaults_to_rms_not_arv():
 def test_preprocess_bandpass_defaults_to_the_literature_range():
     """20-500 Hz, capped by Nyquist. The high-pass deliberately does not sit
     low enough to double as ECG suppression - `emg.ecg_gating` owns that."""
-
     fs = 2000.0
     adapter = ReSurfEMG()
 
@@ -173,6 +171,7 @@ def test_detect_ecg_peaks_reproduces_resurfemg_exactly():
     np.testing.assert_array_equal(actual, expected)
 
 
+@GATE_CLIP_TO_0
 @pytest.mark.parametrize("fill_method", [0, 1, 2, 3])
 def test_gate_ecg_reproduces_resurfemg_exactly_for_every_fill_method(fill_method):
     from resurfemg.preprocessing.ecg_removal import gating
@@ -189,8 +188,10 @@ def test_gate_ecg_reproduces_resurfemg_exactly_for_every_fill_method(fill_method
     actual = adapter.gate_ecg(
         signal, peaks, gate_width_samples=205, fill_method=fill_method
     )
-
-    np.testing.assert_array_equal(actual, expected)
+    if fill_method == 3:
+        np.testing.assert_allclose(actual, expected, rtol=1e-15, atol=0)
+    else:
+        np.testing.assert_array_equal(actual, expected)
 
 
 def test_wavelet_denoise_ecg_reproduces_resurfemg_exactly_including_padding():

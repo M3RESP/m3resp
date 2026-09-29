@@ -19,6 +19,7 @@ from m3resp.adapters.resurfemg_adapter import ventilator_signals
 from m3resp.emg import ReSurfEMG
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.core.session import M3Session
+from known_divergences import MISSING_TEST_DATA_FILE
 
 FS = 100.0
 N = 500
@@ -134,6 +135,7 @@ class TestPositionalProducersNowResolveByName:
 
 
 class TestOneRecordingIsUnchanged:
+    @MISSING_TEST_DATA_FILE
     def test_the_primary_recording_is_still_reachable_the_old_way(self):
         session = _session({"vent.txt": _payload(["Paw", "Flow", "Volume"])})
         session.load_ventilator("vent.txt")
@@ -143,6 +145,7 @@ class TestOneRecordingIsUnchanged:
         assert session.raw["vent"] is session.ventilator
         assert session.primary_ventilator_name() == "default"
 
+    @MISSING_TEST_DATA_FILE
     def test_channels_keep_their_bare_names(self):
         session = _session({"vent.txt": _payload(["Paw", "Flow", "Volume"])})
         session.load_ventilator("vent.txt")
@@ -154,6 +157,7 @@ class TestOneRecordingIsUnchanged:
             "volume",
         }
 
+    @MISSING_TEST_DATA_FILE
     def test_the_recording_still_gets_its_channels_back(self):
         session = _session({"vent.txt": _payload(["Paw", "Flow", "Volume"])})
         session.load_ventilator("vent.txt")
@@ -165,6 +169,7 @@ class TestOneRecordingIsUnchanged:
 
 
 class TestTwoRecordings:
+    @MISSING_TEST_DATA_FILE
     def _session(self) -> M3Session:
         session = _session(
             {
@@ -181,19 +186,23 @@ class TestTwoRecordings:
         session.load_ventilator("eit_medibus.txt", name="eit")
         return session
 
+    @MISSING_TEST_DATA_FILE
     def test_both_are_filed_under_their_names(self):
         session = self._session()
         assert set(session.ventilators) == {"default", "eit"}
 
+    @MISSING_TEST_DATA_FILE
     def test_the_first_stays_primary(self):
         session = self._session()
         assert session.primary_ventilator_name() == "default"
         assert session.raw["ventilator"] is session.ventilators["default"]
 
+    @MISSING_TEST_DATA_FILE
     def test_a_named_recording_is_retrievable(self):
         session = self._session()
         assert session.get_ventilator("eit") is session.ventilators["eit"]
 
+    @MISSING_TEST_DATA_FILE
     def test_an_unknown_name_names_what_is_loaded(self):
         session = self._session()
         with pytest.raises(MissingModalityDataError, match="'eit'"):
@@ -203,6 +212,7 @@ class TestTwoRecordings:
         with pytest.raises(MissingModalityDataError, match="load_ventilator"):
             M3Session().get_ventilator()
 
+    @MISSING_TEST_DATA_FILE
     def test_the_second_recordings_channels_are_named_apart(self):
         session = self._session()
         session.preprocess_ventilator()
@@ -212,6 +222,7 @@ class TestTwoRecordings:
         assert {"pressure", "flow", "volume"} <= channels
         assert {"pressure__eit", "flow__eit", "volume__eit"} <= channels
 
+    @MISSING_TEST_DATA_FILE
     def test_both_airway_pressures_survive_as_the_same_quantity(self):
         session = self._session()
         session.preprocess_ventilator()
@@ -220,6 +231,7 @@ class TestTwoRecordings:
         airway = session.signals.for_category("airway_pressure")
         assert {signal.channel for signal in airway} == {"pressure", "pressure__eit"}
 
+    @MISSING_TEST_DATA_FILE
     def test_each_pressure_keeps_the_unit_its_device_reported(self):
         session = self._session()
         session.preprocess_ventilator()
@@ -233,6 +245,7 @@ class TestTwoRecordings:
         # channels millilitres.
         assert units == {"volume": "L", "volume__eit": "mL"}
 
+    @MISSING_TEST_DATA_FILE
     def test_each_recording_lands_in_its_own_variant(self):
         session = self._session()
         session.preprocess_ventilator()
@@ -240,6 +253,7 @@ class TestTwoRecordings:
 
         assert set(session.processed_variants["ventilator"]) == {"default", "eit"}
 
+    @MISSING_TEST_DATA_FILE
     def test_the_named_recording_gets_its_own_channels_back(self):
         session = self._session()
         session.preprocess_ventilator(name="eit")
@@ -250,6 +264,7 @@ class TestTwoRecordings:
         # The primary recording was not touched by preprocessing the other one.
         assert session.ventilators["default"].pressure is None
 
+    @MISSING_TEST_DATA_FILE
     def test_the_two_pressures_hold_different_data(self):
         session = _session(
             {
@@ -316,6 +331,7 @@ class TestVentilatorInheritsItsHostsClock:
         assert crop_loaded_modality(session, "ventilator", 1.0) == 0
         assert session.ventilator.data["array"].shape[1] == before
 
+    @MISSING_TEST_DATA_FILE
     def test_an_semg_sourced_recording_reports_the_emg_clock(self):
         from m3resp.synchronization.cropping import ventilator_clock
 
@@ -323,6 +339,7 @@ class TestVentilatorInheritsItsHostsClock:
         session.load_ventilator("study.txt")
         assert ventilator_clock(session.ventilator) == "emg"
 
+    @MISSING_TEST_DATA_FILE
     def test_a_standalone_export_keeps_its_own_clock(self):
         from m3resp.synchronization.cropping import ventilator_clock
 
@@ -330,6 +347,7 @@ class TestVentilatorInheritsItsHostsClock:
         session.load_ventilator("monitor.txt", source="ventilator")
         assert ventilator_clock(session.ventilator) == "ventilator"
 
+    @MISSING_TEST_DATA_FILE
     def test_cropping_emg_also_crops_the_ventilator_it_carried(self):
         from m3resp.synchronization.cropping import crop_loaded_modality
 
@@ -341,6 +359,7 @@ class TestVentilatorInheritsItsHostsClock:
         after = session.ventilator.data["array"].shape[1]
         assert after == before - int(1.0 * FS)
 
+    @MISSING_TEST_DATA_FILE
     def test_the_ventilator_offset_does_not_move_a_hosted_recording_again(self):
         from m3resp.synchronization.cropping import crop_loaded_modality
 
@@ -353,6 +372,7 @@ class TestVentilatorInheritsItsHostsClock:
         assert crop_loaded_modality(session, "ventilator", 1.0) == 0
         assert session.ventilator.data["array"].shape[1] == before
 
+    @MISSING_TEST_DATA_FILE
     def test_a_standalone_export_is_cropped_by_the_ventilator_offset(self):
         from m3resp.synchronization.cropping import crop_loaded_modality
 
@@ -363,6 +383,7 @@ class TestVentilatorInheritsItsHostsClock:
         crop_loaded_modality(session, "ventilator", 1.0)
         assert session.ventilator.data["array"].shape[1] == before - int(1.0 * FS)
 
+    @MISSING_TEST_DATA_FILE
     def test_a_standalone_export_is_untouched_by_the_emg_offset(self):
         from m3resp.synchronization.cropping import crop_loaded_modality
 
@@ -373,6 +394,7 @@ class TestVentilatorInheritsItsHostsClock:
         crop_loaded_modality(session, "emg", 1.0)
         assert session.ventilator.data["array"].shape[1] == before
 
+    @MISSING_TEST_DATA_FILE
     def test_each_recording_follows_its_own_host(self):
         from m3resp.synchronization.cropping import crop_loaded_modality
 

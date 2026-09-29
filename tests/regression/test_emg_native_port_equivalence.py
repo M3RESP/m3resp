@@ -43,56 +43,58 @@ from m3resp.core.events import BreathEvent
 from m3resp.emg import ReSurfEMG as ReSurfEMGNative
 from m3resp.emg.processing import signals as native_signals
 
+from known_divergences import *
+
 EMG_FS = 2048
 VENT_FS = 100
 ECG_FS = 2048
 
 
-def _known_divergence(reason: str) -> pytest.MarkDecorator:
-    return pytest.mark.xfail(condition=True, strict=False, reason=reason, run=True)
+# def _known_divergence(reason: str) -> pytest.MarkDecorator:
+#     return pytest.mark.xfail(condition=True, strict=False, reason=reason, run=True)
 
 
-GATE_INTERP_AT_END = _known_divergence(
-    "native `_gate_fill_interp` clips the post-gate index to `max_samples` "
-    "instead of `max_samples - 1` (IndexError when a gate reaches the end of "
-    "the signal) and treats index 0 as out of bounds via `np.where(pre, ...)`."
-)
-WAVELET_THRESHOLD = _known_divergence(
-    "native `wavelet_denoise_ecg` computes `fixed_threshold & std_estimate` "
-    "(bitwise and, TypeError) instead of `*`, and never fills `thresholds`."
-)
-# FIXED
-SLOPESUM_BASELINE = _known_divergence(
-    "native `slopesum_baseline` omits upstream's 1.2 scale factor on the "
-    "baseline and computes the running mean/std over `moving_average_samples` "
-    "instead of `window_samples`."
-)
-# FIXED
-SLOPESUM_DEFAULT_PERCENTILE_WINDOW = _known_divergence(
-    "native `slopesum_baseline` defaults `percentile_window_samples` to "
-    "`fs // 2`; upstream defaults `perc_window` to `fs` (plus the "
-    "SLOPESUM_BASELINE divergence)."
-)
-# FIXED
-BELL_CURVE_RETURN_ORDER = _known_divergence(
-    "`evaluate_bell_curve_error` return slots 1 and 2 are swapped: upstream "
-    "(and hence the adapter) returns (valid, bell_error, percentage, ...), the "
-    "native port returns (valid, percentage, bell_error, ...)."
-)
-AUB_REFERENCE_SIGNAL = _known_divergence(
-    "upstream `percentage_under_baseline` ignores `ref_signal` (it passes "
-    "`ref_signal=signal` to `area_under_baseline`); the native port honours "
-    "`reference_signal`."
-)
-EVENT_TIMING_DEFAULTS = _known_divergence(
-    "`evaluate_event_timing` defaults differ: adapter (min_delta=-0.5, "
-    "max_delta=2.0), native (min_delta=0.0, max_delta=None)."
-)
-VENTILATOR_SIGNALS_HELPER = _known_divergence(
-    "the adapter's `ventilator_signals` delegates to "
-    "`ventilator_adapter.split_channels` (label-based resolution, extra "
-    "`origins` key); the native copy still indexes fixed columns."
-)
+# GATE_INTERP_AT_END = _known_divergence(
+#     "native `_gate_fill_interp` clips the post-gate index to `max_samples` "
+#     "instead of `max_samples - 1` (IndexError when a gate reaches the end of "
+#     "the signal) and treats index 0 as out of bounds via `np.where(pre, ...)`."
+# )
+# WAVELET_THRESHOLD = _known_divergence(
+#     "native `wavelet_denoise_ecg` computes `fixed_threshold & std_estimate` "
+#     "(bitwise and, TypeError) instead of `*`, and never fills `thresholds`."
+# )
+# # FIXED
+# SLOPESUM_BASELINE = _known_divergence(
+#     "native `slopesum_baseline` omits upstream's 1.2 scale factor on the "
+#     "baseline and computes the running mean/std over `moving_average_samples` "
+#     "instead of `window_samples`."
+# )
+# # FIXED
+# SLOPESUM_DEFAULT_PERCENTILE_WINDOW = _known_divergence(
+#     "native `slopesum_baseline` defaults `percentile_window_samples` to "
+#     "`fs // 2`; upstream defaults `perc_window` to `fs` (plus the "
+#     "SLOPESUM_BASELINE divergence)."
+# )
+# # FIXED
+# BELL_CURVE_RETURN_ORDER = _known_divergence(
+#     "`evaluate_bell_curve_error` return slots 1 and 2 are swapped: upstream "
+#     "(and hence the adapter) returns (valid, bell_error, percentage, ...), the "
+#     "native port returns (valid, percentage, bell_error, ...)."
+# )
+# AUB_REFERENCE_SIGNAL = _known_divergence(
+#     "upstream `percentage_under_baseline` ignores `ref_signal` (it passes "
+#     "`ref_signal=signal` to `area_under_baseline`); the native port honours "
+#     "`reference_signal`."
+# )
+# EVENT_TIMING_DEFAULTS = _known_divergence(
+#     "`evaluate_event_timing` defaults differ: adapter (min_delta=-0.5, "
+#     "max_delta=2.0), native (min_delta=0.0, max_delta=None)."
+# )
+# VENTILATOR_SIGNALS_HELPER = _known_divergence(
+#     "the adapter's `ventilator_signals` delegates to "
+#     "`ventilator_adapter.split_channels` (label-based resolution, extra "
+#     "`origins` key); the native copy still indexes fixed columns."
+# )
 
 
 # -- comparison helper -------------------------------------------------------
