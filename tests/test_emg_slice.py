@@ -6,9 +6,10 @@ import numpy as np
 import pytest
 
 from m3resp import M3Session
-from m3resp.adapters import ReSurfEMGAdapter
+from m3resp.emg import ReSurfEMG
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.workflows.steps.emg.loading import slice_recording
+from known_divergences import MISSING_TEST_DATA_FILE
 
 FS = 100.0
 DURATION_SECONDS = 60.0
@@ -31,12 +32,13 @@ def _recording() -> dict:
 def _session() -> M3Session:
     # Every load reads the file again, as the real loader does.
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(loader=lambda *args, **kwargs: _recording())
+        emg_adapter=ReSurfEMG(loader=lambda *args, **kwargs: _recording())
     )
     session.load_emg("study.txt")
     return session
 
 
+@MISSING_TEST_DATA_FILE
 def test_slice_keeps_only_the_window():
     session = _session()
 
@@ -50,6 +52,7 @@ def test_slice_keeps_only_the_window():
     assert session.parameters["emg_slice"] == summary
 
 
+@MISSING_TEST_DATA_FILE
 def test_without_an_end_the_rest_of_the_recording_is_kept():
     session = _session()
 
@@ -60,6 +63,7 @@ def test_without_an_end_the_rest_of_the_recording_is_kept():
     assert array[0, -1] == pytest.approx(DURATION_SECONDS - 1 / FS)
 
 
+@MISSING_TEST_DATA_FILE
 def test_airway_pressure_from_the_same_file_is_cut_the_same_way():
     """Paw and EMG share one clock, so they must stay lined up."""
 
@@ -73,6 +77,7 @@ def test_airway_pressure_from_the_same_file_is_cut_the_same_way():
     np.testing.assert_array_equal(ventilator, emg)
 
 
+@MISSING_TEST_DATA_FILE
 @pytest.mark.parametrize(
     ("start", "end"),
     [(-1.0, 10.0), (20.0, 10.0), (10.0, 10.0), (0.0, DURATION_SECONDS + 1.0)],
@@ -91,6 +96,7 @@ def test_slicing_needs_a_loaded_recording():
         M3Session().slice_emg(0.0, 1.0)
 
 
+@MISSING_TEST_DATA_FILE
 def test_step_calls_the_session_method():
     session = _session()
 

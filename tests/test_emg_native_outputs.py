@@ -15,18 +15,13 @@ from m3resp.data import Signal
 from m3resp.data.units import normalize_unit
 from m3resp.workflows import run_pipeline
 from m3resp.workflows.steps.emg import moving_baseline, slopesum_baseline
+from known_divergences import MISSING_TEST_DATA_FILE
 
 pytest.importorskip("resurfemg")
 np = pytest.importorskip("numpy")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EMG_PATH = (
-    REPO_ROOT
-    / "data"
-    / "source"
-    / "data_from_repo"
-    / "emg_data_synth_quiet_breathing.Poly5"
-)
+EMG_PATH = REPO_ROOT / "tests" / "data" / "emg_data_synth_quiet_breathing.Poly5"
 
 
 class TestEmgLoad:
@@ -80,6 +75,7 @@ class TestEmgLoad:
                 }
             )
 
+    @MISSING_TEST_DATA_FILE
     def test_injected_loader_still_produces_native_signals(self):
         from m3resp.emg import ReSurfEMG
 

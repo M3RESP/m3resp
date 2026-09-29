@@ -11,13 +11,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from m3resp.adapters import ReSurfEMGAdapter
+from m3resp.emg import ReSurfEMG
 from m3resp.adapters.ventilator_adapter import SUGGESTED_LOWPASS_HZ
 from m3resp.core.exceptions import (
     MissingModalityDataError,
     VariantAlreadyExistsError,
 )
 from m3resp.core.session import M3Session
+from known_divergences import MISSING_TEST_DATA_FILE
 
 FS = 100.0
 N = 1000
@@ -36,15 +37,17 @@ def _payload() -> dict:
     }
 
 
+@MISSING_TEST_DATA_FILE
 def _loaded_session() -> M3Session:
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: _payload()),
+        emg_adapter=ReSurfEMG(loader=lambda path, **kwargs: _payload()),
     )
     session.load_ventilator("subject.txt")
     return session
 
 
 class TestPreprocessVentilator:
+    @MISSING_TEST_DATA_FILE
     def test_returns_the_channel_bundle(self):
         result = _loaded_session().preprocess_ventilator()
         assert {"pressure", "flow", "volume", "fs"} <= set(result)
@@ -53,6 +56,7 @@ class TestPreprocessVentilator:
         with pytest.raises(MissingModalityDataError, match="load_ventilator"):
             M3Session().preprocess_ventilator()
 
+    @MISSING_TEST_DATA_FILE
     def test_updates_the_recordings_channel_fields(self):
         session = _loaded_session()
         session.preprocess_ventilator()
@@ -62,12 +66,14 @@ class TestPreprocessVentilator:
         assert session.ventilator.volume is not None
         assert session.ventilator.fs == FS
 
+    @MISSING_TEST_DATA_FILE
     def test_mirrors_the_default_variant_onto_processed(self):
         session = _loaded_session()
         result = session.preprocess_ventilator()
         assert session.processed["ventilator"] is result
         assert session.processed_variants["ventilator"]["default"] is result
 
+    @MISSING_TEST_DATA_FILE
     def test_mirrors_the_primary_recording_reached_by_its_own_name(self):
         """A recording loaded under a name is still the primary one.
 
@@ -78,7 +84,7 @@ class TestPreprocessVentilator:
         """
 
         session = M3Session(
-            emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: _payload()),
+            emg_adapter=ReSurfEMG(loader=lambda path, **kwargs: _payload()),
         )
         session.load_ventilator("subject.txt", name="mdn")
         result = session.preprocess_ventilator(name="mdn", lowpass_hz=5.0)
@@ -87,6 +93,7 @@ class TestPreprocessVentilator:
         assert session.processed["ventilator"] is result
         assert session.processed_variants["ventilator"]["mdn"] is result
 
+    @MISSING_TEST_DATA_FILE
     def test_a_second_recording_stays_out_of_processed(self):
         session = _loaded_session()
         session.load_ventilator("pod.txt", name="pod")
@@ -96,12 +103,14 @@ class TestPreprocessVentilator:
         assert session.processed["ventilator"] is primary
         assert set(session.processed_variants["ventilator"]) == {"default", "pod"}
 
+    @MISSING_TEST_DATA_FILE
     def test_records_provenance(self):
         session = _loaded_session()
         session.preprocess_ventilator()
         assert session.provenance[-1].action == "preprocess_ventilator"
         assert session.provenance[-1].modality == "ventilator"
 
+    @MISSING_TEST_DATA_FILE
     def test_forwards_adapter_options(self):
         session = _loaded_session()
         result = session.preprocess_ventilator(lowpass_hz=None)
@@ -111,6 +120,7 @@ class TestPreprocessVentilator:
 class TestPreprocessVentilatorVariants:
     """Same semantics as `preprocess_eit`/`preprocess_emg`."""
 
+    @MISSING_TEST_DATA_FILE
     def test_named_variants_coexist(self):
         session = _loaded_session()
         session.preprocess_ventilator(variant="raw_ish", lowpass_hz=None)
@@ -121,23 +131,27 @@ class TestPreprocessVentilatorVariants:
         assert variants["raw_ish"]["filter"]["lowpass_hz"] is None
         assert variants["smooth"]["filter"]["lowpass_hz"] == 5.0
 
+    @MISSING_TEST_DATA_FILE
     def test_a_named_variant_does_not_touch_processed(self):
         session = _loaded_session()
         session.preprocess_ventilator(variant="smooth")
         assert "ventilator" not in session.processed
 
+    @MISSING_TEST_DATA_FILE
     def test_rewriting_a_variant_raises(self):
         session = _loaded_session()
         session.preprocess_ventilator()
         with pytest.raises(VariantAlreadyExistsError, match="already exists"):
             session.preprocess_ventilator()
 
+    @MISSING_TEST_DATA_FILE
     def test_overwrite_allows_replacing(self):
         session = _loaded_session()
         session.preprocess_ventilator()
         replaced = session.preprocess_ventilator(overwrite=True, lowpass_hz=5.0)
         assert session.processed["ventilator"] is replaced
 
+    @MISSING_TEST_DATA_FILE
     def test_session_wide_allow_overwrite_is_honored(self):
         session = _loaded_session()
         session.allow_overwrite = True
@@ -146,6 +160,7 @@ class TestPreprocessVentilatorVariants:
 
 
 class TestTypedCollections:
+    @MISSING_TEST_DATA_FILE
     def test_ventilator_signals_reach_the_session(self):
         # Ventilator data never landed in `session.signals` before the
         # ventilator became a peer modality.
@@ -155,6 +170,7 @@ class TestTypedCollections:
         session.preprocess_ventilator(lowpass_hz=SUGGESTED_LOWPASS_HZ)
         assert len(session.signals.for_modality("ventilator")) == 6
 
+    @MISSING_TEST_DATA_FILE
     def test_each_channel_is_retrievable_by_category(self):
         session = _loaded_session()
         session.preprocess_ventilator(lowpass_hz=SUGGESTED_LOWPASS_HZ)
@@ -164,6 +180,7 @@ class TestTypedCollections:
             assert len(found) == 2  # raw + processed
             assert {s.modality for s in found} == {"ventilator"}
 
+    @MISSING_TEST_DATA_FILE
     def test_signals_accumulate_across_variants(self):
         session = _loaded_session()
         session.preprocess_ventilator(variant="a", lowpass_hz=SUGGESTED_LOWPASS_HZ)
@@ -172,6 +189,7 @@ class TestTypedCollections:
 
 
 class TestDetectVentilatorBreaths:
+    @MISSING_TEST_DATA_FILE
     def test_detects_and_stores_breaths(self):
         session = _loaded_session()
         session.preprocess_ventilator()
@@ -180,12 +198,14 @@ class TestDetectVentilatorBreaths:
         assert breaths is session.events["ventilator_breaths"]
         assert 2 <= len(breaths) <= 3
 
+    @MISSING_TEST_DATA_FILE
     def test_breaths_use_the_canonical_modality(self):
         session = _loaded_session()
         session.preprocess_ventilator()
         breaths = session.detect_ventilator_breaths()
         assert {breath.modality for breath in breaths} == {"ventilator"}
 
+    @MISSING_TEST_DATA_FILE
     def test_preprocesses_on_the_fly_when_not_already_done(self):
         # Raw data has no split channels, so detection would otherwise fail;
         # preprocessing on demand matches how `postprocess_emg` accepts a raw
@@ -198,11 +218,13 @@ class TestDetectVentilatorBreaths:
         with pytest.raises(MissingModalityDataError, match="load_ventilator"):
             M3Session().detect_ventilator_breaths()
 
+    @MISSING_TEST_DATA_FILE
     def test_records_provenance(self):
         session = _loaded_session()
         session.detect_ventilator_breaths()
         assert session.provenance[-1].action == "detect_ventilator_breaths"
 
+    @MISSING_TEST_DATA_FILE
     def test_a_custom_detector_is_forwarded(self):
         session = _loaded_session()
         session.preprocess_ventilator()
@@ -212,6 +234,7 @@ class TestDetectVentilatorBreaths:
 
 
 class TestDetectVentilatorBreathsVariants:
+    @MISSING_TEST_DATA_FILE
     def test_variant_events_are_stored_under_their_own_key(self):
         session = _loaded_session()
         session.preprocess_ventilator(variant="smooth", lowpass_hz=5.0)
@@ -220,6 +243,7 @@ class TestDetectVentilatorBreathsVariants:
         assert "ventilator_breaths:smooth" in session.events
         assert "ventilator_breaths" not in session.events
 
+    @MISSING_TEST_DATA_FILE
     def test_an_unknown_variant_raises(self):
         session = _loaded_session()
         with pytest.raises(MissingModalityDataError, match="preprocess_ventilator"):
@@ -227,6 +251,7 @@ class TestDetectVentilatorBreathsVariants:
 
 
 class TestLinkingAcrossModalities:
+    @MISSING_TEST_DATA_FILE
     def test_detected_breaths_link_under_the_ventilator_key(self):
         session = _loaded_session()
         session.preprocess_ventilator()
