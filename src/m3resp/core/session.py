@@ -206,6 +206,15 @@ class M3Session:
 
         A newly loaded recording has not been synchronized yet: any EIT start
         time and synchronization record from before are cleared.
+
+        Args:
+            path (str | Path): The EIT file to read.
+            vendor (str | None): The EIT device maker, passed to
+                `eitprocessing` (for example ``"draeger"``).
+            **kwargs (Any): Passed on to the EIT file reader.
+
+        Returns:
+            Any: The loaded `eitprocessing` Sequence (`session.eit.data`).
         """
 
         recording = load_eit_recording(
@@ -225,6 +234,15 @@ class M3Session:
 
         A newly loaded recording has not been synchronized yet: any EMG start
         time and synchronization record from before are cleared.
+
+        Args:
+            path (str | Path): The EMG file to read.
+            **kwargs (Any): Passed on to the EMG file reader.
+
+        Returns:
+            Any: The loaded EMG data (`session.emg.data`), a dictionary with
+                the samples under ``"array"`` and the file details under
+                ``"metadata"``.
         """
 
         recording = load_emg_recording(path, adapter=self.emg_adapter, **kwargs)
@@ -242,25 +260,35 @@ class M3Session:
         Mirrors `load_eit`/`load_emg`. The recording is additionally stored
         under the legacy `raw["vent"]` key, pointing at the same object.
 
-        `path` may be either file ventilator data arrives in: the multi-channel
-        export shared with the sEMG, or an EIT ``*.bin`` carrying ventilator
-        waveforms beside its impedance frames. `VentilatorAdapter` picks by
-        suffix; pass ``source="eit"``/``"emg"`` to force one, and
-        ``ventilator_channels=`` to select which channels to read from a
-        ``*.bin`` (see `m3resp.adapters.ventilator_adapter`).
-
-        `name` files this recording alongside any already loaded, for a study
-        where more than one instrument recorded ventilator data - a ventilator
-        export and the EIT file's own Medibus channels, say, each with its own
-        airway pressure. Without a name the recording is the primary one, which
-        is what `session.ventilator` and `raw["ventilator"]` point at.
-        Preprocess a named recording with
-        `preprocess_ventilator(name=...)`, which qualifies its channel keys so
-        the two airway pressures stay distinct in `session.signals`.
-
         A newly loaded standalone recording has not been synchronized yet: its
         own start time and synchronization record from before are cleared.
         Ventilator data from the EIT or EMG file follows that file's clock.
+
+        Args:
+            path (str | Path): The file the ventilator data arrives in: the
+                multi-channel export shared with the sEMG, or an EIT ``*.bin``
+                carrying ventilator waveforms beside its impedance frames.
+                `VentilatorAdapter` picks by file suffix.
+            name (str | None): Files this recording alongside any already
+                loaded, for a study where more than one instrument recorded
+                ventilator data - a ventilator export and the EIT file's own
+                Medibus channels, say, each with its own airway pressure.
+                Without a name the recording is the primary one, which is what
+                `session.ventilator` and `raw["ventilator"]` point at.
+                Preprocess a named recording with
+                `preprocess_ventilator(name=...)`, which qualifies its channel
+                keys so the two airway pressures stay distinct in
+                `session.signals`.
+            **kwargs (Any): Passed on to the ventilator file reader. Use
+                ``source="eit"``/``"emg"``/``"ventilator"`` to choose the file
+                type, and ``ventilator_channels=`` to select which channels to
+                read from a ``*.bin`` (see
+                `m3resp.adapters.ventilator_adapter`).
+
+        Returns:
+            Any: The loaded ventilator data (`VentilatorRecording.data`), a
+                dictionary with the samples under ``"array"`` and the file
+                details under ``"metadata"``.
         """
 
         recording = load_ventilator_recording(
@@ -277,14 +305,27 @@ class M3Session:
         return recording.data
 
     def primary_ventilator_name(self) -> str | None:
-        """The name of the recording `session.ventilator` points at."""
+        """The name of the recording `session.ventilator` points at.
+
+        Returns:
+            str | None: The name, or None when no ventilator recording is
+                loaded.
+        """
 
         if DEFAULT_VENTILATOR_NAME in self.ventilators:
             return DEFAULT_VENTILATOR_NAME
         return next(iter(self.ventilators), None)
 
     def get_ventilator(self, name: str | None = None) -> VentilatorRecording:
-        """A loaded ventilator recording by name, or the primary one."""
+        """A loaded ventilator recording by name, or the primary one.
+
+        Args:
+            name (str | None): The name the recording was loaded under (see
+                `load_ventilator`). None gives the primary recording.
+
+        Returns:
+            VentilatorRecording: The loaded recording.
+        """
 
         key = name or self.primary_ventilator_name()
         if key is None or key not in self.ventilators:
@@ -308,19 +349,31 @@ class M3Session:
         Every result is stored under `session.processed_variants["eit"][name]`,
         `name` being `variant` if given, otherwise `"default"` - there is no
         implicit, ambiguously-overwritten "current" result. Writing to a name
-        that's already populated raises `VariantAlreadyExistsError` unless
-        `overwrite=True` is passed (or `session.allow_overwrite = True` is
-        set, so notebook/exploratory code can opt in once instead of passing
-        `overwrite=True` on every call), so a reference like
-        `processed_variants["eit"]["mdn"]` can't silently change meaning
-        underneath a caller that stashed it earlier. `session.processed["eit"]`
-        mirrors the `"default"` variant only, for convenience/backwards
-        compatibility with code that just wants "the" EIT result.
+        that's already populated raises `VariantAlreadyExistsError`, so a
+        reference like `processed_variants["eit"]["mdn"]` can't silently
+        change meaning underneath a caller that stashed it earlier.
+        `session.processed["eit"]` mirrors the `"default"` variant only, for
+        convenience/backwards compatibility with code that just wants "the"
+        EIT result.
 
         `preprocess_eit(filter_mode="mdn", variant="mdn")` and
         `preprocess_eit(filter_mode="lowpass", variant="lowpass")` can both
         coexist. See `detect_eit_breaths(variant=...)` to detect breaths
         against a specific variant.
+
+        Args:
+            variant (str | None): Name to store this result under. None
+                stores it as ``"default"``.
+            overwrite (bool): Replace a result already stored under the same
+                name. `session.allow_overwrite = True` does the same for every
+                call, so notebook/exploratory code can opt in once.
+            **kwargs (Any): Passed on to `EITProcessingAdapter.preprocess`
+                (for example ``filter_mode``). ``preprocess=`` replaces the
+                whole step with a function of your own.
+
+        Returns:
+            Any: The preprocessing result, also stored in
+                `session.processed_variants["eit"]`.
         """
 
         recording = self._require_raw("eit")
@@ -364,6 +417,21 @@ class M3Session:
         `VariantAlreadyExistsError` if `name` is already populated, and
         mirrors it onto `session.processed["emg"]` only when `name` is
         `"default"`.
+
+        Args:
+            variant (str | None): Name to store this result under. None
+                stores it as ``"default"``.
+            overwrite (bool): Replace a result already stored under the same
+                name.
+            **kwargs (Any): Passed on to `ReSurfEMGAdapter.preprocess`.
+                ``preprocess=`` replaces the whole step with a function of
+                your own.
+
+        Returns:
+            Any: The preprocessing result. The default step gives a
+                dictionary that includes the ``"filtered"`` and
+                ``"envelope"`` signals, the ``"channel"`` used and the
+                sampling rate ``"fs"`` in Hz.
         """
 
         recording = self._require_raw("emg")
@@ -410,22 +478,34 @@ class M3Session:
         `session.processed["ventilator"]` only when the variant is
         `"default"`.
 
-        `name` selects which loaded recording to preprocess when a study
-        recorded ventilator data on more than one instrument (see
-        `load_ventilator`). A non-primary recording's channel keys are
-        qualified with its name - ``pressure__pod`` rather than ``pressure`` -
-        so its airway pressure does not collide with the primary recording's
-        in `session.signals`. `variant` defaults to `name`, so each recording
-        lands in its own slot rather than overwriting.
-
         Unlike its EIT/EMG siblings this runs native code rather than an
         upstream library: nothing in `eitprocessing`/`resurfemg` preprocesses
         ventilator data, which is why these channels used to be consumed
-        unfiltered. Remaining keyword arguments reach
-        `VentilatorAdapter.preprocess`: `lowpass_hz` sets the cut-off, with
-        `lowpass_hz=None` skipping the filter, and `preprocess` replaces the
-        whole step with a callable of your own. See
-        `m3resp.adapters.ventilator_adapter` for the defaults.
+        unfiltered.
+
+        Args:
+            name (str | None): Which loaded recording to preprocess when a
+                study recorded ventilator data on more than one instrument
+                (see `load_ventilator`). A non-primary recording's channel
+                keys are qualified with its name - ``pressure__pod`` rather
+                than ``pressure`` - so its airway pressure does not collide
+                with the primary recording's in `session.signals`. None
+                preprocesses the primary recording.
+            variant (str | None): Name to store this result under. Defaults
+                to `name`, so each recording lands in its own slot rather
+                than overwriting, and to ``"default"`` when `name` is None.
+            overwrite (bool): Replace a result already stored under the same
+                name.
+            **kwargs (Any): Passed on to `VentilatorAdapter.preprocess`:
+                ``lowpass_hz`` sets the cut-off in Hz, with
+                ``lowpass_hz=None`` skipping the filter, and ``preprocess=``
+                replaces the whole step with a function of your own. See
+                `m3resp.adapters.ventilator_adapter` for the defaults.
+
+        Returns:
+            Any: The preprocessing result, a dictionary with one filtered
+                signal per channel (pressure, flow, volume) and the sampling
+                rate ``"fs"`` in Hz.
         """
 
         primary = self.primary_ventilator_name()
@@ -488,20 +568,6 @@ class M3Session:
     ) -> dict[str, Any]:
         """Set when each loaded recording started, on one shared clock.
 
-        `offset_seconds` gives each modality's start time in seconds, for
-        example ``{"emg": 5.0}`` for "EMG started 5 s after EIT", or
-        ``{"emg": -5.0}`` for "EMG started 5 s before EIT". A single number
-        is the EMG start time. Start times are counted from the start of
-        `reference_modality`, which is therefore always 0.
-
-        ``"ventilator"`` is the start time of the standalone ventilator
-        recordings (those loaded with ``source="ventilator"``). When two of
-        them started at different moments, give one its own start time with
-        ``"ventilator:<name>"``, the name it was loaded under, e.g.
-        ``{"ventilator": 0.0, "ventilator:monitor": 12.5}``. Ventilator data
-        that came inside the EIT or EMG file always uses that file's start
-        time.
-
         No samples are removed: every recording keeps its full length. The
         start times are stored in `session.start_times` and are added to
         breath times only when modalities are compared
@@ -510,9 +576,29 @@ class M3Session:
         replaces the start times rather than adding to them. See
         `m3resp.synchronization.start_times`.
 
-        Returns ``{modality: {"start_time_seconds": ...}}`` for every loaded
-        modality, plus a ``"ventilator:<name>"`` entry for each standalone
-        ventilator recording given its own start time.
+        Args:
+            method (str): How the start times are found. Only
+                ``"manual_offset"`` is supported.
+            offset_seconds (float | Mapping[str, float]): Start time of each
+                modality in seconds, for example ``{"emg": 5.0}`` for "EMG
+                started 5 s after EIT", or ``{"emg": -5.0}`` for "EMG started
+                5 s before EIT". A single number is the EMG start time.
+                ``"ventilator"`` is the start time of the standalone ventilator
+                recordings (those loaded with ``source="ventilator"``). When
+                two of them started at different moments, give one its own
+                start time with ``"ventilator:<name>"``, the name it was loaded
+                under, e.g. ``{"ventilator": 0.0, "ventilator:monitor": 12.5}``.
+                Ventilator data that came inside the EIT or EMG file always
+                uses that file's start time.
+            reference_modality (str | None): The recording that start times
+                are counted from, so its own start time is always 0. A
+                modality name or ``"ventilator:<name>"``. When None: the
+                ventilator if one is loaded, otherwise EIT, otherwise EMG.
+
+        Returns:
+            dict[str, Any]: ``{modality: {"start_time_seconds": ...}}`` for
+                every loaded modality, plus a ``"ventilator:<name>"`` entry for
+                each standalone ventilator recording given its own start time.
         """
 
         if method != "manual_offset":
@@ -584,6 +670,16 @@ class M3Session:
 
         Run this before `preprocess_emg`. The removed samples are gone from
         the loaded recording; reload the file to get them back.
+
+        Args:
+            start_seconds (float): Start of the part to keep, in seconds.
+            end_seconds (float | None): End of the part to keep, in seconds.
+                None keeps everything up to the end.
+
+        Returns:
+            dict[str, Any]: The times used and the number of samples removed
+                from the start and the end and kept. Also stored in
+                `session.parameters["emg_slice"]`.
         """
 
         recording = self.emg
@@ -638,6 +734,17 @@ class M3Session:
 
         Run this before `preprocess_eit`. The removed frames are gone from
         the loaded recording; reload the file to get them back.
+
+        Args:
+            start_seconds (float): Start of the part to keep, in seconds.
+            end_seconds (float | None): End of the part to keep, in seconds.
+                None keeps everything up to the end.
+
+        Returns:
+            dict[str, Any]: The times used, the number of frames removed from
+                the start and the end and kept, and how many ventilator
+                recordings were cut with the EIT. Also stored in
+                `session.parameters["eit_slice"]`.
         """
 
         recording = self.eit
@@ -710,9 +817,6 @@ class M3Session:
         asking to cut it here raises an error, since cutting it alone would
         move it out of line with its host recording.
 
-        `name` cuts only the recording loaded under that name. Without it,
-        every standalone ventilator recording is cut.
-
         Times are in seconds from the start of the recording as it is now
         (after any earlier slicing). ``end_seconds=None`` keeps everything up
         to the end. After slicing, the recording's times count from the new
@@ -723,6 +827,19 @@ class M3Session:
 
         Run this before `preprocess_ventilator`. The removed samples are
         gone from the loaded recording; reload the file to get them back.
+
+        Args:
+            start_seconds (float): Start of the part to keep, in seconds.
+            end_seconds (float | None): End of the part to keep, in seconds.
+                None keeps everything up to the end.
+            name (str | None): Cut only the recording loaded under this name.
+                None cuts every standalone ventilator recording.
+
+        Returns:
+            dict[str, Any]: The times used and, under ``"recordings"``, the
+                number of samples removed from the start and the end and kept
+                for each recording that was cut. Also stored in
+                `session.parameters["ventilator_slice"]`.
         """
 
         named = self.ventilators or (
@@ -800,12 +917,19 @@ class M3Session:
     def detect_eit_breaths(self, *, variant: str | None = None, **kwargs: Any) -> Any:
         """Detect EIT breaths and store normalized events.
 
-        Pass `variant=<name>` to detect breaths against a
-        `preprocess_eit(..., variant=<name>)` result instead of the default
-        `processed["eit"]`; the events are then stored under
-        `session.events["eit_breaths:<name>"]` instead of
-        `session.events["eit_breaths"]`, so multiple variants' detections
-        can coexist.
+        Args:
+            variant (str | None): Detect breaths in the
+                `preprocess_eit(..., variant=<name>)` result with this name
+                instead of the default `processed["eit"]`. The events are then
+                stored under `session.events["eit_breaths:<name>"]` instead of
+                `session.events["eit_breaths"]`, so multiple variants'
+                detections can coexist.
+            **kwargs (Any): Passed on to `EITProcessingAdapter.detect_breaths`.
+                ``detector=`` replaces the detection with a function of your
+                own.
+
+        Returns:
+            Any: The detected breaths, a list of `BreathEvent`.
         """
 
         if variant is not None:
@@ -827,7 +951,17 @@ class M3Session:
     def detect_emg_breaths(self, *, variant: str | None = None, **kwargs: Any) -> Any:
         """Detect EMG breaths and store normalized events.
 
-        See `detect_eit_breaths` for what `variant` does.
+        Args:
+            variant (str | None): Detect breaths in the `preprocess_emg`
+                result with this name, stored under
+                `session.events["emg_breaths:<name>"]`. See
+                `detect_eit_breaths`.
+            **kwargs (Any): Passed on to `ReSurfEMGAdapter.detect_breaths`
+                (for example ``baseline=``). ``detector=`` replaces the
+                detection with a function of your own.
+
+        Returns:
+            Any: The detected breaths, a list of `BreathEvent`.
         """
 
         if variant is not None:
@@ -856,12 +990,24 @@ class M3Session:
     ) -> Any:
         """Detect ventilator breaths from the volume channel.
 
-        See `detect_eit_breaths` for what `variant` does.
-
         This promotes what used to be a side effect of `postprocess_emg` into a
         method of its own, so ventilator breaths can be detected without
         running EMG postprocessing first. `postprocess_emg` still populates
         `session.events["ventilator_breaths"]` as before.
+
+        Args:
+            variant (str | None): Detect breaths in the
+                `preprocess_ventilator` result with this name, stored under
+                `session.events["ventilator_breaths:<name>"]`. See
+                `detect_eit_breaths`. When None and the ventilator has not
+                been preprocessed, it is preprocessed here with the default
+                settings.
+            **kwargs (Any): Passed on to `VentilatorAdapter.detect_breaths`
+                (for example ``breath_width_seconds``). ``detector=``
+                replaces the detection with a function of your own.
+
+        Returns:
+            Any: The detected breaths, a list of `BreathEvent`.
         """
 
         if variant is not None:
@@ -886,18 +1032,53 @@ class M3Session:
         return self.events[event_key]
 
     def add_events(self, name: str, events: Any) -> list[Any]:
-        """Store a named event list while keeping `session.events` as backing data."""
+        """Store a named event list while keeping `session.events` as backing data.
+
+        Args:
+            name (str): The name to store the events under, for example
+                ``"emg_breaths"``. An existing list with this name is
+                replaced.
+            events (Any): The events, for example a list of `BreathEvent`.
+
+        Returns:
+            list[Any]: The stored events.
+        """
 
         self.events[name] = list(events)
         return self.events[name]
 
     def get_events(self, name: str, default: Any = None) -> Any:
-        """Return a named event list from `session.events`."""
+        """Return a named event list from `session.events`.
+
+        Args:
+            name (str): The name the events were stored under, for example
+                ``"emg_breaths"``.
+            default (Any): What to return when no events have this name.
+
+        Returns:
+            Any: The stored events, or `default`.
+        """
 
         return self.events.get(name, default)
 
     def postprocess_emg(self, **kwargs: Any) -> Any:
-        """Run EMG postprocessing through the adapter."""
+        """Run EMG postprocessing through the adapter.
+
+        Uses the default EMG preprocessing result and the breaths in
+        `session.events["emg_breaths"]`. Any ventilator breaths found during
+        postprocessing are stored in `session.events["ventilator_breaths"]`.
+
+        Args:
+            **kwargs (Any): Passed on to `ReSurfEMGAdapter.postprocess`, for
+                example ``ventilator``, ``ventilator_fs`` (Hz) and
+                ``ventilator_breath_width_seconds``.
+
+        Returns:
+            Any: The postprocessing result, a dictionary with the values
+                computed (``"computed"``), those skipped (``"skipped"``) and
+                the settings used (``"settings"``). Also stored in
+                `session.parameters["emg_postprocessing"]`.
+        """
 
         data = self.processed.get("emg") or self._require_raw("emg").data
         events = self.events.get("emg_breaths")
@@ -953,6 +1134,21 @@ class M3Session:
         so the shifted breaths are on the shared clock. The two add up:
         `offset_seconds` is only for a further correction after detection.
         `start_time_shift_seconds` records what was added for each modality.
+
+        Args:
+            method (str): How the breaths are shifted. Only
+                ``"manual_offset"`` is supported.
+            offset_seconds (float | Mapping[str, float]): Extra shift of each
+                modality's breaths in seconds, on top of the start times, for
+                example ``{"emg": 0.2}``. A single number is the EMG shift.
+            reference_modality (str | None): The modality whose breaths are
+                not shifted by an extra offset. When None: the ventilator if
+                there are ventilator breaths, otherwise EIT.
+
+        Returns:
+            dict[str, Any]: The shifted breath lists, keyed by list name (for
+                example ``"emg_breaths"``). Also stored in
+                `session.processed["synchronized"]`.
         """
 
         if method != "manual_offset":
@@ -1022,7 +1218,18 @@ class M3Session:
         reference_modality: str | None = None,
     ) -> dict[str, Any]:
         """Deprecated alias for `synchronize_multimodal_breaths` - kept for
-        backward compatibility with existing calling code."""
+        backward compatibility with existing calling code.
+
+        Args:
+            method (str): See `synchronize_multimodal_breaths`.
+            offset_seconds (float | Mapping[str, float]): See
+                `synchronize_multimodal_breaths`.
+            reference_modality (str | None): See
+                `synchronize_multimodal_breaths`.
+
+        Returns:
+            dict[str, Any]: The shifted breath lists, keyed by list name.
+        """
 
         return self.synchronize_multimodal_breaths(
             method, offset_seconds, reference_modality=reference_modality
@@ -1040,7 +1247,8 @@ class M3Session:
         Breath lists added directly with `add_events`, without a loaded
         recording, are covered too. Recordings loaded later are not.
 
-        Returns the recordings marked ``"none"``.
+        Returns:
+            list[str]: The recordings marked ``"none"``.
         """
 
         skipped = [
@@ -1064,6 +1272,16 @@ class M3Session:
         Warns (`UnsynchronizedDataWarning`) when the breaths come from
         recordings on different clocks and one of them was never
         synchronized; see `skip_synchronization`.
+
+        Args:
+            time_tolerance (float): Largest time difference, in seconds, at
+                which two breaths from different modalities are still linked.
+                The closest match wins; a breath with no match gets a
+                `LinkedBreath` of its own.
+
+        Returns:
+            list[LinkedBreath]: The linked breaths. Also stored in
+                `session.linked_breaths`.
         """
 
         synchronized = self.processed.get("synchronized")
@@ -1112,6 +1330,23 @@ class M3Session:
         Call `link_breaths` first; an empty `self.linked_breaths` yields an
         empty result rather than raising. Results are added to
         `self.parameter_results` and also returned.
+
+        Args:
+            delay_pairs (Sequence[tuple[str, str]] | None): Modality pairs to
+                compute the per-breath timing delay for, for example
+                ``[("eit", "emg")]``. Positive means the second modality's
+                breath comes later. None uses every pair of modalities found
+                in the linked breaths.
+            duration_pairs (Sequence[tuple[str, str]] | None): Modality pairs
+                to compute the per-breath duration difference for. None uses
+                every pair of modalities found in the linked breaths.
+            anchor (str): Which point of each breath the delay is measured
+                between: ``"start"``, ``"peak"`` or ``"end"``.
+
+        Returns:
+            list[ParameterResult]: The timing delays and duration differences
+                per breath (in seconds), and one event-agreement result per
+                delay pair.
         """
 
         results = compute_multimodal_parameters(
@@ -1141,6 +1376,18 @@ class M3Session:
         (``"eit"``, ``"emg"``, ``"multimodal"``), which simply call this
         session's own already-instrumented methods in sequence - see
         ``m3resp.presets.base`` for the rationale.
+
+        Args:
+            name (str): The preset to run: ``"eit"``, ``"emg"`` or
+                ``"multimodal"``.
+            config (Mapping[str, Mapping[str, Any]] | None): Settings for each
+                step, keyed by step name, for example
+                ``{"preprocess": {"high_pass_hz": 20.0}}`` for the ``"emg"``
+                preset. None uses the
+                preset's defaults.
+
+        Returns:
+            M3Session: This session, with the results of every step stored.
         """
 
         from m3resp.presets import get_pipeline
@@ -1153,10 +1400,17 @@ class M3Session:
     ) -> Path:
         """Export the session summary to disk.
 
-        ``processing_run_id`` (typically `PipelineResult.processing_run_id`)
-        links a written parameter-array archive to the `ProcessingRun` that
-        produced it when a `DataModelRecorder` is attached; omit it for a
-        manual export with no associated pipeline run.
+        Args:
+            output_dir (str | Path): The folder to write the files to. It is
+                created if it does not exist.
+            processing_run_id (str | None): Typically
+                `PipelineResult.processing_run_id`. Links a written
+                parameter-array archive to the `ProcessingRun` that produced
+                it when a `DataModelRecorder` is attached; omit it for a
+                manual export with no associated pipeline run.
+
+        Returns:
+            Path: The folder the files were written to.
         """
 
         output_path = export_session_summary(
