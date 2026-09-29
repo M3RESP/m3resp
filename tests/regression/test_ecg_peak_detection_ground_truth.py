@@ -2,7 +2,7 @@
 2_resurfemg_gap_migration_implementation_plan.md): a ground-truth ECG
 detection-accuracy fixture.
 
-The committed `data/source/data_from_repo/emg_data_synth_quiet_breathing.Poly5`
+The committed `tests/data/emg_data_synth_quiet_breathing.Poly5`
 fixture is useful for wrapper-equivalence tests (same call, same result), but
 its "true" R-peak locations are not independently known - it can only prove
 the adapter forwards its call correctly, not that the detector actually finds

@@ -15,7 +15,7 @@ from m3resp import M3Session
 
 session = M3Session()
 
-data_dir = "data/source/synthetic/20260610_153009"
+data_dir = "tests/data"
 session.load_eit(f"{data_dir}/m3resp_multimodal_1_eit_draeger.bin", vendor="draeger")
 session.load_emg(f"{data_dir}/m3resp_multimodal_1_emg.Poly5")
 

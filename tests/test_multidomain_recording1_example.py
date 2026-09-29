@@ -22,9 +22,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPEC = os.path.join(
     REPO_ROOT, "examples", "multidomain_recording1", "recording1_a2.pipeline.yaml"
 )
-DATA = os.path.join(
-    REPO_ROOT, "data", "source", "Test_PS_27072026", "EMG_Vent", "TestPS3.txt"
-)
+DATA = os.path.join(REPO_ROOT, "tests", "data", "TestPS3.txt")
 
 EXPECTED_BREATH_TIMES_S = [
     146.1735, 152.2125, 158.251, 164.8705, 171.0465,

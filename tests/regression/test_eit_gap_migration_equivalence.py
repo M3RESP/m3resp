@@ -40,9 +40,8 @@ def _fixture_path() -> str:
     repo_root = Path(__file__).resolve().parents[2]
     path = os.path.join(
         repo_root,
+        "tests",
         "data",
-        "source",
-        "data_from_repo",
         "draeger_synthetic_draeger_20Hz.bin",
     )
     assert os.path.exists(path), f"missing committed EIT fixture: {path}"

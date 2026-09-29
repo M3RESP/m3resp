@@ -39,7 +39,7 @@ outputs:
   figures: true
 
 inputs:
-  emg_file: ../../data/source/Test_PS_27072026/EMG_Vent/TestPS3.txt
+  emg_file: ../../tests/data/TestPS3.txt
 
 steps:
   - uses: emg.load
