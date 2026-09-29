@@ -234,7 +234,7 @@ class TestLoad:
 
         payload = _payload()
         monkeypatch.setattr(
-            resurfemg_adapter.ReSurfEMG,
+            resurfemg_adapter.ReSurfEMGAdapter,
             "load",
             lambda self, path, **kwargs: payload,
         )
