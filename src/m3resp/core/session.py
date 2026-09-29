@@ -683,8 +683,11 @@ class M3Session:
         """
 
         recording = self.emg
-        data = recording.data if recording is not None else None
-        if not isinstance(data, dict) or "array" not in data:
+        if (
+            recording is None
+            or not isinstance(recording.data, dict)
+            or "array" not in recording.data
+        ):
             raise MissingModalityDataError("slice_emg needs a loaded EMG recording.")
         window = emg_sample_window(recording, start_seconds, end_seconds)
         if window.sample_frequency is None:
