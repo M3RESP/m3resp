@@ -1305,11 +1305,13 @@ class M3Session:
 
         def _breaths(name: str) -> list[BreathEvent] | None:
             events = synchronized.get(name)
-            if events is None:
-                events = self.events.get(name)
-                if isinstance(events, list):
-                    events = align_events_by_modality_offset(events, start_time_shifts)
-            return events
+            if events is not None:
+                return events
+            stored = self.events.get(name)
+            if not isinstance(stored, list):
+                return stored
+            breaths: list[BreathEvent] = stored
+            return align_events_by_modality_offset(breaths, start_time_shifts)
 
         self.linked_breaths = link_breaths_by_time(
             {
