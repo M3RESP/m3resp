@@ -14,13 +14,7 @@ from m3resp.workflows import run_pipeline
 pytest.importorskip("resurfemg")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EMG_PATH = (
-    REPO_ROOT
-    / "data"
-    / "source"
-    / "data_from_repo"
-    / "emg_data_synth_quiet_breathing.Poly5"
-)
+EMG_PATH = REPO_ROOT / "tests" / "data" / "emg_data_synth_quiet_breathing.Poly5"
 
 
 def _provenance_for(session, action: str):

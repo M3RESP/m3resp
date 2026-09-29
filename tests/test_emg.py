@@ -569,15 +569,11 @@ def test_emg_real_data_pipeline_uses_committed_poly5_sample():
     emg_path = os.path.join(
         repo_root,
         "data",
-        "source",
-        "data_from_repo",
         "emg_data_synth_quiet_breathing.Poly5",
     )
     vent_path = os.path.join(
         repo_root,
         "data",
-        "source",
-        "data_from_repo",
         "vent_data_synth_quiet_breathing.Poly5",
     )
     assert os.path.isfile(emg_path), f"missing fixture: {emg_path}"

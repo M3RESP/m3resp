@@ -40,8 +40,8 @@ outputs:
   structured_export: true
 
 inputs:
-  emg_file: ../../data/source/data_from_repo/emg_data_synth_quiet_breathing.Poly5
-  vent_file: ../../data/source/data_from_repo/vent_data_synth_quiet_breathing.Poly5
+  emg_file: ../../tests/data/emg_data_synth_quiet_breathing.Poly5
+  vent_file: ../../tests/data/vent_data_synth_quiet_breathing.Poly5
 
 steps:
   # -- Loading ---------------------------------------------------------------

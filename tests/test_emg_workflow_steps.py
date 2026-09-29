@@ -93,16 +93,14 @@ class TestFullExampleEndToEnd:
         repo_root = Path(__file__).resolve().parents[1]
         emg_fixture = os.path.join(
             repo_root,
+            "tests",
             "data",
-            "source",
-            "data_from_repo",
             "emg_data_synth_quiet_breathing.Poly5",
         )
         vent_fixture = os.path.join(
             repo_root,
+            "tests",
             "data",
-            "source",
-            "data_from_repo",
             "vent_data_synth_quiet_breathing.Poly5",
         )
         assert os.path.exists(emg_fixture), f"missing committed fixture: {emg_fixture}"

@@ -7,9 +7,9 @@
     "timepoint": null
   },
   "inputs": {
-    "eit_file": "../../data/source/synthetic/20260610_153009/m3resp_multimodal_1_eit_draeger.bin",
-    "emg_file": "../../data/source/synthetic/20260610_153009/m3resp_multimodal_1_emg.Poly5",
-    "vent_file": "../../data/source/synthetic/20260610_153009/m3resp_multimodal_1_ventilator.Poly5"
+    "eit_file": "../../tests/data/m3resp_multimodal_1_eit_draeger.bin",
+    "emg_file": "../../tests/data/m3resp_multimodal_1_emg.Poly5",
+    "vent_file": "../../tests/data/m3resp_multimodal_1_ventilator.Poly5"
   },
   "name": "multimodal-full",
   "outputs": {

@@ -7,7 +7,7 @@
     "timepoint": null
   },
   "inputs": {
-    "eit_file": "../../data/source/data_from_repo/draeger_synthetic_draeger_20Hz.bin",
+    "eit_file": "../../tests/data/draeger_synthetic_draeger_20Hz.bin",
     "vendor": "draeger"
   },
   "name": "eit-full-preprocessing",
