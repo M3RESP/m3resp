@@ -405,7 +405,6 @@ def _scipy_stats():
         from scipy import stats
     except ImportError as exc:
         msg = (
-        msg = (
             "Rolling confidence intervals require SciPy. Install `scipy` to "
             "use `m3resp.processing.windows` confidence interval helpers."
         )
