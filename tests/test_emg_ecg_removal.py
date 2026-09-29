@@ -182,7 +182,7 @@ class TestPreprocessEnvelopeSkipping:
 
     def test_skipping_still_records_the_envelope_settings(self):
         processed = self._preprocess(
-            compute_envelope=False,
+            compute_envelope=False,  # removed in the native implementation
             envelope_window_seconds=0.25,
             envelope_method="rms",
         )

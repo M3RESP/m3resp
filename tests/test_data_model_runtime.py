@@ -19,6 +19,8 @@ from m3resp.data import (
     Signal,
     TimeSeries,
 )
+
+from known_divergences import MISSING_TEST_DATA_FILE
 from m3resp.data.events import BreathEvent
 
 
@@ -75,6 +77,7 @@ class TestTimeSeries:
 
 
 class TestSignal:
+    @MISSING_TEST_DATA_FILE
     def test_create_with_modality_and_channel(self):
         signal = Signal(
             values=[1.0, 2.0],

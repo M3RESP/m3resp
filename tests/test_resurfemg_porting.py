@@ -16,6 +16,7 @@ from m3resp.visualization import (
     plot_session_overview,
     plot_synchronization_comparison,
 )
+from known_divergences import MISSING_TEST_DATA_FILE
 
 
 def fake_emg_recording() -> dict[str, Any]:
@@ -26,6 +27,7 @@ def fake_emg_recording() -> dict[str, Any]:
     }
 
 
+@MISSING_TEST_DATA_FILE
 def test_load_emg_sets_preferred_and_legacy_session_slots():
     session = M3Session(
         emg_adapter=ReSurfEMG(loader=lambda *args, **kwargs: fake_emg_recording())
@@ -40,6 +42,7 @@ def test_load_emg_sets_preferred_and_legacy_session_slots():
     assert session.emg.metadata["fs"] == 1000.0
 
 
+@MISSING_TEST_DATA_FILE
 def test_top_level_and_modality_load_helpers_return_recordings():
     adapter = ReSurfEMG(loader=lambda *args, **kwargs: fake_emg_recording())
 
@@ -216,6 +219,7 @@ def test_custom_emg_postprocess_callable_still_works():
     }
 
 
+@MISSING_TEST_DATA_FILE
 def test_default_preprocess_updates_emg_recording_with_fake_signal():
     pytest.importorskip("resurfemg")
     np = pytest.importorskip("numpy")

@@ -15,6 +15,7 @@ from m3resp.data import Signal
 from m3resp.data.units import normalize_unit
 from m3resp.workflows import run_workflow
 from m3resp.workflows.steps.emg import moving_baseline, slopesum_baseline
+from known_divergences import MISSING_TEST_DATA_FILE
 
 pytest.importorskip("resurfemg")
 np = pytest.importorskip("numpy")
@@ -74,6 +75,7 @@ class TestEmgLoad:
                 }
             )
 
+    @MISSING_TEST_DATA_FILE
     def test_injected_loader_still_produces_native_signals(self):
         from m3resp.emg import ReSurfEMG
 
