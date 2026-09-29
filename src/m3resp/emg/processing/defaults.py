@@ -27,10 +27,11 @@ from m3resp.processing.peaks import (
 )
 from m3resp.processing.windows import rolling_envelope
 
-from ._protocols import _PostprocessingOpsProtocol
-from ._shared import (
+from .protocols import _PostprocessingOpsProtocol
+from .shared import (
     _category_for_function,
     _mask_invalid,
+    _choose_emg_channel,
     _missing_postprocessing_dependency,
     _normalize_selected_postprocessing,
     _require_emg_recording,
@@ -45,14 +46,16 @@ class _DefaultsMixin:
         self,
         recording: Any,
         *,
-        channel: int = 0,
+        channel: int | None = None,
         high_pass_hz: float = 20.0,
         low_pass_hz: float | None = None,
-        envelope_window_seconds: float = 0.5,
+        envelope_window_seconds: float = 0.25,
         envelope_method: str = "rms",
+        compute_envelope: bool = True,
         notch_base_frequency: float | None = None,
         notch_max_frequency: float | None = None,
         notch_quality_factor: float = 30.0,
+        notch_before_bandpass: bool = False,
     ) -> dict[str, Any]:
         """Run the Stage 1 EMG preprocessing pipeline through ReSurfEMG.
 
@@ -79,7 +82,6 @@ class _DefaultsMixin:
         narrow high-pass alone (which only removes the fundamental) doesn't
         leave higher harmonics inside the pass band untouched.
         """
-
         try:
             import numpy as np
             from resurfemg.preprocessing.filtering import emg_bandpass_butter
@@ -94,37 +96,52 @@ class _DefaultsMixin:
         metadata = dict(recording["metadata"])
         fs = float(metadata["fs"])
         array = recording["array"]
+        if channel is None:
+            channel = _choose_emg_channel(len(array), metadata.get("labels"))
         raw = np.asarray(array[channel], dtype=float)
 
         if low_pass_hz is None:
             low_pass_hz = min(fs / 2 * 0.95, 500)
 
-        filtered = emg_bandpass_butter(
-            emg_raw=raw,
-            high_pass=high_pass_hz,
-            low_pass=low_pass_hz,
-            fs_emg=fs,
-        )
-        if notch_base_frequency is not None:
+        def notch(values: Any, base_frequency: float) -> Any:
             # Default the notch's reach to Nyquist, not `low_pass_hz`: a
             # harmonic landing at or just past the low-pass cutoff (e.g. the
             # EIT frame-rate comb's 10th harmonic sitting on a 500 Hz
             # low-pass edge) is only partially attenuated by the low-pass
             # filter's finite roll-off, so it must still be fully inside the
             # notch's stopband rather than at its boundary.
-            filtered = harmonic_notch_filter(
-                filtered,
-                base_frequency=notch_base_frequency,
+            return harmonic_notch_filter(
+                values,
+                base_frequency=base_frequency,
                 sample_frequency=fs,
                 max_frequency=notch_max_frequency or (fs / 2),
                 quality_factor=notch_quality_factor,
             )
-        envelope_window_samples = max(1, int(envelope_window_seconds * fs))
-        envelope = rolling_envelope(
-            filtered,
-            window_length=envelope_window_samples,
-            method=envelope_method,
+
+        filtered = raw
+        if notch_base_frequency is not None and notch_before_bandpass:
+            filtered = notch(filtered, notch_base_frequency)
+        filtered = emg_bandpass_butter(
+            emg_raw=filtered,
+            high_pass=high_pass_hz,
+            low_pass=low_pass_hz,
+            fs_emg=fs,
         )
+        if notch_base_frequency is not None and not notch_before_bandpass:
+            filtered = notch(filtered, notch_base_frequency)
+        # ECG gating replaces the band-passed signal and recomputes the
+        # envelope from the gated trace, so an envelope computed here would be
+        # discarded. `compute_envelope=False` skips it; the window and method
+        # are still recorded below, so the gating step recomputes with the
+        # settings asked for here.
+        envelope = None
+        if compute_envelope:
+            envelope_window_samples = max(1, int(envelope_window_seconds * fs))
+            envelope = rolling_envelope(
+                filtered,
+                window_length=envelope_window_samples,
+                method=envelope_method,
+            )
 
         return {
             **recording,
@@ -146,6 +163,9 @@ class _DefaultsMixin:
                 ),
                 "notch_quality_factor": (
                     notch_quality_factor if notch_base_frequency is not None else None
+                ),
+                "notch_before_bandpass": (
+                    notch_before_bandpass if notch_base_frequency is not None else None
                 ),
             },
         }
@@ -194,6 +214,7 @@ class _DefaultsMixin:
                     "sample_frequency": fs,
                     "signal_name": processed_emg["channel"],
                     "source": "resurfemg.detect_emg_breaths",
+                    "metadata": {"boundaries_measured": False},
                 }
             )
 
