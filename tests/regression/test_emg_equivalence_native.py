@@ -88,7 +88,9 @@ def test_preprocess_envelope_defaults_to_rms_not_arv():
     here instead of going unnoticed.
     """
 
-    full_rolling_arv = import_module("resurfemg.preprocessing.envelope").full_rolling_arv
+    full_rolling_arv = import_module(
+        "resurfemg.preprocessing.envelope"
+    ).full_rolling_arv
     from resurfemg.preprocessing.filtering import emg_bandpass_butter
 
     fs = 1000.0
@@ -176,6 +178,10 @@ def test_detect_ecg_peaks_reproduces_resurfemg_exactly():
     np.testing.assert_array_equal(actual, expected)
 
 
+GATE_WIDTH = 205
+HALF_GATE_WIDTH = GATE_WIDTH // 2
+
+
 @pytest.mark.parametrize("fill_method", [0, 1, 2, 3])
 def test_gate_ecg_reproduces_resurfemg_exactly_for_every_fill_method(fill_method):
     from resurfemg.preprocessing.ecg_removal import gating
@@ -184,14 +190,49 @@ def test_gate_ecg_reproduces_resurfemg_exactly_for_every_fill_method(fill_method
     signal = _synthetic_ecg_contaminated_signal(fs=fs)
     # Peaks near (but not past) both signal boundaries, plus interior ones,
     # exercise the plan's "boundary windows" characterization requirement.
-    peaks = np.array([50, 4096, 8192, len(signal) - 60])
+    # Method 1 is the exception at the start boundary: ReSurfEMG reads the
+    # pre-gate sample at `peak - half_gate_width - 1`, which wraps to the end
+    # of the array when negative. M3RESP uses 0 there instead (covered by
+    # `test_gate_ecg_interp_uses_zero_before_signal_start`), so the first
+    # peak is moved just past the wraparound zone for method 1.
+    first_peak = HALF_GATE_WIDTH + 1 + 50 if fill_method == 1 else 50
+    peaks = np.array([first_peak, 4096, 8192, len(signal) - 60])
 
-    expected = gating(signal, peaks, gate_width=205, method=fill_method)
+    expected = gating(signal, peaks, gate_width=GATE_WIDTH, method=fill_method)
 
     adapter = ReSurfEMG()
     actual = adapter.gate_ecg(
-        signal, peaks, gate_width_samples=205, fill_method=fill_method
+        signal, peaks, gate_width_samples=GATE_WIDTH, fill_method=fill_method
     )
+
+    if fill_method == 3:
+        # Rolling-window mean (pandas) vs per-sample np.nanmean: same maths,
+        # different summation order -> last-bit (~1e-16 relative) differences.
+        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=0)
+    else:
+        np.testing.assert_array_equal(actual, expected)
+
+
+def test_gate_ecg_interp_uses_zero_before_signal_start():
+    """Method 1: a gate reaching the signal start interpolates from 0.
+
+    Intentional deviation from ReSurfEMG, which wraps the negative pre-gate
+    index to the end of the array.
+    """
+    signal = _synthetic_ecg_contaminated_signal(fs=2048.0)
+    peak = 50  # pre-gate index = 50 - 102 - 1 = -53 (< 0)
+    peaks = np.array([peak])
+
+    adapter = ReSurfEMG()
+    actual = adapter.gate_ecg(
+        signal, peaks, gate_width_samples=GATE_WIDTH, fill_method=1
+    )
+
+    k = np.arange(max(0, peak - HALF_GATE_WIDTH), peak + HALF_GATE_WIDTH)
+    frac = (k - peak + HALF_GATE_WIDTH) / GATE_WIDTH
+    post = signal[peak + HALF_GATE_WIDTH + 1]
+    expected = signal.copy()
+    expected[k] = (1.0 - frac) * 0.0 + frac * post
 
     np.testing.assert_array_equal(actual, expected)
 

@@ -1,14 +1,4 @@
-"""M3resp-native EMG processing module.
-
-`ReSurfEMGAdapter` is composed from mixins split by responsibility
-(load/postprocess orchestration, ECG handling, baseline estimation, quality
-assessment, and native fallback implementations) purely for file
-navigability - the class behaves exactly as it did as a single module.
-`ventilator_signals`/`peak_indices_from_events` and
-`POSTPROCESSING_FUNCTIONS` are re-exported here so
-`from m3resp.adapters.resurfemg_adapter import <name>` keeps working
-unchanged.
-"""
+"""M3resp-native EMG processing module."""
 
 from __future__ import annotations
 
