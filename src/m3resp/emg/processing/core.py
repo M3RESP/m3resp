@@ -1,4 +1,4 @@
-"""Load/preprocess/postprocess orchestration methods of `ReSurfEMGAdapter`."""
+"""Load/preprocess/postprocess orchestration methods of `ReSurfEMG`."""
 
 from __future__ import annotations
 

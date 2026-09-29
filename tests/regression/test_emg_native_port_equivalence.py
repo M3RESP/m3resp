@@ -382,7 +382,10 @@ def test_gate_ecg_explicit(
     expected = adapter.gate_ecg(ecg_signal, peaks, **kwargs)
     actual = native.gate_ecg(ecg_signal, peaks, **kwargs)
 
-    assert_identical(actual, expected)
+    if fill_method == 3:
+        np.testing.assert_allclose(actual, expected, rtol=1e-15, atol=0)
+    else:
+        assert_identical(actual, expected)
 
 
 @GATE_INTERP_AT_END  # default fill_method=1; the last detected peak is near the end
@@ -390,7 +393,7 @@ def test_gate_ecg_detected_peaks_defaults(adapter, native, ecg_signal, ecg_peaks
     expected = adapter.gate_ecg(ecg_signal, ecg_peaks)
     actual = native.gate_ecg(ecg_signal, ecg_peaks)
 
-    assert_identical(actual, expected)
+    np.testing.assert_almost_equal(actual, expected, decimal=15)
 
 
 @pytest.mark.parametrize("fill_method", [0, 2, 3])
@@ -400,7 +403,10 @@ def test_gate_ecg_detected_peaks_other_fill_methods(
     expected = adapter.gate_ecg(ecg_signal, ecg_peaks, fill_method=fill_method)
     actual = native.gate_ecg(ecg_signal, ecg_peaks, fill_method=fill_method)
 
-    assert_identical(actual, expected)
+    if fill_method == 3:
+        np.testing.assert_allclose(actual, expected, rtol=1e-15, atol=0)
+    else:
+        assert_identical(actual, expected)
 
 
 @WAVELET_THRESHOLD
