@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any
+import warnings
+
+import numpy as np
 
 from m3resp.core.events import BreathEvent
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
@@ -170,47 +173,57 @@ class _DefaultsMixin:
             },
         }
 
-    # TODO
     def _detect_breaths_default(
         self,
-        processed_emg: Any,
+        processed_emg: dict[str, Any],
         *,
-        min_breath_width_seconds: float = 1.0,
-        half_window_seconds: float = 0.5,
+        min_breath_width_seconds: float = 0.2,
+        baseline: np.ndarray | None = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
         """Run ReSurfEMG EMG breath detection and return common rows."""
 
         if not isinstance(processed_emg, dict) or "envelope" not in processed_emg:
-            raise UnsupportedWorkflowError(
+            msg = (
                 "Default EMG breath detection expects processed EMG data from "
                 "`preprocess_emg()`. Pass `detector=callable` to normalize "
                 "custom detections."
             )
+            raise UnsupportedWorkflowError(msg)
 
         fs = float(processed_emg["fs"])
         envelope = processed_emg["envelope"]
+
+        if baseline is None:
+            warnings.warn(
+                "EMG baseline not defined; detecting breath peaks relative to "
+                "zero. Run `emg.moving_baseline` or `emg.slopesum_baseline` "
+                "before `emg.detect_breaths` so the detection threshold "
+                "follows the drifting quiet level.",
+                UserWarning,
+                stacklevel=2,
+            )
+
         min_width_samples = max(1, int(min_breath_width_seconds * fs))
-        half_window_samples = max(1, int(half_window_seconds * fs))
 
         peak_indices = detect_emg_breath_peaks(
             envelope,
+            baseline=baseline,
             min_peak_width_samples=min_width_samples,
             **kwargs,
         )
 
         events = []
         for peak_index in peak_indices:
-            start_index = max(0, int(peak_index) - half_window_samples)
-            end_index = min(len(envelope) - 1, int(peak_index) + half_window_samples)
+            peak_time = int(peak_index) / fs
             events.append(
                 {
-                    "start_time": start_index / fs,
-                    "end_time": end_index / fs,
-                    "peak_time": int(peak_index) / fs,
-                    "start_index": start_index,
+                    "start_time": peak_time,
+                    "end_time": peak_time,
+                    "peak_time": peak_time,
+                    "start_index": int(peak_index),
                     "peak_index": int(peak_index),
-                    "end_index": end_index,
+                    "end_index": int(peak_index),
                     "sample_frequency": fs,
                     "signal_name": processed_emg["channel"],
                     "source": "resurfemg.detect_emg_breaths",
