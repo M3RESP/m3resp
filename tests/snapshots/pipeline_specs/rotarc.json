@@ -7,7 +7,7 @@
     "timepoint": null
   },
   "inputs": {
-    "eit_file": "/home/mahyart/Desktop/M3Resp/EIT_EMG/ajM3resp_02_001_01.bin",
+    "eit_file": "../../tests/data/draeger_synthetic_draeger_20Hz.bin",
     "vendor": "draeger"
   },
   "name": "rotarc-breath-duration",
@@ -44,7 +44,7 @@
       },
       "uses": "eit.slice_signal",
       "with": {
-        "end": 1550,
+        "end": 1200,
         "mode": "index",
         "start": 0
       }
@@ -88,7 +88,7 @@
       },
       "uses": "eit.slice_signal",
       "with": {
-        "end": 1550,
+        "end": 1200,
         "mode": "index",
         "start": 0
       }

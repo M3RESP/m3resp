@@ -45,6 +45,7 @@ def _recorded_store() -> DataModelStore:
     )
     store = DataModelStore()
     session.datamodel = DataModelRecorder(session, store)
+    # A made-up file name: the stand-in loader above never opens it.
     session.load_eit("subject.bin")
     return store
 
