@@ -65,6 +65,7 @@ class _LoaderMixin:
                 kwargs.get("channel_indexes"),
                 kwargs.get("resample_channels"),
             ),
+            "txt": _load_biopac_txt,
         }
         if file_extension.startswith("adi"):
             file_extension = "adi"

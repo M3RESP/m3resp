@@ -162,6 +162,11 @@ pylint.max-args = 9
 # consume. Both are load-bearing in that format, not dead code.
 "notebooks/**/*.py" = ["B018", "PLR1711"]
 "tools/visualization_tools/**/*.py" = ["B018", "PLR1711"]
+'tests/**/*.py' = [
+    'INP001', # Test directories are not namespace packages
+    'S101',   # Pytest tests should use `assert`
+    'RUF018', # Assignment expressions in assert are fine here
+]
 
 [tool.mypy]
 python_version = "3.12"

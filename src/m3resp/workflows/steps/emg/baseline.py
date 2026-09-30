@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from m3resp.core.session import M3Session
 from m3resp.data import Signal
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 
@@ -19,6 +18,9 @@ from ._shared import (
     _require_positive_seconds,
     _upstream_metadata,
 )
+
+if TYPE_CHECKING:
+    from m3resp.core.session import M3Session
 
 
 @register_step(

@@ -31,20 +31,22 @@ def _select_ecg_source(
     `ecg_channel` (a raw channel-major index) takes priority over `source`
     (a key into `processed_emg`, e.g. "raw_channel"/"filtered"/"envelope").
     """
-
     if ecg_channel is not None:
         recording = session.emg
         if recording is None or recording.raw is None:
-            raise ValueError("emg.ecg_detect_peaks needs a loaded EMG recording.")
+            msg = "emg.ecg_detect_peaks needs a loaded EMG recording."
+            raise ValueError(msg)
         raw = np.asarray(recording.raw)
         if not (0 <= ecg_channel < raw.shape[0]):
-            raise ValueError(
+            msg = (
                 f"ecg_channel {ecg_channel!r} is out of range; the loaded "
                 f"recording has channels 0..{raw.shape[0] - 1}."
             )
+            raise ValueError(msg)
         raw_fs = (recording.metadata or {}).get("fs")
         if raw_fs is None:
-            raise ValueError("emg.ecg_detect_peaks needs recording.metadata['fs'].")
+            msg = "emg.ecg_detect_peaks needs recording.metadata['fs']."
+            raise ValueError(msg)
         return raw[ecg_channel], float(raw_fs), f"raw_channel[{ecg_channel}]"
 
     if source not in processed_emg:
@@ -53,10 +55,11 @@ def _select_ecg_source(
             for key, value in processed_emg.items()
             if isinstance(value, np.ndarray) or hasattr(value, "__len__")
         )
-        raise ValueError(
+        msg = (
             f"emg.ecg_detect_peaks source {source!r} is not present in "
             f"processed_emg; available keys: {available}."
         )
+        raise ValueError(msg)
     array = np.asarray(processed_emg[source], dtype=float)
     fs = float(processed_emg["fs"])
     return array, fs, source

@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Any
 import warnings
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
-from m3resp.core.events import BreathEvent
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
-from m3resp.processing.filters import harmonic_notch_filter
+from m3resp.processing.filters import bandpass_filter, harmonic_notch_filter
 from m3resp.processing.intervals import (
     onoff_from_baseline_crossings,
     onoff_from_slope,
@@ -30,11 +28,10 @@ from m3resp.processing.peaks import (
 )
 from m3resp.processing.windows import rolling_envelope
 
-from .protocols import _PostprocessingOpsProtocol
 from .shared import (
     _category_for_function,
-    _mask_invalid,
     _choose_emg_channel,
+    _mask_invalid,
     _missing_postprocessing_dependency,
     _normalize_selected_postprocessing,
     _require_emg_recording,
@@ -42,23 +39,21 @@ from .shared import (
 )
 from .signals import peak_indices_from_events, ventilator_signals
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from m3resp.core.events import BreathEvent
+
+    from .protocols import _PostprocessingOpsProtocol, _PreprocessingOpsProtocol
+
 
 class _DefaultsMixin:
-    # TODO
     def _preprocess_default(
-        self,
+        self: _PreprocessingOpsProtocol,
         recording: Any,
         *,
         channel: int | None = None,
-        high_pass_hz: float = 20.0,
-        low_pass_hz: float | None = None,
-        envelope_window_seconds: float = 0.25,
-        envelope_method: str = "rms",
-        compute_envelope: bool = True,
-        notch_base_frequency: float | None = None,
-        notch_max_frequency: float | None = None,
-        notch_quality_factor: float = 30.0,
-        notch_before_bandpass: bool = False,
+        **kwargs,
     ) -> dict[str, Any]:
         """Run the Stage 1 EMG preprocessing pipeline through ReSurfEMG.
 
@@ -85,15 +80,6 @@ class _DefaultsMixin:
         narrow high-pass alone (which only removes the fundamental) doesn't
         leave higher harmonics inside the pass band untouched.
         """
-        try:
-            import numpy as np
-            from resurfemg.preprocessing.filtering import emg_bandpass_butter
-        except ImportError as exc:
-            raise OptionalDependencyError(
-                "EMG preprocessing requires the optional dependency `resurfemg`. "
-                'Install with `pip install "m3resp[emg]"`.'
-            ) from exc
-
         _require_emg_recording(recording)
 
         metadata = dict(recording["metadata"])
@@ -103,10 +89,25 @@ class _DefaultsMixin:
             channel = _choose_emg_channel(len(array), metadata.get("labels"))
         raw = np.asarray(array[channel], dtype=float)
 
-        if low_pass_hz is None:
-            low_pass_hz = min(fs / 2 * 0.95, 500)
+        high_pass_hz: float = kwargs.pop("high_pass_hz", 20.0)
+        low_pass_hz: float = kwargs.pop("low_pass_hz", min(fs / 2 * 0.95, 500))
+        compute_envelope: bool = kwargs.pop("compute_envelope", True)
+        envelope_window_seconds = kwargs.pop("envelope_window_seconds", 0.25)
+        envelope_method: Literal["rms", "arv"] = kwargs.pop("envelope_method", "rms")
+        notch_base_frequency: float | None = kwargs.pop("notch_base_frequency", None)
+        notch_max_frequency = kwargs.pop("notch_max_frequency", fs / 2)
+        notch_quality_factor = kwargs.pop(
+            "notch_quality_factor", 30.0 if notch_base_frequency is not None else None
+        )
+        notch_before_bandpass: bool = kwargs.pop(
+            "notch_before_bandpass", False if notch_base_frequency is not None else None
+        )
+        ecg_removal_method: Literal["gating", "wavelet"] | None = kwargs.pop(
+            "ecg_removal_method", "gating"
+        )
+        fill_method = kwargs.pop("ecg_gate_fill_method", 1)
 
-        def notch(values: Any, base_frequency: float) -> Any:
+        def notch(values: np.ndarray, base_frequency: float) -> np.ndarray:
             # Default the notch's reach to Nyquist, not `low_pass_hz`: a
             # harmonic landing at or just past the low-pass cutoff (e.g. the
             # EIT frame-rate comb's 10th harmonic sitting on a 500 Hz
@@ -117,31 +118,35 @@ class _DefaultsMixin:
                 values,
                 base_frequency=base_frequency,
                 sample_frequency=fs,
-                max_frequency=notch_max_frequency or (fs / 2),
+                max_frequency=notch_max_frequency,
                 quality_factor=notch_quality_factor,
             )
 
         filtered = raw
         if notch_base_frequency is not None and notch_before_bandpass:
             filtered = notch(filtered, notch_base_frequency)
-        filtered = emg_bandpass_butter(
-            emg_raw=filtered,
-            high_pass=high_pass_hz,
-            low_pass=low_pass_hz,
-            fs_emg=fs,
+        filtered = bandpass_filter(
+            values=filtered,
+            cutoff_frequency=(high_pass_hz, low_pass_hz),
+            sample_frequency=fs,
         )
         if notch_base_frequency is not None and not notch_before_bandpass:
-            filtered = notch(filtered, notch_base_frequency)
-        # ECG gating replaces the band-passed signal and recomputes the
-        # envelope from the gated trace, so an envelope computed here would be
-        # discarded. `compute_envelope=False` skips it; the window and method
-        # are still recorded below, so the gating step recomputes with the
-        # settings asked for here.
+            filtered = notch(values=filtered, base_frequency=notch_base_frequency)
+
+        clean = filtered
+        if ecg_removal_method is not None:
+            ecg_peak_indexes = self.detect_ecg_peaks(clean, sample_frequency=fs)
+            if ecg_removal_method == "gating":
+                clean = self.gate_ecg(clean, ecg_peak_indexes, fill_method=fill_method)
+            elif ecg_removal_method == "wavelet":
+                clean, *_ = self.wavelet_denoise_ecg(
+                    clean, ecg_peak_indexes, sample_frequency=fs
+                )
         envelope = None
         if compute_envelope:
             envelope_window_samples = max(1, int(envelope_window_seconds * fs))
             envelope = rolling_envelope(
-                filtered,
+                clean,
                 window_length=envelope_window_samples,
                 method=envelope_method,
             )
@@ -152,6 +157,7 @@ class _DefaultsMixin:
             "fs": fs,
             "raw_channel": raw,
             "filtered": filtered,
+            "clean": clean,
             "envelope": envelope,
             "filter": {
                 "high_pass_hz": high_pass_hz,
@@ -159,17 +165,9 @@ class _DefaultsMixin:
                 "envelope_window_seconds": envelope_window_seconds,
                 "envelope_method": envelope_method,
                 "notch_base_frequency": notch_base_frequency,
-                "notch_max_frequency": (
-                    (notch_max_frequency or (fs / 2))
-                    if notch_base_frequency is not None
-                    else None
-                ),
-                "notch_quality_factor": (
-                    notch_quality_factor if notch_base_frequency is not None else None
-                ),
-                "notch_before_bandpass": (
-                    notch_before_bandpass if notch_base_frequency is not None else None
-                ),
+                "notch_max_frequency": notch_max_frequency,
+                "notch_quality_factor": notch_quality_factor,
+                "notch_before_bandpass": notch_before_bandpass,
             },
         }
 
@@ -182,7 +180,6 @@ class _DefaultsMixin:
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
         """Run ReSurfEMG EMG breath detection and return common rows."""
-
         if not isinstance(processed_emg, dict) or "envelope" not in processed_emg:
             msg = (
                 "Default EMG breath detection expects processed EMG data from "
@@ -238,32 +235,40 @@ class _DefaultsMixin:
         self: _PostprocessingOpsProtocol,
         processed_emg: Any,
         events: Sequence[BreathEvent] | None = None,
-        *,
-        ventilator: Any | None = None,
-        ventilator_pressure_channel: int = 0,
-        ventilator_flow_channel: int = 1,
-        ventilator_volume_channel: int = 2,
-        ventilator_fs: float | None = None,
-        ventilator_breath_width_seconds: float = 0.5,
-        peep: float | None = None,
-        baseline_window_seconds: float = 30.0,
-        baseline_step_seconds: float = 1.0,
-        baseline_percentile: float = 33.0,
-        slope_window_seconds: float = 0.5,
-        aub_window_seconds: float = 5.0,
-        selected_functions: dict[str, dict[str, bool]] | None = None,
+        **kwargs,
     ) -> dict[str, Any]:
         try:
             import numpy as np
         except ImportError as exc:
-            raise OptionalDependencyError("EMG postprocessing requires numpy.") from exc
+            msg = "EMG postprocessing requires numpy."
+            raise OptionalDependencyError(msg) from exc
 
         if not isinstance(processed_emg, dict) or "envelope" not in processed_emg:
-            raise UnsupportedWorkflowError(
+            msg = (
                 "Default EMG postprocessing expects processed EMG data from "
                 "`preprocess_emg()`."
             )
+            raise UnsupportedWorkflowError(
+                msg
+            )
 
+        ventilator: Any | None = kwargs.pop("ventilator", None)
+        ventilator_pressure_channel: int = kwargs.pop("ventilator_pressure_channel", 0)
+        ventilator_flow_channel: int = kwargs.pop("ventilator_flow_channel", 1)
+        ventilator_volume_channel: int = kwargs.pop("ventilator_volume_channel", 2)
+        ventilator_fs: float | None = kwargs.pop("ventilator_fs", None)
+        ventilator_breath_width_seconds: float = kwargs.pop(
+            "ventilator_breath_width_seconds", 0.5
+        )
+        peep: float | None = kwargs.pop("peep", None)
+        baseline_window_seconds: float = kwargs.pop("baseline_window_seconds", 30.0)
+        baseline_step_seconds: float = kwargs.pop("baseline_step_seconds", 1.0)
+        baseline_percentile: float = kwargs.pop("baseline_percentile", 33.0)
+        slope_window_seconds: float = kwargs.pop("slope_window_seconds", 0.5)
+        aub_window_seconds: float = kwargs.pop("aub_window_seconds", 5.0)
+        selected_functions: dict[str, dict[str, bool]] | None = kwargs.pop(
+            "selected_functions", None
+        )
         envelope = np.asarray(processed_emg["envelope"], dtype=float)
         fs = float(processed_emg["fs"])
         window_samples = max(1, int(baseline_window_seconds * fs))
@@ -281,23 +286,7 @@ class _DefaultsMixin:
 
         peak_indices = peak_indices_from_events(events, fs)
         peak_indices_array = np.asarray(peak_indices, dtype=int)
-        unavailable_reason = _missing_postprocessing_dependency()
-        if unavailable_reason is not None:
-            return _unavailable_postprocessing_result(
-                selected=selected,
-                peak_indices=peak_indices_array,
-                computed=computed,
-                reason=unavailable_reason,
-                settings={
-                    "baseline_window_seconds": baseline_window_seconds,
-                    "baseline_step_seconds": baseline_step_seconds,
-                    "baseline_percentile": baseline_percentile,
-                    "slope_window_seconds": slope_window_seconds,
-                    "aub_window_seconds": aub_window_seconds,
-                    "ventilator_breath_width_seconds": ventilator_breath_width_seconds,
-                    "peep": peep,
-                },
-            )
+        # since EMG methods are now native, there's no need for the ReSurfEMG dependency check
 
         baseline = None
         if enabled(("baseline", "moving_baseline")):

@@ -69,7 +69,7 @@ POSTPROCESSING_FUNCTIONS: dict[str, tuple[str, ...]] = {
 
 
 _POSTPROCESSING_MODULES = {
-    "baseline": "resurfemg.postprocessing.baseline",
+    "baseline": "m3resp.emg.processing.baseline",
     "event_detection": "resurfemg.postprocessing.event_detection",
     "features": "resurfemg.postprocessing.features",
     "quality_assessment": "resurfemg.postprocessing.quality_assessment",
