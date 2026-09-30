@@ -9,13 +9,14 @@ from m3resp.core.events import (
     event_to_dict,
 )
 from m3resp.core.session import M3Session
-from m3resp.core.utilities import _validate_incompatible_kwargs
+from m3resp.core.utilities import _validate_incompatible_kwargs, capture_value
 
 __all__ = [
     "BreathEvent",
     "Event",
     "M3Session",
     "_validate_incompatible_kwargs",
+    "capture_value",
     "coerce_breath_event",
     "coerce_breath_events",
     "coerce_event",
