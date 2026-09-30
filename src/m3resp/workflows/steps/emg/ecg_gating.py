@@ -21,34 +21,6 @@ from ._shared import (
 if TYPE_CHECKING:
     from m3resp.core.session import M3Session
 
-# def _build_gate_mask(
-#     n_samples: int, peak_indices: Any, *, gate_width_samples: int, fill_method: int
-# ) -> np.ndarray:
-#     """A boolean mask marking the (clipped-to-bounds) gated region around
-#     each peak. Purely descriptive - it reports which samples the cleaned
-#     array had replaced, and is never fed back into it.
-
-#     The blanked region depends on the fill method. ReSurfEMG's RMS fill
-#     (method 3) spans ``int(peak +/- gate_width / 2)`` while the zero,
-#     interpolation and prior-segment fills (methods 0, 1, 2) span
-#     ``peak +/- gate_width // 2``. On an odd gate width - the 205-sample
-#     default among them - the RMS fill starts one sample earlier. The
-#     arithmetic below mirrors each case so the mask names exactly the samples
-#     that were replaced."""
-
-#     mask = np.zeros(n_samples, dtype=bool)
-#     for peak in peak_indices:
-#         if fill_method == 3:
-#             start = int(int(peak) - gate_width_samples / 2)
-#             end = int(int(peak) + gate_width_samples / 2)
-#         else:
-#             half_width = gate_width_samples // 2
-#             start = int(peak) - half_width
-#             end = int(peak) + half_width
-#         mask[max(0, start) : min(n_samples, end)] = True
-#     return mask
-# #
-
 
 @register_step(
     "emg.ecg_gating",
@@ -64,7 +36,7 @@ if TYPE_CHECKING:
         "ecg_gate_mask_result",
     ),
     summary="Remove ECG peaks from EMG by gating (zero/interpolate/replace).",
-    description="Remove ECG peaks from an EMG channel by gating each detected peak (zero/interpolate/replace), via ReSurfEMGAdapter.gate_ecg.",
+    description="Remove ECG peaks from an EMG channel by gating each detected peak (zero/interpolate/replace), via ReSurfEMGAdapter.gate_ecg.",  # noqa: E501
     category="preprocessing",
     modality="emg",
     optional_packages=_RESURFEMG,
@@ -94,7 +66,7 @@ if TYPE_CHECKING:
             value_type="string",
             required=False,
             default=None,
-            description="Key into processed_emg to gate. Defaults to the most-processed trace present: the ECG-cleaned signal when an earlier removal step produced one, otherwise the band-passed signal.",
+            description="Key into processed_emg to gate. Defaults to the most-processed trace present: the ECG-cleaned signal when an earlier removal step produced one, otherwise the band-passed signal.",  # noqa: E501
         ),
         StepParameter(
             name="gate_width_seconds",
@@ -102,7 +74,7 @@ if TYPE_CHECKING:
             required=False,
             default=None,
             unit="s",
-            description="Gate width in seconds. Mutually exclusive with 'gate_width_samples'.",
+            description="Gate width in seconds. Mutually exclusive with 'gate_width_samples'.",  # noqa: E501
         ),
         StepParameter(
             name="gate_width_samples",
@@ -110,14 +82,14 @@ if TYPE_CHECKING:
             required=False,
             default=None,
             minimum=1,
-            description="Gate width in samples. Mutually exclusive with 'gate_width_seconds'. Defaults to 205 samples (resurfemg's own default) when both are unset.",
+            description="Gate width in samples. Mutually exclusive with 'gate_width_seconds'. Defaults to 205 samples (resurfemg's own default) when both are unset.",  # noqa: E501
         ),
         StepParameter(
             name="fill_method",
             value_type="integer",
             default=1,
             choices=(0, 1, 2, 3),
-            description="Gate fill strategy: 0 zeros, 1 interpolation, 2 mean of a neighboring segment, 3 running-RMS-based replacement.",
+            description="Gate fill strategy: 0 zeros, 1 interpolation, 2 mean of a neighboring segment, 3 running-RMS-based replacement.",  # noqa: E501
         ),
     ),
     output_artifacts=(
@@ -140,7 +112,7 @@ if TYPE_CHECKING:
         StepArtifact(
             name="ecg_gate_mask_result",
             artifact_type="parameter_result",
-            description="Native array-valued ParameterResult: boolean mask of gated samples.",
+            description="Native array-valued ParameterResult: boolean mask of gated samples.",  # noqa: E501
         ),
     ),
     record=True,
@@ -155,28 +127,39 @@ def ecg_gating(
     gate_width_samples: int | None = None,
     fill_method: int = 1,
 ) -> dict[str, Any]:
-    """Remove ECG peaks from an EMG channel by gating each detected peak (zero/interpolate/replace), via ReSurfEMGAdapter.gate_ecg.
+    """Remove ECG peaks from an EMG channel by gating each detected peak.
+
+    Remove ECG peaks from an EMG channel by gating each detected peak and filling the
+    gaps with a specified method (zeros, interpolateion, mean of neighboring segments,
+    or running RMS).
 
     Args:
         session (M3Session): The M3Session object.
         processed_emg (Any): The processed EMG bundle supplying 'source' and 'fs'.
         ecg_peak_indices (Any): The ECG peak indices from 'emg.ecg_detect_peaks'.
         source (str): Key into processed_emg to gate.
-        gate_width_seconds (float | None): Gate width in seconds. Mutually exclusive with 'gate_width_samples'.
-        gate_width_samples (int | None): Gate width in samples. Mutually exclusive with 'gate_width_seconds'.
-        fill_method (int): Gate fill strategy.
+        gate_width_seconds (float | None): Gate width in seconds. Mutually exclusive
+            with 'gate_width_samples'.
+        gate_width_samples (int | None): Gate width in samples. Mutually exclusive with
+            'gate_width_seconds'.
+        fill_method (int): Gate fill strategy. Available options are:
+            0: zeros, 1: interpolation, 2: mean of a neighboring segment,
+            3: running-RMS-based replacement.
 
     Returns:
         ecg_gated_emg (signal_array): Gated EMG array.
-        processed_emg_after_ecg (emg_processed_bundle): Updated processed-EMG bundle with the gated signal as 'ecg_cleaned' and no envelope (compute it with 'emg.envelope').
+        processed_emg_after_ecg (emg_processed_bundle): Updated processed-EMG bundle
+            with the gated signal as its 'filtered'/'envelope'.
         ecg_gated_signal (signal): Native Signal wrapping the gated EMG.
-        ecg_gate_mask_result (parameter_result): Native array-valued ParameterResult: boolean mask of gated samples.
+        ecg_gate_mask_result (parameter_result): Native array-valued ParameterResult:
+            boolean mask of gated samples.
     """
     if gate_width_seconds is not None and gate_width_samples is not None:
-        raise ValueError(
+        msg = (
             "emg.ecg_gating: set only one of gate_width_seconds or "
             "gate_width_samples, not both."
         )
+        raise ValueError(msg)
     source = resolve_emg_source(processed_emg, source, "emg.ecg_gating")
 
     array = np.asarray(processed_emg[source], dtype=float)
