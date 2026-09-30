@@ -496,9 +496,10 @@ class _DefaultsMixin:
                 enabled(("features", "respiratory_rate"))
                 and len(peak_indices_array) >= 2
             ):
-                computed["features"]["respiratory_rate"] = (
+                _, computed["features"]["respiratory_rate"] = (
                     respiratory_rate_from_indices(peak_indices_array, fs)
                 )
+
             elif enabled(("features", "respiratory_rate")):
                 skipped["features.respiratory_rate"] = "Needs at least two EMG breaths."
 
