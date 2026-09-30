@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult, Signal
 from m3resp.processing.windows import ENVELOPE_METHODS, rolling_envelope
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
@@ -21,33 +20,36 @@ from ._shared import (
     resolve_emg_source,
 )
 
+if TYPE_CHECKING:
+    from m3resp.core.session import M3Session
 
-def _build_gate_mask(
-    n_samples: int, peak_indices: Any, *, gate_width_samples: int, fill_method: int
-) -> np.ndarray:
-    """A boolean mask marking the (clipped-to-bounds) gated region around
-    each peak. Purely descriptive - it reports which samples the cleaned
-    array had replaced, and is never fed back into it.
+# def _build_gate_mask(
+#     n_samples: int, peak_indices: Any, *, gate_width_samples: int, fill_method: int
+# ) -> np.ndarray:
+#     """A boolean mask marking the (clipped-to-bounds) gated region around
+#     each peak. Purely descriptive - it reports which samples the cleaned
+#     array had replaced, and is never fed back into it.
 
-    The blanked region depends on the fill method. ReSurfEMG's RMS fill
-    (method 3) spans ``int(peak +/- gate_width / 2)`` while the zero,
-    interpolation and prior-segment fills (methods 0, 1, 2) span
-    ``peak +/- gate_width // 2``. On an odd gate width - the 205-sample
-    default among them - the RMS fill starts one sample earlier. The
-    arithmetic below mirrors each case so the mask names exactly the samples
-    that were replaced."""
+#     The blanked region depends on the fill method. ReSurfEMG's RMS fill
+#     (method 3) spans ``int(peak +/- gate_width / 2)`` while the zero,
+#     interpolation and prior-segment fills (methods 0, 1, 2) span
+#     ``peak +/- gate_width // 2``. On an odd gate width - the 205-sample
+#     default among them - the RMS fill starts one sample earlier. The
+#     arithmetic below mirrors each case so the mask names exactly the samples
+#     that were replaced."""
 
-    mask = np.zeros(n_samples, dtype=bool)
-    for peak in peak_indices:
-        if fill_method == 3:
-            start = int(int(peak) - gate_width_samples / 2)
-            end = int(int(peak) + gate_width_samples / 2)
-        else:
-            half_width = gate_width_samples // 2
-            start = int(peak) - half_width
-            end = int(peak) + half_width
-        mask[max(0, start) : min(n_samples, end)] = True
-    return mask
+#     mask = np.zeros(n_samples, dtype=bool)
+#     for peak in peak_indices:
+#         if fill_method == 3:
+#             start = int(int(peak) - gate_width_samples / 2)
+#             end = int(int(peak) + gate_width_samples / 2)
+#         else:
+#             half_width = gate_width_samples // 2
+#             start = int(peak) - half_width
+#             end = int(peak) + half_width
+#         mask[max(0, start) : min(n_samples, end)] = True
+#     return mask
+# #
 
 
 @register_step(
@@ -209,18 +211,15 @@ def ecg_gating(
     else:
         effective_gate_width_samples = 205  # resurfemg's own default
 
+    capture_gate_mask = dict[str, Any]()
     gated = session.emg_adapter.gate_ecg(
         array,
         ecg_peak_indices,
         gate_width_samples=effective_gate_width_samples,
         fill_method=fill_method,
+        capture_mask=capture_gate_mask,
     )
-    gate_mask = _build_gate_mask(
-        len(array),
-        ecg_peak_indices,
-        gate_width_samples=effective_gate_width_samples,
-        fill_method=fill_method,
-    )
+    gate_mask = capture_gate_mask.get("gate_mask", None)
 
     original_filter = processed_emg.get("filter") or {}
     original_window_seconds = original_filter.get("envelope_window_seconds")
