@@ -71,6 +71,7 @@ def test_preprocess_reproduces_resurfemg_filtering_and_envelope_exactly():
         low_pass_hz=low_pass_hz,
         envelope_window_seconds=envelope_window_seconds,
         envelope_method="arv",
+        ecg_removal_method=None,
     )
 
     np.testing.assert_array_equal(processed["filtered"], expected_filtered)
@@ -92,7 +93,9 @@ def test_preprocess_envelope_defaults_to_rms_not_arv():
     recording = {"array": [raw], "metadata": {"fs": fs}}
     adapter = ReSurfEMG()
 
-    processed = adapter.preprocess(recording, high_pass_hz=80.0, low_pass_hz=250.0)
+    processed = adapter.preprocess(
+        recording, high_pass_hz=80.0, low_pass_hz=250.0, ecg_removal_method=None
+    )
 
     assert processed["filter"]["envelope_method"] == "rms"
 
@@ -107,7 +110,8 @@ def test_preprocess_envelope_defaults_to_rms_not_arv():
 
 def test_preprocess_bandpass_defaults_to_the_literature_range():
     """20-500 Hz, capped by Nyquist. The high-pass deliberately does not sit
-    low enough to double as ECG suppression - `emg.ecg_gating` owns that."""
+    low enough to double as ECG suppression - `emg.ecg_gating` owns that.
+    """
     fs = 2000.0
     adapter = ReSurfEMG()
 
