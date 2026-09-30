@@ -55,8 +55,75 @@ class _DefaultsMixin:
         channel: int | None = None,
         **kwargs,
     ) -> dict[str, Any]:
-        """Run the Stage 1 EMG preprocessing pipeline through ReSurfEMG.
+        """Run a default EMG preprocessing pipeline and return a dictionary of results.
 
+        Args:
+            recording: the raw emg bundle
+            channel (int, Optional): the channel index to process.
+                If None, the first channel is used.
+            **kwargs: optional keyword arguments for preprocessing customization
+
+        Returns:
+            dict[str, Any]: a dictionary containing the processed EMG data and metadata
+                - "channel": the channel index used for processing
+                - "fs": the sampling frequency of the EMG signal
+                - "raw_channel": the raw EMG signal for the selected channel
+                - "filtered": the band-pass filtered EMG signal
+                - "clean": the ECG-cleaned EMG signal (or the filtered signal if ECG
+                    removal is disabled)
+                - "envelope": the computed envelope of the EMG signal (or None if
+                    envelope computation is disabled)
+                - "filter": a dictionary containing the filter parameters used for
+                    preprocessing
+
+        Without any additional arguments, the function applies the ReSurfEMG default
+        preprocessing pipeline:
+        -- band-pass filter (20-500 Hz)
+        -- ecg peak detection and removal via gating
+        -- RMS envelope computation
+
+        # Preprocessing pipeline customization
+        ## Filtering
+        filtering is performed via 3rd order Butterworth filtering with
+        customizable pass band:
+        - ``high_pass_hz``: high-pass cutoff frequency in Hz (default: 20.0)
+        - ``low_pass_hz``: low-pass cutoff frequency in Hz
+            (default: min(fs / 2 * 0.95, 500))
+
+        An optional harmonic notch filter can be applied to the band-passed signal,
+        with customizable parameters:
+        - ``notch_base_frequency``: base frequency of the notch filter in Hz
+            (default: None)
+        - ``notch_max_frequency``: maximum frequency of the notch filter in Hz
+            (default: fs / 2)
+        - ``notch_quality_factor``: quality factor of the notch filter
+            (default: 30.0 if notch_base_frequency is not None, else None)
+        - ``notch_before_bandpass``: whether to apply the notch filter before the
+            band-pass filter
+            (default: False if notch_base_frequency is not None, else None)
+
+        ## ECG removal
+        ECG removal is an optional step that is applied by default.
+        - ``remove_ecg``: whether to remove ECG from the signal
+            (default: True)
+        - ``ecg_removal_method``: method for ECG removal, either "gating" or "wavelet"
+            (default: "gating")
+        - ``ecg_gate_fill_method``: method for filling gated ECG segments:
+            - 0: fill with zeros
+            - 1: fill with linear interpolation (default)
+            - 2: fill with the average of the surrounding signal segments
+            - 3: fill with the running average of the RMS
+
+        ## Envelope computation
+        The envelope is computed by default, but can be disabled
+        - ``compute_envelope``: whether to compute the envelope
+            (default: True)
+        - ``envelope_method``: method for envelope computation, either "rms" or "arv"
+            (default: "rms")
+        - ``envelope_window_seconds``: window length for envelope computation in seconds
+            (default: 0.25)
+
+        # Additional information
         The band-pass defaults to 20-500 Hz, the range respiratory-sEMG
         literature specifies. The high-pass is deliberately *not* set low
         enough to double as ECG suppression: removing ECG is the job of a
@@ -65,13 +132,6 @@ class _DefaultsMixin:
         QRS complex still leaves its higher-frequency content inside the pass
         band.
 
-        ``envelope_method`` selects the envelope computed on the band-passed
-        signal - ``"rms"`` (default) or ``"arv"``. RMS is what the literature
-        specifies; ARV is kept as an explicit opt-in because it is not an RMS
-        equivalent on real bursty sEMG. The choice is recorded in the returned
-        ``"filter"`` mapping so a later envelope recomputation (e.g. after ECG
-        gating) reuses the same method rather than silently switching.
-
         ``notch_base_frequency`` opts into harmonic notch filtering (e.g.
         ``50.0`` for mains hum, or a co-recorded EIT device's frame rate, which
         injects a harmonic comb into the sEMG whenever the EIT device is
@@ -79,6 +139,15 @@ class _DefaultsMixin:
         ``emg_bandpass_butter`` and before the envelope is computed, so a
         narrow high-pass alone (which only removes the fundamental) doesn't
         leave higher harmonics inside the pass band untouched.
+
+        ``envelope_method`` selects the envelope computed on the band-passed
+        signal - ``"rms"`` (default) or ``"arv"``. RMS is what the literature
+        specifies; ARV is kept as an explicit opt-in because it is not an RMS
+        equivalent on real bursty sEMG. The choice is recorded in the returned
+        ``"filter"`` mapping so a later envelope recomputation (e.g. after ECG
+        gating) reuses the same method rather than silently switching.
+
+
         """
         _require_emg_recording(recording)
 
@@ -92,6 +161,7 @@ class _DefaultsMixin:
         high_pass_hz: float = kwargs.pop("high_pass_hz", 20.0)
         low_pass_hz: float = kwargs.pop("low_pass_hz", min(fs / 2 * 0.95, 500))
         compute_envelope: bool = kwargs.pop("compute_envelope", True)
+        remove_ecg: bool = kwargs.pop("remove_ecg", True)
         envelope_window_seconds = kwargs.pop("envelope_window_seconds", 0.25)
         envelope_method: Literal["rms", "arv"] = kwargs.pop("envelope_method", "rms")
         notch_base_frequency: float | None = kwargs.pop("notch_base_frequency", None)
@@ -102,7 +172,7 @@ class _DefaultsMixin:
         notch_before_bandpass: bool = kwargs.pop(
             "notch_before_bandpass", False if notch_base_frequency is not None else None
         )
-        ecg_removal_method: Literal["gating", "wavelet"] | None = kwargs.pop(
+        ecg_removal_method: Literal["gating", "wavelet"] = kwargs.pop(
             "ecg_removal_method", "gating"
         )
         fill_method = kwargs.pop("ecg_gate_fill_method", 1)
@@ -134,7 +204,7 @@ class _DefaultsMixin:
             filtered = notch(values=filtered, base_frequency=notch_base_frequency)
 
         clean = filtered
-        if ecg_removal_method is not None:
+        if remove_ecg:
             ecg_peak_indexes = self.detect_ecg_peaks(clean, sample_frequency=fs)
             if ecg_removal_method == "gating":
                 clean = self.gate_ecg(clean, ecg_peak_indexes, fill_method=fill_method)
@@ -142,6 +212,12 @@ class _DefaultsMixin:
                 clean, *_ = self.wavelet_denoise_ecg(
                     clean, ecg_peak_indexes, sample_frequency=fs
                 )
+            else:
+                msg = (
+                    f"Unknown ECG removal method '{ecg_removal_method}'; "
+                    "choose 'gating' or 'wavelet'."
+                )
+                raise ValueError(msg)
         envelope = None
         if compute_envelope:
             envelope_window_samples = max(1, int(envelope_window_seconds * fs))
@@ -164,6 +240,8 @@ class _DefaultsMixin:
                 "low_pass_hz": low_pass_hz,
                 "envelope_window_seconds": envelope_window_seconds,
                 "envelope_method": envelope_method,
+                "ecg_removal_method": ecg_removal_method,
+                "ecg_gate_fill_method": fill_method,
                 "notch_base_frequency": notch_base_frequency,
                 "notch_max_frequency": notch_max_frequency,
                 "notch_quality_factor": notch_quality_factor,
@@ -248,9 +326,7 @@ class _DefaultsMixin:
                 "Default EMG postprocessing expects processed EMG data from "
                 "`preprocess_emg()`."
             )
-            raise UnsupportedWorkflowError(
-                msg
-            )
+            raise UnsupportedWorkflowError(msg)
 
         ventilator: Any | None = kwargs.pop("ventilator", None)
         ventilator_pressure_channel: int = kwargs.pop("ventilator_pressure_channel", 0)
