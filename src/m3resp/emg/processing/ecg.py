@@ -28,11 +28,13 @@ Full attribution notice: see top-level NOTICE.md.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import pywt
 from scipy.signal import find_peaks
+from m3resp.core.utilities import capture_value
 
 from m3resp.processing.filters import bandpass_filter
 from m3resp.processing.windows import rolling_rms  # TODO: check correctness
@@ -314,6 +316,7 @@ class _EcgMixin:
         *,
         gate_width_samples: int = 205,
         fill_method: int = 1,
+        capture_mask: dict[str, Any] | None = None,
     ) -> np.ndarray:
         """Gating removal of QRS complexes.
 
@@ -350,6 +353,8 @@ class _EcgMixin:
         gating_context = self._build_gate_context(
             signal, peak_indices, gate_width_samples, fill_method
         )
+        if capture_mask is not None:
+            capture_value(capture_mask, "gate_mask", gating_context.gate_mask)
         # now, fill the gates according to the selected method
         return _GATE_FILLERS[fill_method](gating_context)
 
