@@ -2,9 +2,9 @@ from .io import _LoaderMixin
 from .processing import (
     _BaselineMixin,
     _CoreMixin,
+    _DefaultsMixin,
     _EcgMixin,
     _QualityMixin,
-    _DefaultsMixin,
 )
 
 

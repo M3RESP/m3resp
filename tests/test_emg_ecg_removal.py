@@ -20,7 +20,35 @@ from m3resp.workflows.steps.emg import (
     ecg_gating,
     ecg_wavelet_denoising,
 )
-from m3resp.workflows.steps.emg.ecg_gating import _build_gate_mask
+
+
+def _build_gate_mask(
+    n_samples: int, peak_indices: Any, *, gate_width_samples: int, fill_method: int
+) -> np.ndarray:
+    """A boolean mask marking the (clipped-to-bounds) gated region around
+    each peak. Purely descriptive - it reports which samples the cleaned
+    array had replaced, and is never fed back into it.
+
+    The blanked region depends on the fill method. ReSurfEMG's RMS fill
+    (method 3) spans ``int(peak +/- gate_width / 2)`` while the zero,
+    interpolation and prior-segment fills (methods 0, 1, 2) span
+    ``peak +/- gate_width // 2``. On an odd gate width - the 205-sample
+    default among them - the RMS fill starts one sample earlier. The
+    arithmetic below mirrors each case so the mask names exactly the samples
+    that were replaced.
+    """
+    mask = np.zeros(n_samples, dtype=bool)
+    for peak in peak_indices:
+        if fill_method == 3:
+            start = int(int(peak) - gate_width_samples / 2)
+            end = int(int(peak) + gate_width_samples / 2)
+        else:
+            half_width = gate_width_samples // 2
+            start = int(peak) - half_width
+            end = int(peak) + half_width
+        mask[max(0, start) : min(n_samples, end)] = True
+    return mask
+
 
 pytest.importorskip("resurfemg")
 np = pytest.importorskip("numpy")
@@ -107,7 +135,8 @@ class TestEcgDetectPeaks:
 class TestSeparateFilteredAndCleanedSignals:
     """Band-pass filtering and ECG removal are separate processing steps, so
     their results are kept under separate keys - as ReSurfEMG keeps 'filt'
-    and 'clean'."""
+    and 'clean'.
+    """
 
     def test_gating_keeps_the_band_passed_signal_alongside_the_gated_one(self):
         session = M3Session()
@@ -154,7 +183,8 @@ class TestSeparateFilteredAndCleanedSignals:
 
 class TestPreprocessEnvelopeSkipping:
     """ECG gating recomputes the envelope from the gated signal, so an
-    envelope computed during preprocessing would be discarded."""
+    envelope computed during preprocessing would be discarded.
+    """
 
     @staticmethod
     def _preprocess(**kwargs):
@@ -275,8 +305,8 @@ class TestEcgGating:
     def test_recomputed_envelope_reuses_the_preprocessing_envelope_method(self):
         """The recomputation must not silently switch envelope method: an ARV
         bundle stays ARV, and the effective choice is carried forward so a
-        later recomputation off the gated bundle agrees too."""
-
+        later recomputation off the gated bundle agrees too.
+        """
         session = M3Session()
         processed_emg = _fake_processed_emg()
         processed_emg["filter"]["envelope_method"] = "arv"
@@ -315,8 +345,8 @@ class TestEcgGating:
 
     def test_bundle_without_an_envelope_method_falls_back_to_rms(self):
         """`_fake_processed_emg`'s 'filter' has no 'envelope_method' - i.e. a
-        bundle predating the field. It must default to RMS, not ARV."""
-
+        bundle predating the field. It must default to RMS, not ARV.
+        """
         session = M3Session()
         processed_emg = _fake_processed_emg()
         assert "envelope_method" not in processed_emg["filter"]

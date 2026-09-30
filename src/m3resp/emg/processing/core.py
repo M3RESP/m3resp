@@ -178,13 +178,13 @@ class _CoreMixin:
             )
         return flags
 
-    # TODO
-    def available_postprocessing(self) -> dict[str, list[str]]:
-        """Return ReSurfEMG postprocessing functions exposed by M3Resp."""
-        return {
-            category: list(functions)
-            for category, functions in POSTPROCESSING_FUNCTIONS.items()
-        }
+    # # TODO
+    # def available_postprocessing(self) -> dict[str, list[str]]:
+    #     """Return ReSurfEMG postprocessing functions exposed by M3Resp."""
+    #     return {
+    #         category: list(functions)
+    #         for category, functions in POSTPROCESSING_FUNCTIONS.items()
+    #     }
 
     # TODO
     def postprocess(
@@ -203,23 +203,23 @@ class _CoreMixin:
         )
 
     # TODO
-    def run_postprocessing_function(
-        self, category: str, function_name: str, *args: Any, **kwargs: Any
-    ) -> Any:
-        """Call any exposed `resurfemg.postprocessing` function by name."""
-        if function_name not in POSTPROCESSING_FUNCTIONS.get(category, ()):
-            msg = (
-                f"Unknown ReSurfEMG postprocessing function {category}.{function_name}."
-            )
-            raise ValueError(msg)
+    # def run_postprocessing_function(
+    #     self, category: str, function_name: str, *args: Any, **kwargs: Any
+    # ) -> Any:
+    #     """Call any exposed `resurfemg.postprocessing` function by name."""
+    #     if function_name not in POSTPROCESSING_FUNCTIONS.get(category, ()):
+    #         msg = (
+    #             f"Unknown ReSurfEMG postprocessing function {category}.{function_name}."
+    #         )
+    #         raise ValueError(msg)
 
-        try:
-            module = import_module(_POSTPROCESSING_MODULES[category])
-        except ImportError as exc:
-            msg = (
-                "EMG postprocessing requires the optional dependency `resurfemg`. "
-                'Install with `pip install "m3resp[emg]"`.'
-            )
-            raise OptionalDependencyError(msg) from exc
+    #     try:
+    #         module = import_module(_POSTPROCESSING_MODULES[category])
+    #     except ImportError as exc:
+    #         msg = (
+    #             "EMG postprocessing requires the optional dependency `resurfemg`. "
+    #             'Install with `pip install "m3resp[emg]"`.'
+    #         )
+    #         raise OptionalDependencyError(msg) from exc
 
-        return getattr(module, function_name)(*args, **kwargs)
+    #     return getattr(module, function_name)(*args, **kwargs)

@@ -9,13 +9,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from known_divergences import MISSING_TEST_DATA_FILE
 
 from m3resp.core.session import M3Session
 from m3resp.data import Signal
 from m3resp.data.units import normalize_unit
 from m3resp.workflows import run_pipeline
 from m3resp.workflows.steps.emg import moving_baseline, slopesum_baseline
-from known_divergences import MISSING_TEST_DATA_FILE
 
 pytest.importorskip("resurfemg")
 np = pytest.importorskip("numpy")
@@ -75,6 +75,9 @@ class TestEmgLoad:
                 }
             )
 
+    @pytest.mark.skipif(
+        not Path("unused.Poly5").exists(), reason="session recordings not on disk"
+    )
     @MISSING_TEST_DATA_FILE
     def test_injected_loader_still_produces_native_signals(self):
         from m3resp.emg import ReSurfEMG
