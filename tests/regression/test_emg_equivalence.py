@@ -71,7 +71,7 @@ def test_preprocess_reproduces_resurfemg_filtering_and_envelope_exactly():
         low_pass_hz=low_pass_hz,
         envelope_window_seconds=envelope_window_seconds,
         envelope_method="arv",
-        ecg_removal_method=None,
+        remove_ecg=False,
     )
 
     np.testing.assert_array_equal(processed["filtered"], expected_filtered)
@@ -94,7 +94,10 @@ def test_preprocess_envelope_defaults_to_rms_not_arv():
     adapter = ReSurfEMG()
 
     processed = adapter.preprocess(
-        recording, high_pass_hz=80.0, low_pass_hz=250.0, ecg_removal_method=None
+        recording,
+        high_pass_hz=80.0,
+        low_pass_hz=250.0,
+        remove_ecg=False,
     )
 
     assert processed["filter"]["envelope_method"] == "rms"
