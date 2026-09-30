@@ -579,11 +579,13 @@ def test_emg_real_data_pipeline_uses_committed_poly5_sample():
     repo_root = Path(__file__).resolve().parents[1]
     emg_path = os.path.join(
         repo_root,
+        "tests",
         "data",
         "emg_data_synth_quiet_breathing.Poly5",
     )
     vent_path = os.path.join(
         repo_root,
+        "tests",
         "data",
         "vent_data_synth_quiet_breathing.Poly5",
     )
