@@ -56,6 +56,7 @@ from typing import Any, Literal
 import numpy as np
 
 from m3resp.core.exceptions import OptionalDependencyError
+from m3resp.core.utilities import capture_value
 
 FilterType = Literal["lowpass", "highpass", "bandpass", "bandstop"]
 
@@ -451,31 +452,6 @@ def _validate_common_filter_arguments(
     if sample_frequency <= 0:
         msg_0 = "sample_frequency must be positive"
         raise ValueError(msg_0)
-
-
-def capture_value(
-    captures: dict[str, Any] | None,
-    key: str,
-    value: Any,  # noqa: ANN401
-    *,
-    append_to_list: bool = False,
-) -> None:
-    """Capture a value in a dictionary.
-
-    Args:
-        captures (dict or None): Dictionary to capture values in.
-            If None, no values will be captured.
-        key (str): Key to use for capturing the value.
-        value (Any): Value to capture.
-        append_to_list (bool): If True, the value will be appended to a list
-            under the given key.
-    """
-    if captures is None:
-        return
-    if append_to_list:
-        captures.setdefault(key, []).append(value)
-    else:
-        captures[key] = value
 
 
 def _capture_butterworth_parameters(

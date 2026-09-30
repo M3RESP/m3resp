@@ -35,7 +35,7 @@ import numpy as np
 
 from m3resp.core.exceptions import MutuallyExclusiveArgsError, OptionalDependencyError
 from m3resp.core.utilities import _validate_incompatible_kwargs
-from m3resp.processing.filters import capture_value
+from m3resp.core.utilities import capture_value
 
 
 def _require_sampling_frequency(sample_frequency: float | None) -> float:

@@ -73,3 +73,28 @@ def _validate_incompatible_kwargs(
     if arg_value2 is not None:
         return arg_value2
     return default_value
+
+
+def capture_value(
+    captures: dict[str, Any] | None,
+    key: str,
+    value: Any,  # noqa: ANN401
+    *,
+    append_to_list: bool = False,
+) -> None:
+    """Capture a value in a dictionary.
+
+    Args:
+        captures (dict or None): Dictionary to capture values in.
+            If None, no values will be captured.
+        key (str): Key to use for capturing the value.
+        value (Any): Value to capture.
+        append_to_list (bool): If True, the value will be appended to a list
+            under the given key.
+    """
+    if captures is None:
+        return
+    if append_to_list:
+        captures.setdefault(key, []).append(value)
+    else:
+        captures[key] = value
