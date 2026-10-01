@@ -14,4 +14,5 @@ pipeline-contracts
 testing
 coding_guidelines
 offset-estimation
+processing-defaults
 ```
