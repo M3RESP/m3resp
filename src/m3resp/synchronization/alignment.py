@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, overload
 
-from m3resp.data.events import BreathEvent, Event
+from m3resp.data.events import BreathEvent, Event, Interval
 from m3resp.modalities.names import VENTILATOR, normalize_modality
 
 if TYPE_CHECKING:
@@ -27,14 +27,20 @@ def align_events_manual_offset(
 
 @overload
 def align_events_manual_offset(
-    events: Sequence[Event | BreathEvent], offset_seconds: float
-) -> list[Event | BreathEvent]: ...
+    events: Sequence[Interval], offset_seconds: float
+) -> list[Interval]: ...
+
+
+@overload
+def align_events_manual_offset(
+    events: Sequence[Event | Interval], offset_seconds: float
+) -> list[Event | Interval]: ...
 
 
 def align_events_manual_offset(
-    events: Sequence[Event | BreathEvent], offset_seconds: float
+    events: Sequence[Event | Interval], offset_seconds: float
 ) -> list[Any]:
-    """Return copies of events shifted by a manual offset."""
+    """Return copies of events, intervals and breaths shifted by a manual offset."""
 
     offset = float(offset_seconds)
     aligned: list[Any] = []
@@ -50,11 +56,20 @@ def align_events_manual_offset(
                     ),
                 )
             )
+        elif isinstance(event, Interval):
+            aligned.append(
+                replace(
+                    event,
+                    start_time=event.start_time + offset,
+                    end_time=event.end_time + offset,
+                )
+            )
         elif isinstance(event, Event):
             aligned.append(replace(event, time=event.time + offset))
         else:
             raise TypeError(
-                "Manual offset alignment supports only Event and BreathEvent objects."
+                "Manual offset alignment supports only Event, Interval and "
+                "BreathEvent objects."
             )
     return aligned
 
@@ -75,13 +90,20 @@ def align_events_by_modality_offset(
 
 @overload
 def align_events_by_modality_offset(
-    events: Sequence[Event | BreathEvent],
+    events: Sequence[Interval],
     offsets_seconds: Mapping[str, float],
-) -> list[Event | BreathEvent]: ...
+) -> list[Interval]: ...
+
+
+@overload
+def align_events_by_modality_offset(
+    events: Sequence[Event | Interval],
+    offsets_seconds: Mapping[str, float],
+) -> list[Event | Interval]: ...
 
 
 def align_events_by_modality_offset(
-    events: Sequence[Event | BreathEvent],
+    events: Sequence[Event | Interval],
     offsets_seconds: Mapping[str, float],
 ) -> list[Any]:
     """Return event copies shifted by the offset configured for each modality.
@@ -106,10 +128,10 @@ def align_events_by_modality_offset(
 
 
 def _event_modality(event: Any) -> str:
-    if isinstance(event, (BreathEvent, Event)):
+    if isinstance(event, (Interval, Event)):
         return event.modality
     raise TypeError(
-        "Manual offset alignment supports only Event and BreathEvent objects."
+        "Manual offset alignment supports only Event, Interval and BreathEvent objects."
     )
 
 

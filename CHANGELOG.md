@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+### New `Interval`, `IntervalData` and `EventData` types; `BreathEvent` is now an `Interval` (#103)
+
+Only breaths could be stored with a start and an end. Other things that last,
+such as an occlusion or a period of noise, had no type, and results with one
+value per breath were kept as bare arrays that lost which breath each value
+belonged to.
+
+| New | What it is |
+|---|---|
+| `Interval` | Something that lasts: `modality`, `start_time`, `end_time`, and a required `name` such as `"occlusion"` |
+| `IntervalData` | One value (a number or an array, such as a pixel map) per interval, in the same order |
+| `EventData` | One value per `Event`, in the same order |
+| `coerce_interval`, `coerce_intervals` | Turn a dictionary, a `(start, end)` pair or eitprocessing's `Interval` into an m3resp `Interval` |
+
+`BreathEvent` is now an `Interval` whose `name` is always `"breath"`, plus
+`peak_time` and `peak_index`. What changes for existing code:
+
+- Only `modality`, `start_time` and `end_time` can be given by position.
+  Every other field must be given by name, e.g.
+  `BreathEvent("eit", 1.0, 2.0, peak_time=1.5)`.
+- Exported breath tables have two new columns, `name` (always `"breath"`)
+  and `label`, and `peak_time`/`peak_index` are now the last two columns.
+- `align_events_by_modality_offset` and `align_events_manual_offset` shift
+  intervals as well as events and breaths.
+- `coerce_breath_event` refuses an interval named anything other than
+  `"breath"` (for example an occlusion), and now keeps `label` when it reads
+  a dictionary or an object. A dictionary without `start_time` or `end_time`
+  raises a `ValueError` that names the missing entry.
+
+All new names can be imported from `m3resp` and `m3resp.data`. See
+[Events, intervals and breaths](docs/concepts/events-and-breaths.md).
+
 ### `Event` and `BreathEvent` moved to `m3resp.data` (#96)
 
 The event types sat in `m3resp.core` only because they were written before

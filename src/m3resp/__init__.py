@@ -5,6 +5,9 @@ from m3resp.core.session import M3Session
 from m3resp.data import (
     BreathEvent,
     Event,
+    EventData,
+    Interval,
+    IntervalData,
     LinkedBreath,
     ParameterResult,
     ParameterResultCollection,
@@ -18,6 +21,8 @@ from m3resp.data import (
     coerce_breath_event,
     coerce_breath_events,
     coerce_event,
+    coerce_interval,
+    coerce_intervals,
     event_to_dict,
 )
 from m3resp.datamodel import (
@@ -72,6 +77,9 @@ __all__ = [
     "EITPipeline",
     "EMGPipeline",
     "Event",
+    "EventData",
+    "Interval",
+    "IntervalData",
     "LinkedBreath",
     "M3Session",
     "MultimodalPipeline",
@@ -95,6 +103,8 @@ __all__ = [
     "coerce_breath_event",
     "coerce_breath_events",
     "coerce_event",
+    "coerce_interval",
+    "coerce_intervals",
     "compute_offsets_from_timestamps",
     "event_to_dict",
     "export_store",

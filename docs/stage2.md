@@ -6,7 +6,7 @@ Stage 2 turns `m3resp` from a thin wrapper around `eitprocessing`/`resurfemg` ([
 
 - [concepts/session.md](concepts/session.md) - `M3Session`, its typed collections, and its full method list.
 - [concepts/signals.md](concepts/signals.md) - `Signal`/`TimeSeries`.
-- [concepts/events-and-breaths.md](concepts/events-and-breaths.md) - `Event`/`BreathEvent`.
+- [concepts/events-and-breaths.md](concepts/events-and-breaths.md) - `Event`/`Interval`/`BreathEvent`, and `IntervalData`/`EventData`.
 - [concepts/parameters.md](concepts/parameters.md) - `ParameterResult`.
 - [concepts/quality.md](concepts/quality.md) - `QualityFlag`.
 - [concepts/synchronization.md](concepts/synchronization.md) - alignment, `LinkedBreath`, and multimodal parameters.
