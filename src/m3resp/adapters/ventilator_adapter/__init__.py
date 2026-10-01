@@ -24,6 +24,12 @@ Composed from mixins split by responsibility, matching the layout of
 
 from __future__ import annotations
 
+from ._breaths import (
+    infer_ventilator_duration,
+    infer_ventilator_fs,
+    iter_ventilator_detections,
+    normalize_ventilator_breath,
+)
 from ._channels import (
     CHANNEL_CATEGORIES,
     DEFAULT_CHANNEL_POSITIONS,
@@ -77,8 +83,12 @@ __all__ = [
     "VentilatorAdapter",
     "available_ventilator_channels",
     "channel_aliases",
+    "infer_ventilator_duration",
+    "infer_ventilator_fs",
+    "iter_ventilator_detections",
     "load_channel_aliases",
     "normalize_channel_label",
+    "normalize_ventilator_breath",
     "primary_channel",
     "recording_payload",
     "register_channel_alias",

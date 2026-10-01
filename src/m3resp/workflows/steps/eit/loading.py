@@ -39,7 +39,13 @@ from ._shared import (
     category="loading",
     modality="eit",
     optional_packages=_EITPROCESSING,
-    session_writes=("session.raw.eit", "session.signals"),
+    session_writes=(
+        "session.raw.eit",
+        "session.signals",
+        # A new recording is not synchronized: its start time is cleared.
+        "session.start_times",
+        "session.sync_methods",
+    ),
     input_artifacts=(_SESSION_ARTIFACT,),
     parameters=(
         StepParameter(

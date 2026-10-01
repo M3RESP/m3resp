@@ -58,6 +58,9 @@ from m3resp.datamodel.entities import (
     TargetType,
 )
 from m3resp.datamodel.store import DataModelStore
+from m3resp.modalities.names import VENTILATOR, normalize_modality
+from m3resp.synchronization.start_times import recording_start_time
+from m3resp.synchronization.sync_methods import clock_key
 
 if TYPE_CHECKING:
     from m3resp.core.provenance import ProvenanceRecord
@@ -191,6 +194,10 @@ class DataModelRecorder:
         # different channel may not, or the global and pixel impedances - or
         # two instruments' airway pressures - would overwrite each other.
         self._stream_owners: dict[str, str | None] = {}
+        # Which recording each stream came from, as (modality, ventilator
+        # recording name or None for the primary one), so its synchronization
+        # can be copied from the session. See `record_synchronization`.
+        self._stream_recordings: dict[str, tuple[str, str | None]] = {}
 
     # -- Layer 1 objects -> persisted entities (Milestone 2.3) ---------------
 
@@ -224,6 +231,8 @@ class DataModelRecorder:
 
         instrument = _instrument_of(signal)
         device_id = self._ensure_device(signal.modality, instrument)
+        recording_name = self._ventilator_recording_name(signal, instrument)
+        sync_method, time_offset_ms = self._sync_fields(signal.modality, recording_name)
         stream = self.store.add_signal_stream(
             SignalStream(
                 session_id=self.recording_session.session_id,
@@ -232,8 +241,11 @@ class DataModelRecorder:
                 unit=signal.unit,
                 sampling_frequency_hz=signal.sample_frequency,
                 sample_count=signal.n_samples,
+                sync_method=sync_method,
+                time_offset_ms=time_offset_ms,
             )
         )
+        self._stream_recordings[stream.signal_id] = (signal.modality, recording_name)
         # The channel-qualified key always points at this exact stream. The
         # unqualified key is owned by the first channel that claimed it, so a
         # later stream of the same modality and quantity on a *different*
@@ -384,7 +396,64 @@ class DataModelRecorder:
             input_file_ids=input_file_ids,
             parameters=_json_safe_parameters(provenance.parameters),
         )
+        # Every session action reaches here after it has run, so this is where
+        # a synchronization, skip, slice or reload is copied onto the streams.
+        self.record_synchronization()
         return self.store.add_processing_run(run)
+
+    def record_synchronization(self) -> None:
+        """Copy each recording's synchronization onto its recorded streams.
+
+        Sets `SignalStream.sync_method` from `session.sync_methods`
+        (``"manual"``, ``"none"``) and `SignalStream.time_offset_ms` from the
+        recording's start time on the shared clock. A stream whose recording
+        was never synchronized gets None for both. Ventilator data from the
+        EIT or EMG file takes that file's synchronization.
+        """
+
+        for signal_id, (modality, instrument) in self._stream_recordings.items():
+            stream = self.store.signal_streams.get(signal_id)
+            if stream is not None:
+                stream.sync_method, stream.time_offset_ms = self._sync_fields(
+                    modality, instrument
+                )
+
+    def _sync_fields(
+        self, modality: str | None, recording_name: str | None
+    ) -> tuple[str | None, float | None]:
+        """``(sync_method, time_offset_ms)`` for one recording's stream, or
+        ``(None, None)`` when it was never synchronized or its modality is
+        not one a start time is kept for. `recording_name` names the
+        ventilator recording; None means the primary one."""
+
+        normalized = normalize_modality(modality or "")
+        if normalized not in ("eit", "emg", VENTILATOR):
+            return None, None
+        key = clock_key(self.session, normalized, recording_name)
+        method = getattr(self.session, "sync_methods", {}).get(key)
+        if method is None:
+            return None, None
+        start_seconds = recording_start_time(self.session, normalized, recording_name)
+        return method, start_seconds * 1000.0
+
+    def _ventilator_recording_name(
+        self, signal: Signal, instrument: str | None
+    ) -> str | None:
+        """The loaded ventilator recording a signal came from, or None for
+        the primary one.
+
+        Uses the name `M3Session.preprocess_ventilator` stores in the
+        signal's metadata. Without it, the channel suffix (`instrument`)
+        counts only when it is the name of a loaded recording: a suffix can
+        also mark a second channel of the same quantity inside one recording
+        (a pressure pod's airway pressure), which belongs to that recording.
+        """
+
+        loaded = getattr(self.session, "ventilators", {}) or {}
+        for candidate in (signal.metadata.get("recording"), instrument):
+            if candidate is not None and candidate in loaded:
+                return candidate
+        return None
 
     def _ensure_device(self, modality: str, instrument: str | None = None) -> str:
         """The ``Device`` record for one instrument of one modality.
@@ -413,14 +482,18 @@ class DataModelRecorder:
         device_id = self._ensure_device(modality)
         signal_type = _MODALITY_SIGNAL_TYPE.get(modality)
         if signal_type is not None:
+            sync_method, time_offset_ms = self._sync_fields(modality, None)
             stream = self.store.add_signal_stream(
                 SignalStream(
                     session_id=self.recording_session.session_id,
                     device_id=device_id,
                     signal_type=signal_type,
+                    sync_method=sync_method,
+                    time_offset_ms=time_offset_ms,
                 )
             )
             self._signals[modality] = stream.signal_id
+            self._stream_recordings[stream.signal_id] = (modality, None)
 
             path = getattr(recording, "path", None)
             if path is not None:

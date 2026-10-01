@@ -19,20 +19,8 @@ pytest.importorskip("resurfemg")
 np = pytest.importorskip("numpy")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EMG_PATH = (
-    REPO_ROOT
-    / "data"
-    / "source"
-    / "data_from_repo"
-    / "emg_data_synth_quiet_breathing.Poly5"
-)
-VENT_PATH = (
-    REPO_ROOT
-    / "data"
-    / "source"
-    / "data_from_repo"
-    / "vent_data_synth_quiet_breathing.Poly5"
-)
+EMG_PATH = REPO_ROOT / "tests" / "data" / "emg_data_synth_quiet_breathing.Poly5"
+VENT_PATH = REPO_ROOT / "tests" / "data" / "vent_data_synth_quiet_breathing.Poly5"
 
 GRANULAR_SPEC = {
     "name": "emg-granular-postprocess",

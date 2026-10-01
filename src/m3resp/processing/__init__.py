@@ -49,6 +49,11 @@ from m3resp.processing.quality import (
     threshold_flag,
     timing_window_flag,
 )
+from m3resp.processing.slicing import (
+    slice_by_index,
+    slice_by_time,
+    slice_signal_by_mode,
+)
 from m3resp.processing.ventilator import estimate_peep
 from m3resp.processing.windows import (
     ENVELOPE_METHODS,
@@ -105,6 +110,9 @@ __all__ = [
     "rolling_rms_ci",
     "sample_intervals_to_breath_events",
     "skipped_quality_flag",
+    "slice_by_index",
+    "slice_by_time",
+    "slice_signal_by_mode",
     "threshold_flag",
     "tidal_variation",
     "time_to_peak",

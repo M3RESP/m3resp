@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from typing import Any, overload
+from typing import TYPE_CHECKING, Any, overload
 
 from m3resp.core.events import BreathEvent, Event
-from m3resp.synchronization.cropping import normalize_modality
+from m3resp.modalities.names import VENTILATOR, normalize_modality
+
+if TYPE_CHECKING:
+    from m3resp.core.session import M3Session
 
 
 @overload
@@ -129,3 +132,87 @@ def compute_offsets_from_timestamps(
         )
     reference_time = timestamps[reference_modality]
     return {modality: value - reference_time for modality, value in timestamps.items()}
+
+
+def ventilator_start_key(name: str) -> str:
+    """The `session.start_times` / `offset_seconds` key for one standalone
+    ventilator recording, e.g. ``"ventilator:monitor"``."""
+
+    return f"{VENTILATOR}:{name}"
+
+
+def normalize_offset_key(key: str) -> str:
+    """Canonicalize an `offset_seconds` / `start_times` key.
+
+    A modality name is normalized as by `normalize_modality`. A key for one
+    ventilator recording (``"vent:Monitor"``, ``"ventilator:Monitor"``) keeps
+    the recording's name exactly as given, since names are case-sensitive.
+    """
+
+    head, separator, name = str(key).partition(":")
+    if not separator:
+        return normalize_modality(key)
+    return f"{normalize_modality(head)}:{name}"
+
+
+def resolve_alignment_offsets(
+    offset_seconds: float | Mapping[str, float],
+) -> dict[str, float]:
+    if isinstance(offset_seconds, Mapping):
+        offsets = {"eit": 0.0, "emg": 0.0, VENTILATOR: 0.0}
+        for modality, offset in offset_seconds.items():
+            offsets[normalize_offset_key(modality)] = float(offset)
+        return offsets
+    return {"eit": 0.0, "emg": float(offset_seconds), VENTILATOR: 0.0}
+
+
+def offsets_relative_to_reference(
+    offsets: Mapping[str, float],
+    reference_modality: str,
+) -> dict[str, float]:
+    reference = normalize_offset_key(reference_modality)
+    reference_offset = float(offsets.get(reference, 0.0))
+    return {
+        normalize_offset_key(modality): float(offset) - reference_offset
+        for modality, offset in offsets.items()
+    }
+
+
+def raw_reference_modality(session: M3Session, reference_modality: str | None) -> str:
+    """The recording `M3Session.synchronize_raw_modalities` keeps at start
+    time 0; every other start time is relative to it.
+
+    The one asked for when `reference_modality` is given (a modality, or
+    ``"ventilator:<name>"``). Otherwise the ventilator if one is loaded, then
+    EIT, then EMG; EIT when nothing is loaded.
+    """
+
+    if reference_modality is not None:
+        return normalize_offset_key(reference_modality)
+    if VENTILATOR in session.raw or "vent" in session.raw:
+        return VENTILATOR
+    if "eit" in session.raw:
+        return "eit"
+    if "emg" in session.raw:
+        return "emg"
+    return "eit"
+
+
+def breath_reference_modality(
+    session: M3Session, reference_modality: str | None
+) -> tuple[str, str | None]:
+    """The modality whose breaths `M3Session.synchronize_multimodal_breaths`
+    does not move by an extra offset; every other offset is relative to it.
+
+    The one asked for when `reference_modality` is given. Otherwise the
+    ventilator if there are ventilator breaths, and EIT when there are none.
+
+    Returns ``(reference, fallback)``. `fallback` is ``"eit"`` when EIT was
+    picked only because there were no ventilator breaths, and None otherwise.
+    """
+
+    if reference_modality is not None:
+        return normalize_modality(reference_modality), None
+    if session.events.get("ventilator_breaths"):
+        return VENTILATOR, None
+    return "eit", "eit"

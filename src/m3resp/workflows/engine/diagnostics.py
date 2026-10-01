@@ -32,7 +32,7 @@ def _is_number(value: Any) -> bool:
 def _is_number_or_mapping_of_numbers(value: Any) -> bool:
     """A ``number`` parameter also accepts a ``{key: number}`` mapping - the
     recurring "single value, or a per-key override" pattern (e.g.
-    ``session.sync_raw``'s ``offset_seconds``: one offset, or one per
+    ``sync.raw_modalities``'s ``offset_seconds``: one offset, or one per
     modality)."""
 
     if isinstance(value, dict):
@@ -387,7 +387,7 @@ def _check_artifact_type_compatibility(
     produced the context key it's bound to ("compilation validates
     ... artifact compatibility"), unless either side
     declares :data:`ANY_ARTIFACT_TYPE` (a genuine passthrough, e.g.
-    ``eit.slice``). Only checked when *both* sides declare a type - this is
+    ``eit.slice_signal``). Only checked when *both* sides declare a type - this is
     additive metadata, backfilled module by module, so an undeclared type on
     either side is simply skipped rather than flagged."""
 

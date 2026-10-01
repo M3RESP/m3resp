@@ -7,7 +7,7 @@
     "timepoint": null
   },
   "inputs": {
-    "emg_file": "../../data/source/Test_PS_27072026/EMG_Vent/TestPS3.txt"
+    "emg_file": "../../tests/data/TestPS3.txt"
   },
   "name": "multidomain_recording1_a2",
   "outputs": {
@@ -33,10 +33,10 @@
       }
     },
     {
-      "id": "step_001_emg_slice",
+      "id": "step_001_emg_slice_recording",
       "in": {},
       "out": {},
-      "uses": "emg.slice",
+      "uses": "emg.slice_recording",
       "with": {
         "end_seconds": 200.0005,
         "start_seconds": 140.0

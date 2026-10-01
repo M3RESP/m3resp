@@ -1,25 +1,32 @@
 # Synchronization and multimodal parameters
 
+For a one-page summary in tables, see
+[Synchronization at a glance](synchronization-overview.md).
+
 ## Plain-language overview
 
 This module's job is lining up data from different modalities (EIT/EMG/
 ventilator) that were recorded on separate clocks or files, so they can be
 compared on one shared time axis. Key pieces:
 
-- `session.synchronize_raw_modalities(...)` shifts the raw signals in time,
-  before any processing, using a manual offset you supply (for example
+- `session.synchronize_raw_modalities(...)` gives each recording a start
+  time on one shared clock, using a manual offset you supply (for example
   "EMG started 5 seconds after EIT"). The offset is a single number in
   seconds that you provide; the package applies it but never measures it
-  (`estimate_sync_offset` only supports `method="manual"`). How you arrive
-  at that number is up to you, and filtered signals are fine for the job:
-  the shift is applied to the raw signals, so every processing step
-  downstream sees the same aligned timeline.
+  (`estimate_sync_offset` only supports `method="manual"`). The step does
+  not read any signal. How you arrive at the number is up to you, for
+  example by comparing filtered signals from both recordings.
+  No samples are removed: a three-hour pressure recording stays three hours
+  long beside a thirty-minute EIT recording that started 90 minutes in. See
+  "Start times" below.
 - `session.synchronize_multimodal_breaths(...)` does the same thing but for
   already-detected events (breaths), not raw signals.
 - `resample_signal(...)` is a standalone utility that changes a signal's
   sampling rate to match another signal's, for the cases where you need two
   signals on one shared sample grid (e.g. a sample-by-sample comparison).
-  It's not part of the alignment pipeline above and isn't called
+  It uses linear interpolation between the original samples and applies no
+  anti-aliasing filter, so low-pass filter the signal before lowering its
+  sampling rate. It's not part of the alignment pipeline above and isn't called
   automatically: breath linking and the multimodal parameter calculations
   below work on real-world timestamps (`BreathEvent.start_time`/`end_time`/
   `peak_time`), not sample indices, so most analysis stays at each
@@ -52,10 +59,104 @@ modalities, deliberately kept modest: manual offset, timestamp alignment,
 resampling, and nearest-neighbor breath linking. Clock-drift correction is
 intentionally out of scope.
 
+## Start times
+
+`session.synchronize_raw_modalities(offset_seconds=..., reference_modality=...)`
+stores one number per recording in `session.start_times`: the time, in
+seconds on the shared clock, at which that recording's first sample was
+taken. The reference recording starts at 0; a negative value means a
+recording started earlier than the reference, a positive value later.
+Calling it again replaces the previously set start times.
+
+Each modality's own results stay on that recording's own clock, so
+`session.events["emg_breaths"]` still gives times from the start of the EMG
+file. The start times are added only where modalities are compared -
+`synchronize_multimodal_breaths`, `link_breaths` and
+`plot_synchronization_comparison`:
+
+```text
+time on the shared clock = own time - own first time + start time
+```
+
+$$t_{shared} = t_{modality} - t_{modality}(0) + t_{start}$$
+
+"Own first time" ($t_{modality}(0)$) is 0 s for EMG and ventilator data.
+EIT files carry the time of day instead (a Draeger file can start at 36528.6 s), so the EIT's
+first time value is taken off first. A ventilator recording that came inside
+the EIT or EMG file uses that modality's start time.
+
+Standalone ventilator recordings (loaded with `source="ventilator"`) share
+the `"ventilator"` start time. When two of them started at different moments
+- a ventilator export and a separate monitor export, say - give one its own
+start time with `"ventilator:<name>"`, the name it was loaded under:
+
+```python
+session.load_ventilator("ventilator.txt", source="ventilator")
+session.load_ventilator("monitor.csv", source="ventilator", name="monitor")
+session.synchronize_raw_modalities(
+    offset_seconds={"eit": 0.0, "ventilator": -30.0, "ventilator:monitor": 12.5},
+    reference_modality="eit",
+)
+```
+
+A recording with its own entry uses it; the others use `"ventilator"`. A
+name that is not loaded, or one for ventilator data inside the EIT or EMG
+file, is refused.
+
+Cutting a recording (`slice_emg`, `slice_eit`, `slice_ventilator`) shifts its
+start time forwards by the amount of time cut from the beginning of the signals,
+so it stays lined up with the other recordings. See [Cutting data to a time window](slicing.md).
+
+## Was each recording synchronized?
+
+A session is meant to hold recordings of the same stretch of real time, so
+steps that compare recordings assume they are on one shared clock. That assumption only holds once each recording has been synchronized.
+`session.sync_methods` records how each recording was placed on the shared clock:
+
+| Key | Recording |
+|---|---|
+| `"eit"`, `"emg"` | the loaded EIT and EMG recordings |
+| `"ventilator:<name>"` | each standalone ventilator recording (loaded with `source="ventilator"`) |
+
+Ventilator data that came inside the EIT or EMG file shares that file's
+clock, so it is always in step with it. The values come from the data
+model's sync vocabulary:
+
+| Value | Set by | Meaning |
+|---|---|---|
+| `"manual"` | `synchronize_raw_modalities`, `synchronize_multimodal_breaths` | a hand-entered offset |
+| `"none"` | `skip_synchronization()` | used as it is, taken to have started with the others |
+
+Steps that compare recordings on different clocks warn
+(`UnsynchronizedDataWarning`) when one of them has no entry in
+`session.sync_methods`. They still
+run: the warning says their times are compared as if all recordings started
+at the same moment. The steps that check are `link_breaths` (and so the
+multimodal parameters computed from linked breaths) and
+`emg.evaluate_event_timing`. Nothing is warned when the data all comes from
+one clock, such as EMG with the airway pressure recorded in the same file.
+
+If the recordings really did start together - for example when one trigger
+started every device - explicitly say so with `session.skip_synchronization()`
+(the `sync.skip` workflow step). The warnings then stop, and the choice
+stays visible in the provenance log and in the `"synchronization"` section of
+the exported `summary.json`, next to the start times.
+
+Loading a file again gives a new recording that has not been synchronized:
+its start time and its entry in `session.sync_methods` are cleared.
+
+With a data model recorder attached (`session.datamodel`), every
+`SignalStream` carries the same information for its recording:
+`sync_method` (`"manual"`, `"none"`, or empty when never synchronized) and
+`time_offset_ms` (the recording's start time, in milliseconds). They are
+updated after every session action, so a later synchronization, skip, cut
+or reload is reflected in streams recorded earlier.
+
 ## Aligning raw signals and events
 
-- `session.synchronize_raw_modalities(...)` aligns raw signals before
-  per-modality processing.
+- `session.synchronize_raw_modalities(...)` sets each recording's start time
+  (see above). Run it before or after per-modality processing; it changes no
+  samples.
 - `session.synchronize_multimodal_breaths(method="manual_offset", offset_seconds=..., reference_modality=...)`
   shifts already-detected event lists (`session.events`) onto a common time
   axis. `offset_seconds` accepts either a single float or a per-modality
