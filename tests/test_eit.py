@@ -147,9 +147,8 @@ def test_eit_real_data_pipeline_uses_committed_sample():
 
     eit_path = os.path.join(
         repo_root,
+        "tests",
         "data",
-        "source",
-        "data_from_repo",
         "draeger_synthetic_draeger_20Hz.bin",
     )
     assert os.path.exists(eit_path), f"missing committed EIT fixture: {eit_path}"

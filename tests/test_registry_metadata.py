@@ -302,6 +302,7 @@ _AUDITED_SESSION_STEPS = frozenset(
         "eit.roi_filter_by_size",
         "eit.roi_tiv_lungspace",
         "eit.roi_watershed",
+        "eit.slice_recording",
         "emg.detect_breaths",
         "emg.detect_extreme_time_products",
         "emg.detect_local_high_aub",
@@ -318,20 +319,22 @@ _AUDITED_SESSION_STEPS = frozenset(
         "emg.percentage_under_baseline",
         "emg.preprocess",
         "emg.remove_invalid_breaths",
-        "emg.slice",
+        "emg.slice_recording",
         "emg.slopesum_baseline",
         "emg.snr_pseudo",
         "export.rotarc_result",
         "export.session_summary",
-        "session.sync_raw",
         "sync.apply_estimated_offset",
         "sync.estimate_offset",
+        "sync.raw_modalities",
+        "sync.skip",
         "ventilator.detect_non_consecutive_manoeuvres",
         "ventilator.load",
         "ventilator.normalize_breaths",
         "ventilator.pocc_intervals",
         "ventilator.pocc_quality",
         "ventilator.pocc_time_product",
+        "ventilator.slice_recording",
     }
 )
 
@@ -390,7 +393,7 @@ def test_describe_steps_filters_by_prefix():
 def test_describe_step_output_is_json_serializable():
     import json
 
-    description = describe_step("session.sync_raw")
+    description = describe_step("sync.raw_modalities")
     json.dumps(description.as_dict())  # must not raise
 
 

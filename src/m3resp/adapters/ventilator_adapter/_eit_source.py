@@ -14,7 +14,7 @@ onto m3resp's canonical ``pressure``/``flow``/``volume`` names (plus the
 esophageal/transpulmonary/gastric channels a Draeger pressure pod adds) and
 packs them into the same ``{"array", "metadata"}`` payload the EMG-file path
 produces, so everything downstream of loading - `split_channels`, the
-preprocessing defaults, cropping, `to_signals` - stays source-agnostic.
+preprocessing defaults, slicing, `to_signals` - stays source-agnostic.
 """
 
 from __future__ import annotations

@@ -51,12 +51,6 @@ _VERSIONED_SPECS = {
     "multimodal_full",
 }
 
-#: Examples whose fixture file is a private, site-specific path (see the
-#: "USER TEMPLATE" banner in breath-duration.pipeline.yaml) rather than a
-#: repo-relative fixture - readiness will flag it as missing on any machine
-#: that is not that researcher's, which is the correct behavior, not a bug.
-_PRIVATE_PATH_SPECS = {"rotarc"}
-
 
 @pytest.mark.parametrize("example_name", sorted(EXAMPLE_SPEC_PATHS))
 def test_example_spec_file_exists(example_name: str):
@@ -100,10 +94,7 @@ def test_example_spec_steps_have_stable_explicit_ids(example_name: str):
         )
 
 
-@pytest.mark.parametrize(
-    "example_name",
-    sorted(set(EXAMPLE_SPEC_PATHS) - _PRIVATE_PATH_SPECS),
-)
+@pytest.mark.parametrize("example_name", sorted(EXAMPLE_SPEC_PATHS))
 def test_example_spec_readiness_reports_no_missing_repo_fixtures(example_name: str):
     """Every example whose fixtures ship in the repo must validate cleanly at
     readiness level too (missing optional packages aside) - a broken
@@ -122,26 +113,6 @@ def test_example_spec_readiness_reports_no_missing_repo_fixtures(example_name: s
             + ", ".join(sorted(d.message for d in missing_file_diagnostics))
         )
     assert missing_file_diagnostics == []
-
-
-def test_rotarc_readiness_flags_its_private_path_as_missing_when_absent():
-    """The ROTARC example's private, site-specific fixture path is expected
-    to be reported as missing on any machine other than the researcher's -
-    this is the readiness system doing its job, not a spec bug."""
-
-    spec = load_spec(EXAMPLE_SPEC_PATHS["rotarc"])
-    report = validate_pipeline(spec, readiness=True)
-    codes = {d.code for d in report.readiness}
-    # ``capability_missing_optional_dependency`` appears when a step's optional
-    # package (e.g. resurfemg) is not installed - as in the lean CI test job -
-    # which, like a missing fixture, is an environment fact rather than a spec
-    # bug. (On the researcher's own machine the private path resolves, so
-    # ``missing_file`` may be absent - hence this stays a pure subset check.)
-    assert codes <= {
-        "missing_file",
-        "missing_optional_package",
-        "capability_missing_optional_dependency",
-    }
 
 
 def test_multimodal_full_example_runs_end_to_end():
@@ -168,11 +139,13 @@ def test_multimodal_full_example_runs_end_to_end():
 
     # Full EMG/ventilator chain, through the clinical quality steps.
     assert len(result.value("ecg_peak_indices")) > 0
-    # The recording's muscle pressure (p_mus) has 14 breath efforts; the first
-    # is cut off at the start of the EMG, so 13 are detectable. A count well
-    # above this means the detector is picking up noise or heartbeats (as it
-    # did on the weak channel 0).
-    assert len(result.value("emg_breath_events")) == 13
+    # The recording's muscle pressure (p_mus) has 14 breath efforts. When the
+    # -2 s EMG offset cut the first 2 s off the EMG, the first breath sat too
+    # close to the new start to be found, so only 13 were. The offset now sets
+    # the EMG start time and keeps every sample (#118), so all 14 are found.
+    # A count well above this means the detector is picking up noise or
+    # heartbeats (as it did on the weak channel 0).
+    assert len(result.value("emg_breath_events")) == 14
     assert len(result.value("ventilator_breath_indices")) > 0
 
     # Native collections were populated exactly once, not duplicated.

@@ -201,7 +201,7 @@ def test_steps_details_shows_parameters(capsys):
     exit_code = _run_cli(["steps", "--details"])
     assert exit_code == EXIT_SUCCESS
     out = capsys.readouterr().out
-    assert "session.sync_raw" in out
+    assert "sync.raw_modalities" in out
     assert "with: method (choice)" in out
 
 

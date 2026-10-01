@@ -1,5 +1,221 @@
 # Changelog
 
+## Unreleased
+
+### `export_store` checks the data model store before writing it (#75)
+
+`validate_store` had to be called separately, and it only returned a list of
+problems, so a store whose records did not link up could be saved without
+anyone noticing. `export_store` now runs the same checks first. If one fails,
+**nothing is written** (not even the output folder) and a
+`DataModelValidationError` lists every problem (also in its `problems`
+attribute).
+
+| Call | What it does |
+|---|---|
+| `export_store(store, path)` | Checks that every record points at records that exist and that no time window ends before it starts, then writes |
+| `export_store(store, path, require_complete=True)` | Also checks that every record has the details a finished dataset needs (units, sampling rate, start time, file checksums) |
+| `export_store(store, path, validate=False)` | Writes without checking, as before |
+
+A store recorded from a session passes the default checks, so existing
+exports keep working; all the example workflows were checked. Passing
+`require_complete=True` together with `validate=False` raises an error
+instead of being ignored.
+
+### Synchronization code and steps tidied up; `Timebase` removed
+
+Every synchronization step is now a `sync.*` step, in one file
+(`m3resp.workflows.steps.sync`):
+
+| Before | Now |
+|---|---|
+| `session.sync_raw` | `sync.raw_modalities` |
+| - | `sync.skip` (new, see #115 below) |
+
+The old name still works in specs, so existing YAML files run unchanged; only
+the new name is listed by `m3resp steps` and the step catalogue. The example
+specs use the new name. The Python module `m3resp.workflows.steps.session` is
+gone; the step functions are now `raw_modalities` and `skip` in
+`m3resp.workflows.steps.sync`.
+
+`m3resp.synchronization.ventilator` was not about synchronization: it turns
+ventilator breath detections into `BreathEvent`s. It moved to the ventilator
+adapter. For code that imported from it:
+
+| Was in `m3resp.synchronization.ventilator` | Now in |
+|---|---|
+| `iter_ventilator_detections`, `normalize_ventilator_breath` | `m3resp.adapters.ventilator_adapter` (still importable from `m3resp.synchronization`) |
+| `infer_ventilator_fs`, `infer_ventilator_duration` | `m3resp.adapters.ventilator_adapter` |
+
+Two smaller moves, with no change in behavior: the rules for which recording
+is the reference when `reference_modality` is not given moved out of
+`M3Session` into `m3resp.synchronization.alignment`
+(`raw_reference_modality`, `breath_reference_modality`), and
+`ventilator_recording` moved from `m3resp.synchronization.start_times` to
+`m3resp.modalities.ventilator`, beside the other ventilator lookups.
+
+`m3resp.synchronization.Timebase` was removed. Nothing used it: a signal's
+own time axis, `TimeWindow` and the per-recording start times now do its job.
+
+### Warn when recordings that were never synchronized are compared (#115)
+
+A session is meant to hold recordings of the same stretch of real time, but
+nothing checked that the recordings had been synchronized. Now:
+
+- `session.sync_methods` records, per recording (`"eit"`, `"emg"`,
+  `"ventilator:<name>"` for each standalone ventilator recording), how it was
+  placed on the shared clock, using the data model's vocabulary: `"manual"`
+  (`synchronize_raw_modalities`, `synchronize_multimodal_breaths`) or `"none"`.
+- `session.skip_synchronization()` (workflow step `sync.skip`) is for
+  recordings that really did start together: it records `"none"`.
+- `link_breaths` and `emg.evaluate_event_timing` warn with
+  `UnsynchronizedDataWarning` when they compare recordings on different
+  clocks and one of them has no record. They do not stop. Data from one clock
+  (EMG with airway pressure from the same file) never warns.
+- **Fix:** `emg.evaluate_event_timing` now compares EMG and ventilator times
+  on the shared clock. Since start times replaced cutting (#118), a
+  standalone ventilator recording with a start time was compared on the
+  wrong clock. Ventilator data from the EMG file gives the same results as
+  before.
+- Loading a file again clears that recording's start time and record: it is a
+  new recording, back at full length, so an earlier start time (for example
+  one moved by slicing) no longer applies.
+- `summary.json` has a new `"synchronization"` section with the start times
+  and the sync methods.
+- With a data model recorder attached, `SignalStream.sync_method` and
+  `SignalStream.time_offset_ms` (the start time in milliseconds) are now
+  filled from the session, and updated after every session action. Ventilator
+  signals from `preprocess_ventilator` carry the name of their recording in
+  `metadata["recording"]`, so each stream is matched to the right recording.
+
+### Cutting code moved to where it belongs; `m3resp.synchronization.cropping` removed
+
+Synchronization no longer cuts recordings (see "Raw synchronization sets a
+start time" below), so the module named after cutting was split up. For code
+that imported from it:
+
+| Was in `m3resp.synchronization.cropping` | Now in |
+|---|---|
+| `VENTILATOR`, `normalize_modality` | `m3resp.modalities.names` |
+| `DEFAULT_VENTILATOR_NAME`, `ventilator_raw`, `ventilator_payload`, `ventilator_clock`, `ventilator_recordings` | `m3resp.modalities.ventilator` |
+| `resolve_alignment_offsets`, `offsets_relative_to_reference`, `normalize_offset_key`, `ventilator_start_key` | `m3resp.synchronization.alignment` |
+| `raw_synchronization_traces` | `m3resp.synchronization.raw_traces` |
+| `crop_loaded_modality` and the `_crop_*` helpers | removed: cut a recording with `slice_emg` / `slice_eit` / `slice_ventilator` |
+
+Cutting one recording now lives beside loading it, in
+`m3resp.modalities.{emg,eit,ventilator}` (`sample_window` / `frame_window`
+and `keep_samples` / `keep_frames`); the session methods only decide what is
+cut together and update the start times. The signal-cutting helpers
+`slice_by_index`, `slice_by_time` and `slice_signal_by_mode` moved from
+`m3resp.workflows.utils` to `m3resp.processing.slicing` (still importable from
+the old place), and every cutting step is registered from a `slicing.py` in
+its step folder. See docs/concepts/slicing.md.
+
+### Cutting steps renamed: `*.slice_recording` cuts the recording, `*.slice_signal` one signal
+
+`emg.slice` cut the whole loaded EMG recording, while `eit.slice` cut only one
+signal passed along in a workflow. The names now say which:
+
+| Before | Now | What it cuts |
+|---|---|---|
+| `emg.slice` | `emg.slice_recording` | The loaded EMG recording |
+| - | `eit.slice_recording` (new, below) | The loaded EIT recording |
+| `eit.slice` | `eit.slice_signal` | One EIT signal in a workflow |
+| - | `ventilator.slice_recording` (new, below) | The standalone ventilator recordings |
+
+The old names still work in specs, so existing YAML files run unchanged; only
+the new names are listed by `m3resp steps` and the step catalogue. The
+example specs use the new names.
+
+`eit.slice_signal` now also cuts m3resp's own `Signal` (values and time axis
+together, with the kept sample range noted in its metadata), not only
+eitprocessing data. On a `Signal` a window that keeps no samples raises an
+error instead of returning an empty result. Its time mode is unchanged: times
+are the signal's own time values, which for data read from an EIT file is the
+time of day.
+
+### Cut standalone ventilator recordings to a time window: `session.slice_ventilator` / `ventilator.slice_recording`
+
+Ventilator data could only be cut when it came inside the EMG or EIT file (by
+`slice_emg` / `slice_eit`); a standalone ventilator or monitor export could not
+be cut at all. `slice_ventilator(start_seconds, end_seconds=None)` now does
+this, with times in seconds from the start of the recording. It cuts the
+recording named with `name=`, or every standalone ventilator recording, and
+moves each cut recording's start time later by `start_seconds` (see below). It
+refuses ventilator data from the EIT or EMG file, which must be cut with its
+host recording, and must run before `preprocess_ventilator`.
+
+The `ventilator.load` step has a new `source` option (`ventilator`, `emg` or
+`eit`), so a workflow can mark a file as a standalone export. Without it, a
+`.bin` file is taken as EIT and anything else as the EMG device's export, as
+before.
+
+### Standalone ventilator recordings can each have their own start time
+
+All standalone ventilator recordings shared the one `"ventilator"` start time,
+so a ventilator export and a separate monitor export that were started at
+different moments could not both be lined up. Each can now get its own start
+time under `"ventilator:<name>"` (the name it was loaded under), e.g.
+`synchronize_raw_modalities(offset_seconds={"ventilator": -30.0,
+"ventilator:monitor": 12.5})`. A recording without its own entry uses
+`"ventilator"` as before. A name that is not loaded, or one for ventilator data
+inside the EIT or EMG file, raises an error rather than being ignored.
+
+- `slice_ventilator(..., name=...)` cuts one named recording; without `name`
+  it still cuts them all. Each cut recording's new start time is stored under
+  its own `"ventilator:<name>"` entry, so no other recording moves.
+- The `ventilator.load` step has a new `name` option, so a workflow can load
+  more than one ventilator recording; `ventilator.slice_recording` has one
+  too.
+- A `"ventilator:<name>"` recording can be the `reference_modality`.
+
+### Cut the loaded EIT recording to a time window: `session.slice_eit` / `eit.slice_recording`
+
+The EIT counterpart of `slice_emg` / `emg.slice_recording`. It keeps only the part of
+the loaded EIT recording between two times (seconds from the first frame, not
+the time of day in the file). The cutting is done by `eitprocessing`'s own
+`Sequence.select_by_index` (through `EITProcessingAdapter.slice_sequence`), so
+pixel data, global impedance, pressure/flow channels and markers are cut to
+the same frames, chosen by their time stamps. A ventilator recording loaded
+from the same EIT file is cut at exactly those frames, and the EIT start time
+moves later by the part cut off the front. It must run before
+`preprocess_eit`.
+
+### Raw synchronization sets a start time per recording instead of cutting samples (#118)
+
+`synchronize_raw_modalities` (and the `session.sync_raw` /
+`sync.apply_estimated_offset` workflow steps) used to line recordings up by
+removing samples: a negative offset cut the start of a recording, a positive
+one cut its end. That lost data - an EIT recording starting 90 minutes into a
+three-hour pressure recording cost the first 90 minutes of pressure - and a
+positive offset did not move the recording in time at all, it only shortened
+it.
+
+**This is a behavior change.**
+
+- No samples are removed. Each recording gets a start time on a shared clock,
+  stored in `session.start_times` (and in
+  `session.parameters["raw_alignment"]["start_time_seconds"]`).
+- The start times are added when modalities are compared:
+  `synchronize_multimodal_breaths` adds them on top of its own offset (its
+  `parameters["alignment"]["start_time_shift_seconds"]` records how much),
+  `link_breaths` adds them to any list `synchronize_multimodal_breaths` did not
+  already shift, and `plot_synchronization_comparison` draws the "after"
+  traces moved rather than cut.
+- `session.events` and each modality's signals stay on their own recording's
+  clock.
+- EIT breath times are now counted from the EIT recording's first sample when
+  modalities are compared. A Draeger file's time axis is the time of day, so
+  EIT breaths used to sit hours away from EMG and ventilator breaths.
+- `slice_emg` moves the EMG start time later by `start_seconds`, so a sliced
+  EMG stays lined up.
+- `synchronize_raw_modalities` returns `{modality: {"start_time_seconds": ...}}`
+  for every loaded modality. `cropped_samples` is gone from its return value
+  and from `parameters["raw_alignment"]`.
+- Breath detection now sees the whole recording, so it can find breaths near
+  the start that used to be cut off. The multimodal example finds all 14 EMG
+  breaths instead of 13.
+
 ## 0.2.0 (2026-09-25)
 
 ### The standard EMG pipeline now removes ECG, band-passes 20-500 Hz, and computes an RMS envelope

@@ -6,6 +6,7 @@ for the conceptual model this package implements.
 
 from __future__ import annotations
 
+from m3resp.core.exceptions import DataModelValidationError
 from m3resp.datamodel.entities import (
     Breath,
     Case,
@@ -34,6 +35,7 @@ __all__ = [
     "DataModelRecorder",
     "DataModelStore",
     "DataModelStoreError",
+    "DataModelValidationError",
     "DerivedFeature",
     "Device",
     "EITConfiguration",

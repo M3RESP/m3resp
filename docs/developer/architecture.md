@@ -41,7 +41,8 @@ foreign keys, meaning it verifies that if one record refers to another
 record by ID, that other record actually exists). This layer supports two
 extra operations the runtime objects do not have: `validate_store()`
 (checks the data is complete and internally consistent) and
-`export_store()` (writes everything out, one JSON file per table).
+`export_store()` (writes everything out, one JSON file per table, after
+running `validate_store()`; a store that fails is not written).
 
 ### How you move from Layer 1 to Layer 2
 
@@ -145,7 +146,8 @@ src/m3resp/
 │   ├── store.py                        DataModelStore (in-memory, FK-checked tables)
 │   ├── recorder.py                     DataModelRecorder - the Layer 1 -> Layer 2 boundary
 │   ├── validation.py                   validate_store() - reference + completeness checks (doc Sec 10)
-│   └── export.py                       export_store() - one JSON file per table
+│   └── export.py                       export_store() - checks the store, then one JSON
+│                                           file per table
 │
 ├── adapters/                           Conversion boundary to the legacy packages - see adapters.md
 │   ├── eitprocessing_adapter/          load/preprocess + to_signals/to_parameters/
@@ -153,23 +155,28 @@ src/m3resp/
 │   ├── resurfemg_adapter/              same shape, for resurfemg (split by
 │   │                                       responsibility: core/ecg/baseline/quality/defaults)
 │   └── ventilator_adapter/             same shape, for ventilator pressure/flow/volume;
-│                                           reads files through the EMG/EIT adapters above
+│                                           reads files through the EMG/EIT adapters above;
+│                                           turns breath detections into BreathEvents (_breaths.py)
 │
 ├── processing/                         Shared, modality-neutral building blocks: filters, peaks,
-│                                           windows, intervals, metrics, quality, ecg
+│                                           windows, intervals, metrics, quality, ecg,
+│                                           slicing (cutting one signal to a window)
 │
 ├── synchronization/                    Alignment, resampling, breath linking, multimodal
 │   │                                       parameters (Milestone 2.5, see concepts/synchronization.md)
-│   ├── alignment.py                    manual-offset + timestamp-derived offsets
+│   ├── alignment.py                    manual-offset + timestamp-derived offsets; resolving
+│   │                                       offset_seconds keys (incl. "ventilator:<name>");
+│   │                                       which recording is the reference
 │   ├── offset_estimation.py            manual-offset passthrough (no robust automatic
 │   │                                       sync method; protocol-specific estimators live in
 │   │                                       tools/visualization_tools/utils/, not in the package)
-│   ├── timebase.py                     Timebase - common time-axis representation
 │   ├── resampling.py                   resample_signal - common time base
 │   ├── linking.py                      link_breaths_by_time - nearest-neighbor breath linking
-│   ├── cropping.py                     raw-modality offset resolution + in-place cropping,
-│   │                                       used by M3Session.synchronize_raw_modalities
-│   ├── ventilator.py                   ventilator breath-detection normalization into BreathEvents
+│   ├── start_times.py                  per-recording start times on a shared clock,
+│   │                                       set by M3Session.synchronize_raw_modalities
+│   ├── sync_methods.py                 which recordings were synchronized, and how; the
+│   │                                       UnsynchronizedDataWarning check
+│   ├── raw_traces.py                   before/after traces for the raw synchronization plot
 │   └── multimodal_parameters.py        compute_timing_delay / compute_event_agreement /
 │                                           compute_breath_duration_difference /
 │                                           compute_multimodal_parameters
@@ -177,13 +184,13 @@ src/m3resp/
 ├── workflows/                          Stage 1's declarative step-registry engine (YAML/JSON specs)
 │   └── steps/                          add a new @register_step here for a custom, composable step
 │       ├── eit/                        eit.* steps, split by pipeline stage
-│       │                                   (filtering/pixel/roi/loading/signals)
+│       │                                   (filtering/pixel/roi/loading/slicing/signals)
 │       ├── emg/                        emg.* steps, split by pipeline stage
-│       │                                   (baseline/ecg_*/features/quality_*/...)
-│       ├── ventilator/                 ventilator.* steps (loading, breath and Pocc
-│       │                                   detection, quality)
-│       └── sync.py, session.py,        sync.*/session.* (cross-modality timing),
-│           metrics.py, export.py           metric.*, export.* steps
+│       │                                   (baseline/ecg_*/features/quality_*/slicing/...)
+│       ├── ventilator/                 ventilator.* steps (loading, slicing, breath and
+│       │                                   Pocc detection, quality)
+│       └── sync.py, metrics.py,        sync.* (every synchronization step),
+│           export.py                       metric.*, export.* steps
 │
 ├── presets/                            Named, built-in Pipeline presets (Milestone 2.4) - see
 │   │                                       developer/pipeline-contracts.md; NOT the same thing as
@@ -191,7 +198,12 @@ src/m3resp/
 │   ├── eit.py, emg.py, multimodal.py   add a new preset here
 │   └── registry.py                     register_pipeline(name, cls)
 │
-├── modalities/                         Recording types and load helpers per modality (EIT, EMG, ventilator)
+├── modalities/                         Recording types per modality (EIT, EMG, ventilator) and what
+│   │                                       can be done to one recording: load it, cut it to a
+│   │                                       time window (see concepts/slicing.md)
+│   ├── eit.py, emg.py, ventilator.py   load(); frame_window/sample_window + keep_frames/keep_samples
+│   ├── names.py                        modality names and accepted spellings ("vent" -> "ventilator")
+│   └── time_window.py                  TimeWindow - which samples of a recording to keep
 ├── export/                             session_export.py (Stage 1 + Milestone 2.6 structured export),
 │                                           tables.py (row-shaping helpers)
 ├── visualization/                      Session overview and synchronization plots

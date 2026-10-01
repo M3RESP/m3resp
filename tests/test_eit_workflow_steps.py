@@ -731,9 +731,8 @@ def test_full_eit_example_pipeline_runs_end_to_end(tmp_path):
     repo_root = Path(__file__).resolve().parents[1]
     fixture = os.path.join(
         repo_root,
+        "tests",
         "data",
-        "source",
-        "data_from_repo",
         "draeger_synthetic_draeger_20Hz.bin",
     )
     assert os.path.exists(fixture), f"missing committed EIT fixture: {fixture}"

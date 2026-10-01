@@ -23,7 +23,13 @@ from ._shared import _RESURFEMG, _SESSION_ARTIFACT
     category="loading",
     modality="ventilator",
     optional_packages=_RESURFEMG,
-    session_writes=("session.raw.ventilator",),
+    session_writes=(
+        "session.raw.ventilator",
+        # A new standalone recording is not synchronized: its start time is
+        # cleared.
+        "session.start_times",
+        "session.sync_methods",
+    ),
     input_artifacts=(_SESSION_ARTIFACT,),
     parameters=(
         StepParameter(
@@ -32,6 +38,34 @@ from ._shared import _RESURFEMG, _SESSION_ARTIFACT
             required=True,
             path_kind="file",
             description="Ventilator recording file to load.",
+        ),
+        StepParameter(
+            name="source",
+            value_type="choice",
+            required=False,
+            default=None,
+            choices=("ventilator", "emg", "eit"),
+            description=(
+                "Which device's file this is, which decides its clock. "
+                "'ventilator': a standalone ventilator or monitor export with "
+                "its own clock. 'emg' / 'eit': ventilator channels recorded "
+                "inside the EMG or EIT file, on that file's clock. Left "
+                "empty, a .bin file is taken as EIT and anything else as the "
+                "EMG device's export."
+            ),
+        ),
+        StepParameter(
+            name="name",
+            value_type="string",
+            required=False,
+            default=None,
+            description=(
+                "Name to file this recording under, when more than one "
+                "ventilator recording is loaded (e.g. 'monitor'). Left empty, "
+                "it is the main ventilator recording, and loading another "
+                "one without a name replaces it."
+            ),
+            advanced=True,
         ),
     ),
     output_artifacts=(
@@ -43,14 +77,22 @@ from ._shared import _RESURFEMG, _SESSION_ARTIFACT
         ),
     ),
 )
-def load(session: M3Session, *, file_path: str) -> dict[str, Any]:
+def load(
+    session: M3Session,
+    *,
+    file_path: str,
+    source: str | None = None,
+    name: str | None = None,
+) -> dict[str, Any]:
     # Delegates to the session method - the same shape as `emg.load` calling
     # `session.load_emg` - so provenance and `session.raw` bookkeeping happen
     # in one place. The step still emits the raw payload dict, which is what
     # `ventilator.channels` downstream expects.
-    session.load_ventilator(file_path, verbose=False)
-    recording = session.ventilator
-    assert recording is not None
+    options: dict[str, Any] = {"verbose": False}
+    if source is not None:
+        options["source"] = source
+    session.load_ventilator(file_path, name=name, **options)
+    recording = session.get_ventilator(name)
     return {"ventilator_raw": recording.data}
 
 

@@ -164,7 +164,7 @@ A versioned (`schema_version: 1`) spec must set `mode` explicitly whenever `dir`
 Two distinct checks are available before running anything, both without importing `eitprocessing`/`resurfemg` or touching the filesystem for anything but the readiness check itself:
 
 - **Structural** validation (`m3resp validate spec.yaml`, or `validate_pipeline(spec)` from `m3resp.workflows.compiler`) checks that the spec parses, every `uses` name is a registered step, every step's inputs are bound to something produced earlier (or a declared default), every static parameter has the right value type, and no unknown/duplicate names exist. This is always safe to run and always cheap — it never imports an optional package or reads a data file.
-- **Readiness** validation (`m3resp validate --readiness spec.yaml`, or `validate_pipeline(spec, readiness=True)`) additionally checks things that depend on *this* machine/environment: whether a step's declared optional package (`eitprocessing`/`resurfemg`) is actually importable, and whether a `path`-typed parameter's file actually exists on disk. A readiness diagnostic is expected and correct, not a bug, when it fires for the right reason — e.g. `breath-duration.pipeline.yaml`'s `eit_file` is a private, site-specific path (see its "USER TEMPLATE" banner) and reports `missing_file` on any machine other than that researcher's.
+- **Readiness** validation (`m3resp validate --readiness spec.yaml`, or `validate_pipeline(spec, readiness=True)`) additionally checks things that depend on *this* machine/environment: whether a step's declared optional package (`eitprocessing`/`resurfemg`) is actually importable, and whether a `path`-typed parameter's file actually exists on disk. A readiness diagnostic is expected and correct, not a bug, when it fires for the right reason — e.g. an `eit_file` that points to a recording stored only on another computer reports `missing_file`.
 
 Both return every independent problem found in one pass (a `ValidationReport` with separate `structural`/`readiness` diagnostic tuples, each JSON-safe via `.as_dict()`), rather than raising on the first one, so a GUI or CI job can show a complete list instead of a fix-one-rerun loop. `compile_pipeline(spec)` raises on the first structural error instead of collecting them — it is meant for "give me the resolved plan or fail," not for validation reporting.
 
@@ -208,11 +208,21 @@ Run `m3resp steps` to see the full list with descriptions. The main groups are:
 
 | Prefix | What it covers |
 |---|---|
-| `eit.*` | Load, slice, filter, detect rates/breaths, compute TIV/EELI/pixel TIV |
+| `eit.*` | Load, cut (the recording or one signal), filter, detect rates/breaths, compute TIV/EELI/pixel TIV |
 | `emg.*` | Load (EMG/ventilator), preprocess, detect breaths, compute per-function baseline/event-detection/feature/quality-assessment postprocessing steps |
-| `session.*` | Cross-modality operations (raw signal synchronization) |
+| `sync.*` | Put the recordings on one shared clock: set each recording's start time (`sync.raw_modalities`), use the recordings as they are (`sync.skip`), or pass on an offset found by hand (`sync.estimate_offset`, `sync.apply_estimated_offset`) |
 | `metric.*` | Reduction steps (e.g. coefficient of variation of intervals) |
 | `export.*` | Write results to disk (scalar files, JSON, session summary, ROTARC result) |
+
+Cutting steps follow one naming rule:
+
+| Step | What it cuts |
+|---|---|
+| `emg.slice_recording`, `eit.slice_recording` | The whole loaded recording in the session, with anything recorded in the same file. The recording's start time moves with it, so it stays lined up with the other recordings. Times are seconds from the first sample. |
+| `ventilator.slice_recording` | Every standalone ventilator recording (loaded with `source: ventilator`), the same way. Ventilator data that came inside the EIT or EMG file is cut with that file's recording instead. |
+| `eit.slice_signal` | One signal passed along in the workflow (an m3resp `Signal`, or eitprocessing data). The loaded recording is not changed. In time mode, times are the signal's own time values (the time of day, for data read from an EIT file). |
+
+`emg.slice` and `eit.slice`, the names used before, still work in specs.
 
 ## Adding a custom step
 
@@ -236,10 +246,10 @@ The function receives bound keyword arguments and returns a mapping of `{output_
 
 Worked examples ship with the repository. All except the two smaller introductory ones use `schema_version: 1` and declare an explicit `outputs.mode` (see above); every step in the `schema_version: 1` examples has a stable, explicit `id:`.
 
-- [`examples/ROTARC_example/breath-duration.pipeline.yaml`](https://github.com/M3RESP/m3resp/blob/main/examples/ROTARC_example/breath-duration.pipeline.yaml) — computes breath-duration CV from EIT data and writes a ROTARC-style result file (`outputs.mode: explicit`, since `export.rotarc_result` is its own export step). Its `inputs.eit_file` is a private, site-specific path — point it at your own recording before running it (see the file's "USER TEMPLATE" banner); `m3resp validate --readiness` correctly reports it missing on any other machine.
+- [`examples/ROTARC_example/breath-duration.pipeline.yaml`](https://github.com/M3RESP/m3resp/blob/main/examples/ROTARC_example/breath-duration.pipeline.yaml) — computes breath-duration CV from EIT data and writes a ROTARC-style result file (`outputs.mode: explicit`, since `export.rotarc_result` is its own export step). It runs on the synthetic Draeger recording in `tests/data/`; point `inputs.eit_file` at your own recording (and check the slice ranges) to use it on real data.
 - [`examples/eit_full_preprocessing/eit-full.pipeline.yaml`](https://github.com/M3RESP/m3resp/blob/main/examples/eit_full_preprocessing/eit-full.pipeline.yaml) — every EIT operation the Stage 2 EIT gap migration closed onto `EITProcessingAdapter`: loading, rate detection, MDN filtering, global breath detection, continuous TIV/EELI, pixel-breath timing, pixel TIV, and the four ROI lung-space steps (`outputs.mode: automatic`).
 - [`examples/emg_full_preprocessing/emg-full.pipeline.yaml`](https://github.com/M3RESP/m3resp/blob/main/examples/emg_full_preprocessing/emg-full.pipeline.yaml) — every EMG/ventilator operation the Stage 2 ReSurfEMG gap migration closed onto `ReSurfEMGAdapter`: loading, ECG detection + gating, breath detection, moving-baseline, on/offset detection, breath features, ventilator/Pocc detection and prerequisites, and all ten clinical quality operations. See ["EMG/ventilator pipelines"](#emgventilator-pipelines) below.
-- [`examples/multimodal_full/multimodal-full.pipeline.yaml`](https://github.com/M3RESP/m3resp/blob/main/examples/multimodal_full/multimodal-full.pipeline.yaml) — the canonical, most complete multimodal example: loads EIT + EMG + ventilator, performs raw synchronization via `session.sync_raw` *before* any modality-specific preprocessing, then runs the full EIT and EMG/ventilator chains above, then exports native results. Does not restore any post-detection alignment step — raw sync is the only cross-modality timing adjustment.
+- [`examples/multimodal_full/multimodal-full.pipeline.yaml`](https://github.com/M3RESP/m3resp/blob/main/examples/multimodal_full/multimodal-full.pipeline.yaml) — the canonical, most complete multimodal example: loads EIT + EMG + ventilator, performs raw synchronization via `sync.raw_modalities` *before* any modality-specific preprocessing, then runs the full EIT and EMG/ventilator chains above, then exports native results. Does not restore any post-detection alignment step — raw sync is the only cross-modality timing adjustment.
 - [`examples/multimodal_example/multimodal.pipeline.yaml`](https://github.com/M3RESP/m3resp/blob/main/examples/multimodal_example/multimodal.pipeline.yaml) — a smaller, introductory multimodal pipeline (legacy spec, no `schema_version`); shorter than `multimodal-full` and easier to read end-to-end.
 - [`examples/multidomain_recording1/recording1_a2.pipeline.yaml`](https://github.com/M3RESP/m3resp/blob/main/examples/multidomain_recording1/recording1_a2.pipeline.yaml) — the multidomain results chain on real diaphragm sEMG (Recording1, window A2, EIT off): cut to the window, 50 Hz notch before the 20-500 Hz band-pass, wavelet ECG removal, median envelope, baseline subtracted, breath detection with close peaks merged. Gives the same 9 breaths and 9.72 breaths/min as the multidomain notebook, value for value.
 
@@ -295,7 +305,8 @@ Every step also writes its raw/compatibility output(s) unchanged (existing consu
 | Step | Reads (besides `session`) | Key parameters | Native writes | Implementation |
 |---|---|---|---|---|
 | `emg.load` | — | `file_path`, `loader_options` | `raw_emg_signals` (one `Signal`/channel) | upstream loader |
-| `emg.slice` | — | `start_seconds`, `end_seconds` (optional; default: to the end) | `emg_slice` (kept window, samples removed at each end) | native (cuts `session.raw`; ventilator channels from the same file are cut too) |
+| `emg.slice_recording` (formerly `emg.slice`) | — | `start_seconds`, `end_seconds` (optional; default: to the end) | `emg_slice` (kept window, samples removed at each end) | native (cuts `session.raw`; ventilator channels from the same file are cut too) |
+| `ventilator.slice_recording` | — | `start_seconds`, `end_seconds` (optional; default: to the end) | `ventilator_slice` (kept window and samples removed at each end, per recording) | native (cuts every standalone ventilator recording; refuses ventilator data from the EIT/EMG file) |
 | `emg.preprocess` | — | `channel`, `high_pass_hz` (default 20), `low_pass_hz` (default 500, Nyquist-capped), `envelope_window_seconds`, `envelope_method` (`"rms"` default / `"arv"` / `"median"`), `notch_base_frequency`, `notch_quality_factor`, `notch_before_bandpass` (default `false`) | — (raw `processed_emg` dict) | upstream + native notch filter |
 | `emg.ecg_detect_peaks` | `processed_emg` | `ecg_channel`, `source` (default `"raw_channel"`), `peak_fraction`, `peak_width_seconds`, `peak_distance_seconds`, `bandpass_filter` | `ecg_peak_events` (one `Event`/peak), `ecg_peak_count_result` | upstream |
 | `emg.ecg_gating` | `processed_emg`, `ecg_peak_indices` | `source` (default `"filtered"`), `gate_width_seconds` **xor** `gate_width_samples`, `fill_method` (0-3), `envelope_window_seconds`, `envelope_method` (defaults to preprocessing's) | `ecg_gated_signal`, `ecg_gate_mask_result` (array) | upstream |

@@ -1,21 +1,19 @@
-"""Tests for `m3resp.synchronization.ventilator`, split out of `core/session.py`
-in the raw-modality synchronization refactor. Covers normalizing ventilator
-breath detections (sample indices, mappings, and already-native BreathEvents)
-into common `BreathEvent`s.
-"""
+"""Turning ventilator breath detections (sample indices, mappings, and
+already-native BreathEvents) into common `BreathEvent`s
+(`m3resp.adapters.ventilator_adapter`)."""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
-from m3resp.core.events import BreathEvent
-from m3resp.synchronization.ventilator import (
+from m3resp.adapters.ventilator_adapter import (
     infer_ventilator_duration,
     infer_ventilator_fs,
     iter_ventilator_detections,
     normalize_ventilator_breath,
 )
+from m3resp.core.events import BreathEvent
 
 
 class TestIterVentilatorDetections:
