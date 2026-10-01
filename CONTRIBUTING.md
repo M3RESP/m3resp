@@ -12,6 +12,11 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Making changes
 
+The data files in `tests/data` are stored with [Git LFS](https://git-lfs.com).
+Install `git-lfs` and run `git lfs install` once, before cloning. If you cloned
+without it, run `git lfs pull` afterwards. Without it, those files are small text
+placeholders and the tests that read them fail.
+
 Before opening a pull request, make sure the tests pass:
 
 ```bash

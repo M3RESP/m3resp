@@ -8,6 +8,7 @@ plan/*
 .*
 !.pre-commit-config.yaml
 !.readthedocs.yaml
+!.gitattributes
 # !.github/
 # !.github/**
 graphify-out/
