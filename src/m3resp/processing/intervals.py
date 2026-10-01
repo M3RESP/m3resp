@@ -34,7 +34,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from m3resp.core.events import BreathEvent
+from m3resp.data.events import BreathEvent
 
 
 def baseline_crossings(values: np.ndarray, baseline: np.ndarray) -> np.ndarray:

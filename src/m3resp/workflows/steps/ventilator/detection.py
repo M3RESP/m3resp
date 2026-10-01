@@ -6,10 +6,10 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.core.events import BreathEvent
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult
+from m3resp.data.events import BreathEvent
 from m3resp.processing.intervals import (
     onoff_from_baseline_crossings,
 )

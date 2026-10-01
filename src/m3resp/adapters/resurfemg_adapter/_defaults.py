@@ -6,8 +6,8 @@ import warnings
 from collections.abc import Sequence
 from typing import Any
 
-from m3resp.core.events import BreathEvent
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
+from m3resp.data.events import BreathEvent
 from m3resp.processing.filters import harmonic_notch_filter
 from m3resp.processing.intervals import (
     onoff_from_baseline_crossings,

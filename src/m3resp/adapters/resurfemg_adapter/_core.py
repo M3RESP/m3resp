@@ -8,9 +8,9 @@ from typing import Any, cast
 
 import numpy as np
 
-from m3resp.core.events import BreathEvent, coerce_breath_events
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
 from m3resp.data import ParameterResult, QualityFlag, Signal
+from m3resp.data.events import BreathEvent, coerce_breath_events
 from m3resp.data.signals import ProcessingState
 from m3resp.processing.quality import quality_flag_from_result, skipped_quality_flag
 

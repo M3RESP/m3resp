@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from m3resp.core.events import BreathEvent
 from m3resp.data import ParameterResult
+from m3resp.data.events import BreathEvent
 from m3resp.workflows import run_pipeline
 
 pytest.importorskip("resurfemg")

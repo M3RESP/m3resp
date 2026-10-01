@@ -13,8 +13,8 @@ import json
 import numpy as np
 
 from m3resp import M3Session
-from m3resp.core.events import BreathEvent
 from m3resp.data import ParameterResult, QualityFlag, Signal
+from m3resp.data.events import BreathEvent
 from m3resp.data.linked_breath import LinkedBreath
 
 

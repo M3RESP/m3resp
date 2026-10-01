@@ -26,7 +26,7 @@ Breaths are not kept in a container class of their own. They live inside
 `session.events`, the same plain dictionary from Stage 1, under keys like
 `"eit_breaths"` - see [Where breath/event lists live](#where-breathevent-lists-live).
 
-`m3resp.core.events` defines two timestamped types shared across modalities.
+`m3resp.data.events` defines two timestamped types shared across modalities.
 
 ## `Event`
 

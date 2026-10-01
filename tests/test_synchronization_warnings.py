@@ -14,9 +14,9 @@ import warnings
 import numpy as np
 import pytest
 
-from m3resp.core.events import BreathEvent
 from m3resp.core.exceptions import UnsynchronizedDataWarning
 from m3resp.core.session import M3Session
+from m3resp.data.events import BreathEvent
 from m3resp.workflows.steps.emg.quality_events import evaluate_event_timing
 from m3resp.workflows.steps.sync import skip
 

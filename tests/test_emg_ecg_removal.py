@@ -10,9 +10,9 @@ from typing import Any
 
 import pytest
 
-from m3resp.core.events import Event
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult, Signal
+from m3resp.data.events import Event
 from m3resp.processing.windows import rolling_envelope
 from m3resp.workflows import run_pipeline
 from m3resp.workflows.steps.emg import (

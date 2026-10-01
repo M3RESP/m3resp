@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from m3resp.core.events import BreathEvent
+from m3resp.data.events import BreathEvent
 from m3resp.processing.intervals import (
     baseline_crossings,
     onoff_from_baseline_crossings,

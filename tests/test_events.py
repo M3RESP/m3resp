@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import ast
+import importlib
+import os
 from typing import ClassVar
 
 import pytest
 
+import m3resp
+import m3resp.data
+import m3resp.data.events
 from m3resp import (
     BreathEvent,
     Event,
@@ -190,3 +196,41 @@ def test_alignment_uses_per_modality_offset_map():
     assert aligned[1].start_time == 1.25
     assert aligned[1].peak_time == 1.75
     assert aligned[2].time == 0.9
+
+
+def test_event_types_are_the_same_from_every_import_path():
+    assert m3resp.BreathEvent is m3resp.data.BreathEvent
+    assert m3resp.BreathEvent is m3resp.data.events.BreathEvent
+    assert m3resp.Event is m3resp.data.Event
+    assert m3resp.Event is m3resp.data.events.Event
+
+
+def test_old_core_events_path_is_gone():
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("m3resp.core.events")
+
+
+def test_data_package_does_not_import_from_core():
+    # `m3resp.data` holds the plain data types; `m3resp.core` holds the
+    # session, which uses them. The data types must not depend on the session.
+    data_folder = os.path.dirname(m3resp.data.__file__)
+    offending = []
+    for file_name in sorted(os.listdir(data_folder)):
+        if not file_name.endswith(".py"):
+            continue
+        file_path = os.path.join(data_folder, file_name)
+        with open(file_path, encoding="utf-8") as handle:
+            tree = ast.parse(handle.read(), filename=file_path)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                names = [node.module or ""]
+            elif isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            else:
+                continue
+            offending += [
+                f"{file_name}: {name}"
+                for name in names
+                if name == "m3resp.core" or name.startswith("m3resp.core.")
+            ]
+    assert offending == []

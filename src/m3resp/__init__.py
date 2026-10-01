@@ -1,16 +1,10 @@
 """M3Resp public API."""
 
 from m3resp import io
-from m3resp.core.events import (
-    BreathEvent,
-    Event,
-    coerce_breath_event,
-    coerce_breath_events,
-    coerce_event,
-    event_to_dict,
-)
 from m3resp.core.session import M3Session
 from m3resp.data import (
+    BreathEvent,
+    Event,
     LinkedBreath,
     ParameterResult,
     ParameterResultCollection,
@@ -21,6 +15,10 @@ from m3resp.data import (
     Signal,
     SignalCollection,
     TimeSeries,
+    coerce_breath_event,
+    coerce_breath_events,
+    coerce_event,
+    event_to_dict,
 )
 from m3resp.datamodel import (
     Case,

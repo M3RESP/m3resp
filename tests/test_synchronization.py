@@ -10,8 +10,8 @@ import numpy as np
 import pytest
 
 from m3resp import M3Session
-from m3resp.core.events import BreathEvent
 from m3resp.data import Signal
+from m3resp.data.events import BreathEvent
 from m3resp.data.linked_breath import LinkedBreath
 from m3resp.synchronization import (
     compute_breath_duration_difference,

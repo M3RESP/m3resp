@@ -1,7 +1,7 @@
 """``LinkedBreath``: one respiratory cycle observed across modalities.
 
 Produced by ``m3resp.synchronization.linking.link_breaths_by_time``, which
-matches ``Breath``/``BreathEvent`` objects across any number of modalities'
+matches ``BreathEvent`` objects across any number of modalities'
 event lists by how close their times are, rather than by a hard foreign key.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from m3resp.core.events import BreathEvent
+from m3resp.data.events import BreathEvent
 
 
 @dataclass

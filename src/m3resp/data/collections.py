@@ -6,7 +6,7 @@ consumer that needs list-like containers with query helpers, and
 `plan/stage2_consolidation.md` calls for adding collections only once
 something actually needs them.
 
-`Event`/`Breath` are deliberately not given a collection type here: they
+`Event`/`BreathEvent` are deliberately not given a collection type here: they
 already have one, `session.events` (a `dict[str, list[BreathEvent]]`, see
 `M3Session.add_events`/`get_events`), which predates this milestone and is
 depended on throughout Stage 1. Introducing a second container would fork

@@ -18,7 +18,6 @@ from m3resp.adapters.ventilator_adapter import (
     normalize_ventilator_breath,
     primary_channel,
 )
-from m3resp.core.events import BreathEvent
 from m3resp.core.exceptions import MissingModalityDataError, VariantAlreadyExistsError
 from m3resp.core.metadata import SessionMetadata
 from m3resp.core.provenance import ProvenanceRecord, record
@@ -27,6 +26,7 @@ from m3resp.data.collections import (
     QualityReport,
     SignalCollection,
 )
+from m3resp.data.events import BreathEvent
 from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
 from m3resp.data.processing import ProcessingHistory

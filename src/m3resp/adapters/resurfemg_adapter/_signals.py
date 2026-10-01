@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from m3resp.adapters.ventilator_adapter import DEFAULT_CHANNELS, split_channels
-from m3resp.core.events import BreathEvent
+from m3resp.data.events import BreathEvent
 
 
 def ventilator_signals(

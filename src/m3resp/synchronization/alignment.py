@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, overload
 
-from m3resp.core.events import BreathEvent, Event
+from m3resp.data.events import BreathEvent, Event
 from m3resp.modalities.names import VENTILATOR, normalize_modality
 
 if TYPE_CHECKING:
