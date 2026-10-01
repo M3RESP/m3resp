@@ -62,9 +62,14 @@ internal and may change without notice.
    :nosignatures:
 
    m3resp.Event
+   m3resp.Interval
    m3resp.BreathEvent
+   m3resp.EventData
+   m3resp.IntervalData
    m3resp.LinkedBreath
    m3resp.coerce_event
+   m3resp.coerce_interval
+   m3resp.coerce_intervals
    m3resp.coerce_breath_event
    m3resp.coerce_breath_events
    m3resp.event_to_dict

@@ -20,12 +20,16 @@ from m3resp.data.collections import (
     QualityReport,
     SignalCollection,
 )
+from m3resp.data.event_data import EventData, IntervalData
 from m3resp.data.events import (
     BreathEvent,
     Event,
+    Interval,
     coerce_breath_event,
     coerce_breath_events,
     coerce_event,
+    coerce_interval,
+    coerce_intervals,
     event_to_dict,
 )
 from m3resp.data.linked_breath import LinkedBreath
@@ -40,6 +44,9 @@ __all__ = [
     "BreathEvent",
     "Category",
     "Event",
+    "EventData",
+    "Interval",
+    "IntervalData",
     "LinkedBreath",
     "ParameterResult",
     "ParameterResultCollection",
@@ -53,6 +60,8 @@ __all__ = [
     "coerce_breath_event",
     "coerce_breath_events",
     "coerce_event",
+    "coerce_interval",
+    "coerce_intervals",
     "event_to_dict",
     "load_category_aliases",
     "normalize_category",

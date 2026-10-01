@@ -367,6 +367,10 @@ def pocc_intervals(
         pressure, baseline, peaks
     )
 
+    # A Pocc is an occluded breath: an effort to breathe in against a closed
+    # airway. It is kept as a BreathEvent, not a plain Interval, because it
+    # has a turning point (the deepest pressure, `peak_index`) that an
+    # Interval has no place for. `metadata["event_type"]` marks it as a Pocc.
     events: list[BreathEvent] = []
     for index, peak in enumerate(peaks):
         events.append(

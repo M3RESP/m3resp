@@ -13,9 +13,12 @@ import m3resp.data.events
 from m3resp import (
     BreathEvent,
     Event,
+    Interval,
     coerce_breath_event,
     coerce_breath_events,
     coerce_event,
+    coerce_interval,
+    coerce_intervals,
     event_to_dict,
 )
 from m3resp.export.tables import events_to_rows
@@ -234,3 +237,150 @@ def test_data_package_does_not_import_from_core():
                 if name == "m3resp.core" or name.startswith("m3resp.core.")
             ]
     assert offending == []
+
+
+def test_interval_needs_a_name_and_keeps_its_times():
+    interval = Interval("ventilator", 10.0, 12.5, name="occlusion")
+
+    assert interval.duration == 2.5
+    assert interval.name == "occlusion"
+    with pytest.raises(TypeError, match="name"):
+        Interval("ventilator", 10.0, 12.5)
+
+
+def test_interval_rejects_an_end_before_its_start():
+    with pytest.raises(ValueError, match="Interval.end_time"):
+        Interval("ventilator", 2.0, 1.0, name="occlusion")
+
+
+def test_breath_event_is_an_interval_named_breath():
+    breath = BreathEvent("eit", 1.0, 2.0, peak_time=1.5)
+
+    assert isinstance(breath, Interval)
+    assert breath.name == "breath"
+    assert breath.duration == 1.0
+
+
+def test_breath_event_and_interval_with_the_same_times_are_not_equal():
+    breath = BreathEvent("eit", 1.0, 2.0)
+    interval = Interval("eit", 1.0, 2.0, name="breath")
+
+    assert breath != interval
+
+
+def test_settings_after_end_time_must_be_given_by_name():
+    with pytest.raises(TypeError):
+        BreathEvent("eit", 1.0, 2.0, 1.5)
+    with pytest.raises(TypeError):
+        Interval("eit", 1.0, 2.0, "noise")
+
+
+def test_coerce_interval_from_dict_object_and_pair():
+    from_dict = coerce_interval(
+        {"modality": "emg", "start_time": 1.0, "end_time": 3.0, "name": "noise"}
+    )
+
+    class UpstreamInterval:
+        start_time = 4.0
+        end_time = 5.0
+
+    from_object = coerce_interval(
+        UpstreamInterval(), name="noise", modality="eit", source="eitprocessing"
+    )
+    from_pair = coerce_interval((6.0, 7.0), name="noise", modality="emg")
+
+    assert from_dict == Interval("emg", 1.0, 3.0, name="noise")
+    assert from_object == Interval(
+        "eit", 4.0, 5.0, name="noise", source="eitprocessing"
+    )
+    assert from_pair == Interval("emg", 6.0, 7.0, name="noise")
+
+
+def test_coerce_interval_passes_an_interval_through():
+    interval = Interval("emg", 1.0, 2.0, name="noise")
+
+    assert coerce_interval(interval) is interval
+    assert coerce_intervals([interval]) == [interval]
+
+
+def test_coerce_interval_needs_a_name_and_two_times():
+    with pytest.raises(ValueError, match="name is required"):
+        coerce_interval((1.0, 2.0), modality="emg")
+    with pytest.raises(ValueError, match="length-3"):
+        coerce_interval((1.0, 2.0, 3.0), name="noise", modality="emg")
+
+
+def test_alignment_shifts_intervals_like_breaths():
+    interval = Interval("emg", 1.0, 2.0, name="noise")
+
+    aligned = align_events_by_modality_offset([interval], {"emg": 0.5})
+
+    assert aligned == [Interval("emg", 1.5, 2.5, name="noise")]
+    assert aligned[0].id == interval.id
+    assert interval.start_time == 1.0
+
+
+def test_breath_event_name_is_always_breath():
+    with pytest.raises(TypeError, match="name"):
+        BreathEvent("eit", 1.0, 2.0, name="occlusion")
+
+
+def test_coerce_breath_event_refuses_an_interval_that_is_not_a_breath():
+    occlusion = Interval("ventilator", 1.0, 3.0, name="occlusion")
+
+    with pytest.raises(ValueError, match="'occlusion' interval as a breath"):
+        coerce_breath_event(occlusion)
+    with pytest.raises(ValueError, match="'occlusion' interval as a breath"):
+        coerce_breath_event(event_to_dict(occlusion))
+
+
+def test_breath_keeps_its_label_through_a_dictionary():
+    breath = BreathEvent("eit", 1.0, 2.0, peak_time=1.5, label="first")
+
+    restored = coerce_breath_event(event_to_dict(breath))
+
+    assert restored == breath
+    assert restored.label == "first"
+    assert restored.id == breath.id
+
+
+def test_interval_keeps_its_label_through_a_dictionary():
+    noise = Interval("emg", 1.0, 2.0, name="noise", label="burst")
+
+    assert coerce_interval(event_to_dict(noise)) == noise
+
+
+def test_coerce_interval_keeps_the_turning_point_of_a_breath():
+    breath = BreathEvent("eit", 1.0, 2.0, peak_time=1.5, peak_index=75)
+
+    restored = coerce_interval(event_to_dict(breath))
+
+    assert isinstance(restored, BreathEvent)
+    assert restored == breath
+
+
+def test_coerce_interval_keeps_middle_time_from_eitprocessing():
+    restored = coerce_interval(UpstreamBreath())
+
+    assert isinstance(restored, BreathEvent)
+    assert restored.peak_time == 1.5
+
+
+def test_coerce_interval_refuses_a_turning_point_it_cannot_keep():
+    with pytest.raises(ValueError, match="turning point"):
+        coerce_interval(
+            {
+                "modality": "ventilator",
+                "start_time": 1.0,
+                "end_time": 2.0,
+                "name": "occlusion",
+                "peak_time": 1.4,
+            }
+        )
+
+
+def test_coerce_needs_both_times_in_a_dictionary():
+    with pytest.raises(ValueError, match="no end_time entry"):
+        coerce_breath_event({"modality": "eit", "start_time": 1.0})
+    with pytest.raises(ValueError, match="no start_time entry"):
+        coerce_interval({"end_time": 1.0}, name="noise", modality="emg")
