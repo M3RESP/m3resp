@@ -1,0 +1,7 @@
+# Recorded and synthetic data files used by the tests and examples.
+# Git LFS keeps them outside the normal git history: git stores a small
+# placeholder, and the real file is downloaded on clone (install git-lfs first).
+# linguist-generated: leave them out of GitHub's language statistics and fold them in pull requests.
+tests/data/*.txt filter=lfs diff=lfs merge=lfs -text linguist-generated=true
+tests/data/*.Poly5 filter=lfs diff=lfs merge=lfs -text
+tests/data/*.bin filter=lfs diff=lfs merge=lfs -text
