@@ -15,8 +15,8 @@ import numpy as np
 import pytest
 
 from m3resp.adapters import ReSurfEMGAdapter
-from m3resp.core.events import BreathEvent
 from m3resp.core.session import M3Session
+from m3resp.data.events import BreathEvent
 from m3resp.modalities.eit import EITRecording
 from m3resp.modalities.emg import EMGRecording
 from m3resp.synchronization.start_times import own_first_time, shared_clock_shift

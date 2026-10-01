@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### `Event` and `BreathEvent` moved to `m3resp.data` (#96)
+
+The event types sat in `m3resp.core` only because they were written before
+the `m3resp.data` package existed. They now live with the other data types.
+**The old path is removed**, so imports from it need updating:
+
+| Before | Now |
+|---|---|
+| `from m3resp.core.events import BreathEvent` | `from m3resp.data.events import BreathEvent` |
+| `from m3resp.core import BreathEvent` (also `Event`, `coerce_*`, `event_to_dict`) | `from m3resp.data import ...` |
+| `from m3resp.data import Breath` | `from m3resp.data import BreathEvent` |
+
+`from m3resp import BreathEvent` still works. `m3resp.data` now also offers
+`coerce_event`, `coerce_breath_event`, `coerce_breath_events` and
+`event_to_dict`. `m3resp.core` now only holds `M3Session`. The second name
+`Breath` is gone, because `m3resp.datamodel.Breath` (the saved breath record)
+and eitprocessing's `Breath` are different classes with that same name.
+
 ### `export_store` checks the data model store before writing it (#75)
 
 `validate_store` had to be called separately, and it only returned a list of

@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.core.events import BreathEvent, Event, coerce_breath_event
+from m3resp.data.events import BreathEvent, Event, coerce_breath_event
 from m3resp.modalities.names import VENTILATOR
 
 

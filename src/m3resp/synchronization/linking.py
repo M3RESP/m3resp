@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from m3resp.core.events import BreathEvent
+from m3resp.data.events import BreathEvent
 from m3resp.data.linked_breath import LinkedBreath
 
 

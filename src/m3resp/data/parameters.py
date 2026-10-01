@@ -32,7 +32,7 @@ class ParameterResult:
     - a time period, e.g. during an intervention or one 30-second window
       (``start_time`` and ``end_time`` both set) - these are single values on
       one instance, not a list, so repeated windows are one instance each;
-    - a specific ``m3resp.core.events.Event`` (``event_id``), e.g. a
+    - a specific ``m3resp.data.events.Event`` (``event_id``), e.g. a
       blood-gas draw used for a P/F ratio, or a labeled intervention like a
       Baydur maneuver;
     - the whole signal, when none of the above are set.

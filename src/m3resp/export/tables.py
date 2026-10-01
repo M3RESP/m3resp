@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from m3resp.core.events import BreathEvent, Event, event_to_dict
+from m3resp.data.events import BreathEvent, Event, event_to_dict
 
 if TYPE_CHECKING:
     from m3resp.data.linked_breath import LinkedBreath

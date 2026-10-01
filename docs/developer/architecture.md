@@ -108,7 +108,7 @@ legacy package output (eitprocessing / resurfemg)
         |
         v
    Layer 1 - runtime objects (m3resp.data)
-   Signal, ParameterResult, QualityFlag, LinkedBreath, Event/Breath
+   Signal, ParameterResult, QualityFlag, LinkedBreath, Event/BreathEvent
         |
         v
    DataModelRecorder (opt-in, session.datamodel)
@@ -130,10 +130,11 @@ legacy package output (eitprocessing / resurfemg)
 ## Package map: where to add new functionality
 ```text
 src/m3resp/ 
-├── core/                               Session, events, exceptions, provenance, metadata
+├── core/                               Session, exceptions, provenance, metadata
 │   └── session.py                      M3Session - see concepts/session.md
 │
 ├── data/                               Layer 1: runtime scientific objects (Milestone 2.1/2.2/2.5)
+│   ├── events.py                       Event, BreathEvent (shared by all modalities)
 │   ├── signals.py                      Signal, TimeSeries - add new signal-shaped concepts here
 │   ├── parameters.py                   ParameterResult - add new computed-metric concepts here
 │   ├── quality.py                      QualityFlag

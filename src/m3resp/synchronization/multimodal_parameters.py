@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from itertools import combinations
 
-from m3resp.core.events import BreathEvent
+from m3resp.data.events import BreathEvent
 from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
 

@@ -9,9 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from m3resp.core.events import BreathEvent
 from m3resp.data import (
-    Breath,
     ParameterResult,
     ProcessingHistory,
     ProcessingStep,
@@ -19,10 +17,7 @@ from m3resp.data import (
     Signal,
     TimeSeries,
 )
-
-
-def test_breath_is_the_same_type_as_breath_event():
-    assert Breath is BreathEvent
+from m3resp.data.events import BreathEvent
 
 
 def test_breath_event_exposes_duration_and_sample_indices():

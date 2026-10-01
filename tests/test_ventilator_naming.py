@@ -14,8 +14,8 @@ from __future__ import annotations
 import numpy as np
 
 from m3resp.adapters.ventilator_adapter import normalize_ventilator_breath
-from m3resp.core.events import BreathEvent
 from m3resp.core.session import M3Session, set_ventilator_raw
+from m3resp.data.events import BreathEvent
 from m3resp.modalities.names import VENTILATOR, normalize_modality
 from m3resp.modalities.ventilator import keep_samples, ventilator_raw
 from m3resp.synchronization.alignment import (

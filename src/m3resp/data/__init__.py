@@ -1,21 +1,13 @@
-"""Layer 1: shared runtime scientific data model (plan_stage2.md Milestone 2.1).
+"""Layer 1: the data types used while a session runs.
 
-These are the objects EIT, EMG, and ventilator processing code should create,
-pass around, and return - replacing the untyped dicts adapters currently
-produce. See ``plan/plan_stage2.md`` (Sec 8-13) for the design rationale and
-``plan/stage2_consolidation.md`` for how these relate to the persisted
-entities in ``m3resp.datamodel``.
-
-``Event``/``Breath`` are intentionally re-exported from ``m3resp.core.events``
-rather than redefined here: that module already implements them and is used
-throughout Stage 1 (``M3Session``, adapters, the pipeline engine). Duplicating
-them would fork the type Stage 1 code already depends on.
+EIT, EMG and ventilator processing code creates, passes around and returns
+these objects. The saved records in ``m3resp.datamodel`` (Layer 2) are built
+from them; ``docs/developer/architecture.md`` explains how the two layers fit
+together.
 """
 
 from __future__ import annotations
 
-from m3resp.core.events import BreathEvent as Breath
-from m3resp.core.events import Event
 from m3resp.data.categories import (
     KNOWN_CATEGORIES,
     Category,
@@ -28,6 +20,14 @@ from m3resp.data.collections import (
     QualityReport,
     SignalCollection,
 )
+from m3resp.data.events import (
+    BreathEvent,
+    Event,
+    coerce_breath_event,
+    coerce_breath_events,
+    coerce_event,
+    event_to_dict,
+)
 from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
 from m3resp.data.processing import ProcessingHistory, ProcessingStep
@@ -37,7 +37,7 @@ from m3resp.data.timeseries import TimeSeries
 
 __all__ = [
     "KNOWN_CATEGORIES",
-    "Breath",
+    "BreathEvent",
     "Category",
     "Event",
     "LinkedBreath",
@@ -50,6 +50,10 @@ __all__ = [
     "Signal",
     "SignalCollection",
     "TimeSeries",
+    "coerce_breath_event",
+    "coerce_breath_events",
+    "coerce_event",
+    "event_to_dict",
     "load_category_aliases",
     "normalize_category",
     "register_category_alias",

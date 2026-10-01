@@ -13,7 +13,7 @@ from m3resp.adapters.ventilator_adapter import (
     iter_ventilator_detections,
     normalize_ventilator_breath,
 )
-from m3resp.core.events import BreathEvent
+from m3resp.data.events import BreathEvent
 
 
 class TestIterVentilatorDetections:

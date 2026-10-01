@@ -7,8 +7,8 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.core.events import BreathEvent
 from m3resp.core.session import M3Session
+from m3resp.data.events import BreathEvent
 from m3resp.synchronization.alignment import align_events_by_modality_offset
 from m3resp.synchronization.start_times import shared_clock_shifts
 
