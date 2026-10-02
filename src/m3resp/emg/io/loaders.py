@@ -119,6 +119,13 @@ def _load_biopac_txt(path: str) -> dict[str, Any]:
             # "Paw - TSD104A - Blood Pressure, DA100C" -> "Paw"
             labels.append(label_line.split(" - ")[0].strip())
             units.append(unit_line.strip())
+        column_header = [
+            name.strip() for name in handle.readline().rstrip("\n").split("\t")
+        ]
+
+    first_column = column_header[0] if column_header else ""
+    has_time_column = bool(first_column) and not first_column.upper().startswith("CH")
+    first_channel_column = 1 if has_time_column else 0
 
     # 3 title/rate/channel lines + 2 lines per channel + column-header row
     # + per-channel sample-count row precede the numeric samples.
@@ -128,7 +135,7 @@ def _load_biopac_txt(path: str) -> dict[str, Any]:
         sep="\t",
         skiprows=skiprows,
         names=labels,
-        usecols=range(n_channels),
+        usecols=range(first_channel_column, first_channel_column + n_channels),
         engine="c",
     )
     array = dataframe.to_numpy(dtype=float).T  # channel-major (n_channels, n_samples)
@@ -141,6 +148,8 @@ def _load_biopac_txt(path: str) -> dict[str, Any]:
         "file_extension": "txt",
         "recording_name": recording_name,
     }
+    if has_time_column:
+        metadata["skipped_time_column"] = first_column
     return {"array": array, "dataframe": dataframe, "metadata": metadata}
 
 
