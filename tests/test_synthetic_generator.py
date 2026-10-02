@@ -221,10 +221,10 @@ def test_emg_and_ventilator_generation_calls_resurfemg_with_config(
     synthetic_data = types.ModuleType("resurfemg.pipelines.synthetic_data")
     synthetic_data.simulate_raw_emg = simulate_raw_emg
     synthetic_data.simulate_ventilator_data = simulate_ventilator_data
-    workflows = types.ModuleType("resurfemg.pipelines")
+    pipelines = types.ModuleType("resurfemg.pipelines")
     resurfemg = types.ModuleType("resurfemg")
     monkeypatch.setitem(sys.modules, "resurfemg", resurfemg)
-    monkeypatch.setitem(sys.modules, "resurfemg.pipelines", workflows)
+    monkeypatch.setitem(sys.modules, "resurfemg.pipelines", pipelines)
     monkeypatch.setitem(
         sys.modules,
         "resurfemg.pipelines.synthetic_data",
@@ -301,10 +301,10 @@ def test_emg_timing_drift_does_not_shift_ventilator(monkeypatch, tmp_path):
     synthetic_data = types.ModuleType("resurfemg.pipelines.synthetic_data")
     synthetic_data.simulate_raw_emg = simulate_raw_emg
     synthetic_data.simulate_ventilator_data = simulate_ventilator_data
-    workflows = types.ModuleType("resurfemg.pipelines")
+    pipelines = types.ModuleType("resurfemg.pipelines")
     resurfemg = types.ModuleType("resurfemg")
     monkeypatch.setitem(sys.modules, "resurfemg", resurfemg)
-    monkeypatch.setitem(sys.modules, "resurfemg.pipelines", workflows)
+    monkeypatch.setitem(sys.modules, "resurfemg.pipelines", pipelines)
     monkeypatch.setitem(
         sys.modules,
         "resurfemg.pipelines.synthetic_data",
@@ -363,10 +363,10 @@ def test_resurfemg_length_mismatch_retries_and_normalizes_signal(
 
     synthetic_data = types.ModuleType("resurfemg.pipelines.synthetic_data")
     synthetic_data.simulate_raw_emg = simulate_raw_emg
-    workflows = types.ModuleType("resurfemg.pipelines")
+    pipelines = types.ModuleType("resurfemg.pipelines")
     resurfemg = types.ModuleType("resurfemg")
     monkeypatch.setitem(sys.modules, "resurfemg", resurfemg)
-    monkeypatch.setitem(sys.modules, "resurfemg.pipelines", workflows)
+    monkeypatch.setitem(sys.modules, "resurfemg.pipelines", pipelines)
     monkeypatch.setitem(
         sys.modules,
         "resurfemg.pipelines.synthetic_data",
@@ -557,10 +557,10 @@ def test_native_emg_and_ventilator_request_writes_poly5_without_upstream_writer(
     synthetic_data = types.ModuleType("resurfemg.pipelines.synthetic_data")
     synthetic_data.simulate_raw_emg = simulate_raw_emg
     synthetic_data.simulate_ventilator_data = simulate_ventilator_data
-    workflows = types.ModuleType("resurfemg.pipelines")
+    pipelines = types.ModuleType("resurfemg.pipelines")
     resurfemg = types.ModuleType("resurfemg")
     monkeypatch.setitem(sys.modules, "resurfemg", resurfemg)
-    monkeypatch.setitem(sys.modules, "resurfemg.pipelines", workflows)
+    monkeypatch.setitem(sys.modules, "resurfemg.pipelines", pipelines)
     monkeypatch.setitem(
         sys.modules,
         "resurfemg.pipelines.synthetic_data",

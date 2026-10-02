@@ -5,7 +5,7 @@ modality-specific processing in the upstream packages whenever possible:
 
 - EIT-specific changes belong in `eitprocessing`.
 - EMG-specific changes belong in `ReSurfEMG` / `resurfemg`.
-- Cross-modality API, synchronization, export, session state, and the pipeline
+- Cross-modality API, synchronization, export, session state, and the workflow
   engine belong here.
 
 Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
