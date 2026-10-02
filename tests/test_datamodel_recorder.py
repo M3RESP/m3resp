@@ -138,8 +138,8 @@ def test_two_instruments_recording_one_quantity_stay_separate():
     store = DataModelStore()
     recorder = DataModelRecorder(session, store)
 
-    primary = recorder.record_signal(_airway_pressure("pressure"))
-    second = recorder.record_signal(_airway_pressure("pressure__pod"))
+    primary = recorder.record_signal(_airway_pressure("airway_pressure"))
+    second = recorder.record_signal(_airway_pressure("airway_pressure__pod"))
 
     assert primary.signal_id != second.signal_id
     assert primary.device_id != second.device_id
@@ -151,8 +151,8 @@ def test_a_result_naming_no_instrument_resolves_to_the_primary_recording():
     session = M3Session()
     store = DataModelStore()
     recorder = DataModelRecorder(session, store)
-    primary = recorder.record_signal(_airway_pressure("pressure"))
-    recorder.record_signal(_airway_pressure("pressure__pod"))
+    primary = recorder.record_signal(_airway_pressure("airway_pressure"))
+    recorder.record_signal(_airway_pressure("airway_pressure__pod"))
     run = store.add_processing_run(ProcessingRun(name="demo"))
 
     feature = recorder.record_parameter(
@@ -176,11 +176,11 @@ def test_the_second_instrument_is_reachable_by_name():
     session = M3Session()
     store = DataModelStore()
     recorder = DataModelRecorder(session, store)
-    recorder.record_signal(_airway_pressure("pressure"))
-    second = recorder.record_signal(_airway_pressure("pressure__pod"))
+    recorder.record_signal(_airway_pressure("airway_pressure"))
+    second = recorder.record_signal(_airway_pressure("airway_pressure__pod"))
 
     resolved = recorder._lookup_signal_id(
-        "ventilator", "airway_pressure", "pressure__pod"
+        "ventilator", "airway_pressure", "airway_pressure__pod"
     )
     assert resolved == second.signal_id
 
@@ -193,8 +193,8 @@ def test_reprocessing_one_instrument_replaces_its_own_stream():
     session = M3Session()
     store = DataModelStore()
     recorder = DataModelRecorder(session, store)
-    recorder.record_signal(_airway_pressure("pressure"))
-    reprocessed = recorder.record_signal(_airway_pressure("pressure"))
+    recorder.record_signal(_airway_pressure("airway_pressure"))
+    reprocessed = recorder.record_signal(_airway_pressure("airway_pressure"))
     run = store.add_processing_run(ProcessingRun(name="demo"))
 
     feature = recorder.record_parameter(

@@ -12,14 +12,12 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
+
+from m3resp.adapters.ventilator_adapter import primary_channel
+from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.core.session import M3Session
-from m3resp.data import QualityFlag
-from m3resp.data.quality import Severity
 from m3resp.workflows.registry import StepArtifact
-from m3resp.workflows.steps._per_breath import (
-    _breath_metadata,
-    _require_equal_length,
-)
 
 #: Ventilator loading/quality steps currently go through ReSurfEMGAdapter
 #: (loading shares the sEMG's file; Pocc quality assessment wraps
@@ -97,38 +95,23 @@ def _record_step(
     )
 
 
-def _per_breath_flags(
-    name: str,
-    valid: Any,
-    *,
-    modality: str,
-    category: str | None = None,
-    peak_indices: Any,
-    severity: Severity = "info",
-    fs: float | None = None,
-    threshold: float | None = None,
-    extra_metadata: dict[str, Any] | None = None,
-) -> list[QualityFlag]:
-    """One `QualityFlag` per breath - `breath_id=str(position)` until a
-    stable event ID is available, with the source peak sample index recorded
-    in metadata."""
+def _airway_pressure(ventilator_signals: Any, step_name: str) -> tuple[np.ndarray, str]:
+    """The airway pressure from a ventilator channel bundle, with its unit.
 
-    _require_equal_length(valid=valid, peak_indices=peak_indices)
-    flags = []
-    for position, (is_valid, peak_index) in enumerate(zip(valid, peak_indices)):
-        metadata = _breath_metadata(peak_index, fs=fs)
-        if extra_metadata:
-            metadata.update(extra_metadata)
-        flags.append(
-            QualityFlag(
-                name=name,
-                passed=bool(is_valid),
-                severity=severity,
-                modality=modality,
-                category=category,
-                breath_id=str(position),
-                threshold=threshold,
-                metadata=metadata,
-            )
+    Takes the bundle's main airway pressure channel (`primary_channel`), so a
+    second recording's ``airway_pressure__<name>`` is found too. The unit is
+    the one the recording reported for that channel. A bundle built by hand
+    with no per-channel units may give one ``"unit"`` for all; with neither,
+    cmH2O is assumed. Raises a clear error when there is no airway pressure.
+    """
+
+    key = primary_channel(ventilator_signals, "airway_pressure")
+    values = ventilator_signals.get(key) if key is not None else None
+    if values is None:
+        raise MissingModalityDataError(
+            f"{step_name} needs an 'airway_pressure' channel; ask "
+            "ventilator.channels for it (e.g. airway_pressure_channel=0)."
         )
-    return flags
+    units = ventilator_signals.get("units") or {}
+    unit = units.get(key) or ventilator_signals.get("unit") or "cmH2O"
+    return np.asarray(values, dtype=float), str(unit)

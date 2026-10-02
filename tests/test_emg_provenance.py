@@ -93,7 +93,7 @@ def test_native_primitive_step_records_m3resp_as_the_source_package():
         },
         extra_context={
             "_ventilator_signals_input": {
-                "pressure": pressure,
+                "airway_pressure": pressure,
                 "fs": 100.0,
             },
             "_pocc_indices_input": [50, 150],

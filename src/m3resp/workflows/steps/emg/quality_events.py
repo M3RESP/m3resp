@@ -13,12 +13,11 @@ from m3resp.modalities.ventilator import ventilator_recordings
 from m3resp.synchronization.start_times import shared_clock_shift
 from m3resp.synchronization.sync_methods import warn_if_not_synchronized
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
-from m3resp.workflows.steps._per_breath import _per_breath_results
+from m3resp.workflows.steps._per_breath import _per_breath_flags, _per_breath_results
 
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _per_breath_flags,
     _record_step,
     _upstream_metadata,
 )

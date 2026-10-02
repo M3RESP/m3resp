@@ -127,7 +127,7 @@ def _instrument_of(signal: Signal) -> str | None:
 
     When a study records the same quantity on two instruments, the
     non-primary recording's channels are qualified with its name
-    (``pressure__pod`` rather than ``pressure``, see
+    (``airway_pressure__pod`` rather than ``airway_pressure``, see
     ``M3Session.preprocess_ventilator``). That qualifier is the instrument,
     and it still decides the ``Device`` record. The stream keys themselves
     are qualified by the full channel, which already tells the two apart.

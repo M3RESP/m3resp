@@ -283,9 +283,9 @@ class _DefaultsMixin:
         events: Sequence[BreathEvent] | None = None,
         *,
         ventilator: Any | None = None,
-        ventilator_pressure_channel: int = 0,
-        ventilator_flow_channel: int = 1,
-        ventilator_volume_channel: int = 2,
+        ventilator_airway_pressure_channel: int | None = None,
+        ventilator_flow_channel: int | None = None,
+        ventilator_volume_channel: int | None = None,
         ventilator_fs: float | None = None,
         ventilator_breath_width_seconds: float = 0.5,
         peep: float | None = None,
@@ -373,7 +373,7 @@ class _DefaultsMixin:
 
         vent_signals = ventilator_signals(
             ventilator,
-            pressure_channel=ventilator_pressure_channel,
+            airway_pressure_channel=ventilator_airway_pressure_channel,
             flow_channel=ventilator_flow_channel,
             volume_channel=ventilator_volume_channel,
             fs=ventilator_fs,
@@ -382,7 +382,7 @@ class _DefaultsMixin:
         ventilator_breath_indices = np.asarray([], dtype=int)
         if vent_signals is not None:
             v_vent = vent_signals["volume"]
-            p_vent = vent_signals["pressure"]
+            p_vent = vent_signals["airway_pressure"]
             vent_fs = float(vent_signals["fs"])
             vent_width_samples = max(1, int(ventilator_breath_width_seconds * vent_fs))
             if enabled(("event_detection", "detect_ventilator_breath")):

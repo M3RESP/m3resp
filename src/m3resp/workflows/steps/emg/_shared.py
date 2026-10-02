@@ -8,13 +8,7 @@ from typing import Any
 import numpy as np
 
 from m3resp.core.session import M3Session
-from m3resp.data import QualityFlag
-from m3resp.data.quality import Severity
 from m3resp.workflows.registry import StepArtifact
-from m3resp.workflows.steps._per_breath import (
-    _breath_metadata,
-    _require_equal_length,
-)
 
 #: Steps that call resurfemg directly or through ReSurfEMGAdapter declare this.
 _RESURFEMG = ("resurfemg",)
@@ -165,40 +159,3 @@ def _processed_channel_label_and_unit(processed_emg: Any) -> tuple[str, str | No
         else None
     )
     return label, unit
-
-
-def _per_breath_flags(
-    name: str,
-    valid: Any,
-    *,
-    modality: str,
-    category: str | None = None,
-    peak_indices: Any,
-    severity: Severity = "info",
-    fs: float | None = None,
-    threshold: float | None = None,
-    extra_metadata: dict[str, Any] | None = None,
-) -> list[QualityFlag]:
-    """One `QualityFlag` per breath - `breath_id=str(position)` until a
-    stable event ID is available, with the source peak sample index
-    recorded in metadata (plan Phase 5.4)."""
-
-    _require_equal_length(valid=valid, peak_indices=peak_indices)
-    flags = []
-    for position, (is_valid, peak_index) in enumerate(zip(valid, peak_indices)):
-        metadata = _breath_metadata(peak_index, fs=fs)
-        if extra_metadata:
-            metadata.update(extra_metadata)
-        flags.append(
-            QualityFlag(
-                name=name,
-                passed=bool(is_valid),
-                severity=severity,
-                modality=modality,
-                category=category,
-                breath_id=str(position),
-                threshold=threshold,
-                metadata=metadata,
-            )
-        )
-    return flags

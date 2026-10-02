@@ -49,7 +49,7 @@ def _adapter(payload: dict | None = None) -> VentilatorAdapter:
 class TestSplitChannels:
     def test_names_the_three_quantities(self):
         bundle = split_channels(_payload())
-        assert bundle["pressure"].shape == (N,)
+        assert bundle["airway_pressure"].shape == (N,)
         assert bundle["flow"].shape == (N,)
         assert bundle["volume"].shape == (N,)
 
@@ -61,17 +61,19 @@ class TestSplitChannels:
 
     def test_resolves_units_from_metadata(self):
         units = split_channels(_payload())["units"]
-        assert units == {"pressure": "cmH2O", "flow": "L/min", "volume": "L"}
+        assert units == {"airway_pressure": "cmH2O", "flow": "L/min", "volume": "L"}
 
     def test_falls_back_to_default_units(self):
         payload = _payload()
         payload["metadata"].pop("units")
-        assert split_channels(payload)["units"]["pressure"] == "cmH2O"
+        assert split_channels(payload)["units"]["airway_pressure"] == "cmH2O"
 
     def test_channel_indices_are_configurable(self):
-        bundle = split_channels(_payload(), pressure_channel=2, volume_channel=0)
+        bundle = split_channels(_payload(), airway_pressure_channel=2, volume_channel=0)
         # Channel 2 is the unscaled wave, channel 0 is scaled by 10.
-        assert np.allclose(bundle["volume"] / 10.0, bundle["pressure"], atol=1e-9)
+        assert np.allclose(
+            bundle["volume"] / 10.0, bundle["airway_pressure"], atol=1e-9
+        )
 
     def test_accepts_a_recording_object(self):
         recording = VentilatorRecording(data=_payload(), path="v.txt")
@@ -106,7 +108,7 @@ class TestPreprocess:
 
     def test_keeps_the_unfiltered_channels_available(self):
         processed = _adapter().preprocess(_payload(), lowpass_hz=SUGGESTED_LOWPASS_HZ)
-        assert set(processed["raw"]) == {"pressure", "flow", "volume"}
+        assert set(processed["raw"]) == {"airway_pressure", "flow", "volume"}
         assert not np.allclose(processed["raw"]["volume"], processed["volume"])
 
     def test_plain_keys_expose_the_processed_signal(self):

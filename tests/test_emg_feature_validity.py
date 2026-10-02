@@ -126,7 +126,7 @@ def test_invalid_pocc_manoeuvre_keeps_its_pressure_time_product():
 
     result = pocc_time_product(
         M3Session(),
-        {"pressure": pressure, "fs": FS, "unit": "cmH2O"},
+        {"airway_pressure": pressure, "fs": FS, "unit": "cmH2O"},
         starts,
         ends,
         baseline,

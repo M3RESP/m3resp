@@ -47,7 +47,7 @@ def _loaded_session() -> M3Session:
 class TestPreprocessVentilator:
     def test_returns_the_channel_bundle(self):
         result = _loaded_session().preprocess_ventilator()
-        assert {"pressure", "flow", "volume", "fs"} <= set(result)
+        assert {"airway_pressure", "flow", "volume", "fs"} <= set(result)
 
     def test_requires_a_loaded_recording(self):
         with pytest.raises(MissingModalityDataError, match="load_ventilator"):
@@ -57,7 +57,7 @@ class TestPreprocessVentilator:
         session = _loaded_session()
         session.preprocess_ventilator()
 
-        assert session.ventilator.pressure is not None
+        assert session.ventilator.airway_pressure is not None
         assert session.ventilator.flow is not None
         assert session.ventilator.volume is not None
         assert session.ventilator.fs == FS

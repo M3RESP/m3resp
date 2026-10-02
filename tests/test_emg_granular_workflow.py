@@ -39,7 +39,11 @@ GRANULAR_SPEC = {
         {"uses": "emg.peak_indices"},
         {
             "uses": "ventilator.channels",
-            "with": {"pressure_channel": 0, "flow_channel": 1, "volume_channel": 2},
+            "with": {
+                "airway_pressure_channel": 0,
+                "flow_channel": 1,
+                "volume_channel": 2,
+            },
         },
         {
             "uses": "emg.moving_baseline",

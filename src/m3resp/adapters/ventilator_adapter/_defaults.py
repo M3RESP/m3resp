@@ -45,7 +45,7 @@ class _DefaultsMixin:
         recording: Any,
         *,
         channels: Any = DEFAULT_CHANNELS,
-        pressure_channel: int | None = None,
+        airway_pressure_channel: int | None = None,
         flow_channel: int | None = None,
         volume_channel: int | None = None,
         channel_indices: dict[str, int] | None = None,
@@ -75,7 +75,7 @@ class _DefaultsMixin:
         bundle = split_channels(
             recording,
             channels=channels,
-            pressure_channel=pressure_channel,
+            airway_pressure_channel=airway_pressure_channel,
             flow_channel=flow_channel,
             volume_channel=volume_channel,
             channel_indices=channel_indices,

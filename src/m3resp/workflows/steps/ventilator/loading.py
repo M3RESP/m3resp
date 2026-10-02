@@ -121,7 +121,7 @@ def load(
             description="Quantities to extract, found by channel label. Beyond the three standard ones a pressure pod can also supply 'esophageal_pressure', 'transpulmonary_pressure' or 'gastric_pressure'.",
         ),
         StepParameter(
-            name="pressure_channel",
+            name="airway_pressure_channel",
             value_type="integer",
             required=False,
             default=None,
@@ -161,7 +161,7 @@ def load(
         StepArtifact(
             name="ventilator_signals",
             artifact_type="ventilator_channel_bundle",
-            description="Mapping of 'pressure'/'flow'/'volume' arrays plus 'fs'.",
+            description="Mapping of 'airway_pressure'/'flow'/'volume' arrays plus 'fs'.",
         ),
     ),
 )
@@ -169,7 +169,7 @@ def channels(
     ventilator_raw: Any,
     *,
     channels: Sequence[str] = DEFAULT_CHANNELS,
-    pressure_channel: int | None = None,
+    airway_pressure_channel: int | None = None,
     flow_channel: int | None = None,
     volume_channel: int | None = None,
     fs: float | None = None,
@@ -187,7 +187,7 @@ def channels(
     signals = ventilator_signals(
         ventilator_raw,
         channels=tuple(channels),
-        pressure_channel=pressure_channel,
+        airway_pressure_channel=airway_pressure_channel,
         flow_channel=flow_channel,
         volume_channel=volume_channel,
         fs=fs,

@@ -10,7 +10,7 @@ Ventilator data reaches m3resp from two independent sources, not one:
   exposes them as ``ContinuousData`` on the loaded ``Sequence``.
 
 This module covers the second source. It resolves the vendor's channel labels
-onto m3resp's canonical ``pressure``/``flow``/``volume`` names (plus the
+onto m3resp's canonical ``airway_pressure``/``flow``/``volume`` names (plus the
 esophageal/transpulmonary/gastric channels a Draeger pressure pod adds) and
 packs them into the same ``{"array", "metadata"}`` payload the EMG-file path
 produces, so everything downstream of loading - `split_channels`, the
@@ -28,7 +28,7 @@ from m3resp.core.exceptions import UnsupportedWorkflowError
 from ._channels import CHANNEL_CATEGORIES, ChannelSpec, resolve_channels
 
 #: The channels loaded unless the caller asks for others.
-DEFAULT_EIT_CHANNELS: tuple[str, ...] = ("pressure", "flow", "volume")
+DEFAULT_EIT_CHANNELS: tuple[str, ...] = ("airway_pressure", "flow", "volume")
 
 #: What `Signal.source` records for a channel read out of an EIT recording.
 EIT_ORIGIN = "eit"
@@ -89,7 +89,7 @@ def available_ventilator_channels(sequence: Any) -> dict[str, str]:
 
     Useful on its own to see which keys a given recording resolves to before
     asking for them. A file carrying both the ventilator's airway pressure and
-    a pod's reports them as two keys (``pressure`` and ``pressure__pod``)
+    a pod's reports them as two keys (``airway_pressure`` and ``airway_pressure__pod``)
     rather than dropping one.
 
     A listed channel is not a measured channel. A Draeger recording exposes its

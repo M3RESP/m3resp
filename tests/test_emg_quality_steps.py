@@ -315,7 +315,7 @@ class TestPoccQualityAndInterpeakDist:
     def test_pocc_quality_labels_criteria_rows_explicitly(self):
         session = M3Session()
         pressure = -np.abs(np.sin(np.linspace(0, 10, 2000))) * 5.0
-        ventilator_signals = {"pressure": pressure, "fs": 100.0}
+        ventilator_signals = {"airway_pressure": pressure, "fs": 100.0}
         pocc_peaks = np.array([100, 800])
         pocc_ends = np.array([150, 850])
         time_products = np.array([1.0, 1.5])

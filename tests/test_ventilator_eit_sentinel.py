@@ -85,7 +85,7 @@ class TestTheSentinelBecomesNaN:
         pressure[50:70] = -1.7e38
         payload = ventilator_payload_from_sequence(_sequence(pressure=pressure))
 
-        assert payload["metadata"]["nan_samples"]["pressure"] == 20
+        assert payload["metadata"]["nan_samples"]["airway_pressure"] == 20
 
     @pytest.mark.parametrize("value", [-1.7e38, -3.4e38, SENTINEL_CUTOFF * 10])
     def test_the_cutoff_catches_the_values_different_versions_write(self, value):
@@ -113,7 +113,7 @@ class TestAChannelWithNoMeasurementIsRefused:
 
         with pytest.raises(UnsupportedWorkflowError) as excinfo:
             ventilator_payload_from_sequence(
-                sequence, channels=("pressure", "esophageal_pressure")
+                sequence, channels=("airway_pressure", "esophageal_pressure")
             )
 
         message = str(excinfo.value)
@@ -123,7 +123,7 @@ class TestAChannelWithNoMeasurementIsRefused:
     def test_the_other_channels_still_load(self):
         payload = ventilator_payload_from_sequence(
             _sequence(esophageal=_unmeasured()),
-            channels=("pressure", "flow", "volume"),
+            channels=("airway_pressure", "flow", "volume"),
         )
 
         assert payload["array"].shape == (3, N)
