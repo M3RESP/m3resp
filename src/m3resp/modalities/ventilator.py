@@ -44,15 +44,16 @@ class VentilatorRecording:
     not evenly spaced. Discarding it would mean re-reading the file to
     recover any of that.
 
-    ``pressure``, ``flow`` and ``volume`` are the three channels a ventilator
-    always reports - airway pressure, airway flow and tidal volume - populated
-    by ``M3Session.preprocess_ventilator`` (the ventilator counterpart of
-    ``EMGRecording.filtered``/``envelope``). ``pressure`` is the ventilator's
-    own airway pressure and nothing else: a recording carrying an esophageal,
-    transpulmonary or gastric pressure, or a second airway pressure from a
-    Draeger pressure pod, keeps each of those under its own name in the
-    preprocessing result, where they are also tagged with the quantity they
-    measure. Only the airway pressure appears here.
+    ``airway_pressure``, ``flow`` and ``volume`` are the three channels a
+    ventilator always reports - airway pressure, airway flow and tidal volume -
+    populated by ``M3Session.preprocess_ventilator`` (the ventilator
+    counterpart of ``EMGRecording.filtered``/``envelope``).
+    ``airway_pressure`` is the ventilator's own airway pressure and nothing
+    else: a recording carrying an esophageal, transpulmonary or gastric
+    pressure, or a second airway pressure from a Draeger pressure pod, keeps
+    each of those under its own name in the preprocessing result, where they
+    are also tagged with the quantity they measure. Only the airway pressure
+    appears here.
     """
 
     data: Any
@@ -61,7 +62,7 @@ class VentilatorRecording:
     dataframe: Any = None
     metadata: dict[str, Any] | None = None
     fs: float | None = None
-    pressure: Any = None
+    airway_pressure: Any = None
     flow: Any = None
     volume: Any = None
     #: Which modality's file these waveforms arrived in, and therefore whose

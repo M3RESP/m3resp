@@ -24,12 +24,12 @@ from m3resp.processing.peaks import (
 )
 from m3resp.processing.ventilator import estimate_peep
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
-from m3resp.workflows.steps._per_breath import _per_breath_results
+from m3resp.workflows.steps._per_breath import _per_breath_flags, _per_breath_results
 
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _per_breath_flags,
+    _airway_pressure,
     _record_step,
     _upstream_metadata,
 )
@@ -141,7 +141,7 @@ def detect_breaths(
         StepArtifact(
             name="ventilator_signals",
             artifact_type="ventilator_channel_bundle",
-            description="Ventilator channel bundle from 'ventilator.channels' with a 'pressure' channel.",
+            description="Ventilator channel bundle from 'ventilator.channels' with an 'airway_pressure' channel.",
         ),
     ),
     parameters=(
@@ -184,12 +184,9 @@ def detect_pressure_breaths(
     min_depth: float = 0.15,
     min_interval_seconds: float = 2.0,
 ) -> dict[str, Any]:
-    pressure = ventilator_signals.get("pressure")
-    if pressure is None:
-        raise MissingModalityDataError(
-            "ventilator.detect_pressure_breaths needs a 'pressure' channel; ask "
-            "ventilator.channels for it (e.g. pressure_channel=0)."
-        )
+    pressure, _ = _airway_pressure(
+        ventilator_signals, "ventilator.detect_pressure_breaths"
+    )
     indices = detect_pressure_dip_breaths(
         pressure,
         sample_frequency=float(ventilator_signals["fs"]),
@@ -223,7 +220,7 @@ def detect_pressure_breaths(
             required=False,
             default=None,
             unit="cmH2O",
-            description="PEEP baseline. Defaults to the median pressure when unset.",
+            description="PEEP baseline. When unset, PEEP is estimated from the airway pressure at the end of each breath out, found from the volume channel (Warnaar et al. 2024), so the volume channel is then needed.",
         ),
     ),
     output_artifacts=(
@@ -239,7 +236,9 @@ def find_occluded_breaths(
 ) -> dict[str, Any]:
     import numpy as np
 
-    pressure = ventilator_signals["pressure"]
+    pressure, _ = _airway_pressure(
+        ventilator_signals, "ventilator.find_occluded_breaths"
+    )
     fs = float(ventilator_signals["fs"])
     peep = _resolve_peep(ventilator_signals, pressure, peep)
     indices = detect_occluded_breath_peaks(
@@ -348,7 +347,7 @@ def pocc_intervals(
     baseline_step_seconds: float = 0.2,
     baseline_percentile: float = 33.0,
 ) -> dict[str, Any]:
-    pressure = np.asarray(ventilator_signals["pressure"], dtype=float)
+    pressure, _ = _airway_pressure(ventilator_signals, "ventilator.pocc_intervals")
     fs = float(ventilator_signals["fs"])
     peaks = np.asarray(pocc_indices, dtype=int)
 
@@ -383,7 +382,7 @@ def pocc_intervals(
                 extremum_index=int(peak),
                 end_index=int(ends[index]),
                 sample_frequency=fs,
-                signal_name="pressure",
+                signal_name="airway_pressure",
                 source="m3resp.processing.intervals.onoff_from_baseline_crossings",
                 metadata={
                     "event_type": "pocc",
@@ -506,7 +505,9 @@ def pocc_time_product(
     include_aub: bool = True,
     aub_window_seconds: float = 5.0,
 ) -> dict[str, Any]:
-    pressure = np.asarray(ventilator_signals["pressure"], dtype=float)
+    pressure, pressure_unit = _airway_pressure(
+        ventilator_signals, "ventilator.pocc_time_product"
+    )
     fs = float(ventilator_signals["fs"])
     baseline = np.asarray(pressure_baseline, dtype=float)
 
@@ -536,7 +537,6 @@ def pocc_time_product(
         )
         time_products = time_products + aub
 
-    pressure_unit = ventilator_signals.get("unit") or "cmH2O"
     parameters = {
         "include_aub": include_aub,
         "aub_window_seconds": aub_window_seconds,
@@ -623,13 +623,13 @@ _POCC_CRITERIA_ROW_NAMES = ("dp_up_10", "dp_up_90", "dp_up_90_norm")
             name="dp_up_10_threshold",
             value_type="number",
             default=0.0,
-            description="Minimum acceptable dP at 10% of the upslope.",
+            description="Minimum acceptable dP at 10% of the upslope, in the pressure's own unit (the default is for cmH2O).",
         ),
         StepParameter(
             name="dp_up_90_threshold",
             value_type="number",
             default=2.0,
-            description="Minimum acceptable dP at 90% of the upslope.",
+            description="Minimum acceptable dP at 90% of the upslope, in the pressure's own unit (the default is for cmH2O).",
         ),
         StepParameter(
             name="dp_up_90_norm_threshold",
@@ -674,8 +674,9 @@ def pocc_quality(
     dp_up_90_threshold: float = 2.0,
     dp_up_90_norm_threshold: float = 0.8,
 ) -> dict[str, Any]:
-    pressure = np.asarray(ventilator_signals["pressure"], dtype=float)
-    pressure_unit = ventilator_signals.get("unit") or "cmH2O"
+    pressure, pressure_unit = _airway_pressure(
+        ventilator_signals, "ventilator.pocc_quality"
+    )
 
     valid, criteria = session.emg_adapter.pocc_quality(
         pressure,

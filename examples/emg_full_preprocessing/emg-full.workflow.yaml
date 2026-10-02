@@ -55,7 +55,7 @@ steps:
 
   - id: ventilator_channels
     uses: ventilator.channels
-    with: { pressure_channel: 0, flow_channel: 1, volume_channel: 2 }
+    with: { airway_pressure_channel: 0, flow_channel: 1, volume_channel: 2 }
 
   # -- Preprocessing + ECG removal --------------------------------------------
   # Channel 1 ("EMGdi") is the diaphragm EMG channel in this fixture; channel

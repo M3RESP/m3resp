@@ -86,7 +86,7 @@ class LungTemplateConfig:
 class MedibusConfig:
     """Synthetic Medibus channel layout and plausible values."""
 
-    pressure_channel: int = 0
+    airway_pressure_channel: int = 0
     flow_channel: int = 1
     volume_channel: int = 2
     respiratory_rate_channel: int = 36

@@ -2,6 +2,62 @@
 
 ## Unreleased
 
+### A labelled ventilator file no longer hands on an unnamed column
+
+- **Fixes** ventilator channels being taken from columns 0, 1 and 2 when the
+  file has labels but none for that channel. A file with `Paw, EMGdi, EMGsc`
+  (airway pressure recorded next to the sEMG) used to give EMGdi as flow and
+  EMGsc as volume, with no warning, and those then went into PEEP estimation
+  and ventilator breath detection. Now, once one label names a known
+  channel, a channel not named among the labels is reported as missing.
+  Read such a file with `channels=("airway_pressure",)`.
+- A file whose labels name no known channel at all (such as ReSurfEMG's
+  synthetic `P, F, V`) is still read as columns 0, 1 and 2, but now with a
+  warning. A file without labels is read the same way, without a warning.
+
+### The ventilator's `pressure` channel is now `airway_pressure` (#117)
+
+The channel only ever held the airway pressure, never an esophageal,
+transpulmonary or gastric pressure, but its name did not say so, while the
+other pressures next to it did (`esophageal_pressure`, ...). It is now
+`airway_pressure`, the same as its category. **The old names are removed.**
+
+| Before | Now |
+|---|---|
+| `session.ventilator.pressure` (`VentilatorRecording.pressure`) | `session.ventilator.airway_pressure` |
+| Channel key `"pressure"`: `bundle["pressure"]`, `channels=("pressure", "flow", "volume")`, `Signal.channel == "pressure"` | `"airway_pressure"` |
+| A second airway pressure `"pressure__pod"`, `"pressure__<recording>"` | `"airway_pressure__pod"`, `"airway_pressure__<recording>"` |
+| `pressure_channel=` on `split_channels`, `VentilatorAdapter.preprocess` and the `ventilator.channels` step (`with: {pressure_channel: 0}` in a workflow file) | `airway_pressure_channel=` |
+| `ventilator_pressure_channel=` on EMG postprocessing | `ventilator_airway_pressure_channel=` |
+| `medibus.pressure_channel` in the synthetic data generator config | `medibus.airway_pressure_channel` |
+
+Files are read as before: a column labelled `Pressure`, `Paw`, `Pvent` or
+`airway pressure` still becomes the airway pressure channel. Exported signals
+and the `channel` column carry the new name. `register_channel_alias` (and so
+`load_channel_aliases`) now refuses an alias pointing to `"pressure"` with a
+clear error, rather than quietly making a second channel by that name. An
+alias file with such an entry changes nothing, not even the entries before it.
+
+Found while doing the rename:
+
+- **Fixes** EMG postprocessing reading the ventilator columns by position.
+  It always asked for columns 0, 1 and 2 as airway pressure, flow and volume,
+  which overrode the column labels. Labels now decide, as they already did in
+  `ventilator.channels`; a recording without recognised labels still uses
+  columns 0, 1 and 2.
+- **Fixes** the unit on `pocc_time_product` and `pocc_quality` results. It was
+  always cmH2O; it is now the unit the recording reports for its airway
+  pressure. The `pocc_quality` thresholds are in that same unit, and their
+  defaults are meant for cmH2O.
+- **Fixes** `ventilator.normalize_breaths` letting the last breath run past
+  the end of the recording when the airway pressure was not loaded.
+- A column index given for a channel that is not being read (for example
+  `channel_indices={"pressure": 2}`, or `flow_channel=` when flow is not
+  asked for) is now an error. It used to be ignored.
+- The Pocc steps now say they need an `airway_pressure` channel when it is
+  missing, instead of failing with a bare `KeyError`. They also find the
+  airway pressure of a second ventilator recording.
+
 ### "Pipeline" renamed to "workflow" everywhere; built-in pipelines are now presets (#112)
 
 The engine module was already `m3resp.workflows`, but most names, files and

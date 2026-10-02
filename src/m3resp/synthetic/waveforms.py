@@ -250,7 +250,7 @@ def generate_medibus_data(
         scaled = np.zeros_like(signal)
     else:
         scaled = (signal - signal.min()) / signal_range
-    medibus[config.pressure_channel] = (
+    medibus[config.airway_pressure_channel] = (
         config.pressure_baseline_cm_h2o + config.pressure_amplitude_cm_h2o * scaled
     ).astype(DEFAULT_FLOAT32_DTYPE)
     medibus[config.flow_channel] = np.gradient(signal, time_seconds).astype(

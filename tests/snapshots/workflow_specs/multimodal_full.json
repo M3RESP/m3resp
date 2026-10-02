@@ -266,7 +266,7 @@
       "uses": "ventilator.channels",
       "with": {
         "flow_channel": 1,
-        "pressure_channel": 0,
+        "airway_pressure_channel": 0,
         "volume_channel": 2
       }
     },

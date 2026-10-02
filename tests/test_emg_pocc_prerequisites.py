@@ -75,7 +75,7 @@ class TestPoccIntervals:
 
         result = run_workflow(POCC_SPEC)
         signals = result.value("ventilator_signals")
-        pressure = np.asarray(signals["pressure"], dtype=float)
+        pressure = np.asarray(signals["airway_pressure"], dtype=float)
         fs = float(signals["fs"])
         expected = moving_baseline(
             pressure, int(7.5 * fs), int(0.2 * fs), set_percentile=33
@@ -137,7 +137,7 @@ class TestPoccTimeProduct:
 
         result = run_workflow(POCC_SPEC)
         signals = result.value("ventilator_signals")
-        pressure = np.asarray(signals["pressure"], dtype=float)
+        pressure = np.asarray(signals["airway_pressure"], dtype=float)
         fs = float(signals["fs"])
         baseline = result.value("pressure_baseline")
         starts = result.value("pocc_start_indices")
@@ -176,7 +176,7 @@ class TestPoccTimeProduct:
         result = run_workflow(spec)
         signals = result.value("ventilator_signals")
         expected = window_integral(
-            np.asarray(signals["pressure"]),
+            np.asarray(signals["airway_pressure"]),
             float(signals["fs"]),
             result.value("pocc_start_indices"),
             result.value("pocc_end_indices"),

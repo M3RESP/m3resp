@@ -14,7 +14,8 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.data import ParameterResult
+from m3resp.data import ParameterResult, QualityFlag
+from m3resp.data.quality import Severity
 
 #: Metadata key holding the sample of the breath's turning point.
 EXTREMUM_SAMPLE_INDEX = "extremum_sample_index"
@@ -95,3 +96,40 @@ def _per_breath_results(
             )
         )
     return results
+
+
+def _per_breath_flags(
+    name: str,
+    valid: Any,
+    *,
+    modality: str,
+    category: str | None = None,
+    peak_indices: Any,
+    severity: Severity = "info",
+    fs: float | None = None,
+    threshold: float | None = None,
+    extra_metadata: dict[str, Any] | None = None,
+) -> list[QualityFlag]:
+    """One `QualityFlag` per breath - `breath_id=str(position)` until a
+    stable event ID is available, with the source peak sample index recorded
+    in metadata."""
+
+    _require_equal_length(valid=valid, peak_indices=peak_indices)
+    flags = []
+    for position, (is_valid, peak_index) in enumerate(zip(valid, peak_indices)):
+        metadata = _breath_metadata(peak_index, fs=fs)
+        if extra_metadata:
+            metadata.update(extra_metadata)
+        flags.append(
+            QualityFlag(
+                name=name,
+                passed=bool(is_valid),
+                severity=severity,
+                modality=modality,
+                category=category,
+                breath_id=str(position),
+                threshold=threshold,
+                metadata=metadata,
+            )
+        )
+    return flags

@@ -62,8 +62,14 @@ def normalize_breaths(
     breath_width_seconds: float = 0.5,
 ) -> dict[str, Any]:
     fs = float(ventilator_signals["fs"])
-    pressure = ventilator_signals.get("pressure")
-    duration_seconds = len(pressure) / fs if pressure is not None and fs else None
+    # All channels of one recording have the same length, so any of them
+    # gives the recording length; airway pressure may not have been asked for.
+    channels = ventilator_signals.get("channels") or {
+        name: ventilator_signals.get(name)
+        for name in ("airway_pressure", "flow", "volume")
+    }
+    lengths = [len(values) for values in channels.values() if values is not None]
+    duration_seconds = lengths[0] / fs if lengths and fs else None
     events = [
         normalize_ventilator_breath(
             detection,

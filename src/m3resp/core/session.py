@@ -503,8 +503,8 @@ class M3Session:
             name (str | None): Which loaded recording to preprocess when a
                 study recorded ventilator data on more than one instrument
                 (see `load_ventilator`). A non-primary recording's channel
-                keys are qualified with its name - ``pressure__pod`` rather
-                than ``pressure`` - so its airway pressure does not collide
+                keys are qualified with its name - ``airway_pressure__pod``
+                rather than ``airway_pressure`` - so its airway pressure does not collide
                 with the primary recording's in `session.signals`. None
                 preprocesses the primary recording.
             variant (str | None): Name to store this result under. Defaults
@@ -520,7 +520,7 @@ class M3Session:
 
         Returns:
             Any: The preprocessing result, a dictionary with one filtered
-                signal per channel (pressure, flow, volume) and the sampling
+                signal per channel (airway_pressure, flow, volume) and the sampling
                 rate ``"fs"`` in Hz.
         """
 
@@ -548,7 +548,9 @@ class M3Session:
             )
         result = self.ventilator_adapter.preprocess(recording, **kwargs)
         if target is not None and isinstance(result, dict):
-            target.pressure = result.get(primary_channel(result, "pressure") or "")
+            target.airway_pressure = result.get(
+                primary_channel(result, "airway_pressure") or ""
+            )
             target.flow = result.get(primary_channel(result, "flow") or "")
             target.volume = result.get(primary_channel(result, "volume") or "")
             target.fs = result.get("fs")

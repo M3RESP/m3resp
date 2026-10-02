@@ -18,10 +18,10 @@ origin   the instrument/file that recorded it   ``modality`` / ``source``
 key      unique handle within one recording     ``channel``
 ======== ====================================== ==========================
 
-The key is the short channel name (``"pressure"``, ``"esophageal_pressure"``).
+The key is the short channel name (``"airway_pressure"``, ``"esophageal_pressure"``).
 When two channels of the same quantity are present, the first keeps the bare
 name and the others are suffixed with what distinguishes them
-(``"pressure__pod"``), so both stay addressable and neither is dropped.
+(``"airway_pressure__pod"``), so both stay addressable and neither is dropped.
 
 Vendor naming is open-ended, so the ``label -> channel`` map is a registry with
 the same shape as :mod:`m3resp.data.categories`: built-in defaults plus
@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 import re
+import warnings
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,7 +54,7 @@ from m3resp.data.categories import normalize_category
 #: ``"pressure"`` channel would label an esophageal or transpulmonary trace as
 #: an airway pressure, which is a measurement error, not a naming one.
 CHANNEL_CATEGORIES: dict[str, str] = {
-    "pressure": "airway_pressure",
+    "airway_pressure": "airway_pressure",
     "flow": "airflow",
     "volume": "volume",
     "esophageal_pressure": "esophageal_pressure",
@@ -68,7 +69,7 @@ CHANNEL_CATEGORIES: dict[str, str] = {
 #: always wins and is never converted - see `to_signals`, which passes the
 #: recorded unit through unchanged.
 DEFAULT_CHANNEL_UNITS: dict[str, str] = {
-    "pressure": "cmH2O",
+    "airway_pressure": "cmH2O",
     "flow": "L/min",
     "volume": "L",
     "esophageal_pressure": "cmH2O",
@@ -87,24 +88,28 @@ _DEFAULT_CHANNEL_UNIT_DEFAULTS: dict[str, str] = dict(DEFAULT_CHANNEL_UNITS)
 
 #: The channels read unless the caller asks for others, in the array order the
 #: positional fallback below assumes.
-DEFAULT_CHANNELS: tuple[str, ...] = ("pressure", "flow", "volume")
+DEFAULT_CHANNELS: tuple[str, ...] = ("airway_pressure", "flow", "volume")
 
 #: Column index used for a channel when the recording carries no labels to
 #: match against. This is the layout of the multi-channel sEMG export the
 #: ventilator path originally assumed; it stays supported for unlabelled
 #: arrays, but only as an explicit fallback rather than the primary mechanism.
-DEFAULT_CHANNEL_POSITIONS: dict[str, int] = {"pressure": 0, "flow": 1, "volume": 2}
+DEFAULT_CHANNEL_POSITIONS: dict[str, int] = {
+    "airway_pressure": 0,
+    "flow": 1,
+    "volume": 2,
+}
 
 #: Built-in ``normalized label -> channel name`` pairs. Ordered most specific
 #: first within each channel, which decides which candidate keeps the bare key
 #: when a recording carries several channels of one quantity.
 _DEFAULT_CHANNEL_ALIASES: dict[str, str] = {
     # airway pressure: the ventilator's own, plus the pressure pod's copy
-    "airway pressure": "pressure",
-    "airway pressure (pod)": "pressure",
-    "paw": "pressure",
-    "pressure": "pressure",
-    "pvent": "pressure",
+    "airway pressure": "airway_pressure",
+    "airway pressure (pod)": "airway_pressure",
+    "paw": "airway_pressure",
+    "pressure": "airway_pressure",
+    "pvent": "airway_pressure",
     # flow
     "flow": "flow",
     "airway flow": "flow",
@@ -181,6 +186,21 @@ def resolve_channel_name(label: Any) -> str | None:
     return _CHANNEL_ALIASES.get(normalize_channel_label(label))
 
 
+def _check_alias_target(alias: str, channel: str) -> None:
+    """Refuse an alias pointing to the old name of the airway pressure channel.
+
+    The airway pressure channel used to be called "pressure". Without this
+    check an old alias file would quietly define a second, separate channel
+    by that name instead of pointing at the airway pressure.
+    """
+
+    if channel == "pressure":
+        raise ValueError(
+            f"Channel alias {alias!r} points to 'pressure'. The airway "
+            "pressure channel is now called 'airway_pressure'."
+        )
+
+
 def register_channel_alias(
     alias: str,
     channel: str,
@@ -210,6 +230,7 @@ def register_channel_alias(
     or extend `save_channel_aliases` if that becomes a common need).
     """
 
+    _check_alias_target(alias, channel)
     if channel not in CHANNEL_CATEGORIES:
         CHANNEL_CATEGORIES[channel] = (
             normalize_category(category) or category or channel
@@ -293,6 +314,10 @@ def load_channel_aliases(path: str | Path, *, replace: bool = False) -> dict[str
             "label -> channel name."
         )
 
+    # Check every entry first, so a bad one leaves the active map unchanged
+    # rather than half replaced.
+    for alias, channel in raw.items():
+        _check_alias_target(str(alias), str(channel))
     if replace:
         reset_channel_aliases()
     for alias, channel in raw.items():
@@ -342,8 +367,15 @@ def resolve_channels(
 
     1. an explicit column index in ``positions`` (a caller override);
     2. a label match through the active alias map;
-    3. the positional fallback in :data:`DEFAULT_CHANNEL_POSITIONS`, for
-       unlabelled recordings, when ``fallback_positions`` is set.
+    3. the positional fallback in :data:`DEFAULT_CHANNEL_POSITIONS`, when
+       ``fallback_positions`` is set and no label names a known channel.
+
+    Once one label names a known channel the labels are trusted, and a
+    channel not named among them is missing, not taken from its usual column.
+    Otherwise a file such as one with an airway pressure and two EMG columns
+    would hand an EMG channel on as flow or volume. A recording whose labels
+    name nothing known (or that has none) is read by column position; when it
+    does have labels, a warning says so.
 
     When several labels denote the same channel - a pressure pod reporting an
     airway pressure alongside the ventilator's own - the earliest column keeps
@@ -375,15 +407,20 @@ def resolve_channels(
         if name in candidates:
             candidates[name].append(index)
 
+    labels_name_a_channel = any(resolve_channel_name(label) for label in labels)
+    use_positions = fallback_positions and not labels_name_a_channel
+
     specs: list[ChannelSpec] = []
     used_keys: set[str] = set()
+    by_position: dict[str, int] = {}
     for name in requested:
         if name in positions:
             indices = [int(positions[name])]
         elif candidates[name]:
             indices = candidates[name]
-        elif fallback_positions and name in DEFAULT_CHANNEL_POSITIONS:
+        elif use_positions and name in DEFAULT_CHANNEL_POSITIONS:
             indices = [DEFAULT_CHANNEL_POSITIONS[name]]
+            by_position[name] = indices[0]
         else:
             continue
 
@@ -410,14 +447,23 @@ def resolve_channels(
                     index=index,
                 )
             )
+    if by_position and any(label is not None and str(label) for label in labels):
+        warnings.warn(
+            f"None of the column labels {[str(label) for label in labels]} "
+            "names a known ventilator channel, so these channels are read by "
+            f"column position: {by_position}. Register the labels with "
+            "`register_channel_alias` to read them by name instead.",
+            UserWarning,
+            stacklevel=2,
+        )
     return specs
 
 
 def primary_channel(bundle: Any, quantity: str) -> str | None:
     """The channel key representing `quantity` in a bundle, or ``None``.
 
-    `quantity` may be a category (``"airway_pressure"``) or a channel name
-    (``"pressure"``), so callers can ask in whichever vocabulary is natural.
+    `quantity` may be a category (``"airflow"``) or a channel name
+    (``"flow"``), so callers can ask in whichever vocabulary is natural.
     When a recording carries several channels of one quantity this is the one
     downstream steps operate on - the first resolved, unless overridden.
     """
@@ -453,7 +499,7 @@ def split_channels(
     recording: Any,
     *,
     channels: Iterable[str] = DEFAULT_CHANNELS,
-    pressure_channel: int | None = None,
+    airway_pressure_channel: int | None = None,
     flow_channel: int | None = None,
     volume_channel: int | None = None,
     channel_indices: dict[str, int] | None = None,
@@ -464,9 +510,9 @@ def split_channels(
     """Split a ventilator recording into its named channels.
 
     Channels are found by matching the recording's own labels against the
-    alias registry, falling back to fixed column positions only for an
-    unlabelled array. ``channels=`` selects which quantities to extract;
-    ``pressure_channel``/``flow_channel``/``volume_channel`` (and the general
+    alias registry. Fixed column positions are used only when no label names a
+    known channel (see `resolve_channels`). ``channels=`` selects which quantities to extract;
+    ``airway_pressure_channel``/``flow_channel``/``volume_channel`` (and the general
     ``channel_indices``) override the resolution for one channel with an
     explicit column.
 
@@ -474,7 +520,7 @@ def split_channels(
     with its :class:`ChannelSpec` under ``"specs"``, plus ``fs``, ``metadata``,
     and per-channel ``units``/``labels``/``categories``/``channel_indices``.
     Each channel's array is also exposed under its own key, so a bundle with
-    the default selection still answers to ``bundle["pressure"]`` as before.
+    the default selection still answers to ``bundle["airway_pressure"]``.
     ``"primary"`` maps each physical quantity to the channel representing it,
     which is what downstream steps use when several channels share a quantity.
     """
@@ -501,29 +547,40 @@ def split_channels(
 
     overrides = dict(channel_indices or {})
     for name, index in (
-        ("pressure", pressure_channel),
+        ("airway_pressure", airway_pressure_channel),
         ("flow", flow_channel),
         ("volume", volume_channel),
     ):
         if index is not None:
             overrides[name] = int(index)
 
+    requested = list(channels)
+    # A column given for a channel that is not being read would otherwise be
+    # ignored without a word, and the channel taken from somewhere else.
+    unused = sorted(set(overrides) - set(requested))
+    if unused:
+        raise ValueError(
+            f"Column indices were given for ventilator channel(s) {unused}, "
+            f"which are not among the channels being read ({requested}). "
+            f"Known channels: {sorted(CHANNEL_CATEGORIES)}."
+        )
+
     specs = resolve_channels(
         metadata.get("labels") or [],
-        requested=channels,
+        requested=requested,
         origin=origin or metadata.get("source"),
         units=metadata.get("units") or [],
         positions=overrides,
         qualify=qualify,
     )
 
-    requested = list(channels)
     missing = {name for name in requested} - {spec.channel for spec in specs}
     if missing:
         raise UnresolvedChannelError(
             f"Ventilator channel(s) {sorted(missing)} could not be found in "
             f"this recording. Labels present: {list(metadata.get('labels') or [])}. "
-            "Register the vendor's naming with `register_channel_alias`, or "
+            "Ask only for the channels this recording has (`channels=`), "
+            "register the vendor's naming with `register_channel_alias`, or "
             "pass an explicit column index."
         )
 

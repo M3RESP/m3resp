@@ -6,11 +6,11 @@ from typing import Any
 
 from m3resp.core.session import M3Session
 from m3resp.workflows.registry import StepArtifact, register_step
+from m3resp.workflows.steps._per_breath import _per_breath_flags
 
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _per_breath_flags,
     _record_step,
     _upstream_metadata,
 )
