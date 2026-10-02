@@ -233,7 +233,7 @@ def sample_intervals_to_breath_events(
                 start, sample_frequency=sample_frequency, time=time
             ),
             end_time=_sample_to_time(end, sample_frequency=sample_frequency, time=time),
-            peak_time=(
+            extremum_time=(
                 None
                 if peaks is None
                 else _sample_to_time(
@@ -241,7 +241,7 @@ def sample_intervals_to_breath_events(
                 )
             ),
             start_index=int(start),
-            peak_index=None if peaks is None else int(peaks[index]),
+            extremum_index=None if peaks is None else int(peaks[index]),
             end_index=int(end),
             source=source,
         )

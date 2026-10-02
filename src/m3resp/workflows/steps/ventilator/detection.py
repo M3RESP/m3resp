@@ -24,12 +24,12 @@ from m3resp.processing.peaks import (
 )
 from m3resp.processing.ventilator import estimate_peep
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
+from m3resp.workflows.steps._per_breath import _per_breath_results
 
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
     _per_breath_flags,
-    _per_breath_results,
     _record_step,
     _upstream_metadata,
 )
@@ -369,7 +369,7 @@ def pocc_intervals(
 
     # A Pocc is an occluded breath: an effort to breathe in against a closed
     # airway. It is kept as a BreathEvent, not a plain Interval, because it
-    # has a turning point (the deepest pressure, `peak_index`) that an
+    # has a turning point (the deepest pressure, `extremum_index`) that an
     # Interval has no place for. `metadata["event_type"]` marks it as a Pocc.
     events: list[BreathEvent] = []
     for index, peak in enumerate(peaks):
@@ -378,9 +378,9 @@ def pocc_intervals(
                 modality="ventilator",
                 start_time=float(starts[index]) / fs,
                 end_time=float(ends[index]) / fs,
-                peak_time=float(peak) / fs,
+                extremum_time=float(peak) / fs,
                 start_index=int(starts[index]),
-                peak_index=int(peak),
+                extremum_index=int(peak),
                 end_index=int(ends[index]),
                 sample_frequency=fs,
                 signal_name="pressure",

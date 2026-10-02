@@ -55,5 +55,7 @@ def peak_indices_from_events(
     if events is None:
         return []
     return [
-        int(event.peak_time * fs) for event in events if event.peak_time is not None
+        int(event.extremum_time * fs)
+        for event in events
+        if event.extremum_time is not None
     ]

@@ -217,7 +217,7 @@ class _DefaultsMixin:
         ``emg.onoffpeak_baseline_crossing`` to obtain them.
 
         `BreathEvent` currently requires an interval, so each event is emitted
-        with ``start_time == end_time == peak_time``: a zero-length breath at
+        with ``start_time == end_time == extremum_time``: a zero-length breath at
         the peak, marked ``boundaries_measured: False``. That is a placeholder
         for a measurement not yet made, not a claim about the breath's extent.
         """
@@ -264,9 +264,9 @@ class _DefaultsMixin:
                 {
                     "start_time": peak_time,
                     "end_time": peak_time,
-                    "peak_time": peak_time,
+                    "extremum_time": peak_time,
                     "start_index": int(peak_index),
-                    "peak_index": int(peak_index),
+                    "extremum_index": int(peak_index),
                     "end_index": int(peak_index),
                     "sample_frequency": fs,
                     "signal_name": processed_emg["channel"],

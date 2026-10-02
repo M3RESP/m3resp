@@ -572,7 +572,7 @@ def test_pixel_breaths_step_converts_object_array_to_landmark_array():
     assert isinstance(timing, IntervalData)
     assert [b.start_time for b in timing.intervals] == [-1.0, 0.0, 1.0]
     # The breaths keep their turning point, like the breaths of TIV and EELI.
-    assert [b.peak_time for b in timing.intervals] == [-0.5, 0.5, 1.5]
+    assert [b.extremum_time for b in timing.intervals] == [-0.5, 0.5, 1.5]
     assert timing.unit == "s"
     value = np.stack(timing.values)
     assert value.shape == (3, 2, 2, 3)
@@ -606,7 +606,7 @@ def test_steps_on_the_same_breaths_share_one_detection_and_the_same_breaths():
     raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float))
     sequence = _FakeSequence(raw)
     detector = _FakeBreathDetector(2)
-    stored_first_breath = BreathEvent("eit", 0.0, 1.0, peak_time=0.5)
+    stored_first_breath = BreathEvent("eit", 0.0, 1.0, extremum_time=0.5)
     session.add_events("eit_breaths", [stored_first_breath])
     session.eit_adapter.compute_eeli = lambda *args, **kwargs: _FakeSparseData(  # type: ignore[attr-defined]
         [1.0, 2.0], [1.0, 2.0], label="continuous_eelis"

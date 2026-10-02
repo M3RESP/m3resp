@@ -25,14 +25,14 @@ def test_breath_event_exposes_duration_and_sample_indices():
         modality="eit",
         start_time=1.0,
         end_time=2.5,
-        peak_time=1.5,
+        extremum_time=1.5,
         start_index=10,
-        peak_index=15,
+        extremum_index=15,
         end_index=25,
     )
 
     assert breath.duration == pytest.approx(1.5)
-    assert (breath.start_index, breath.peak_index, breath.end_index) == (10, 15, 25)
+    assert (breath.start_index, breath.extremum_index, breath.end_index) == (10, 15, 25)
 
 
 class TestTimeSeries:

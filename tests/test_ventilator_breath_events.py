@@ -44,7 +44,7 @@ class TestNormalizeVentilatorBreath:
         normalized = normalize_ventilator_breath(100, fs=10.0, width_seconds=0.4)
 
         assert normalized.modality == "ventilator"
-        assert normalized.peak_time == pytest.approx(10.0)
+        assert normalized.extremum_time == pytest.approx(10.0)
         assert normalized.start_time == pytest.approx(9.8)
         assert normalized.end_time == pytest.approx(10.2)
         assert normalized.metadata["sample_index"] == 100

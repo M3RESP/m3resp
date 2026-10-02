@@ -29,7 +29,7 @@ compared on one shared time axis. Key pieces:
   sampling rate. It's not part of the alignment pipeline above and isn't called
   automatically: breath linking and the multimodal parameter calculations
   below work on real-world timestamps (`BreathEvent.start_time`/`end_time`/
-  `peak_time`), not sample indices, so most analysis stays at each
+  `extremum_time`), not sample indices, so most analysis stays at each
   modality's original sample rate and resampling is only needed when you
   explicitly ask for it.
 
@@ -172,7 +172,7 @@ or reload is reflected in streams recorded earlier.
 `m3resp.link_breaths_by_time(breaths_by_modality, time_tolerance=0.5)` (or
 `session.link_breaths(time_tolerance=0.5)`) matches `BreathEvent`s across
 any number of modalities by how close their representative times are
-(`peak_time`, falling back to the start/end midpoint) - greedily and
+(`extremum_time`, falling back to the start/end midpoint) - greedily and
 one-to-one, no clock-drift correction. A breath with no match in the other
 modalities still produces a result with only its own slot filled, so no
 input breath is silently dropped.
@@ -211,7 +211,7 @@ Three primitives, usable standalone on any `LinkedBreath`/`list[LinkedBreath]`:
 
 - `compute_timing_delay(linked, from_modality, to_modality, anchor="start")` -
   signed delay in seconds between two modalities' breath anchors
-  (`anchor` is `"start"`, `"peak"`, or `"end"`); `None` if either modality
+  (`anchor` is `"start"`, `"extremum"`, or `"end"`); `None` if either modality
   is missing from the link. Positive means `to_modality` occurs later.
 - `compute_breath_duration_difference(linked, modality_a, modality_b)` -
   `duration(modality_a) - duration(modality_b)` in seconds; `None` if either

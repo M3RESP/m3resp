@@ -101,7 +101,7 @@ def test_onset_offset_validity_is_added_to_the_session_quality_flags():
     for index, flag in enumerate(flags):
         assert flag.name == "start_end_validity"
         assert flag.modality == "emg"
-        assert flag.metadata["peak_sample_index"] == int(peak_indices[index])
+        assert flag.metadata["extremum_sample_index"] == int(peak_indices[index])
         assert flag.metadata["start_sample_index"] == int(
             windows["start_indices"][index]
         )

@@ -35,7 +35,7 @@ def test_detection_alignment_and_export(tmp_path):
     session.processed["emg"] = {"filtered": True}
 
     def detector(data, **kwargs):
-        return [BreathEvent("eit", 1.0, 2.0, peak_time=1.5)]
+        return [BreathEvent("eit", 1.0, 2.0, extremum_time=1.5)]
 
     session.detect_eit_breaths(detector=detector)
     synchronized = session.synchronize_multimodal_breaths(offset_seconds=0.5)
@@ -50,7 +50,7 @@ def test_detection_alignment_and_export(tmp_path):
 
 def test_session_event_helpers_keep_events_dict_as_backing_store():
     session = M3Session()
-    events = [BreathEvent("emg", 0.0, 1.0, peak_time=0.5)]
+    events = [BreathEvent("emg", 0.0, 1.0, extremum_time=0.5)]
 
     stored = session.add_events("emg_breaths", events)
 
@@ -83,7 +83,7 @@ def test_session_normalizes_ventilator_breaths_after_emg_postprocessing():
 
     breaths = session.events["ventilator_breaths"]
     assert [breath.modality for breath in breaths] == ["ventilator", "ventilator"]
-    assert breaths[0].peak_time == 1.0
+    assert breaths[0].extremum_time == 1.0
     assert breaths[0].start_time == 0.8
     assert breaths[0].end_time == 1.2
     assert breaths[0].metadata["fs"] == 100.0
@@ -94,9 +94,9 @@ def test_session_aligns_eit_emg_and_ventilator_events_with_offset_map():
     # and the offset key: it must keep aligning correctly, even though the
     # recorded offsets are normalized to the canonical "ventilator".
     session = M3Session()
-    eit_events = [BreathEvent("eit", 1.0, 2.0, peak_time=1.5)]
-    emg_events = [BreathEvent("emg", 1.0, 2.0, peak_time=1.5)]
-    vent_events = [BreathEvent("vent", 1.0, 2.0, peak_time=1.5)]
+    eit_events = [BreathEvent("eit", 1.0, 2.0, extremum_time=1.5)]
+    emg_events = [BreathEvent("emg", 1.0, 2.0, extremum_time=1.5)]
+    vent_events = [BreathEvent("vent", 1.0, 2.0, extremum_time=1.5)]
     session.add_events("eit_breaths", eit_events)
     session.add_events("emg_breaths", emg_events)
     session.add_events("ventilator_breaths", vent_events)

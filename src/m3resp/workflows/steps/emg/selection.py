@@ -8,6 +8,7 @@ import numpy as np
 
 from m3resp.core.session import M3Session
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
+from m3resp.workflows.steps._per_breath import extremum_sample_index
 
 from ._shared import _SESSION_ARTIFACT, _record_step, _upstream_metadata
 
@@ -128,7 +129,7 @@ def remove_invalid_breaths(
         "removed": [
             {
                 "breath_number": int(position),
-                "peak_sample_index": int(peaks[position]),
+                "extremum_sample_index": int(peaks[position]),
                 "failed_flags": failed_flags[position],
             }
             for position in np.flatnonzero(~keep)
@@ -168,7 +169,7 @@ def _failed_flags_per_breath(
         for flag in session.quality:
             if flag.name != name or flag.modality != "emg":
                 continue
-            peak = flag.metadata.get("peak_sample_index")
+            peak = extremum_sample_index(flag.metadata)
             if peak is None:
                 raise ValueError(
                     f"Quality flag '{name}' is not a per-breath flag, so it "

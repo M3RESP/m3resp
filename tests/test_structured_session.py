@@ -282,7 +282,7 @@ def test_tiv_values_computed_after_breath_detection_use_the_stored_breaths():
     eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed_with_tiv()  # type: ignore[method-assign]
     session = M3Session(eit_adapter=eit_adapter)
     session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
-    stored = BreathEvent("eit", 0.0, 1.0, peak_time=0.5)
+    stored = BreathEvent("eit", 0.0, 1.0, extremum_time=0.5)
     session.add_events("eit_breaths", [stored])
 
     session.preprocess_eit()

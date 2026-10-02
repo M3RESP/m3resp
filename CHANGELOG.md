@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### `peak_time` and `peak_index` renamed to `extremum_time` and `extremum_index` (#93)
+
+"Peak" says the signal turns at a maximum. That holds for impedance, volume
+and the EMG envelope, but not for esophageal pressure or the deepest pressure
+of an occlusion, which turn at a minimum. "Extremum" covers both. **The old
+names are removed:**
+
+| Before | Now |
+|---|---|
+| `BreathEvent.peak_time`, `BreathEvent.peak_index` | `BreathEvent.extremum_time`, `BreathEvent.extremum_index` |
+| Breath and linked-breath export columns `peak_time`, `peak_index`, `eit_peak_time`, `emg_peak_time`, `ventilator_peak_time` | `extremum_time`, `extremum_index`, `eit_extremum_time`, `emg_extremum_time`, `ventilator_extremum_time`; linked breaths also gain `eit_extremum_index`, `emg_extremum_index`, `ventilator_extremum_index` |
+| `compute_multimodal_parameters(anchor="peak")`, `compute_timing_delay(anchor="peak")` | `anchor="extremum"` |
+| Metadata `peak_sample_index`, `peak_time` on EMG and ventilator results and quality flags | `extremum_sample_index`, `extremum_time` |
+
+`coerce_breath_event` still reads `peak_time`/`peak_index` from
+dictionaries and objects made by other detectors, with a warning naming the
+new keys. It tries `extremum_time`/`extremum_index` first, then
+`peak_time`/`peak_index`, then eitprocessing's `middle_time`, and takes the
+time and its position from the same pair. Likewise
+`emg.remove_invalid_breaths` still matches a quality flag carrying the old
+`peak_sample_index`, with a warning.
+
 ### EIT results per breath, pixel maps and masks get their own types; global and regional impedance (#120, #107)
 
 `ParameterResult` held real results (respiratory rate) next to in-between
@@ -45,7 +67,7 @@ What changes for existing code:
   `detect_eit_breaths()`, in either order: each TIV or EELI value points to
   the stored breath object. Stored items that are not a `BreathEvent` are
   ignored. `eit.pixel_breaths` stores its breaths with their
-  turning point (`peak_time`), like TIV and EELI.
+  turning point (`extremum_time`), like TIV and EELI.
 - `preprocess_eit()` used to store TIV and EELI as one `ParameterResult` per
   breath and **dropped breaths whose value was NaN**. They are now
   `IntervalData` in `session.interval_data`, with every breath kept.
@@ -93,13 +115,13 @@ belonged to.
 | `coerce_interval`, `coerce_intervals` | Turn a dictionary, a `(start, end)` pair or eitprocessing's `Interval` into an m3resp `Interval` |
 
 `BreathEvent` is now an `Interval` whose `name` is always `"breath"`, plus
-`peak_time` and `peak_index`. What changes for existing code:
+`extremum_time` and `extremum_index` (named `peak_time` and `peak_index` before #93). What changes for existing code:
 
 - Only `modality`, `start_time` and `end_time` can be given by position.
   Every other field must be given by name, e.g.
-  `BreathEvent("eit", 1.0, 2.0, peak_time=1.5)`.
+  `BreathEvent("eit", 1.0, 2.0, extremum_time=1.5)`.
 - Exported breath tables have two new columns, `name` (always `"breath"`)
-  and `label`, and `peak_time`/`peak_index` are now the last two columns.
+  and `label`, and `extremum_time`/`extremum_index` are now the last two columns.
 - `align_events_by_modality_offset` and `align_events_manual_offset` shift
   intervals as well as events and breaths.
 - `coerce_breath_event` refuses an interval named anything other than

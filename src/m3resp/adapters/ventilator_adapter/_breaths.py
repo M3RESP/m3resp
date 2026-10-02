@@ -72,7 +72,7 @@ def normalize_ventilator_breath(
         modality=VENTILATOR,
         start_time=start_time,
         end_time=end_time,
-        peak_time=peak_time,
+        extremum_time=peak_time,
         source="resurfemg.detect_ventilator_breath",
         metadata={
             "sample_index": sample_index,

@@ -27,7 +27,7 @@ def link_breaths_by_time(
     `"ventilator"`, or anything else - e.g. `"pressure"`, `"ultrasound"`) to
     that modality's breath list. Each breath is assigned to at most one link.
     Two breaths from different modalities are linked when their
-    representative times (`peak_time`, falling back to the start/end
+    representative times (`extremum_time`, falling back to the start/end
     midpoint) are within `time_tolerance` seconds of each other; the closest
     available match wins. A breath with no match in the other modalities
     still produces a `LinkedBreath` with only its own slot filled, so no
@@ -87,8 +87,8 @@ def link_breaths_by_time(
 
 
 def _anchor_time(breath: BreathEvent) -> float:
-    if breath.peak_time is not None:
-        return breath.peak_time
+    if breath.extremum_time is not None:
+        return breath.extremum_time
     return (breath.start_time + breath.end_time) / 2.0
 
 

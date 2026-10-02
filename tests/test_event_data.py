@@ -10,8 +10,8 @@ from m3resp import BreathEvent, Event, EventData, Interval, IntervalData
 
 def _breaths() -> list[BreathEvent]:
     return [
-        BreathEvent("eit", 0.0, 3.0, peak_time=1.2),
-        BreathEvent("eit", 3.0, 6.5, peak_time=4.4),
+        BreathEvent("eit", 0.0, 3.0, extremum_time=1.2),
+        BreathEvent("eit", 3.0, 6.5, extremum_time=4.4),
     ]
 
 
@@ -92,7 +92,7 @@ def test_interval_data_to_dict_is_json_ready():
     restored = json.loads(json.dumps(data.to_dict()))
 
     assert restored["values"] == [1.5, 1.7]
-    assert restored["intervals"][0]["peak_time"] == 1.2
+    assert restored["intervals"][0]["extremum_time"] == 1.2
     assert restored["intervals"][0]["name"] == "breath"
 
 

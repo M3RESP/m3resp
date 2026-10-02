@@ -80,10 +80,10 @@ class TestResampleSignal:
 class TestLinkBreathsByTime:
     def test_matches_close_breaths_across_modalities(self):
         eit_breath = BreathEvent(
-            modality="eit", start_time=1.0, end_time=2.0, peak_time=1.5
+            modality="eit", start_time=1.0, end_time=2.0, extremum_time=1.5
         )
         emg_breath = BreathEvent(
-            modality="emg", start_time=1.1, end_time=2.1, peak_time=1.6
+            modality="emg", start_time=1.1, end_time=2.1, extremum_time=1.6
         )
 
         linked = link_breaths_by_time(
@@ -97,10 +97,10 @@ class TestLinkBreathsByTime:
 
     def test_keeps_out_of_tolerance_breaths_as_separate_links(self):
         eit_breath = BreathEvent(
-            modality="eit", start_time=1.0, end_time=2.0, peak_time=1.5
+            modality="eit", start_time=1.0, end_time=2.0, extremum_time=1.5
         )
         emg_breath = BreathEvent(
-            modality="emg", start_time=3.0, end_time=4.0, peak_time=3.5
+            modality="emg", start_time=3.0, end_time=4.0, extremum_time=3.5
         )
 
         linked = link_breaths_by_time(
@@ -113,13 +113,13 @@ class TestLinkBreathsByTime:
 
     def test_links_all_three_modalities(self):
         eit_breath = BreathEvent(
-            modality="eit", start_time=1.0, end_time=2.0, peak_time=1.5
+            modality="eit", start_time=1.0, end_time=2.0, extremum_time=1.5
         )
         emg_breath = BreathEvent(
-            modality="emg", start_time=1.05, end_time=2.05, peak_time=1.55
+            modality="emg", start_time=1.05, end_time=2.05, extremum_time=1.55
         )
         vent_breath = BreathEvent(
-            modality="ventilator", start_time=0.9, end_time=1.9, peak_time=1.45
+            modality="ventilator", start_time=0.9, end_time=1.9, extremum_time=1.45
         )
 
         linked = link_breaths_by_time(
@@ -136,13 +136,13 @@ class TestLinkBreathsByTime:
 
     def test_does_not_double_assign_a_breath_to_two_links(self):
         eit_breath = BreathEvent(
-            modality="eit", start_time=1.0, end_time=2.0, peak_time=1.5
+            modality="eit", start_time=1.0, end_time=2.0, extremum_time=1.5
         )
         emg_near = BreathEvent(
-            modality="emg", start_time=1.05, end_time=2.05, peak_time=1.55
+            modality="emg", start_time=1.05, end_time=2.05, extremum_time=1.55
         )
         emg_far = BreathEvent(
-            modality="emg", start_time=1.2, end_time=2.2, peak_time=1.7
+            modality="emg", start_time=1.2, end_time=2.2, extremum_time=1.7
         )
 
         linked = link_breaths_by_time(
@@ -168,10 +168,10 @@ class TestSessionLinkBreaths:
     def test_link_breaths_uses_raw_event_lists_by_default(self):
         session = M3Session()
         eit_breath = BreathEvent(
-            modality="eit", start_time=1.0, end_time=2.0, peak_time=1.5
+            modality="eit", start_time=1.0, end_time=2.0, extremum_time=1.5
         )
         emg_breath = BreathEvent(
-            modality="emg", start_time=1.1, end_time=2.1, peak_time=1.6
+            modality="emg", start_time=1.1, end_time=2.1, extremum_time=1.6
         )
         session.add_events("eit_breaths", [eit_breath])
         session.add_events("emg_breaths", [emg_breath])
@@ -186,10 +186,10 @@ class TestSessionLinkBreaths:
     def test_link_breaths_prefers_aligned_events_over_raw_ones(self):
         session = M3Session()
         eit_breath = BreathEvent(
-            modality="eit", start_time=1.0, end_time=2.0, peak_time=1.5
+            modality="eit", start_time=1.0, end_time=2.0, extremum_time=1.5
         )
         emg_breath = BreathEvent(
-            modality="emg", start_time=1.0, end_time=2.0, peak_time=1.5
+            modality="emg", start_time=1.0, end_time=2.0, extremum_time=1.5
         )
         session.add_events("eit_breaths", [eit_breath])
         session.add_events("emg_breaths", [emg_breath])
@@ -207,18 +207,20 @@ class TestComputeTimingDelay:
         linked = LinkedBreath(
             breaths={
                 "emg": BreathEvent(
-                    modality="emg", start_time=1.0, end_time=2.0, peak_time=1.5
+                    modality="emg", start_time=1.0, end_time=2.0, extremum_time=1.5
                 ),
                 "eit": BreathEvent(
-                    modality="eit", start_time=1.2, end_time=2.2, peak_time=1.9
+                    modality="eit", start_time=1.2, end_time=2.2, extremum_time=1.9
                 ),
             }
         )
 
         assert compute_timing_delay(linked, "emg", "eit") == pytest.approx(0.2)
         assert compute_timing_delay(
-            linked, "emg", "eit", anchor="peak"
+            linked, "emg", "eit", anchor="extremum"
         ) == pytest.approx(0.4)
+        with pytest.raises(ValueError, match="'extremum'"):
+            compute_timing_delay(linked, "emg", "eit", anchor="peak")
 
     def test_returns_none_when_a_modality_is_missing(self):
         linked = LinkedBreath(
@@ -284,10 +286,10 @@ class TestComputeMultimodalParameters:
             LinkedBreath(
                 breaths={
                     "eit": BreathEvent(
-                        modality="eit", start_time=1.0, end_time=2.0, peak_time=1.5
+                        modality="eit", start_time=1.0, end_time=2.0, extremum_time=1.5
                     ),
                     "emg": BreathEvent(
-                        modality="emg", start_time=1.1, end_time=2.1, peak_time=1.6
+                        modality="emg", start_time=1.1, end_time=2.1, extremum_time=1.6
                     ),
                 }
             )
@@ -310,11 +312,19 @@ class TestSessionComputeMultimodalParameters:
         session = M3Session()
         session.add_events(
             "eit_breaths",
-            [BreathEvent(modality="eit", start_time=1.0, end_time=2.0, peak_time=1.5)],
+            [
+                BreathEvent(
+                    modality="eit", start_time=1.0, end_time=2.0, extremum_time=1.5
+                )
+            ],
         )
         session.add_events(
             "emg_breaths",
-            [BreathEvent(modality="emg", start_time=1.1, end_time=2.1, peak_time=1.6)],
+            [
+                BreathEvent(
+                    modality="emg", start_time=1.1, end_time=2.1, extremum_time=1.6
+                )
+            ],
         )
         session.link_breaths(time_tolerance=0.5)
 

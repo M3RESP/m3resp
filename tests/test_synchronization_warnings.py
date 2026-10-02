@@ -48,7 +48,7 @@ def _session() -> M3Session:
 
 
 def _breath(modality: str, peak: float) -> BreathEvent:
-    return BreathEvent(modality, peak - 0.5, peak + 0.5, peak_time=peak)
+    return BreathEvent(modality, peak - 0.5, peak + 0.5, extremum_time=peak)
 
 
 def _with_breaths(session: M3Session, *modalities: str) -> M3Session:

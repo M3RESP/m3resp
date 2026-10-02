@@ -68,7 +68,7 @@ def _emg_flag(name: str, peak: int, passed: bool) -> QualityFlag:
         passed=passed,
         severity="info",
         modality="emg",
-        metadata={"peak_sample_index": peak},
+        metadata={"extremum_sample_index": peak},
     )
 
 
@@ -96,7 +96,7 @@ def test_breath_with_invalid_window_is_removed_and_all_outputs_stay_aligned():
     assert kept["removed"] == [
         {
             "breath_number": 0,
-            "peak_sample_index": 800,
+            "extremum_sample_index": 800,
             "failed_flags": ["start_end_validity"],
         }
     ]
@@ -266,3 +266,26 @@ def _assert_same(value: Any, expected: Any, name: str) -> None:
             _assert_same(part, expected_part, name)
         return
     np.testing.assert_array_equal(np.asarray(value), expected, err_msg=name)
+
+
+def test_a_flag_with_the_old_peak_sample_key_still_counts_with_a_warning():
+    """A per-breath flag made before the rename carries 'peak_sample_index';
+    it is still matched to its breath, and a warning names the new key."""
+
+    session, outputs = _session_with_three_breaths()
+    session.quality.add(
+        QualityFlag(
+            name="old_check",
+            passed=False,
+            severity="info",
+            modality="emg",
+            metadata={"peak_sample_index": 2250},
+        )
+    )
+
+    with pytest.warns(UserWarning, match="extremum_sample_index"):
+        kept = remove_invalid_breaths(session, flag_names=["old_check"], **outputs)[
+            "valid_breaths"
+        ]
+
+    assert 2250 not in kept["peak_indices"].tolist()

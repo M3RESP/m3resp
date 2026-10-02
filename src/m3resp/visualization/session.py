@@ -491,9 +491,13 @@ def _plot_events(
     for event in events:
         for ax in axes:
             ax.axvspan(event.start_time, event.end_time, color=color, alpha=0.08)
-            if event.peak_time is not None:
+            if event.extremum_time is not None:
                 ax.axvline(
-                    event.peak_time, color=color, alpha=0.45, linewidth=1, label=label
+                    event.extremum_time,
+                    color=color,
+                    alpha=0.45,
+                    linewidth=1,
+                    label=label,
                 )
 
 

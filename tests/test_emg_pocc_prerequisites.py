@@ -62,7 +62,7 @@ class TestPoccIntervals:
             assert event.metadata["event_type"] == "pocc"
             assert event.start_index == int(starts[index])
             assert event.end_index == int(ends[index])
-            assert event.peak_index == int(pocc_indices[index])
+            assert event.extremum_index == int(pocc_indices[index])
             assert event.sample_frequency == result.value("ventilator_signals")["fs"]
             assert event.metadata["valid"] == bool(validity[index])
 

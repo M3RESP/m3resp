@@ -150,7 +150,7 @@ def _breath_intervals_to_dicts(breath_intervals: Any) -> list[dict[str, Any]]:
         {
             "start_time": breath.start_time,
             "end_time": breath.end_time,
-            "peak_time": getattr(breath, "middle_time", None),
+            "extremum_time": getattr(breath, "middle_time", None),
             "source": "eitprocessing.BreathDetection",
         }
         for breath in breath_intervals.values

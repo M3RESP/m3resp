@@ -12,12 +12,14 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
-
 from m3resp.core.session import M3Session
-from m3resp.data import ParameterResult, QualityFlag
+from m3resp.data import QualityFlag
 from m3resp.data.quality import Severity
 from m3resp.workflows.registry import StepArtifact
+from m3resp.workflows.steps._per_breath import (
+    _breath_metadata,
+    _require_equal_length,
+)
 
 #: Ventilator loading/quality steps currently go through ReSurfEMGAdapter
 #: (loading shares the sEMG's file; Pocc quality assessment wraps
@@ -95,22 +97,6 @@ def _record_step(
     )
 
 
-def _require_equal_length(**named_arrays: Any) -> None:
-    """Raise a clear error instead of silently truncating with
-    `min(len(...))` when paired arrays disagree in length."""
-
-    lengths = {name: len(array) for name, array in named_arrays.items()}
-    if len(set(lengths.values())) > 1:
-        raise ValueError(f"Arrays must have equal length; got {lengths}.")
-
-
-def _breath_metadata(peak_index: Any, *, fs: float | None = None) -> dict[str, Any]:
-    metadata: dict[str, Any] = {"peak_sample_index": int(peak_index)}
-    if fs is not None:
-        metadata["peak_time"] = float(peak_index) / fs
-    return metadata
-
-
 def _per_breath_flags(
     name: str,
     valid: Any,
@@ -146,36 +132,3 @@ def _per_breath_flags(
             )
         )
     return flags
-
-
-def _per_breath_results(
-    name: str,
-    values: Any,
-    *,
-    modality: str,
-    category: str | None = None,
-    peak_indices: Any,
-    unit: str | None = None,
-    method: str | None = None,
-    fs: float | None = None,
-    extra_metadata_per_item: list[dict[str, Any]] | None = None,
-) -> list[ParameterResult]:
-    _require_equal_length(values=values, peak_indices=peak_indices)
-    results = []
-    for position, (value, peak_index) in enumerate(zip(values, peak_indices)):
-        metadata = _breath_metadata(peak_index, fs=fs)
-        if extra_metadata_per_item is not None:
-            metadata.update(extra_metadata_per_item[position])
-        results.append(
-            ParameterResult(
-                name=name,
-                value=value if np.ndim(value) > 0 else float(value),
-                modality=modality,
-                category=category,
-                unit=unit,
-                breath_id=str(position),
-                method=method,
-                metadata=metadata,
-            )
-        )
-    return results

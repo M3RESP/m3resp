@@ -122,7 +122,7 @@ class TestEITAdapterConversions:
         np.testing.assert_array_equal(tiv.values, [1.0, math.nan, 2.0])
         assert all(isinstance(b, BreathEvent) for b in tiv.intervals)
         assert [b.start_time for b in tiv.intervals] == [0.0, 2.0, 4.0]
-        assert [b.peak_time for b in tiv.intervals] == [1.0, 3.0, 5.0]
+        assert [b.extremum_time for b in tiv.intervals] == [1.0, 3.0, 5.0]
 
     def test_to_interval_data_needs_the_breaths(self):
         adapter = EITProcessingAdapter()

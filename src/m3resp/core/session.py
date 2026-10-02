@@ -1373,7 +1373,7 @@ class M3Session:
                 to compute the per-breath duration difference for. None uses
                 every pair of modalities found in the linked breaths.
             anchor (str): Which point of each breath the delay is measured
-                between: ``"start"``, ``"peak"`` or ``"end"``.
+                between: ``"start"``, ``"extremum"`` or ``"end"``.
 
         Returns:
             list[ParameterResult]: The timing delays and duration differences
