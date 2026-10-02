@@ -1,5 +1,12 @@
 """Synchronization helpers for multimodal recordings."""
 
+# Turning ventilator detections into breaths is not synchronization; these two
+# live in `m3resp.adapters.ventilator_adapter` and are imported here only so
+# older code that imports them from `m3resp.synchronization` keeps working.
+from m3resp.adapters.ventilator_adapter import (
+    iter_ventilator_detections,
+    normalize_ventilator_breath,
+)
 from m3resp.synchronization.alignment import (
     align_events_by_modality_offset,
     align_events_manual_offset,
@@ -17,15 +24,9 @@ from m3resp.synchronization.offset_estimation import (
     estimate_sync_offset,
 )
 from m3resp.synchronization.resampling import resample_signal
-from m3resp.synchronization.timebase import Timebase
-from m3resp.synchronization.ventilator import (
-    iter_ventilator_detections,
-    normalize_ventilator_breath,
-)
 
 __all__ = [
     "SyncOffsetResult",
-    "Timebase",
     "align_events_by_modality_offset",
     "align_events_manual_offset",
     "compute_breath_duration_difference",

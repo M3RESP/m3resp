@@ -128,7 +128,6 @@ def test_available_steps_covers_every_modality_prefix():
         "emg",
         "export",
         "metric",
-        "session",
         "sync",
         "ventilator",
     }

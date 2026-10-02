@@ -33,10 +33,10 @@
       }
     },
     {
-      "id": "step_001_emg_slice",
+      "id": "step_001_emg_slice_recording",
       "in": {},
       "out": {},
-      "uses": "emg.slice",
+      "uses": "emg.slice_recording",
       "with": {
         "end_seconds": 200.0005,
         "start_seconds": 140.0
