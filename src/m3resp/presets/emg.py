@@ -1,16 +1,16 @@
-"""`EMGPipeline`: the built-in "emg" preset (plan_stage2.md Sec 18)."""
+"""`EMGPreset`: the built-in "emg" preset."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from m3resp.presets.base import Pipeline, PipelineConfig
+from m3resp.presets.base import Preset, PresetConfig
 
 if TYPE_CHECKING:
     from m3resp.core.session import M3Session
 
 
-class EMGPipeline(Pipeline):
+class EMGPreset(Preset):
     """Preprocess, remove ECG, detect breaths, and postprocess loaded EMG data.
 
     Equivalent to calling ``session.preprocess_emg()``, the
@@ -26,7 +26,7 @@ class EMGPipeline(Pipeline):
     ECG-contaminated. Gating each detected ECG peak and recomputing the
     envelope from the gated signal is the standard preprocessing chain
     (band-pass -> ECG peak detection -> gating -> envelope -> baseline), and
-    this preset is what "the standard EMG pipeline" means, so it does that
+    this preset is what "the standard EMG preset" means, so it does that
     rather than leaving it to the caller.
 
     Config keys, each a mapping of keyword arguments:
@@ -58,7 +58,7 @@ class EMGPipeline(Pipeline):
     name = "emg"
 
     def run(
-        self, session: M3Session, *, config: PipelineConfig | None = None
+        self, session: M3Session, *, config: PresetConfig | None = None
     ) -> M3Session:
         processed = session.preprocess_emg(**self._kwargs_for(config, "preprocess"))
         self._remove_ecg(session, processed, config)
@@ -69,9 +69,7 @@ class EMGPipeline(Pipeline):
         session.postprocess_emg(**self._kwargs_for(config, "postprocess"))
         return session
 
-    def _moving_baseline(
-        self, session: M3Session, config: PipelineConfig | None
-    ) -> Any:
+    def _moving_baseline(self, session: M3Session, config: PresetConfig | None) -> Any:
         """The quiet level the breath-detection threshold is measured against.
 
         A breath is a rise above the local quiet level, which drifts through a
@@ -102,7 +100,7 @@ class EMGPipeline(Pipeline):
         self,
         session: M3Session,
         processed: Any,
-        config: PipelineConfig | None,
+        config: PresetConfig | None,
     ) -> None:
         """Detect ECG peaks and gate them out, updating `session.processed`.
 
@@ -118,7 +116,7 @@ class EMGPipeline(Pipeline):
         supplied_peak_indices = removal_options.pop("ecg_peak_indices", None)
         if removal_options:
             raise TypeError(
-                "EMGPipeline config['ecg_removal'] only accepts 'enabled' and "
+                "EMGPreset config['ecg_removal'] only accepts 'enabled' and "
                 f"'ecg_peak_indices'; got {sorted(removal_options)}. Step "
                 "keyword arguments belong under config['ecg_detect_peaks'] / "
                 "config['ecg_gating']."
@@ -126,7 +124,7 @@ class EMGPipeline(Pipeline):
         detection_kwargs = self._kwargs_for(config, "ecg_detect_peaks")
         if supplied_peak_indices is not None and detection_kwargs:
             raise TypeError(
-                "EMGPipeline: config['ecg_removal']['ecg_peak_indices'] skips "
+                "EMGPreset: config['ecg_removal']['ecg_peak_indices'] skips "
                 "peak detection, so config['ecg_detect_peaks'] "
                 f"({sorted(detection_kwargs)}) would have no effect. Pass one "
                 "or the other."
@@ -134,7 +132,7 @@ class EMGPipeline(Pipeline):
 
         # Imported here, not at module scope: the step modules import
         # `m3resp.core.session`, which would make this a circular import at
-        # package-import time (mirrors `M3Session.run_pipeline`'s own lazy
+        # package-import time (mirrors `M3Session.run_preset`'s own lazy
         # import of the preset registry).
         from m3resp.workflows.steps.emg.ecg_detection import ecg_detect_peaks
         from m3resp.workflows.steps.emg.ecg_gating import ecg_gating

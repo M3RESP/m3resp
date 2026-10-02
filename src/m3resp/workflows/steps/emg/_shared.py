@@ -1,4 +1,4 @@
-"""Shared helpers for the registered EMG pipeline step modules."""
+"""Shared helpers for the registered EMG workflow step modules."""
 
 from __future__ import annotations
 

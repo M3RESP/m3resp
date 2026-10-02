@@ -29,10 +29,10 @@ Stage 2 turns `m3resp` from a thin wrapper around `eitprocessing`/`resurfemg` ([
 
 - [developer/architecture.md](developer/architecture.md) - the two data-model layers and the package map.
 - [developer/adapters.md](developer/adapters.md) - the adapter conversion boundary.
-- [developer/pipeline-contracts.md](developer/pipeline-contracts.md) - `Pipeline`/presets vs. the declarative engine.
+- [developer/preset-contracts.md](developer/preset-contracts.md) - presets vs. the declarative engine.
 - [developer/testing.md](developer/testing.md) - regression tests and the test layout.
 
 ## See also
 
 - [stage1.md](stage1.md) - the Stage 1 wrapper layer these all build on.
-- [pipelines.md](pipelines.md) - the declarative YAML/JSON pipeline spec format (its own deep reference, not duplicated here).
+- [workflows.md](workflows.md) - the declarative YAML/JSON workflow spec format (its own deep reference, not duplicated here).

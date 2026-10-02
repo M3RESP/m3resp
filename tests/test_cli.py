@@ -206,12 +206,12 @@ def test_steps_details_shows_parameters(capsys):
 
 
 def test_run_debug_flag_reraises_instead_of_printing_short_message(_cli_step, tmp_path):
-    from m3resp.workflows import PipelineExecutionError
+    from m3resp.workflows import WorkflowExecutionError
 
     spec_path = _write_spec(
         tmp_path, {"name": "p", "steps": [{"uses": "cli_test.fail"}]}
     )
-    with pytest.raises(PipelineExecutionError):
+    with pytest.raises(WorkflowExecutionError):
         main(["run", str(spec_path), "--debug"])
 
 

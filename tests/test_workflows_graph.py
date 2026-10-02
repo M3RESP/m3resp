@@ -15,12 +15,12 @@ import pytest
 
 import m3resp.workflows.steps  # noqa: F401 - ensure built-in steps are registered
 from m3resp.core.exceptions import UnknownStepError
-from m3resp.workflows.compiler import compile_pipeline
+from m3resp.workflows.compiler import compile_workflow
 from m3resp.workflows.graph import GraphNode, graph_to_spec, spec_to_graph
 from m3resp.workflows.registry import STEP_REGISTRY, register_step
 from m3resp.workflows.spec import load_spec
 
-EXAMPLE_SPECS = sorted(Path("examples").glob("**/*.pipeline.yaml"))
+EXAMPLE_SPECS = sorted(Path("examples").glob("**/*.workflow.yaml"))
 
 
 # --------------------------------------------------------------------------- #
@@ -34,7 +34,7 @@ def test_round_trip_compiles_identically_for_every_example_spec(spec_path: Path)
     graph = spec_to_graph(original)
     rebuilt = graph_to_spec(graph)
 
-    assert compile_pipeline(rebuilt).as_dict() == compile_pipeline(original).as_dict()
+    assert compile_workflow(rebuilt).as_dict() == compile_workflow(original).as_dict()
 
 
 def test_at_least_one_example_spec_was_found():
@@ -192,7 +192,7 @@ def test_spec_to_graph_suppresses_the_session_context_key(_graph_test_steps):
         STEP_REGISTRY.pop("graph_test.takes_session", None)
 
 
-def test_spec_to_graph_builds_a_spec_input_edge_for_a_declared_pipeline_input(
+def test_spec_to_graph_builds_a_spec_input_edge_for_a_declared_workflow_input(
     _graph_test_steps,
 ):
     spec = load_spec(
@@ -234,7 +234,7 @@ def test_spec_to_graph_builds_a_session_edge_from_session_reads_writes(
 
 def test_spec_to_graph_omits_an_unresolved_context_key_edge(_graph_test_steps):
     """A read whose context key comes from neither a producing step nor a
-    declared pipeline input (e.g. seeded externally at run time) has
+    declared workflow input (e.g. seeded externally at run time) has
     nothing in this spec to draw an edge from."""
 
     spec = load_spec(

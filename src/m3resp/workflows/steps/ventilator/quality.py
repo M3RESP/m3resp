@@ -1,4 +1,4 @@
-"""Registered ventilator event-quality pipeline steps."""
+"""Registered ventilator event-quality workflow steps."""
 
 from __future__ import annotations
 

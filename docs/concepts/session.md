@@ -149,7 +149,7 @@ as before.
 | `synchronize_multimodal_breaths(method="manual_offset", offset_seconds=..., reference_modality=...)` | Shift already-detected event lists onto a common time axis. |
 | `link_breaths(time_tolerance=0.5)` | Match breaths across modalities into [`LinkedBreath`](synchronization.md) objects. |
 | `compute_multimodal_parameters(...)` | Compute timing-delay/duration-difference/event-agreement [`ParameterResult`](parameters.md)s from `session.linked_breaths`. |
-| `run_pipeline(name, config=...)` | Run a built-in `"eit"`/`"emg"`/`"multimodal"` preset - see [pipeline-contracts.md](../developer/pipeline-contracts.md). |
+| `run_preset(name, config=...)` | Run a built-in `"eit"`/`"emg"`/`"multimodal"` preset - see [preset-contracts.md](../developer/preset-contracts.md). |
 | `export_summary(output_dir)` | Write the structured export - see [export-results tutorial](../tutorials/export-results.md). |
 
 ## See also

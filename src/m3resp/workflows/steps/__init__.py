@@ -1,4 +1,4 @@
-"""Importing this package registers all built-in pipeline steps.
+"""Importing this package registers all built-in workflow steps.
 
 Step modules import their upstream dependencies lazily (inside the step
 functions), so importing this package never requires the optional ``eitprocessing``

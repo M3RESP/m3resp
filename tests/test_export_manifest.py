@@ -14,7 +14,7 @@ import pytest
 from m3resp.core.session import M3Session
 from m3resp.workflows import (
     CancellationToken,
-    PipelineExecutionError,
+    WorkflowExecutionError,
     load_spec,
     register_step,
     run_spec,
@@ -52,7 +52,7 @@ def _manifest_steps():
 def _write_spec(tmp_path: Path, raw: dict[str, Any]) -> Path:
     import yaml
 
-    spec_path = tmp_path / "spec.pipeline.yaml"
+    spec_path = tmp_path / "spec.workflow.yaml"
     spec_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
     return spec_path
 
@@ -195,7 +195,7 @@ def test_successful_run_writes_a_terminal_manifest(_manifest_steps, tmp_path):
     assert manifest["run_id"] == result.run_id
     assert len(manifest["step_records"]) == 1
     assert manifest["error"] is None
-    assert manifest["pipeline_name"] == "p"
+    assert manifest["workflow_name"] == "p"
 
 
 def test_failed_run_still_writes_an_honestly_failed_manifest(_manifest_steps, tmp_path):
@@ -213,7 +213,7 @@ def test_failed_run_still_writes_an_honestly_failed_manifest(_manifest_steps, tm
     )
     manifest_path = tmp_path / "out" / "run_manifest.json"
 
-    with pytest.raises(PipelineExecutionError):
+    with pytest.raises(WorkflowExecutionError):
         run_spec(spec_path, session=M3Session())
 
     assert manifest_path.exists()

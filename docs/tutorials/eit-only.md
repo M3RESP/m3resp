@@ -2,12 +2,12 @@
 
 This walks through loading, preprocessing, detecting breaths, and exporting
 a single EIT recording using `M3Session` directly - the same processing as
-the `"eit"` preset. For the full pipeline expressed as a declarative YAML
+the `"eit"` preset. For the full workflow expressed as a declarative YAML
 spec, including pixel-level and ROI operations (`eit.pixel_breaths`,
 `eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace`, `eit.roi_watershed`,
 `eit.roi_filter_by_size`) that have no `M3Session`-level equivalent yet, see
-`examples/eit_full_preprocessing/eit-full.pipeline.yaml` and
-[../pipelines.md](../pipelines.md).
+`examples/eit_full_preprocessing/eit-full.workflow.yaml` and
+[../workflows.md](../workflows.md).
 
 ## Step by step
 
@@ -44,14 +44,14 @@ The three processing calls above (minus loading/exporting) are also
 available as a single named preset:
 
 ```python
-session.run_pipeline("eit")
+session.run_preset("eit")
 ```
 
 This calls `session.preprocess_eit()` then `session.detect_eit_breaths()` in
 sequence - identical behavior, just a shorter call for the common case. Pass
 `config={"preprocess": {...}, "detect_breaths": {...}}` to override either
 call's keyword arguments. See
-[../developer/pipeline-contracts.md](../developer/pipeline-contracts.md).
+[../developer/preset-contracts.md](../developer/preset-contracts.md).
 
 ## Choosing what gets computed
 

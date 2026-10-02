@@ -1,4 +1,4 @@
-"""Shared helpers for the registered EIT pipeline step modules."""
+"""Shared helpers for the registered EIT workflow step modules."""
 
 from __future__ import annotations
 

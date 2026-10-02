@@ -52,7 +52,7 @@ Explore tutorials
 
 ## Choose your path
 
-Start with a guided workflow or go directly to the pipeline and API references.
+Start with a guided workflow or go directly to the workflow and API references.
 
 ::::{grid} 1 2 3 3
 :gutter: 3
@@ -64,7 +64,7 @@ Start with a guided workflow or go directly to the pipeline and API references.
 :class-card: m3-path-card
 
 Install the package, understand optional modality integrations, and run your
-first pipeline.
+first workflow.
 
 **Start here →**
 :::
@@ -79,15 +79,15 @@ Follow focused EIT, EMG, multimodal, and result-export walkthroughs.
 **View tutorials →**
 :::
 
-:::{grid-item-card} Design a pipeline
-:link: pipelines
+:::{grid-item-card} Design a workflow
+:link: workflows
 :link-type: doc
 :class-card: m3-path-card
 
 Define reproducible workflows in YAML, inspect available steps, and validate
 inputs before processing.
 
-**Pipeline reference →**
+**Workflow reference →**
 :::
 ::::
 
@@ -125,7 +125,7 @@ Public API
 getting-started
 tutorials/index
 concepts/index
-pipelines
+workflows
 ```
 
 ```{toctree}

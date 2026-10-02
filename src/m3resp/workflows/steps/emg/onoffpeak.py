@@ -1,4 +1,4 @@
-"""Registered on/off-peak interval pipeline steps."""
+"""Registered on/off-peak interval workflow steps."""
 
 from __future__ import annotations
 

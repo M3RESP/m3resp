@@ -1,4 +1,4 @@
-"""Utility helpers used by pipeline steps and the engine."""
+"""Utility helpers used by workflow steps and the engine."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def resolve_output_dir(
     """Resolve ``outputs.dir`` into a concrete directory, honoring ``timestamped``.
 
     This is the one place a "run's output directory" should be computed.
-    ``run_spec`` calls it once per run and seeds the result into the pipeline
+    ``run_spec`` calls it once per run and seeds the result into the workflow
     context under the ``_resolved_output_dir`` key (with the raw stamp under
     ``_run_timestamp``), so every export step in that run - built-in or
     custom - lands in the same folder instead of each one minting its own

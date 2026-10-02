@@ -31,7 +31,7 @@ import numpy as np
 import pytest
 
 from m3resp.core.session import M3Session
-from m3resp.workflows.engine import run_pipeline
+from m3resp.workflows.engine import run_workflow
 
 pytest.importorskip("eitprocessing")
 
@@ -88,41 +88,41 @@ _SPEC: dict[str, Any] = {
 
 
 @pytest.fixture(scope="module")
-def pipeline_result():
-    return run_pipeline(_SPEC, session=M3Session())
+def workflow_result():
+    return run_workflow(_SPEC, session=M3Session())
 
 
-def test_detect_rates_matches_direct_rate_detection_call(pipeline_result):
+def test_detect_rates_matches_direct_rate_detection_call(workflow_result):
     from eitprocessing.features.rate_detection import RateDetection
 
-    raw_eit = pipeline_result.value("raw_eit")
+    raw_eit = workflow_result.value("raw_eit")
     expected_resp, expected_heart = RateDetection("adult").apply(raw_eit)
 
-    assert pipeline_result.value("respiratory_rate_hz") == pytest.approx(expected_resp)
-    assert pipeline_result.value("heart_rate_hz") == pytest.approx(expected_heart)
+    assert workflow_result.value("respiratory_rate_hz") == pytest.approx(expected_resp)
+    assert workflow_result.value("heart_rate_hz") == pytest.approx(expected_heart)
 
-    result = pipeline_result.value("respiratory_rate_result")
+    result = workflow_result.value("respiratory_rate_result")
     assert result.value == pytest.approx(expected_resp)
     assert result.unit == "Hz"
 
 
-def test_mdn_filter_matches_direct_mdn_filter_call(pipeline_result):
+def test_mdn_filter_matches_direct_mdn_filter_call(workflow_result):
     from eitprocessing.filters.mdn import MDNFilter
 
-    raw_eit = pipeline_result.value("raw_eit")
-    respiratory_rate_hz = pipeline_result.value("respiratory_rate_hz")
-    heart_rate_hz = pipeline_result.value("heart_rate_hz")
+    raw_eit = workflow_result.value("raw_eit")
+    respiratory_rate_hz = workflow_result.value("respiratory_rate_hz")
+    heart_rate_hz = workflow_result.value("heart_rate_hz")
 
     expected = MDNFilter(
         respiratory_rate=respiratory_rate_hz, heart_rate=heart_rate_hz
     ).apply(raw_eit, label="mdn_filtered")
 
-    filtered_eit = pipeline_result.value("filtered_eit")
+    filtered_eit = workflow_result.value("filtered_eit")
     np.testing.assert_array_equal(
         filtered_eit.pixel_impedance, expected.pixel_impedance
     )
 
-    signal = pipeline_result.value("filtered_eit_signal")
+    signal = workflow_result.value("filtered_eit_signal")
     np.testing.assert_array_equal(signal.values, expected.pixel_impedance)
     # Regression guard: MDNFilter.apply deep-copies the raw input and only
     # overwrites attributes passed as explicit kwargs, so `name` must be
@@ -131,17 +131,17 @@ def test_mdn_filter_matches_direct_mdn_filter_call(pipeline_result):
     assert signal.name == "MDN-filtered EIT data (mdn_filtered)"
 
 
-def test_eeli_matches_direct_eeli_call(pipeline_result):
+def test_eeli_matches_direct_eeli_call(workflow_result):
     from eitprocessing.parameters.eeli import EELI
 
-    global_impedance = pipeline_result.value("global_impedance")
-    breath_detector = pipeline_result.value("breath_detector")
+    global_impedance = workflow_result.value("global_impedance")
+    breath_detector = workflow_result.value("breath_detector")
 
     expected = EELI(breath_detection=breath_detector).compute_parameter(
         global_impedance, store=False, result_label="continuous_eelis"
     )
 
-    eeli_result = pipeline_result.value("eeli_result")
+    eeli_result = workflow_result.value("eeli_result")
     np.testing.assert_array_equal(
         eeli_result.values, np.asarray(expected.values, dtype=float)
     )
@@ -154,17 +154,17 @@ def test_eeli_matches_direct_eeli_call(pipeline_result):
     assert eeli_result.unit == expected.unit
 
 
-def test_continuous_tiv_matches_direct_tiv_call(pipeline_result):
+def test_continuous_tiv_matches_direct_tiv_call(workflow_result):
     from eitprocessing.parameters.tidal_impedance_variation import TIV
 
-    global_impedance = pipeline_result.value("global_impedance")
-    breath_detector = pipeline_result.value("breath_detector")
+    global_impedance = workflow_result.value("global_impedance")
+    breath_detector = workflow_result.value("breath_detector")
 
     expected = TIV(breath_detection=breath_detector).compute_parameter(
         global_impedance, store=False, result_label="continuous_tivs"
     )
 
-    tiv_result = pipeline_result.value("continuous_tiv_result")
+    tiv_result = workflow_result.value("continuous_tiv_result")
     np.testing.assert_array_equal(
         tiv_result.values, np.asarray(expected.values, dtype=float)
     )
@@ -173,15 +173,15 @@ def test_continuous_tiv_matches_direct_tiv_call(pipeline_result):
     assert [breath.extremum_time for breath in tiv_result.intervals] == [
         float(time) for time in expected.time
     ]
-    assert tiv_result in list(pipeline_result.session.interval_data)
+    assert tiv_result in list(workflow_result.session.interval_data)
 
 
-def test_pixel_tiv_matches_direct_tiv_call(pipeline_result):
+def test_pixel_tiv_matches_direct_tiv_call(workflow_result):
     from eitprocessing.parameters.tidal_impedance_variation import TIV
 
-    filtered_eit = pipeline_result.value("filtered_eit")
-    global_impedance = pipeline_result.value("global_impedance")
-    breath_detector = pipeline_result.value("breath_detector")
+    filtered_eit = workflow_result.value("filtered_eit")
+    global_impedance = workflow_result.value("global_impedance")
+    breath_detector = workflow_result.value("breath_detector")
 
     expected = TIV(breath_detection=breath_detector).compute_parameter(
         filtered_eit,
@@ -197,7 +197,7 @@ def test_pixel_tiv_matches_direct_tiv_call(pipeline_result):
     # than a None-aware conversion.
     expected_values = np.asarray(expected.values, dtype=float)
 
-    pixel_tiv_result = pipeline_result.value("pixel_tiv_result")
+    pixel_tiv_result = workflow_result.value("pixel_tiv_result")
     np.testing.assert_array_equal(
         np.stack([pixel_map.values for pixel_map in pixel_tiv_result.values]),
         expected_values,
@@ -212,12 +212,12 @@ def test_pixel_tiv_matches_direct_tiv_call(pipeline_result):
     ] == expected_middle_times
 
 
-def test_pixel_breaths_matches_direct_pixel_breath_call(pipeline_result):
+def test_pixel_breaths_matches_direct_pixel_breath_call(workflow_result):
     from eitprocessing.features.breath_detection import BreathDetection
     from eitprocessing.features.pixel_breath import PixelBreath
 
-    filtered_eit = pipeline_result.value("filtered_eit")
-    global_impedance = pipeline_result.value("global_impedance")
+    filtered_eit = workflow_result.value("filtered_eit")
+    global_impedance = workflow_result.value("global_impedance")
 
     expected = PixelBreath(
         breath_detection=BreathDetection(minimum_duration=2 / 3),
@@ -238,7 +238,7 @@ def test_pixel_breaths_matches_direct_pixel_breath_call(pipeline_result):
                         breath.end_time,
                     )
 
-    pixel_breath_timing_result = pipeline_result.value("pixel_breath_timing_result")
+    pixel_breath_timing_result = workflow_result.value("pixel_breath_timing_result")
     np.testing.assert_array_equal(
         np.stack(pixel_breath_timing_result.values), expected_landmarks
     )
@@ -248,53 +248,53 @@ def test_pixel_breaths_matches_direct_pixel_breath_call(pipeline_result):
     ] == [(float(start), float(end)) for start, end in expected.intervals]
 
 
-def test_roi_tiv_lungspace_matches_direct_call(pipeline_result):
+def test_roi_tiv_lungspace_matches_direct_call(workflow_result):
     from eitprocessing.roi.tiv import TIVLungspace
 
-    filtered_eit = pipeline_result.value("filtered_eit")
-    global_impedance = pipeline_result.value("global_impedance")
+    filtered_eit = workflow_result.value("filtered_eit")
+    global_impedance = workflow_result.value("global_impedance")
 
     expected_mask = TIVLungspace(threshold=0.15).apply(
         filtered_eit, timing_data=global_impedance
     )
 
-    result = pipeline_result.value("tiv_lungspace_result")
+    result = workflow_result.value("tiv_lungspace_result")
     np.testing.assert_array_equal(result.values, expected_mask.mask)
 
 
-def test_roi_amplitude_lungspace_matches_direct_call(pipeline_result):
+def test_roi_amplitude_lungspace_matches_direct_call(workflow_result):
     from eitprocessing.roi.amplitude import AmplitudeLungspace
 
-    filtered_eit = pipeline_result.value("filtered_eit")
-    global_impedance = pipeline_result.value("global_impedance")
+    filtered_eit = workflow_result.value("filtered_eit")
+    global_impedance = workflow_result.value("global_impedance")
 
     expected_mask = AmplitudeLungspace(threshold=0.15).apply(
         filtered_eit, timing_data=global_impedance
     )
 
-    result = pipeline_result.value("amplitude_lungspace_result")
+    result = workflow_result.value("amplitude_lungspace_result")
     np.testing.assert_array_equal(result.values, expected_mask.mask)
 
 
-def test_roi_watershed_matches_direct_call(pipeline_result):
+def test_roi_watershed_matches_direct_call(workflow_result):
     from eitprocessing.roi.watershed import WatershedLungspace
 
-    filtered_eit = pipeline_result.value("filtered_eit")
-    global_impedance = pipeline_result.value("global_impedance")
+    filtered_eit = workflow_result.value("filtered_eit")
+    global_impedance = workflow_result.value("global_impedance")
 
     expected_mask = WatershedLungspace(threshold_fraction=0.15).apply(
         filtered_eit, timing_data=global_impedance
     )
 
-    result = pipeline_result.value("watershed_lungspace_result")
+    result = workflow_result.value("watershed_lungspace_result")
     np.testing.assert_array_equal(result.values, expected_mask.mask)
 
 
-def test_roi_filter_by_size_matches_direct_call(pipeline_result):
+def test_roi_filter_by_size_matches_direct_call(workflow_result):
     from eitprocessing.roi.filter_by_size import FilterROIBySize
 
-    watershed_mask = pipeline_result.value("watershed_lungspace_mask")
+    watershed_mask = workflow_result.value("watershed_lungspace_mask")
     expected_mask = FilterROIBySize(min_region_size=1).apply(watershed_mask)
 
-    result = pipeline_result.value("size_filtered_roi_result")
+    result = workflow_result.value("size_filtered_roi_result")
     np.testing.assert_array_equal(result.values, expected_mask.mask)

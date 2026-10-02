@@ -49,9 +49,9 @@ def export_session_summary(
     Array-valued ``ParameterResult``s (Stage 2 EIT gap migration, Phase 5.3)
     are written to a shared ``parameter_result_arrays.npz`` archive instead of
     being serialized into ``parameter_results.csv`` cells. ``processing_run_id``
-    - typically ``PipelineResult.processing_run_id`` - links that archive to
+    - typically ``WorkflowResult.processing_run_id`` - links that archive to
     the ``ProcessingRun`` that produced it when a ``DataModelRecorder`` is
-    attached; a manual export with no associated pipeline run still writes the
+    attached; a manual export with no associated workflow run still writes the
     archive but leaves it unlinked rather than inventing a run.
 
     Values per breath (`IntervalData`, e.g. TIV and EELI) go to

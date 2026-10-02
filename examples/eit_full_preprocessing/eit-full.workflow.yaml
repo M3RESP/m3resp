@@ -1,11 +1,11 @@
-# Full EIT preprocessing pipeline.
+# Full EIT preprocessing workflow.
 #
 # Exercises every EIT operation the gap migration closed onto
 # `EITProcessingAdapter`: loading, rate detection, MDN filtering, global
 # breath detection, continuous TIV/EELI, pixel-breath timing, pixel TIV, and
 # the four ROI lung-space steps. Run with:
 #
-#   m3resp run examples/eit_full_preprocessing/eit-full.pipeline.yaml
+#   m3resp run examples/eit_full_preprocessing/eit-full.workflow.yaml
 #
 # from the repository root - path-typed `with:`/`inputs:` values (like
 # `inputs.eit_file` below) resolve relative to this spec file's own
@@ -65,7 +65,7 @@ steps:
   # Removes the cardiac component from the raw pixel impedance, using the
   # two rates found above. Writes `filtered_eit`, which most steps below
   # read. (This step also takes an optional `label:`, which only names the
-  # filtered data inside the recording - it is not a pipeline name and
+  # filtered data inside the recording - it is not a workflow name and
   # nothing reads it, so it is left at its default here.)
   - id: mdn_filter
     uses: eit.mdn_filter
@@ -114,7 +114,7 @@ steps:
   # not consumed by eit.roi_watershed below. eit.roi_watershed computes its
   # own internal TIV/amplitude lung-space masks via upstream's
   # WatershedLungspace and needs no other ROI step run first. See
-  # docs/pipelines.md for upstream's warning against using amplitude alone
+  # docs/workflows.md for upstream's warning against using amplitude alone
   # as a general-purpose functional lung-space definition.
   - id: roi_amplitude_lungspace
     uses: eit.roi_amplitude_lungspace

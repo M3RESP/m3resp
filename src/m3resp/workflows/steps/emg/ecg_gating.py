@@ -1,4 +1,4 @@
-"""Registered ECG-artifact gating pipeline step."""
+"""Registered ECG-artifact gating workflow step."""
 
 from __future__ import annotations
 

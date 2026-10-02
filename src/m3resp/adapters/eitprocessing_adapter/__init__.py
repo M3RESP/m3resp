@@ -430,7 +430,7 @@ class EITProcessingAdapter:
         include_filtered_data: bool = True,
         include_global_impedance: bool = True,
     ) -> dict[str, Any]:
-        """Run the Stage 1 EIT preprocessing pipeline through `eitprocessing`."""
+        """Run the Stage 1 EIT preprocessing workflow through `eitprocessing`."""
 
         BreathDetection, TIV = _lazy_import(
             "eitprocessing.features.breath_detection.BreathDetection",

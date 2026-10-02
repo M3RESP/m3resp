@@ -11,7 +11,7 @@ import pytest
 
 from m3resp.data import ParameterResult
 from m3resp.data.events import BreathEvent
-from m3resp.workflows import run_pipeline
+from m3resp.workflows import run_workflow
 
 pytest.importorskip("resurfemg")
 np = pytest.importorskip("numpy")
@@ -36,7 +36,7 @@ POCC_SPEC = {
 
 class TestPoccIntervals:
     def test_writes_start_end_validity_and_ventilator_modality_events(self):
-        result = run_pipeline(POCC_SPEC)
+        result = run_workflow(POCC_SPEC)
         o = result.outputs
 
         pocc_indices = o["pocc_indices"]
@@ -73,7 +73,7 @@ class TestPoccIntervals:
         # airway pressure (percentile 33, 7.5 s window), not the constant PEEP.
         from resurfemg.postprocessing.baseline import moving_baseline
 
-        result = run_pipeline(POCC_SPEC)
+        result = run_workflow(POCC_SPEC)
         signals = result.value("ventilator_signals")
         pressure = np.asarray(signals["pressure"], dtype=float)
         fs = float(signals["fs"])
@@ -90,13 +90,13 @@ class TestPoccIntervals:
             "uses": "ventilator.pocc_intervals",
             "with": {"baseline_percentile": 20.0},
         }
-        low = run_pipeline(spec).value("pressure_baseline")
-        default = run_pipeline(POCC_SPEC).value("pressure_baseline")
+        low = run_workflow(spec).value("pressure_baseline")
+        default = run_workflow(POCC_SPEC).value("pressure_baseline")
         assert np.all(low <= default)
         assert np.any(low < default)
 
     def test_does_not_assume_emg_and_ventilator_fs_are_equal(self):
-        result = run_pipeline(POCC_SPEC)
+        result = run_workflow(POCC_SPEC)
         emg_fs = result.session.emg.metadata["fs"]
         vent_fs = result.value("ventilator_signals")["fs"]
         assert emg_fs != vent_fs
@@ -108,7 +108,7 @@ class TestPoccIntervals:
 
 class TestPoccTimeProduct:
     def test_writes_one_value_per_pocc_with_combined_pressure_time_unit(self):
-        result = run_pipeline(POCC_SPEC)
+        result = run_workflow(POCC_SPEC)
         o = result.outputs
 
         time_products = o["pocc_time_products"]
@@ -135,7 +135,7 @@ class TestPoccTimeProduct:
         # moving baseline plus the area under that baseline.
         from resurfemg.postprocessing import features as feat
 
-        result = run_pipeline(POCC_SPEC)
+        result = run_workflow(POCC_SPEC)
         signals = result.value("ventilator_signals")
         pressure = np.asarray(signals["pressure"], dtype=float)
         fs = float(signals["fs"])
@@ -173,7 +173,7 @@ class TestPoccTimeProduct:
             "uses": "ventilator.pocc_time_product",
             "with": {"include_aub": False},
         }
-        result = run_pipeline(spec)
+        result = run_workflow(spec)
         signals = result.value("ventilator_signals")
         expected = window_integral(
             np.asarray(signals["pressure"]),

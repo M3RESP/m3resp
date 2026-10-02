@@ -1,4 +1,4 @@
-"""Registered EMG loading/preprocessing pipeline steps."""
+"""Registered EMG loading/preprocessing workflow steps."""
 
 from __future__ import annotations
 

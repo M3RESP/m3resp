@@ -1,4 +1,4 @@
-"""Registered ventilator breath and Pocc event-detection pipeline steps."""
+"""Registered ventilator breath and Pocc event-detection workflow steps."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Registered EMG event-quality pipeline steps (manoeuvre/timing/rate checks)."""
+"""Registered EMG event-quality workflow steps (manoeuvre/timing/rate checks)."""
 
 from __future__ import annotations
 
@@ -252,7 +252,7 @@ def evaluate_event_timing(
     fs = float(processed_emg["fs"])
     vent_fs = float(ventilator_signals["fs"])
     # Keep the raw output's existing truncation behavior (Phase 5.1: "existing
-    # pipeline consumers do not break"), but report the truncation instead of
+    # workflow consumers do not break"), but report the truncation instead of
     # silently dropping the unmatched events (Phase 5.4).
     paired_count = min(len(peak_indices), len(ventilator_breath_indices))
     unmatched_count = abs(len(peak_indices) - len(ventilator_breath_indices))

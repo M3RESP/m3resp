@@ -8,10 +8,10 @@ tests/
 │                        (session, adapters, data model, exports, workflows, ...)
 ├── regression/          Equivalence tests against eitprocessing/resurfemg
 └── snapshots/
-    └── pipeline_specs/  Frozen, normalized snapshots of the shipped example specs
+    └── workflow_specs/  Frozen, normalized snapshots of the shipped example specs
 ```
 
-There is no separate `tests/unit/`, `tests/adapters/`, `tests/pipelines/`
+There is no separate `tests/unit/`, `tests/adapters/`, `tests/workflows/`
 directory split as originally sketched in early Stage 2 planning - the flat
 `tests/test_*.py` layout with one `regression/` subfolder has worked fine at
 the current test count and keeps discovery (`pytest tests/`) simple. Split
@@ -43,9 +43,9 @@ method involved before assuming the test is wrong. See
 ## Optional-dependency tests
 
 `tests/test_optional_dependency_absence.py` checks that importing `m3resp`
-and listing/validating pipeline steps works even when `eitprocessing`/
+and listing/validating workflow steps works even when `eitprocessing`/
 `resurfemg` are not installed (capability discovery must not import the
-optional backend - see [../pipelines.md](../pipelines.md) "Validation and
+optional backend - see [../workflows.md](../workflows.md) "Validation and
 readiness"). This simulates absence in-process (`sys.modules[name] = None`)
 inside one environment that actually has both packages installed.
 
@@ -62,10 +62,10 @@ step's `describe_steps()` capability state (`"available"` vs.
 ## Frozen example snapshots
 
 `tests/test_workflow_spec_baseline.py`/`test_example_specs.py` load and
-validate every shipped example spec (`examples/*/*.pipeline.yaml`) and
+validate every shipped example spec (`examples/*/*.workflow.yaml`) and
 compare a normalized, secret-free structure (step order, `in`/`with`/`out`
 bindings, resolved `outputs.dir`) against the frozen JSON files in
-`tests/snapshots/pipeline_specs/`. This protects the parser and compiler
+`tests/snapshots/workflow_specs/`. This protects the parser and compiler
 against silent behavior changes while their internals evolve. Regenerate a
 snapshot only after confirming (by diffing with the changed field stripped)
 that nothing else in the normalized structure moved.

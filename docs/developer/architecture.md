@@ -3,16 +3,16 @@
 Stage 2 turns `m3resp` from a thin wrapper around `eitprocessing`/`resurfemg`
 ([stage1.md](../stage1.md)) into a shared multimodal data model and
 framework, without breaking anything Stage 1 already provided. Every piece
-below is additive: existing `M3Session` methods, the declarative pipeline
+below is additive: existing `M3Session` methods, the declarative workflow
 engine, and the CLI all still work exactly as documented in
-[stage1.md](../stage1.md) and [pipelines.md](../pipelines.md).
+[stage1.md](../stage1.md) and [workflows.md](../workflows.md).
 
 Stage 2 was designed in two parts that are not competing designs but two
-layers of the same pipeline: the original Stage 2 vision (milestones
+layers of the same workflow: the original Stage 2 vision (milestones
 2.1-2.8), which this `docs/concepts/`, `docs/tutorials/`, `docs/migration/`,
 `docs/developer/` layout follows; and how that vision reconciles with the
 parallel persisted data model from `main_v0.3.tex` (`m3resp.datamodel`) and
-with Stage 1's existing declarative pipeline engine. If something below
+with Stage 1's existing declarative workflow engine. If something below
 looks like it duplicates existing functionality, it almost always doesn't -
 see "The two data-model layers" below for why the runtime (Layer 1) and
 persisted (Layer 2) objects need to coexist.
@@ -27,7 +27,7 @@ These are the objects described in the [concept guides](../concepts/index.md): `
 created fresh each time a session runs. They are lightweight (a dataclass
 with a handful of fields, no database behind them) and their only job is to
 be the common currency that flows between processing steps while a
-pipeline executes.
+workflow executes.
 
 **Layer 2: persisted entities (`m3resp.datamodel`)**
 
@@ -53,7 +53,7 @@ objects. If you want the persisted layer as well, you attach a
 this recorder acts as the boundary or translator: it watches what Layer 1
 produces and converts it into the matching Layer 2 entity. This is why the
 doc below stresses "not competing designs, two layers of the same
-pipeline": it is one straight-line flow of data, just with an optional
+workflow": it is one straight-line flow of data, just with an optional
 second stop at the end, not two separate systems fighting for the same
 job.
 
@@ -75,7 +75,7 @@ The reason comes down to these two points: we are making fundamentally different
 
 Trying to merge them into one type would force a bad compromise either
 way: make every in-flight processing object carry full validation and
-relational bookkeeping (slow and premature, since a signal mid-pipeline is
+relational bookkeeping (slow and premature, since a signal mid-workflow is
 not "complete" yet), or strip the audit layer down to something as loose
 as the runtime objects (which would defeat the point of an audit trail).
 So the design keeps them as two separate types connected by one converter
@@ -184,20 +184,20 @@ src/m3resp/
 │
 ├── workflows/                          Stage 1's declarative step-registry engine (YAML/JSON specs)
 │   └── steps/                          add a new @register_step here for a custom, composable step
-│       ├── eit/                        eit.* steps, split by pipeline stage
+│       ├── eit/                        eit.* steps, split by workflow stage
 │       │                                   (filtering/pixel/roi/loading/slicing/signals)
-│       ├── emg/                        emg.* steps, split by pipeline stage
+│       ├── emg/                        emg.* steps, split by workflow stage
 │       │                                   (baseline/ecg_*/features/quality_*/slicing/...)
 │       ├── ventilator/                 ventilator.* steps (loading, slicing, breath and
 │       │                                   Pocc detection, quality)
 │       └── sync.py, metrics.py,        sync.* (every synchronization step),
 │           export.py                       metric.*, export.* steps
 │
-├── presets/                            Named, built-in Pipeline presets (Milestone 2.4) - see
-│   │                                       developer/pipeline-contracts.md; NOT the same thing as
+├── presets/                            Named, built-in presets - see
+│   │                                       developer/preset-contracts.md; NOT the same thing as
 │   │                                       workflows/ above; see presets/base.py
 │   ├── eit.py, emg.py, multimodal.py   add a new preset here
-│   └── registry.py                     register_pipeline(name, cls)
+│   └── registry.py                     register_preset(name, cls)
 │
 ├── modalities/                         Recording types per modality (EIT, EMG, ventilator) and what
 │   │                                       can be done to one recording: load it, cut it to a
@@ -220,14 +220,14 @@ Rule of thumb for "where does my new EIT/EMG/multimodal functionality go":
    one) -> `data/parameters.py` (`ParameterResult` already covers most cases;
    only add a new class if the concept genuinely isn't a named/valued/
    unit-tagged metric).
-3. **A new composable pipeline step** for the YAML/JSON declarative engine
+3. **A new composable workflow step** for the YAML/JSON declarative engine
    -> a module under `workflows/steps/` with `@register_step`.
 4. **A new one-call preset** ("run all of EIT/EMG/multimodal processing in
    one call") -> `presets/*.py`, registered in `presets/registry.py`.
 5. **A new low-level, reusable synchronization or multimodal-metric building
    block** (e.g. a resampling method, an offset/alignment computation, a
    breath-linking strategy, a cross-modality timing metric - something other
-   code composes, not a full pipeline step or preset itself) ->
+   code composes, not a full workflow step or preset itself) ->
    `synchronization/`.
 6. **A new persisted/audit entity** (something that needs to be queryable,
    validated, and exported later, per the `main_v0.3.tex` data model) ->
@@ -364,7 +364,7 @@ even after production code stops calling them.
 - [Concept guides](../concepts/index.md) - what each Layer 1 object is and what populates it.
 - [Tutorials](../tutorials/index.md) - end-to-end walkthroughs using these objects.
 - [adapters.md](adapters.md) - the adapter conversion boundary in detail.
-- [pipeline-contracts.md](pipeline-contracts.md) - `Pipeline`/presets vs. the declarative engine.
+- [preset-contracts.md](preset-contracts.md) - presets vs. the declarative engine.
 - [testing.md](testing.md) - regression tests and the test layout.
-- [../pipelines.md](../pipelines.md) - the declarative YAML/JSON pipeline spec format.
+- [../workflows.md](../workflows.md) - the declarative YAML/JSON workflow spec format.
 - [Migration guides](../migration.md) - calling `eitprocessing`/`resurfemg` directly vs. through `m3resp`.

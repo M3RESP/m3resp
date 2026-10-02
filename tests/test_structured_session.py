@@ -194,7 +194,7 @@ def test_preprocess_eit_overwrite_true_replaces_existing_variant():
 def test_session_allow_overwrite_lets_repeated_preprocess_calls_through():
     """`allow_overwrite` lets notebook code opt in once instead of passing
     `overwrite=True` on every call, without weakening the default guard for
-    code that doesn't set it (e.g. once copied into a reusable pipeline)."""
+    code that doesn't set it (e.g. once copied into a reusable workflow)."""
 
     eit_adapter = EITProcessingAdapter()
     eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]

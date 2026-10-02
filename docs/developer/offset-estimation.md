@@ -15,7 +15,7 @@ not a robust, general-purpose automatic sync method. `m3resp.synchronization`
 itself only supports a manual offset (`sync.estimate_offset`'s `method`
 defaults to `"manual"`); use `2_annemijn_multimodal_vis.py` interactively to
 find an offset by hand for a given recording, then hardcode the result as
-`manual_offset_seconds` in your pipeline spec (see the Annemijn example).
+`manual_offset_seconds` in your workflow spec (see the Annemijn example).
 
 > **Estimate vs. apply.** `M3Session.synchronize_raw_modalities`
 > (`sync.raw_modalities`) *applies* a known offset by setting each recording's
@@ -199,7 +199,7 @@ The returned `lag_seconds` is the correction to apply to the base offset. A
 negative lag means "start the Biopac crop earlier relative to the EIT start";
 a positive lag means "start it later".
 
-For the Annemijn multimodal example, the current pipeline configuration gives:
+For the Annemijn multimodal example, the current workflow configuration gives:
 
 - interference edge: `1697.20 s` on the Biopac clock
 - EIT duration: `640.98 s`
@@ -258,7 +258,7 @@ print(refined.refined_offset_seconds)
 
 Once you've confirmed the fit against the power/correlation traces (see
 `2_annemijn_multimodal_vis.py`), hardcode the resulting offset as
-`manual_offset_seconds` in your pipeline spec's `sync.estimate_offset` step.
+`manual_offset_seconds` in your workflow spec's `sync.estimate_offset` step.
 For the `eit_emg_annemijn` dataset (EIT registration 03 against the Biopac
 file) the value found this way was 1050.62 s.
 

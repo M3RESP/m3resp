@@ -205,9 +205,9 @@ class M3Session:
         # timing), independent of whether any step function calls
         # `self._record()` itself. Distinct from `provenance` (the older,
         # session-method-level "action + modality" log) and from the
-        # datamodel's per-pipeline `ProcessingRun` (see
-        # `m3resp.workflows.engine.run_pipeline` and
-        # `DataModelRecorder.record_pipeline_result`).
+        # datamodel's per-workflow `ProcessingRun` (see
+        # `m3resp.workflows.engine.run_workflow` and
+        # `DataModelRecorder.record_workflow_result`).
         self.processing_history = ProcessingHistory()
         # Stage 2 data model wrapper (opt-in, see m3resp.datamodel). ``None``
         # leaves Stage 1 behavior completely unchanged.
@@ -1395,15 +1395,15 @@ class M3Session:
         )
         return results
 
-    def run_pipeline(
+    def run_preset(
         self, name: str, *, config: Mapping[str, Mapping[str, Any]] | None = None
     ) -> M3Session:
-        """Run a named, built-in `Pipeline` preset against this session.
+        """Run a named, built-in preset against this session.
 
         This is a different mechanism from the module-level
-        ``m3resp.run_pipeline(spec, session=...)``, which executes a fully
-        custom declarative step-list spec (the Stage 1 pipeline engine in
-        ``m3resp.workflows``). ``session.run_pipeline(name)`` instead runs one
+        ``m3resp.run_workflow(spec, session=...)``, which executes a fully
+        custom declarative step-list spec (the Stage 1 workflow engine in
+        ``m3resp.workflows``). ``session.run_preset(name)`` instead runs one
         of the small, built-in presets registered in ``m3resp.presets``
         (``"eit"``, ``"emg"``, ``"multimodal"``), which simply call this
         session's own already-instrumented methods in sequence - see
@@ -1422,10 +1422,10 @@ class M3Session:
             M3Session: This session, with the results of every step stored.
         """
 
-        from m3resp.presets import get_pipeline
+        from m3resp.presets import get_preset
 
-        pipeline_cls = get_pipeline(name)
-        return pipeline_cls().run(self, config=config)
+        preset_cls = get_preset(name)
+        return preset_cls().run(self, config=config)
 
     def export_summary(
         self, output_dir: str | Path, *, processing_run_id: str | None = None
@@ -1436,10 +1436,10 @@ class M3Session:
             output_dir (str | Path): The folder to write the files to. It is
                 created if it does not exist.
             processing_run_id (str | None): Typically
-                `PipelineResult.processing_run_id`. Links a written
+                `WorkflowResult.processing_run_id`. Links a written
                 parameter-array archive to the `ProcessingRun` that produced
                 it when a `DataModelRecorder` is attached; omit it for a
-                manual export with no associated pipeline run.
+                manual export with no associated workflow run.
 
         Returns:
             Path: The folder the files were written to.

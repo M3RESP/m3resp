@@ -7,7 +7,7 @@ vocabularies the doc already spells out (Sec 2.5, 7.4, 7.9-7.11, 11).
 
 Two fields go beyond the doc, both flagged here rather than hidden: they exist
 so the future Controller/Service layer (Session Manager, State Manager,
-Pipeline Manager, Error Handler, Task Runner) has somewhere to record
+Workflow Manager, Error Handler, Task Runner) has somewhere to record
 execution/async state without a schema break.
 
 - ``ProcessingRun.status`` / ``ProcessingRun.error``: Task Runner needs to
@@ -326,13 +326,20 @@ class ClinicalEvent(Entity):
 
 ProcessingStatus = Literal["pending", "running", "succeeded", "failed"]
 
+#: What a `ProcessingRun` records: a whole workflow, one single step, or one
+#: `M3Session` method call (such as ``postprocess_emg``).
+ProcessingRunKind = Literal["workflow", "step", "session_action"]
+
 
 class ProcessingRun(Entity):
-    """One execution of a processing pipeline (doc Sec 7.10)."""
+    """One processing run: a whole workflow, one step, or one
+    session method call. ``kind`` says which, and ``name`` is the name of
+    that workflow, step or method."""
 
     processing_run_id: str = Field(default_factory=lambda: new_id("run"))
-    pipeline_name: str
-    pipeline_version: str | None = None
+    name: str
+    kind: ProcessingRunKind = "workflow"
+    version: str | None = None
     code_commit_hash: str | None = None
     input_file_ids: list[str] = Field(default_factory=list)
     # The files holding this run's array results (role "parameter"), e.g.

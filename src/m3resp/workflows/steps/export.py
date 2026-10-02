@@ -1,4 +1,4 @@
-"""Registered export pipeline steps."""
+"""Registered export workflow steps."""
 
 from __future__ import annotations
 
@@ -300,7 +300,7 @@ def rotarc_result(
 
     if _resolved_output_dir is None:
         raise ValueError(
-            "export.rotarc_result requires 'outputs.dir' to be set in the pipeline spec."
+            "export.rotarc_result requires 'outputs.dir' to be set in the workflow spec."
         )
     for field_name, field_val in [
         ("experiment.subject_id", exp.subject_id),
@@ -308,7 +308,7 @@ def rotarc_result(
     ]:
         if not field_val:
             raise ValueError(
-                f"export.rotarc_result requires '{field_name}' in the pipeline spec."
+                f"export.rotarc_result requires '{field_name}' in the workflow spec."
             )
 
     output_dir = (

@@ -1,5 +1,5 @@
 """Standalone signal-shaping helpers used by the ReSurfEMGAdapter and by
-EMG pipeline steps that need the same ventilator-channel/event-index shaping."""
+EMG workflow steps that need the same ventilator-channel/event-index shaping."""
 
 from __future__ import annotations
 

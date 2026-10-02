@@ -1,7 +1,6 @@
-"""A framework-neutral pipeline service (Phase 7.3/7.4 of the
-pipeline-structure plan).
+"""A framework-neutral workflow service.
 
-``PipelineService`` is the intended integration surface for the Stage 3 GUI
+``WorkflowService`` is the intended integration surface for the Stage 3 GUI
 and any other application embedding m3resp: every method takes a spec
 (path/dict/mapping) and returns only JSON-safe dictionaries - never a
 session, adapter instance, upstream package object, NumPy array, or
@@ -11,7 +10,7 @@ not this service's.
 
 ``event_sink``/``cancellation_token``, when supplied by the caller, are the
 one exception to "JSON-safe only": they are the caller's own objects, used
-exactly as ``run_pipeline`` already uses them (Phase 4.4/4.5).
+exactly as ``run_workflow`` already uses them.
 """
 
 from __future__ import annotations
@@ -19,20 +18,20 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from m3resp.workflows.compiler import compile_pipeline as _compile_pipeline
-from m3resp.workflows.compiler import validate_pipeline as _validate_pipeline
-from m3resp.workflows.engine import PipelineResult
-from m3resp.workflows.engine import run_pipeline as _run_pipeline
+from m3resp.workflows.compiler import compile_workflow as _compile_workflow
+from m3resp.workflows.compiler import validate_workflow as _validate_workflow
+from m3resp.workflows.engine import WorkflowResult
+from m3resp.workflows.engine import run_workflow as _run_workflow
 from m3resp.workflows.lifecycle import (
     CancellationToken,
     EventSink,
     summarize_output_value,
 )
 from m3resp.workflows.registry import describe_step, describe_steps
-from m3resp.workflows.spec import PipelineSpec, load_spec
+from m3resp.workflows.spec import WorkflowSpec, load_spec
 
 
-class PipelineService:
+class WorkflowService:
     """Framework-neutral facade over discovery, validation, compilation, and
     execution - the integration surface for a GUI or other application."""
 
@@ -49,9 +48,9 @@ class PipelineService:
 
         return describe_step(operation_id).as_dict()
 
-    def validate_pipeline(
+    def validate_workflow(
         self,
-        spec: str | Path | dict[str, Any] | PipelineSpec,
+        spec: str | Path | dict[str, Any] | WorkflowSpec,
         *,
         readiness: bool = False,
     ) -> dict[str, Any]:
@@ -60,41 +59,41 @@ class PipelineService:
         report is returned either way via ``ValidationReport.as_dict()``."""
 
         parsed = load_spec(spec)
-        return _validate_pipeline(parsed, readiness=readiness).as_dict()
+        return _validate_workflow(parsed, readiness=readiness).as_dict()
 
-    def compile_pipeline(
-        self, spec: str | Path | dict[str, Any] | PipelineSpec
+    def compile_workflow(
+        self, spec: str | Path | dict[str, Any] | WorkflowSpec
     ) -> dict[str, Any]:
         """The fully-resolved, read-only execution plan (Phase 3.1), as a
-        JSON-safe dict. Raises the same way ``compile_pipeline`` does for an
-        invalid spec - call ``validate_pipeline`` first to check without
+        JSON-safe dict. Raises the same way ``compile_workflow`` does for an
+        invalid spec - call ``validate_workflow`` first to check without
         raising."""
 
         parsed = load_spec(spec)
-        return _compile_pipeline(parsed).as_dict()
+        return _compile_workflow(parsed).as_dict()
 
-    def run_pipeline(
+    def run_workflow(
         self,
-        spec: str | Path | dict[str, Any] | PipelineSpec,
+        spec: str | Path | dict[str, Any] | WorkflowSpec,
         *,
         event_sink: EventSink | None = None,
         cancellation_token: CancellationToken | None = None,
     ) -> dict[str, Any]:
-        """Run the pipeline and return a JSON-safe run summary (Phase 4.7's
-        ``PipelineResult``, minus the live session/context/raw outputs -
-        see :func:`summarize_pipeline_result`). Raises
-        ``PipelineExecutionError`` on a step failure, exactly like
-        ``run_pipeline`` itself (Phase 4.2) - this service does not swallow
+        """Run the workflow and return a JSON-safe run summary (the
+        ``WorkflowResult``, minus the live session/context/raw outputs -
+        see :func:`summarize_workflow_result`). Raises
+        ``WorkflowExecutionError`` on a step failure, exactly like
+        ``run_workflow`` itself - this service does not swallow
         it into a return value, since a Python caller can already catch it."""
 
-        result = _run_pipeline(
+        result = _run_workflow(
             spec, event_sink=event_sink, cancellation_token=cancellation_token
         )
-        return summarize_pipeline_result(result)
+        return summarize_workflow_result(result)
 
 
-def summarize_pipeline_result(result: PipelineResult) -> dict[str, Any]:
-    """JSON-safe summary of a ``PipelineResult`` (Phase 7.4): run metadata,
+def summarize_workflow_result(result: WorkflowResult) -> dict[str, Any]:
+    """JSON-safe summary of a ``WorkflowResult``: run metadata,
     step records, diagnostics/warnings, and a *summary* of each produced
     output (via ``summarize_output_value``, the same type/shape-only
     summary step records already use) - never the raw session, context, or

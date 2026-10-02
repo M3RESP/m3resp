@@ -10,9 +10,9 @@ Make `m3resp` standalone (able to run fully on its own, without needing another 
 
 ## What "merging EIT and EMG" actually means
 
-The whole point of `m3resp` is to merge EIT and EMG analysis into one integrated tool: one `M3Session` object holds both modalities' data for the same recording, one pipeline engine runs both modalities' steps from the same YAML spec, and one set of shared data types (`Signal`, `ParameterResult`, `QualityFlag`, `BreathEvent`) lets EIT and EMG results be compared, time-aligned, and linked breath-by-breath. That integration is real and is the reason the project exists.
+The whole point of `m3resp` is to merge EIT and EMG analysis into one integrated tool: one `M3Session` object holds both modalities' data for the same recording, one workflow engine runs both modalities' steps from the same YAML spec, and one set of shared data types (`Signal`, `ParameterResult`, `QualityFlag`, `BreathEvent`) lets EIT and EMG results be compared, time-aligned, and linked breath-by-breath. That integration is real and is the reason the project exists.
 
-What Stage 3 does *not* do is fuse the two algorithm libraries' source code into one shared implementation. `eitprocessing`'s EIT algorithms and `resurfemg`'s EMG algorithms solve different scientific problems (impedance imaging vs. muscle electrical signals), so once ported natively they still land in separate, modality-owned folders (`src/m3resp/eit/` vs `src/m3resp/emg/`), not merged into one indistinguishable algorithm library. The "merge" is at the framework level (one session, one pipeline engine, one set of data types), not at the level of the two libraries' internal math becoming the same code.
+What Stage 3 does *not* do is fuse the two algorithm libraries' source code into one shared implementation. `eitprocessing`'s EIT algorithms and `resurfemg`'s EMG algorithms solve different scientific problems (impedance imaging vs. muscle electrical signals), so once ported natively they still land in separate, modality-owned folders (`src/m3resp/eit/` vs `src/m3resp/emg/`), not merged into one indistinguishable algorithm library. The "merge" is at the framework level (one session, one workflow engine, one set of data types), not at the level of the two libraries' internal math becoming the same code.
 
 The two libraries do already share a small handful of genuinely modality-neutral building blocks, already factored out into `m3resp.processing` in Stage 2 and reused by both sides:
 
@@ -85,8 +85,8 @@ The GUI must never import from `m3resp.adapters`, `eitprocessing`, or `resurfemg
 
 The GUI is organized into three sections, corresponding to the three stages of a session's lifecycle. All three are fully interactive (able to change session or spec state through the service API), not read-only viewers with an editor bolted onto just one of them:
 
-1. **Data preparation** - load recordings, inspect raw signals, and configure per-session choices (vendor selection, channel/ROI assignment, session metadata) before any pipeline runs. Edits here go through the service API and mutate `M3Session` state the same way any other GUI action does.
-2. **Workflow design** - assemble and edit the pipeline spec that will run against the prepared session, using the node-based editor described in ["Node-based workflow design panel"](#node-based-workflow-design-panel) below.
+1. **Data preparation** - load recordings, inspect raw signals, and configure per-session choices (vendor selection, channel/ROI assignment, session metadata) before any workflow runs. Edits here go through the service API and mutate `M3Session` state the same way any other GUI action does.
+2. **Workflow design** - assemble and edit the workflow spec that will run against the prepared session, using the node-based editor described in ["Node-based workflow design panel"](#node-based-workflow-design-panel) below.
 3. **Results review** - inspect metrics, quality flags, provenance, and plots produced by a run, with the ability to edit quality flags, adjust thresholds, and re-trigger the affected downstream steps, rather than only viewing static output.
 
 Because every section supports editing, the same boundary rules apply throughout: every edit is expressed as a call into the `m3resp` service API (never a direct mutation of an adapter or scientific object), every change is discoverable through the step/capability registry, and every result carries the provenance needed to explain what produced it and why re-running is safe. A section being "for review" or "for preparation" does not exempt it from these rules - it changes which service calls are exposed there, not whether the boundary applies.
@@ -95,7 +95,7 @@ Because every section supports editing, the same boundary rules apply throughout
 
 **The workflow-design section (above) is decided to be a node-based editor; the implementation details below (exact panel layout, phased delivery order) remain open and are not part of Stage 3's completion gate.** This section records the feasibility check behind that decision, so a reviewer can see what the GUI boundary above makes possible without having to re-derive it. No Stage 3 completion-gate item depends on any particular detail below becoming true on any particular timeline; it is written to be self-contained, so everything needed to evaluate the approach is here.
 
-The question asked was whether the workflow-design section could be a *node-based editor* (a canvas where each operation is a box and the connections between boxes show which operation's output feeds which operation's input, as in Blender's shader editor or LabVIEW), built with a fully free front-end library, rather than a conventional form-and-button interface. The answer is yes, and most of the required backend already exists, because a pipeline spec is already a data-flow graph written in list form. See ["Front-end library choice"](#front-end-library-choice) below for which library and why.
+The question asked was whether the workflow-design section could be a *node-based editor* (a canvas where each operation is a box and the connections between boxes show which operation's output feeds which operation's input, as in Blender's shader editor or LabVIEW), built with a fully free front-end library, rather than a conventional form-and-button interface. The answer is yes, and most of the required backend already exists, because a workflow spec is already a data-flow graph written in list form. See ["Front-end library choice"](#front-end-library-choice) below for which library and why.
 
 ### Existing engine fits already very nicely
 
@@ -105,7 +105,7 @@ Measured against the live registry (60 registered steps as of this writing), the
 - 45 of 60 steps declare full static-parameter metadata (`StepParameter`: type, unit, minimum/maximum, choices, default, advanced flag), which is enough to generate a settings panel for a selected node automatically, with no per-operation front-end code.
 - `modality` and `category` already group operations for a palette (the menu of available nodes).
 - The compiler already performs artifact-type compatibility checking, including the `ANY_ARTIFACT_TYPE` passthrough exemption, so "may these two ports be connected?" is an existing backend question, not a new front-end one.
-- `PipelineService` already returns only JSON-safe dictionaries, and already supports live progress (`EventSink`) and cancellation (`CancellationToken`).
+- `WorkflowService` already returns only JSON-safe dictionaries, and already supports live progress (`EventSink`) and cancellation (`CancellationToken`).
 - Every `Diagnostic` already carries `step_id`, so a validation error can be attached to the exact node on the canvas with no additional plumbing.
 
 This is a direct consequence of the GUI boundary rules above, not a coincidence: a registry-driven node editor is close to the most literal possible implementation of "discover operations and controls from the `m3resp` step/capability registry".
@@ -116,14 +116,14 @@ In node-editor terminology the values passed along connections are often called 
 
 - **Connection points are typed and colour-coded by `artifact_type`.** The roughly 35 types should be grouped into a smaller number of colour families (signal-like, index/event-like, mask-like, result-like, bundle, path, scalar, and the `any` passthrough); 35 distinct colours would be noise rather than information.
 - **Connection validity is checked twice, and the backend is the authority.** The front end can give immediate feedback from the same metadata, but the binding check remains the compiler's existing artifact-type comparison, re-run on save. The front-end check is a convenience, never the source of truth. The `ANY_ARTIFACT_TYPE` passthrough exemption (used by steps such as `eit.slice_signal`, which return whatever type they were given) must be honoured on whichever side declares it.
-- **Artifacts marked `compatibility_only` are hidden by default**, behind an explicit toggle. These are the temporary upstream/adapter objects that Stage 3 excludes from the public result contract; showing them by default would invite building pipelines against them.
-- **Tokens are connection metadata, not payloads.** What crosses to the front end is the type/shape summary already produced by `summarize_output_value()` - never a NumPy array, never an upstream `Sequence`/`EITData`/ReSurfEMG object. This is the same JSON-safe contract `PipelineService` already enforces, and the UI must not bypass it. Displaying actual signal data for plotting would need a separate, explicit, downsampled preview call, kept distinct from the graph representation.
+- **Artifacts marked `compatibility_only` are hidden by default**, behind an explicit toggle. These are the temporary upstream/adapter objects that Stage 3 excludes from the public result contract; showing them by default would invite building workflows against them.
+- **Tokens are connection metadata, not payloads.** What crosses to the front end is the type/shape summary already produced by `summarize_output_value()` - never a NumPy array, never an upstream `Sequence`/`EITData`/ReSurfEMG object. This is the same JSON-safe contract `WorkflowService` already enforces, and the UI must not bypass it. Displaying actual signal data for plotting would need a separate, explicit, downsampled preview call, kept distinct from the graph representation.
 
 ### Two findings that constrain any such UI
 
 These are properties of the current engine that a reviewer should be aware of independently of whether the UI is ever built.
 
-**1. Connections must be resolved by position, not by matching names.** Steps communicate through a shared blackboard (a single namespace of named values that steps read from and write to) rather than through explicit wiring, and a spec may rebind the same name to a different value partway through a run. In [`examples/multimodal_full/multimodal-full.pipeline.yaml`](https://github.com/M3RESP/m3resp/blob/main/examples/multimodal_full/multimodal-full.pipeline.yaml) the key `processed_emg` refers to one value before the ECG-gating step and a different value after it. Drawing a connection wherever two steps mention the same name would therefore produce wrong connections. The correct rule, which `collect_diagnostics()` in the engine already implements while validating, is that each read binds to the *most recent preceding* writer of that name. Any graph conversion must reuse that existing logic rather than reimplement it, so that the drawn graph can never disagree with validation.
+**1. Connections must be resolved by position, not by matching names.** Steps communicate through a shared blackboard (a single namespace of named values that steps read from and write to) rather than through explicit wiring, and a spec may rebind the same name to a different value partway through a run. In [`examples/multimodal_full/multimodal-full.workflow.yaml`](https://github.com/M3RESP/m3resp/blob/main/examples/multimodal_full/multimodal-full.workflow.yaml) the key `processed_emg` refers to one value before the ECG-gating step and a different value after it. Drawing a connection wherever two steps mention the same name would therefore produce wrong connections. The correct rule, which `collect_diagnostics()` in the engine already implements while validating, is that each read binds to the *most recent preceding* writer of that name. Any graph conversion must reuse that existing logic rather than reimplement it, so that the drawn graph can never disagree with validation.
 
 **2. `session` is an undeclared dependency channel.** 39 of the 60 steps take the `M3Session` as an input, and in the multimodal example only about 10 of roughly 45 steps declare an explicit `in:` binding at all; the rest coordinate by mutating shared session state. Two consequences: rendered literally, the canvas would show one `session` node connected to 39 others, obscuring the meaningful structure; and, more importantly, genuine ordering constraints between session-mutating steps are expressed nowhere in the spec, so **reordering such steps into a broken sequence cannot currently be caught at compile time**.
 
@@ -131,7 +131,7 @@ The second point is worth noting on its own merits, separate from any UI. Adding
 
 ### What is missing
 
-- There is no spec writer. `load_spec()` parses YAML/JSON into a `PipelineSpec`; nothing serializes a `PipelineSpec` back out. Editing a graph and saving it requires one.
+- There is no spec writer. `load_spec()` parses YAML/JSON into a `WorkflowSpec`; nothing serializes a `WorkflowSpec` back out. Editing a graph and saving it requires one.
 - Because session-mediated ordering constraints are undeclared (finding 2), converting a graph back to an ordered step list cannot rely on topological sorting (ordering purely by data dependencies) alone; the author's step order would have to be preserved explicitly until those dependencies are declared.
 - The 15 steps still lacking parameter metadata would need backfilling before a UI could offer them for editing safely.
 
@@ -139,7 +139,7 @@ The second point is worth noting on its own merits, separate from any UI. Adding
 
 The substantive deliverable is a backend module, not a front end. A spec-to-graph and graph-to-spec conversion layer (nodes carrying operation id, static parameters, and opaque canvas coordinates; connections carrying source and target node, the two connection point names, and the context key the value flowed through) would be pure Python, JSON-safe, and testable with no user interface present. It would reuse the engine's existing producer-tracking rather than restate it, per finding 1. Alongside it, the missing spec writer must keep `@name` input references unresolved and relative paths relative to the spec root, and would lose the extensive hand-written comments in the example specs unless a comment-preserving YAML library were adopted - so it should write to a new file rather than overwrite an authored one. Canvas coordinates belong in the spec's existing free-form `metadata` block, so that a hand-written spec with no such block still opens (falling back to automatic layout).
 
-Exposing this to a front end needs only a thin local HTTP or IPC layer over `PipelineService`: list capabilities, validate, compile, run with a progress stream, and import/export a spec. That layer belongs in `src/m3resp/gui/` and is bound by the same prohibition as the rest of the GUI - it must never import `m3resp.adapters`, `eitprocessing`, or `resurfemg`, and an import test should enforce that, as the completion gate already requires.
+Exposing this to a front end needs only a thin local HTTP or IPC layer over `WorkflowService`: list capabilities, validate, compile, run with a progress stream, and import/export a spec. That layer belongs in `src/m3resp/gui/` and is bound by the same prohibition as the rest of the GUI - it must never import `m3resp.adapters`, `eitprocessing`, or `resurfemg`, and an import test should enforce that, as the completion gate already requires.
 
 ### Front-end library choice
 
@@ -154,7 +154,7 @@ A sensible order of work would be: the conversion module and its round-trip test
 None of these are blocking anything today, but a reviewer should know they are open rather than settled:
 
 - **Comment preservation on save,** and whether that justifies an additional YAML dependency.
-- **Metadata completeness.** The 15 steps without parameter metadata would have to be backfilled before an editor could offer them safely. A node editor makes it easy to assemble pipelines that are plausible but invalid, so the registry's constraint metadata becomes load-bearing in a way it is not today.
+- **Metadata completeness.** The 15 steps without parameter metadata would have to be backfilled before an editor could offer them safely. A node editor makes it easy to assemble workflows that are plausible but invalid, so the registry's constraint metadata becomes load-bearing in a way it is not today.
 
 ## Completion gate
 

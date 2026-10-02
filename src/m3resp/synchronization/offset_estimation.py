@@ -14,7 +14,7 @@ typically found interactively with the marimo multimodal viewer
 (``tools/visualization_tools/2_annemijn_multimodal_vis.py``) and its
 protocol-specific estimators
 (``tools/visualization_tools/utils/offset_estimation.py``), then hardcoded
-into the pipeline spec. Those estimators are not part of this module because
+into the workflow spec. Those estimators are not part of this module because
 they were tuned against one dataset's specific acquisition artifact and are
 not safe to run unattended on arbitrary recordings.
 

@@ -1,4 +1,4 @@
-"""Parsing and validation of declarative pipeline specs (YAML or JSON).
+"""Parsing and validation of declarative workflow specs (YAML or JSON).
 
 Specs come in two modes (Stage 2 pipeline-structure plan, Phase 2):
 
@@ -11,7 +11,7 @@ Specs come in two modes (Stage 2 pipeline-structure plan, Phase 2):
   unsupported ``schema_version`` value is rejected with a clear message.
 
 Both modes build the same public frozen dataclasses below, so callers and
-the engine do not need to know which mode produced a given ``PipelineSpec``.
+the engine do not need to know which mode produced a given ``WorkflowSpec``.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from pydantic import (
     model_validator,
 )
 
-from m3resp.core.exceptions import PipelineSpecError
+from m3resp.core.exceptions import WorkflowSpecError
 from m3resp.core.path_helper import resolve_optional_path
 
 #: schema_version values this release of m3resp understands.
@@ -56,7 +56,7 @@ OutputMode = Literal["automatic", "explicit", "none"]
 
 @dataclass(frozen=True)
 class SpecOutputsConfig:
-    """Controls where and what the pipeline runner exports after execution.
+    """Controls where and what the workflow runner exports after execution.
 
     ``dir`` is resolved to an absolute path relative to the spec file.
     If ``timestamped`` is true, a ``YYYYMMDD_HHMMSS`` subfolder is appended.
@@ -104,7 +104,7 @@ class SpecExecutionConfig:
 
 @dataclass(frozen=True)
 class StepSpec:
-    """One step invocation in a pipeline spec.
+    """One step invocation in a workflow spec.
 
     ``id`` is always populated: an explicit spec ``id:`` is used as-is
     (and validated for uniqueness across the spec), otherwise a stable
@@ -117,15 +117,15 @@ class StepSpec:
     id: str
     #: parameter name -> context key, overriding the step's default ``reads``.
     inputs: dict[str, str] = field(default_factory=dict)
-    #: static parameters (``@name`` values reference pipeline inputs).
+    #: static parameters (``@name`` values reference workflow inputs).
     params: dict[str, Any] = field(default_factory=dict)
     #: natural output name -> context key to store it under.
     outputs: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
-class PipelineSpec:
-    """A parsed, ordered pipeline spec."""
+class WorkflowSpec:
+    """A parsed, ordered workflow spec."""
 
     name: str
     schema_version: int | None = None
@@ -151,11 +151,11 @@ class PipelineSpec:
 
 
 def load_spec(
-    spec: str | Path | dict[str, Any] | PipelineSpec,
+    spec: str | Path | dict[str, Any] | WorkflowSpec,
     *,
     root: str | Path | None = None,
-) -> PipelineSpec:
-    """Load a pipeline spec from a path, a raw mapping, or a ``PipelineSpec``.
+) -> WorkflowSpec:
+    """Load a workflow spec from a path, a raw mapping, or a ``WorkflowSpec``.
 
     YAML and JSON are both accepted: ``.json`` files are parsed with ``json``;
     everything else is parsed with ``yaml.safe_load`` (a superset of JSON).
@@ -165,7 +165,7 @@ def load_spec(
     when loading from a path, or the current working directory otherwise.
     """
 
-    if isinstance(spec, PipelineSpec):
+    if isinstance(spec, WorkflowSpec):
         return spec
 
     resolved_root: Path | None = Path(root).expanduser().resolve() if root else None
@@ -180,11 +180,11 @@ def load_spec(
     else:
         raw = yaml.safe_load(text)
     if not isinstance(raw, dict):
-        raise PipelineSpecError(f"Pipeline spec at {path} must be a mapping.")
+        raise WorkflowSpecError(f"Workflow spec at {path} must be a mapping.")
     return _parse_spec(raw, root=resolved_root or path.parent)
 
 
-def spec_to_dict(spec: PipelineSpec) -> dict[str, Any]:
+def spec_to_dict(spec: WorkflowSpec) -> dict[str, Any]:
     """The inverse of ``load_spec()``'s parsing: a plain, JSON-safe dict
     that reproduces ``spec`` when passed back through ``load_spec()``.
 
@@ -275,7 +275,7 @@ def _step_to_dict(step_spec: StepSpec) -> dict[str, Any]:
 
 
 def dump_spec(
-    spec: PipelineSpec,
+    spec: WorkflowSpec,
     path: str | Path,
     *,
     format: Literal["yaml", "json"] | None = None,
@@ -371,7 +371,7 @@ class _SpecDocument(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal[1]
-    name: str = "pipeline"
+    name: str = "workflow"
     description: str = ""
     inputs: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -381,17 +381,17 @@ class _SpecDocument(BaseModel):
     steps: list[_StepDocument] = Field(min_length=1)
 
 
-def _parse_spec(raw: dict[str, Any], *, root: Path) -> PipelineSpec:
+def _parse_spec(raw: dict[str, Any], *, root: Path) -> WorkflowSpec:
     schema_version = raw.get("schema_version")
     if schema_version is not None:
         return _parse_versioned_spec(raw, root=root)
     return _parse_legacy_spec(raw, root=root)
 
 
-def _parse_versioned_spec(raw: dict[str, Any], *, root: Path) -> PipelineSpec:
+def _parse_versioned_spec(raw: dict[str, Any], *, root: Path) -> WorkflowSpec:
     schema_version = raw.get("schema_version")
     if schema_version not in _SUPPORTED_SCHEMA_VERSIONS:
-        raise PipelineSpecError(
+        raise WorkflowSpecError(
             f"Unsupported schema_version {schema_version!r}; this version of "
             f"m3resp supports schema_version {_SUPPORTED_SCHEMA_VERSIONS!r}."
         )
@@ -399,8 +399,8 @@ def _parse_versioned_spec(raw: dict[str, Any], *, root: Path) -> PipelineSpec:
     try:
         document = _SpecDocument.model_validate(raw)
     except ValidationError as exc:
-        raise PipelineSpecError(
-            f"Pipeline spec failed strict validation:\n{exc}"
+        raise WorkflowSpecError(
+            f"Workflow spec failed strict validation:\n{exc}"
         ) from exc
 
     step_ids = _finalize_step_ids(
@@ -418,7 +418,7 @@ def _parse_versioned_spec(raw: dict[str, Any], *, root: Path) -> PipelineSpec:
     )
 
     resolved_dir = resolve_optional_path(root, document.outputs.dir)
-    return PipelineSpec(
+    return WorkflowSpec(
         name=document.name,
         schema_version=schema_version,
         description=document.description,
@@ -457,18 +457,18 @@ def _parse_versioned_spec(raw: dict[str, Any], *, root: Path) -> PipelineSpec:
 # --------------------------------------------------------------------------- #
 
 
-def _parse_legacy_spec(raw: dict[str, Any], *, root: Path) -> PipelineSpec:
+def _parse_legacy_spec(raw: dict[str, Any], *, root: Path) -> WorkflowSpec:
     steps_raw = raw.get("steps")
     if not isinstance(steps_raw, list) or not steps_raw:
-        raise PipelineSpecError("Pipeline spec must define a non-empty 'steps' list.")
+        raise WorkflowSpecError("Workflow spec must define a non-empty 'steps' list.")
 
     inputs = raw.get("inputs", {})
     if not isinstance(inputs, dict):
-        raise PipelineSpecError("Pipeline 'inputs' must be a mapping.")
+        raise WorkflowSpecError("Workflow 'inputs' must be a mapping.")
 
     metadata = raw.get("metadata", {})
     if not isinstance(metadata, dict):
-        raise PipelineSpecError("Pipeline 'metadata' must be a mapping.")
+        raise WorkflowSpecError("Workflow 'metadata' must be a mapping.")
 
     raw_steps = [
         _parse_legacy_step(index, item) for index, item in enumerate(steps_raw)
@@ -486,8 +486,8 @@ def _parse_legacy_spec(raw: dict[str, Any], *, root: Path) -> PipelineSpec:
         )
     )
 
-    return PipelineSpec(
-        name=str(raw.get("name", "pipeline")),
+    return WorkflowSpec(
+        name=str(raw.get("name", "workflow")),
         schema_version=None,
         description=str(raw.get("description", "")),
         inputs=dict(inputs),
@@ -510,7 +510,7 @@ def _legacy_bool(value: Any, default: bool, *, field_name: str) -> bool:
     if isinstance(value, bool):
         return value
     warnings.warn(
-        f"Pipeline outputs field {field_name!r} got non-boolean value "
+        f"Workflow outputs field {field_name!r} got non-boolean value "
         f"{value!r}; coercing via bool() is deprecated for unversioned specs "
         "and is a hard error once 'schema_version' is set.",
         FutureWarning,
@@ -530,8 +530,8 @@ def _parse_legacy_output_mode(raw: Any) -> OutputMode | None:
     if raw is None:
         return None
     if raw not in _OUTPUT_MODES:
-        raise PipelineSpecError(
-            f"Pipeline 'outputs.mode' must be one of {_OUTPUT_MODES}, got {raw!r}."
+        raise WorkflowSpecError(
+            f"Workflow 'outputs.mode' must be one of {_OUTPUT_MODES}, got {raw!r}."
         )
     return cast(OutputMode, raw)
 
@@ -540,12 +540,12 @@ def _parse_legacy_outputs(raw: Any, *, root: Path) -> SpecOutputsConfig:
     if not raw:
         return SpecOutputsConfig()
     if not isinstance(raw, dict):
-        raise PipelineSpecError("Pipeline 'outputs' must be a mapping.")
+        raise WorkflowSpecError("Workflow 'outputs' must be a mapping.")
     resolved_dir = resolve_optional_path(root, raw.get("dir"))
     mode = _parse_legacy_output_mode(raw.get("mode"))
     if mode in ("automatic", "explicit") and resolved_dir is None:
-        raise PipelineSpecError(
-            f"Pipeline 'outputs.mode' {mode!r} requires 'outputs.dir' to be "
+        raise WorkflowSpecError(
+            f"Workflow 'outputs.mode' {mode!r} requires 'outputs.dir' to be "
             "set (nothing to write into otherwise)."
         )
     return SpecOutputsConfig(
@@ -576,7 +576,7 @@ def _parse_legacy_experiment(raw: Any) -> SpecExperimentConfig:
     if not raw:
         return SpecExperimentConfig()
     if not isinstance(raw, dict):
-        raise PipelineSpecError("Pipeline 'experiment' must be a mapping.")
+        raise WorkflowSpecError("Workflow 'experiment' must be a mapping.")
     return SpecExperimentConfig(
         subject_id=raw.get("subject_id"),
         mode=raw.get("mode"),
@@ -590,10 +590,10 @@ def _parse_legacy_execution(raw: Any) -> SpecExecutionConfig:
     if not raw:
         return SpecExecutionConfig()
     if not isinstance(raw, dict):
-        raise PipelineSpecError("Pipeline 'execution' must be a mapping.")
+        raise WorkflowSpecError("Workflow 'execution' must be a mapping.")
     error_policy = str(raw.get("error_policy", "fail_fast"))
     if error_policy != "fail_fast":
-        raise PipelineSpecError(
+        raise WorkflowSpecError(
             f"Unsupported execution.error_policy {error_policy!r}; Stage 2 "
             "supports only 'fail_fast'."
         )
@@ -607,10 +607,10 @@ def _parse_legacy_step(
     index: int, item: Any
 ) -> tuple[str | None, str, dict[str, str], dict[str, Any], dict[str, str]]:
     if not isinstance(item, dict):
-        raise PipelineSpecError(f"Step #{index} must be a mapping.")
+        raise WorkflowSpecError(f"Step #{index} must be a mapping.")
     uses = item.get("uses")
     if not isinstance(uses, str) or not uses:
-        raise PipelineSpecError(f"Step #{index} must define a 'uses' name.")
+        raise WorkflowSpecError(f"Step #{index} must define a 'uses' name.")
 
     return (
         item.get("id"),
@@ -625,7 +625,7 @@ def _str_mapping(value: Any, label: str) -> dict[str, str]:
     if not value:
         return {}
     if not isinstance(value, dict):
-        raise PipelineSpecError(f"{label} must be a mapping.")
+        raise WorkflowSpecError(f"{label} must be a mapping.")
     return {str(key): str(val) for key, val in value.items()}
 
 
@@ -646,7 +646,7 @@ def _finalize_step_ids(raw_ids: list[str | None], uses_list: list[str]) -> list[
     seen: dict[str, int] = {}
     for position, step_id in enumerate(resolved):
         if step_id in seen:
-            raise PipelineSpecError(
+            raise WorkflowSpecError(
                 f"Duplicate step id {step_id!r} (steps #{seen[step_id]} and "
                 f"#{position}). Supply distinct 'id' values or omit them to "
                 "use generated ids."

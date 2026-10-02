@@ -78,13 +78,13 @@ M3Resp workflows are described in YAML or JSON. List the available processing st
 
 ```bash
 m3resp steps
-m3resp run path/to/pipeline.yaml
+m3resp run path/to/workflow.yaml
 ```
 
 For example, the multimodal workflow included in this repository loads EIT, EMG, and ventilator signals, synchronizes them, processes each modality, and exports session summaries:
 
 ```bash
-m3resp run examples/multimodal_example/multimodal.pipeline.yaml
+m3resp run examples/multimodal_example/multimodal.workflow.yaml
 ```
 
 Paths in `outputs.dir` are resolved relative to the workflow file. Input files, sampling rates, synchronization choices, and all other scientific settings remain explicit in the workflow.
@@ -96,7 +96,7 @@ The same workflow can be run from Python:
 ```python
 from m3resp import run_spec
 
-result = run_spec("examples/multimodal_example/multimodal.pipeline.yaml")
+result = run_spec("examples/multimodal_example/multimodal.workflow.yaml")
 print(result.outputs)
 ```
 
@@ -134,7 +134,7 @@ session.export_summary(os.path.join("path", "to", "results"))
 - Manual-offset and timestamp-derived synchronization, signal resampling, and
   breath matching across modalities.
 - Reproducible YAML/JSON workflows, a command-line interface, and named
-  EIT-only, EMG-only, and multimodal pipelines.
+  EIT-only, EMG-only, and multimodal presets.
 - CSV, JSON, figure, and full-session structured exports with provenance.
 
 ## Documentation
@@ -144,7 +144,7 @@ The [M3Resp documentation](docs/index.md) contains:
 - [getting-started instructions](docs/getting-started.md);
 - [EIT, EMG, multimodal, and export tutorials](docs/tutorials/index.md);
 - [scientific concept guides](docs/concepts/index.md);
-- the [workflow specification and built-in steps](docs/pipelines.md);
+- the [workflow specification and built-in steps](docs/workflows.md);
 - the [public Python API](docs/api/index.md); and
 - [migration guidance](docs/migration.md) for existing `eitprocessing` and
   `resurfemg` users.

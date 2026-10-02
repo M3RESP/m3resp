@@ -1,4 +1,4 @@
-"""Registered ventilator loading/channel-splitting pipeline steps."""
+"""Registered ventilator loading/channel-splitting workflow steps."""
 
 from __future__ import annotations
 

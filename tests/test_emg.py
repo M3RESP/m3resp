@@ -564,7 +564,7 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
         plt.close(fig)
 
 
-def test_emg_real_data_pipeline_uses_committed_poly5_sample():
+def test_emg_real_data_workflow_uses_committed_poly5_sample():
     pytest.importorskip("resurfemg")
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -624,7 +624,7 @@ def test_emg_real_data_pipeline_uses_committed_poly5_sample():
 
 
 def test_emg_preset_runs_end_to_end_and_reports_respiratory_rate():
-    """`session.run_pipeline("emg")` on a made-up recording breathing at
+    """`session.run_preset("emg")` on a made-up recording breathing at
     12 breaths/min. This once crashed while saving the respiratory rate."""
 
     pytest.importorskip("resurfemg")
@@ -651,7 +651,7 @@ def test_emg_preset_runs_end_to_end_and_reports_respiratory_rate():
     )
     session.load_emg("synthetic.Poly5")
 
-    session.run_pipeline("emg")
+    session.run_preset("emg")
 
     rates = {
         p.name: p for p in session.parameter_results if p.name.startswith("respiratory")

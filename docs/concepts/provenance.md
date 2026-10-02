@@ -10,7 +10,7 @@ whichever answers your question. The third you switch on when you need it.
 1. `ProvenanceRecord`, the lightest record: one entry per `M3Session`
    method call (action name, modality, parameters, timestamp), appended to
    `session.provenance`. Written whenever you call a session method,
-   including by hand, outside any pipeline. Read it to see what was asked
+   including by hand, outside any workflow. Read it to see what was asked
    for.
 
 2. `ProcessingStep`/`ProcessingHistory`, a step up in detail. Instead of
@@ -20,9 +20,9 @@ whichever answers your question. The third you switch on when you need it.
    `"cancelled"`) and the installed version of each optional upstream
    package (`resurfemg`, `eitprocessing`) the step depends on. This is
    filled in automatically by the declarative workflow engine (the system
-   that runs pipelines described by YAML spec files) whenever a step runs
+   that runs workflows described by YAML spec files) whenever a step runs
    through it, without any step function needing to remember to log
-   anything itself. Read it to see what a pipeline actually did, and to
+   anything itself. Read it to see what a workflow actually did, and to
    reproduce a step: the package versions are recorded nowhere else, and
    the same operation with the same parameters can give a different answer
    after an upstream upgrade. Only the engine writes this, so a session
@@ -41,9 +41,9 @@ whichever answers your question. The third you switch on when you need it.
    service to query. Attach it when you intend to export a finished,
    checkable dataset; the first two records stay in memory on the session
    and are not validated. It is also a different shape of bookkeeping than
-   `ProcessingHistory`: a full pipeline run becomes one `ProcessingRun`,
+   `ProcessingHistory`: a full workflow run becomes one `ProcessingRun`,
    and so does each individual session method call, versus one
-   `ProcessingStep` per step inside a pipeline.
+   `ProcessingStep` per step inside a workflow.
 
 There is also a `validate_store(store, require_complete=True)` option that
 checks the deeper layer has all the descriptive detail a finished dataset
@@ -88,7 +88,7 @@ class ProcessingStep:
 
 `session.processing_history` (a `ProcessingHistory`) is populated
 automatically for every step run through the declarative
-`m3resp.workflows` engine (see [../pipelines.md](../pipelines.md)) - the
+`m3resp.workflows` engine (see [../workflows.md](../workflows.md)) - the
 engine knows the exact operation, bindings, parameters, timing, and outcome
 of each step and records it after execution, so no step function has to
 remember to call anything itself. `ProvenanceRecord` is not replaced by
@@ -113,8 +113,8 @@ architecture diagram (see [../developer/architecture.md](../developer/architectu
 a validated record of what happened, built for later consumption by an
 audit trail, export, or a future backend/GUI service layer - separate in
 cardinality from `session.processing_history`: one `ProcessingRun` per
-pipeline run and one per session method call, vs. one `ProcessingStep` per
-step inside a pipeline.
+workflow run and one per session method call, vs. one `ProcessingStep` per
+step inside a workflow.
 
 Each `SignalStream` also records how its recording was synchronized
 (`sync_method`, `time_offset_ms`), copied from the session; see
@@ -124,7 +124,7 @@ Each `SignalStream` also records how its recording was synchronized
 from m3resp.datamodel.recorder import DataModelRecorder
 
 session.datamodel = DataModelRecorder(session)
-# ... run pipelines/session methods as usual ...
+# ... run workflows/session methods as usual ...
 
 from m3resp import export_store, validate_store
 validate_store(session.datamodel.store)   # a list of problems; empty when none

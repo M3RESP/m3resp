@@ -1,4 +1,4 @@
-"""Registered EMG baseline-estimation pipeline steps."""
+"""Registered EMG baseline-estimation workflow steps."""
 
 from __future__ import annotations
 

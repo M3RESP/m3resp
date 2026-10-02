@@ -3,7 +3,7 @@ pipeline-structure plan).
 
 A :class:`Diagnostic` describes one independent problem found while
 compiling/validating a spec, without raising - so a caller (CLI, GUI, or
-:func:`m3resp.workflows.compiler.validate_pipeline`) can report every
+:func:`m3resp.workflows.compiler.validate_workflow`) can report every
 problem in one pass instead of stopping at the first. ``validate_spec``
 remains a raising compatibility wrapper around the same collection logic.
 """

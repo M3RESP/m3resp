@@ -6,7 +6,7 @@ This is the runtime counterpart of ``ProvenanceRecord``
 names the context keys a step read and wrote, which is what lets the
 persisted ``ProcessingRun.input_file_ids`` (see
 ``plan/stage2_consolidation.md``) be filled in precisely instead of guessed.
-``ProvenanceRecord`` is not replaced by this - both stay in use until pipeline
+``ProvenanceRecord`` is not replaced by this - both stay in use until workflow
 steps are migrated to emit ``ProcessingStep`` (Milestone 2.3+).
 """
 
@@ -20,7 +20,7 @@ from typing import Any
 
 @dataclass
 class ProcessingStep:
-    """One step of a processing pipeline."""
+    """One step of a processing workflow."""
 
     name: str
     input_keys: list[str] = field(default_factory=list)

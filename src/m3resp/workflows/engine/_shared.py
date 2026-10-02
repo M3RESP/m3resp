@@ -9,20 +9,20 @@ from typing import TYPE_CHECKING, Any
 
 from m3resp.core.session import M3Session
 from m3resp.workflows.context import (
-    PipelineContext,
+    WorkflowContext,
 )
 from m3resp.workflows.diagnostics import Diagnostic
 from m3resp.workflows.lifecycle import (
     CapturedWarning,
     ExecutionContext,
-    PipelineStatus,
     StepExecutionRecord,
+    WorkflowStatus,
 )
 
 if TYPE_CHECKING:
     # Deferred at runtime: compiler.py imports collect_diagnostics from this
     # package, so importing it back at module scope here would be circular.
-    from m3resp.workflows.compiler import CompiledPipeline
+    from m3resp.workflows.compiler import CompiledWorkflow
 _STEPS_REGISTERED = False
 
 
@@ -41,23 +41,23 @@ def _ensure_steps_registered() -> None:
 
 
 @dataclass
-class PipelineResult:
-    """Outcome of running a pipeline."""
+class WorkflowResult:
+    """Outcome of running a workflow."""
 
     name: str
-    context: PipelineContext
+    context: WorkflowContext
     outputs: dict[str, Any] = field(default_factory=dict)
-    #: The `ProcessingRun` id `record_pipeline_result` created for this run,
+    #: The `ProcessingRun` id `record_workflow_result` created for this run,
     #: when a `DataModelRecorder` is attached to the session. `None`
     #: otherwise (including for a session without a recorder).
     processing_run_id: str | None = None
     #: All additive; existing fields above are unchanged.
     run_id: str | None = None
-    status: PipelineStatus = "pending"
+    status: WorkflowStatus = "pending"
     started_at: str | None = None
     finished_at: str | None = None
     duration_seconds: float | None = None
-    compiled_pipeline: CompiledPipeline | None = None
+    compiled_workflow: CompiledWorkflow | None = None
     step_records: tuple[StepExecutionRecord, ...] = ()
     diagnostics: tuple[Diagnostic, ...] = ()
     warnings: tuple[CapturedWarning, ...] = ()

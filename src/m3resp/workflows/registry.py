@@ -1,8 +1,8 @@
-"""Step registry for declarative M3Resp pipelines.
+"""Step registry for declarative M3Resp workflows.
 
 A *step* is a named, reusable operation. Each step declares the context keys it
 reads (mapped onto its parameter names) and the context keys it writes. A
-pipeline spec lists steps by name and binds them together, so workflows can be
+workflow spec lists steps by name and binds them together, so workflows can be
 assembled from a YAML/JSON file without writing custom Python.
 
 Steps additionally carry optional, JSON-safe GUI/discovery metadata
@@ -131,7 +131,7 @@ class StepDefinition:
     writes: tuple[str, ...] = ()
     #: parameter names in ``reads`` whose context key may be absent. The step
     #: is called without the argument (falling back to its own default) rather
-    #: than the pipeline failing to compile. For an input that improves a
+    #: than the workflow failing to compile. For an input that improves a
     #: result when present but is not required to produce one - e.g. the EMG
     #: baseline that ``emg.detect_breaths`` sets its threshold against.
     optional_reads: tuple[str, ...] = ()
@@ -236,7 +236,7 @@ def register_step(
     deprecated_since: str | None = None,
     aliases: tuple[str, ...] = (),
 ) -> Callable[[StepCallable], StepCallable]:
-    """Register ``func`` under ``name`` as a pipeline step.
+    """Register ``func`` under ``name`` as a workflow step.
 
     ``reads`` maps each function parameter to the default context key it is
     bound from; a spec can override the binding per step via ``in:``. ``writes``
@@ -265,7 +265,7 @@ def register_step(
 
     def decorator(func: StepCallable) -> StepCallable:
         if name in STEP_REGISTRY:
-            raise ValueError(f"Pipeline step '{name}' is already registered.")
+            raise ValueError(f"Workflow step '{name}' is already registered.")
         for alias in aliases:
             if alias in STEP_REGISTRY:
                 raise ValueError(
@@ -274,13 +274,13 @@ def register_step(
                 )
             if STEP_ALIASES.get(alias) not in (None, name):
                 raise ValueError(
-                    f"Pipeline step alias '{alias}' is already mapped to "
+                    f"Workflow step alias '{alias}' is already mapped to "
                     f"'{STEP_ALIASES[alias]}'."
                 )
         unknown_optional = set(optional_reads) - set(reads or {})
         if unknown_optional:
             raise ValueError(
-                f"Pipeline step '{name}' declares optional_reads "
+                f"Workflow step '{name}' declares optional_reads "
                 f"{sorted(unknown_optional)} that are not in 'reads'."
             )
         definition = StepDefinition(
@@ -480,7 +480,7 @@ def get_step(name: str) -> StepDefinition:
 
     available = ", ".join(sorted(STEP_REGISTRY)) or "(none registered)"
     raise UnknownStepError(
-        f"Unknown pipeline step '{name}'. Available steps: {available}."
+        f"Unknown workflow step '{name}'. Available steps: {available}."
     )
 
 

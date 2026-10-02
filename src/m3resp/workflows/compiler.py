@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from m3resp.core.exceptions import PipelineSpecError, UnknownStepError
+from m3resp.core.exceptions import UnknownStepError, WorkflowSpecError
 from m3resp.core.path_helper import resolve_optional_path
 from m3resp.workflows.context import resolve_value
 from m3resp.workflows.diagnostics import Diagnostic
@@ -25,7 +25,7 @@ from m3resp.workflows.registry import (
     get_step,
     step_capability_state,
 )
-from m3resp.workflows.spec import PipelineSpec, StepSpec
+from m3resp.workflows.spec import StepSpec, WorkflowSpec
 
 
 @dataclass(frozen=True)
@@ -71,7 +71,7 @@ class CompiledStep:
 
 
 @dataclass(frozen=True)
-class CompiledPipeline:
+class CompiledWorkflow:
     """A read-only, ordered execution plan. What provenance and a future GUI
     display - not the raw spec, which may still contain unresolved ``@ref``
     values and cwd-relative-looking path strings."""
@@ -88,13 +88,13 @@ class CompiledPipeline:
         }
 
 
-def compile_pipeline(
-    spec: PipelineSpec, *, available: set[str] | None = None
-) -> CompiledPipeline:
+def compile_workflow(
+    spec: WorkflowSpec, *, available: set[str] | None = None
+) -> CompiledWorkflow:
     """Compile ``spec`` into a read-only, fully-resolved execution plan.
 
-    Raises ``PipelineSpecError``/``UnknownStepError`` for the first
-    structural problem found - call :func:`validate_pipeline` first to get
+    Raises ``WorkflowSpecError``/``UnknownStepError`` for the first
+    structural problem found - call :func:`validate_workflow` first to get
     every independent problem in one pass instead of just the first.
     """
 
@@ -104,13 +104,13 @@ def compile_pipeline(
         first = errors[0]
         if first.code == "unknown_step":
             raise UnknownStepError(first.message)
-        raise PipelineSpecError(first.message)
+        raise WorkflowSpecError(first.message)
 
     compiled_steps = tuple(
         _compile_step(step_spec, get_step(step_spec.uses), spec, position)
         for position, step_spec in enumerate(spec.steps)
     )
-    return CompiledPipeline(
+    return CompiledWorkflow(
         name=spec.name, schema_version=spec.schema_version, steps=compiled_steps
     )
 
@@ -118,7 +118,7 @@ def compile_pipeline(
 def _compile_step(
     step_spec: StepSpec,
     definition: StepDefinition,
-    spec: PipelineSpec,
+    spec: WorkflowSpec,
     position: int,
 ) -> CompiledStep:
     input_bindings: dict[str, str] = {}
@@ -205,8 +205,8 @@ class ValidationReport:
         }
 
 
-def validate_pipeline(
-    spec: PipelineSpec,
+def validate_workflow(
+    spec: WorkflowSpec,
     *,
     available: set[str] | None = None,
     readiness: bool = False,
@@ -214,7 +214,7 @@ def validate_pipeline(
     """Return a full structural (and, if requested, readiness) report.
 
     Structural validation never imports optional packages or touches the
-    filesystem, so a GUI can validate a pipeline on a machine without the
+    filesystem, so a GUI can validate a workflow on a machine without the
     optional backend installed. Readiness additionally reports missing
     optional dependencies and missing input files - set ``readiness=True``
     when you also want to know whether the spec can actually run *here*.
@@ -239,7 +239,7 @@ def validate_pipeline(
 def _readiness_diagnostics_for_step(
     step_spec: StepSpec,
     definition: StepDefinition,
-    spec: PipelineSpec,
+    spec: WorkflowSpec,
     position: int,
 ) -> list[Diagnostic]:
     diagnostics: list[Diagnostic] = []
@@ -273,7 +273,7 @@ def _readiness_diagnostics_for_step(
             continue
         try:
             value = resolve_value(raw_value, spec.inputs)
-        except PipelineSpecError:
+        except WorkflowSpecError:
             continue  # already reported structurally
         if not isinstance(value, str):
             continue

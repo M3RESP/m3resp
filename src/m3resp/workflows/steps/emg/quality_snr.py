@@ -1,4 +1,4 @@
-"""Registered EMG signal-quality pipeline steps (SNR/AUB/time-product based)."""
+"""Registered EMG signal-quality workflow steps (SNR/AUB/time-product based)."""
 
 from __future__ import annotations
 

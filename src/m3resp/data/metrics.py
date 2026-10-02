@@ -15,7 +15,7 @@ a standard one.
 The vocabulary is deliberately small and open: register project-specific
 metrics with `register_metric_alias`, and persist a custom vocabulary with
 `save_metric_aliases`/`load_metric_aliases`, which round-trip the map through a
-YAML or JSON file using the same dual-format convention as the pipeline-spec
+YAML or JSON file using the same dual-format convention as the workflow-spec
 loader (`m3resp.workflows.spec.load_spec`) - mirroring `m3resp.data.units`.
 """
 

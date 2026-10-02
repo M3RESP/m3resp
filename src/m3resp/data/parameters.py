@@ -1,7 +1,7 @@
 """``ParameterResult``: a computed respiratory metric (plan_stage2.md Sec 11).
 
 Covers both scalar metrics (EIT TIV, EMG amplitude, respiratory rate) and
-array-valued ones (regional ventilation maps), computed by a pipeline step
+array-valued ones (regional ventilation maps), computed by a workflow step
 from one or more source signals/breaths.
 """
 

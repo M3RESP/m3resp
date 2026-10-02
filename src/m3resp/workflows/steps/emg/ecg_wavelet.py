@@ -1,4 +1,4 @@
-"""Registered ECG-artifact wavelet-denoising pipeline step."""
+"""Registered ECG-artifact wavelet-denoising workflow step."""
 
 from __future__ import annotations
 

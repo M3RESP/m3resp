@@ -1,4 +1,4 @@
-"""Registered EIT loading pipeline steps."""
+"""Registered EIT loading workflow steps."""
 
 from __future__ import annotations
 

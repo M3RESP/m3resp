@@ -1,4 +1,4 @@
-"""Registered EIT filtering pipeline steps.
+"""Registered EIT filtering workflow steps.
 
 Rate detection lives in `rates.py`; the rates it produces are inputs to the
 MDN filter below, but estimating them is not a filtering operation.
