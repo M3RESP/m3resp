@@ -30,7 +30,7 @@ select EIT pixels are [`PixelMask`s](pixel-maps.md) in `session.pixel_masks`.
 Where they come from: same pattern as `Signal`, the adapters have
 `to_parameters()` methods, called automatically by
 `preprocess_eit`/`postprocess_emg`. There is also a cross-modality source:
-`session.compute_multimodal_parameters()`, covered in
+`session.compute_breath_timing_parameters()`, covered in
 [synchronization.md](synchronization.md). All of them land in
 `session.parameter_results`, which supports filtering like
 `.for_modality("eit")` and exports to a CSV file.
@@ -86,7 +86,7 @@ become lists) are the two helper members.
   [../developer/adapters.md](../developer/adapters.md)); `preprocess_eit`/
   `postprocess_emg` call these and add the results to
   `session.parameter_results`.
-- Cross-modality: `session.compute_multimodal_parameters()` computes timing
+- Cross-modality: `session.compute_breath_timing_parameters()` computes timing
   delays, breath-duration differences, and event-agreement scores from
   `session.linked_breaths` - see [synchronization.md](synchronization.md).
   These are deliberately timing-only metrics: they read breath start/end

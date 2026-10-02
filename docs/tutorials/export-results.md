@@ -24,7 +24,7 @@ collections rather than writing empty files):
 |---|---|
 | `session_metadata.json` | `session.metadata`. |
 | `signals_manifest.csv` | One row per `Signal` in `session.signals` (see [../concepts/signals.md](../concepts/signals.md)). |
-| `parameter_results.csv` | One row per scalar `ParameterResult` in `session.parameter_results` - includes per-modality parameters *and* any `session.compute_multimodal_parameters()` results (see [../concepts/parameters.md](../concepts/parameters.md)). |
+| `parameter_results.csv` | One row per scalar `ParameterResult` in `session.parameter_results` - includes per-modality parameters *and* any `session.compute_breath_timing_parameters()` results (see [../concepts/parameters.md](../concepts/parameters.md)). |
 | `parameter_result_arrays.npz` | Array-valued `ParameterResult`s (e.g. EMG gate masks), written to a shared archive instead of a CSV cell. |
 | `interval_data.csv` | One row per interval (usually a breath) for each `IntervalData` in `session.interval_data`, e.g. EIT TIV and EELI: the breath's start and end time and its value (see [../concepts/events-and-breaths.md](../concepts/events-and-breaths.md#values-per-interval-or-event)). |
 | `interval_data_metadata.json` | One entry per `IntervalData` result: its name, unit, method, archive key and metadata (the settings it was made with, the axes of its arrays, ...). Each CSV row's `result_index` points to its entry. |
