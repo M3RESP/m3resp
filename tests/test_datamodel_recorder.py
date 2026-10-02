@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pytest
 
 from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
 from m3resp.core.session import M3Session
-from m3resp.data import ParameterResult, ProcessingStep, QualityFlag, Signal
+from m3resp.data import (
+    BreathEvent,
+    Event,
+    EventData,
+    IntervalData,
+    ParameterResult,
+    PixelMask,
+    ProcessingStep,
+    QualityFlag,
+    Signal,
+)
 from m3resp.datamodel import (
     DataModelRecorder,
     DataModelStore,
@@ -507,9 +518,149 @@ def test_pipeline_result_records_output_provenance_for_array_valued_results():
         STEP_REGISTRY.pop("t.array_result", None)
 
 
+def test_pipeline_result_records_provenance_for_values_per_breath_and_masks():
+    """`IntervalData` and `PixelMask` outputs are stored as `DerivedFeature`s,
+    and the run records how they were made."""
+
+    import numpy as np
+
+    from m3resp.workflows.registry import STEP_REGISTRY
+
+    @register_step("t.grouped_results", writes=("tiv_result", "mask_result"))
+    def _grouped_results(**kwargs: Any) -> dict[str, Any]:
+        return {
+            "tiv_result": IntervalData(
+                name="continuous_tivs",
+                modality="eit",
+                intervals=[BreathEvent("eit", 0.0, 1.0), BreathEvent("eit", 1.0, 2.0)],
+                values=np.array([1.0, 2.0]),
+                method="eitprocessing.TIV",
+                metadata={"operation": "eit.continuous_tiv"},
+            ),
+            "mask_result": PixelMask(
+                name="tiv_lungspace_mask",
+                values=[[1.0, np.nan]],
+                method="eitprocessing.TIVLungspace",
+            ),
+        }
+
+    try:
+        session = M3Session()
+        store = DataModelStore()
+        session.datamodel = DataModelRecorder(session, store)
+
+        result = run_pipeline(
+            {"name": "demo", "steps": [{"uses": "t.grouped_results"}]},
+            session=session,
+        )
+
+        outputs = store.processing_runs[result.processing_run_id].parameters["outputs"]
+        assert outputs["tiv_result"]["type"] == "IntervalData"
+        assert outputs["tiv_result"]["count"] == 2
+        assert outputs["tiv_result"]["metadata"]["operation"] == "eit.continuous_tiv"
+        assert outputs["mask_result"]["type"] == "PixelMask"
+        assert outputs["mask_result"]["shape"] == [1, 2]
+        assert outputs["mask_result"]["method"] == "eitprocessing.TIVLungspace"
+
+        # Numbers per breath are stored one per breath, with the breath's
+        # start and end as the time window; a mask is one feature without a
+        # value (its grid lives in the export archive).
+        tiv_features = [
+            f
+            for f in store.derived_features.values()
+            if f.feature_name == "continuous_tivs"
+        ]
+        assert [f.value for f in tiv_features] == [1.0, 2.0]
+        assert [(f.time_window_start, f.time_window_end) for f in tiv_features] == [
+            (0.0, 1.0),
+            (1.0, 2.0),
+        ]
+        [mask_feature] = [
+            f
+            for f in store.derived_features.values()
+            if f.feature_name == "tiv_lungspace_mask"
+        ]
+        assert mask_feature.value is None
+    finally:
+        STEP_REGISTRY.pop("t.grouped_results", None)
+
+
+def test_missing_values_per_breath_are_stored_without_a_value_and_export_as_json(
+    tmp_path,
+):
+    """NaN has no place in a JSON file, so a missing value per breath is
+    stored as "no value" and the exported store stays readable JSON."""
+
+    import json
+    import os
+
+    import numpy as np
+
+    session = M3Session()
+    store = DataModelStore()
+    recorder = DataModelRecorder(session, store)
+    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+    breaths = [BreathEvent("eit", 0.0, 1.0), BreathEvent("eit", 1.0, 2.0)]
+
+    features = recorder.record_interval_data(
+        IntervalData(
+            name="continuous_tivs",
+            modality="eit",
+            intervals=breaths,
+            values=np.array([1.5, np.nan]),
+        ),
+        processing_run_id=run.processing_run_id,
+    )
+
+    assert [f.value for f in features] == [1.5, None]
+    export_store(store, tmp_path)
+    with open(os.path.join(tmp_path, "derived_features.json"), encoding="utf-8") as f:
+        text = f.read()
+    json.loads(text, parse_constant=lambda name: pytest.fail(f"{name} in JSON"))
+
+
+def test_values_that_are_not_numbers_are_stored_without_a_value():
+    session = M3Session()
+    store = DataModelStore()
+    recorder = DataModelRecorder(session, store)
+    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+
+    features = recorder.record_interval_data(
+        IntervalData(
+            name="breath_quality",
+            modality="eit",
+            intervals=[BreathEvent("eit", 0.0, 1.0)],
+            values=["good"],
+        ),
+        processing_run_id=run.processing_run_id,
+    )
+
+    assert [f.value for f in features] == [None]
+
+
+def test_values_per_event_use_the_event_time_as_their_window():
+    session = M3Session()
+    store = DataModelStore()
+    recorder = DataModelRecorder(session, store)
+    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+
+    [feature] = recorder.record_interval_data(
+        EventData(
+            name="ecg_peak_amplitude",
+            modality="emg",
+            events=[Event(name="ecg_peak", modality="emg", time=3.0)],
+            values=[0.8],
+        ),
+        processing_run_id=run.processing_run_id,
+    )
+
+    assert (feature.time_window_start, feature.time_window_end) == (3.0, 3.0)
+    assert feature.value == 0.8
+
+
 def test_record_parameter_file_links_data_file_onto_processing_run(tmp_path):
     """Phase 5.3/7: the array archive becomes a `DataFile` with role
-    'parameter', linked onto the `ProcessingRun.parameter_file_id`."""
+    'parameter', listed in the run's `ProcessingRun.parameter_file_ids`."""
 
     session = M3Session()
     store = DataModelStore()
@@ -524,9 +675,9 @@ def test_record_parameter_file_links_data_file_onto_processing_run(tmp_path):
     )
 
     stored_run = store.processing_runs[run.processing_run_id]
-    assert stored_run.parameter_file_id is not None
+    [file_id] = stored_run.parameter_file_ids
 
-    data_file = store.data_files[stored_run.parameter_file_id]
+    data_file = store.data_files[file_id]
     assert data_file.file_role == "parameter"
     assert data_file.file_format == "other"
     assert data_file.file_path == str(output_dir / "parameter_result_arrays.npz")
@@ -535,6 +686,54 @@ def test_record_parameter_file_links_data_file_onto_processing_run(tmp_path):
         data_file.file_size_bytes
         == (output_dir / "parameter_result_arrays.npz").stat().st_size
     )
+
+
+def test_all_exported_array_files_are_linked_to_the_run(tmp_path):
+    """A run that makes values per breath, masks and array parameters lists
+    all three array files; exporting again does not list them twice."""
+
+    import numpy as np
+
+    session = M3Session()
+    store = DataModelStore()
+    session.datamodel = DataModelRecorder(session, store)
+    session.parameter_results.add(
+        ParameterResult(name="gate", value=[1.0, 2.0], modality="emg")
+    )
+    session.interval_data.add(
+        IntervalData(
+            name="pixel_tivs",
+            modality="eit",
+            intervals=[BreathEvent("eit", 0.0, 1.0)],
+            values=[np.ones((2, 2))],
+        )
+    )
+    session.pixel_masks.add(PixelMask(name="lung", values=[[1.0, np.nan]]))
+    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+
+    session.export_summary(tmp_path, processing_run_id=run.processing_run_id)
+    session.export_summary(tmp_path, processing_run_id=run.processing_run_id)
+
+    linked = [
+        os.path.basename(store.data_files[file_id].file_path)
+        for file_id in store.processing_runs[run.processing_run_id].parameter_file_ids
+    ]
+    assert sorted(linked) == [
+        "interval_data_arrays.npz",
+        "parameter_result_arrays.npz",
+        "pixel_masks.npz",
+    ]
+    assert validate_store(store) == []
+
+
+def test_validate_store_reports_a_run_that_names_a_missing_file():
+    store = DataModelStore()
+    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+    run.parameter_file_ids.append("file_missing")
+
+    problems = validate_store(store)
+
+    assert any("file_missing" in problem for problem in problems)
 
 
 def test_export_store_survives_array_valued_parameters(tmp_path):

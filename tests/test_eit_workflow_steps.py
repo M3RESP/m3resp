@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -21,6 +22,7 @@ import pytest
 
 from m3resp.core.exceptions import PipelineSpecError
 from m3resp.core.session import M3Session
+from m3resp.data import BreathEvent, Event, IntervalData, PixelMap, PixelMask
 from m3resp.workflows import available_steps, run_pipeline
 from m3resp.workflows.registry import get_step
 from m3resp.workflows.spec import load_spec
@@ -121,6 +123,23 @@ class _FakeSparseData:
         self.name = label
 
 
+class _FakeBreathDetector:
+    """Finds `count` one-second breaths, like eitprocessing's BreathDetection
+    returns them (an object whose `values` are the breaths)."""
+
+    def __init__(self, count: int):
+        self.count = count
+        self.calls = 0
+
+    def find_breaths(self, signal: Any) -> Any:
+        self.calls += 1
+        return SimpleNamespace(
+            values=[
+                _FakeBreath(float(i), i + 0.5, float(i + 1)) for i in range(self.count)
+            ]
+        )
+
+
 class _FakePixelMask:
     def __init__(self, mask: np.ndarray):
         self.mask = mask
@@ -199,7 +218,19 @@ class _FakeAdapter:
     ) -> Any:
         values = np.full((3, 2, 2), None, dtype=object)
         values[1, 0, 0] = _FakeBreath(0.0, 0.5, 1.0)
-        return _FakeSparseData(values, None, label="pixel_breaths")
+        result = _FakeSparseData(values, None, label="pixel_breaths")
+        result.intervals = [(-1.0, 0.0), (0.0, 1.0), (1.0, 2.0)]
+        return result
+
+    def find_breaths(self, timing_data: Any, **kwargs: Any) -> Any:
+        # The same breaths as the intervals `find_pixel_breaths` returns.
+        return SimpleNamespace(
+            values=[
+                _FakeBreath(-1.0, -0.5, 0.0),
+                _FakeBreath(0.0, 0.5, 1.0),
+                _FakeBreath(1.0, 1.5, 2.0),
+            ]
+        )
 
     def compute_tiv_lungspace(self, eit_data: Any, **kwargs: Any) -> dict[str, Any]:
         mask = np.array([[1.0, np.nan], [np.nan, 1.0]])
@@ -412,18 +443,40 @@ def test_butterworth_filter_step_accepts_an_already_filtered_signal():
     assert get_step("eit.butterworth_filter").reads["signal"] is None
 
 
-def test_eeli_step_produces_single_array_parameter_result():
+def test_eeli_step_stores_one_value_per_breath():
     session = _session_with_fake_adapter()
     raw = _FakeEITData(np.ones((3, 1, 1)), time=np.arange(3, dtype=float))
     sequence = _FakeSequence(raw)
 
-    result = eeli(raw, eit_sequence=sequence, breath_detector=object(), session=session)
+    result = eeli(
+        raw,
+        eit_sequence=sequence,
+        breath_detector=_FakeBreathDetector(3),
+        session=session,
+    )
 
     assert set(get_step("eit.eeli").writes) <= set(result)
     eeli_result = result["eeli_result"]
-    assert eeli_result.value.shape == (3,)
-    assert eeli_result.metadata["time"] == [0.0, 1.0, 2.0]
+    assert isinstance(eeli_result, IntervalData)
+    np.testing.assert_array_equal(eeli_result.values, [1.0, 2.0, np.nan])
+    assert [b.start_time for b in eeli_result.intervals] == [0.0, 1.0, 2.0]
     assert eeli_result.method == "eitprocessing.EELI"
+    assert list(session.interval_data) == [eeli_result]
+    assert len(session.parameter_results) == 0
+
+
+def test_eeli_step_refuses_breaths_that_do_not_match_the_values():
+    session = _session_with_fake_adapter()
+    raw = _FakeEITData(np.ones((3, 1, 1)), time=np.arange(3, dtype=float))
+    sequence = _FakeSequence(raw)
+
+    with pytest.raises(ValueError, match="per-breath values"):
+        eeli(
+            raw,
+            eit_sequence=sequence,
+            breath_detector=_FakeBreathDetector(2),
+            session=session,
+        )
 
 
 def test_pixel_tiv_step_preserves_shape_and_valid_breath_metadata():
@@ -435,15 +488,20 @@ def test_pixel_tiv_step_preserves_shape_and_valid_breath_metadata():
         eit_data=raw,
         signal=raw,
         eit_sequence=sequence,
-        breath_detector=object(),
+        breath_detector=_FakeBreathDetector(2),
         session=session,
     )
 
     assert set(get_step("eit.pixel_tiv").writes) <= set(result)
     pixel_tiv_result = result["pixel_tiv_result"]
-    assert pixel_tiv_result.value.shape == (2, 2, 2)
+    assert isinstance(pixel_tiv_result, IntervalData)
+    assert len(pixel_tiv_result) == 2
+    assert all(isinstance(m, PixelMap) for m in pixel_tiv_result.values)
+    assert pixel_tiv_result.values[0].shape == (2, 2)
+    assert pixel_tiv_result.values[0].values[0, 0] == 0.5
     assert pixel_tiv_result.metadata["valid_breath_indices"] == [0]
-    assert pixel_tiv_result.metadata["axes"] == ["breath", "row", "column"]
+    assert pixel_tiv_result.metadata["axes"] == ["row", "column"]
+    assert list(session.interval_data) == [pixel_tiv_result]
 
 
 def test_pixel_tiv_accepts_unfiltered_pixel_data():
@@ -457,11 +515,11 @@ def test_pixel_tiv_accepts_unfiltered_pixel_data():
         eit_data=raw,
         signal=raw,
         eit_sequence=sequence,
-        breath_detector=object(),
+        breath_detector=_FakeBreathDetector(2),
         session=session,
     )
 
-    assert result["pixel_tiv_result"].value.shape == (2, 2, 2)
+    assert len(result["pixel_tiv_result"]) == 2
     definition = get_step("eit.pixel_tiv")
     assert "eit_data" in definition.reads
     assert "filtered_eit" not in definition.reads
@@ -510,10 +568,85 @@ def test_pixel_breaths_step_converts_object_array_to_landmark_array():
     )
 
     assert set(get_step("eit.pixel_breaths").writes) <= set(result)
-    value = result["pixel_breath_timing_result"].value
+    timing = result["pixel_breath_timing_result"]
+    assert isinstance(timing, IntervalData)
+    assert [b.start_time for b in timing.intervals] == [-1.0, 0.0, 1.0]
+    # The breaths keep their turning point, like the breaths of TIV and EELI.
+    assert [b.peak_time for b in timing.intervals] == [-0.5, 0.5, 1.5]
+    assert timing.unit == "s"
+    value = np.stack(timing.values)
     assert value.shape == (3, 2, 2, 3)
     assert np.array_equal(value[1, 0, 0], [0.0, 0.5, 1.0])
     assert np.isnan(value[0]).all()  # unresolved pixel breaths stay NaN
+    assert list(session.interval_data) == [timing]
+
+
+def test_pixel_breaths_refuses_breaths_that_do_not_match_pixelbreath():
+    session = _session_with_fake_adapter()
+    session.eit_adapter.find_breaths = lambda timing_data, **kwargs: SimpleNamespace(  # type: ignore[attr-defined]
+        values=[_FakeBreath(0.0, 0.5, 1.0)]
+    )
+    raw = _FakeEITData(np.ones((3, 2, 2)), time=np.arange(3, dtype=float))
+
+    with pytest.raises(ValueError, match="do not match"):
+        pixel_breaths(
+            eit_data=raw,
+            timing_data=raw,
+            eit_sequence=_FakeSequence(raw),
+            session=session,
+        )
+
+
+def test_steps_on_the_same_breaths_share_one_detection_and_the_same_breaths():
+    """EELI and pixel TIV over the same detector and signal find the breaths
+    once and store the very same breath objects; a breath already stored in
+    session.events is reused, so values can be traced to it."""
+
+    session = _session_with_fake_adapter()
+    raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float))
+    sequence = _FakeSequence(raw)
+    detector = _FakeBreathDetector(2)
+    stored_first_breath = BreathEvent("eit", 0.0, 1.0, peak_time=0.5)
+    session.add_events("eit_breaths", [stored_first_breath])
+    session.eit_adapter.compute_eeli = lambda *args, **kwargs: _FakeSparseData(  # type: ignore[attr-defined]
+        [1.0, 2.0], [1.0, 2.0], label="continuous_eelis"
+    )
+
+    eeli_result = eeli(
+        raw, eit_sequence=sequence, breath_detector=detector, session=session
+    )["eeli_result"]
+    tiv_result = pixel_tiv(
+        eit_data=raw,
+        signal=raw,
+        eit_sequence=sequence,
+        breath_detector=detector,
+        session=session,
+    )["pixel_tiv_result"]
+
+    assert detector.calls == 1
+    assert all(
+        first is second
+        for first, second in zip(eeli_result.intervals, tiv_result.intervals)
+    )
+    assert eeli_result.intervals[0] is stored_first_breath
+
+
+def test_steps_ignore_stored_eit_breaths_that_are_not_breaths():
+    """`add_events` accepts anything; a marker stored under "eit_breaths"
+    must not break the steps that reuse stored breaths."""
+
+    session = _session_with_fake_adapter()
+    session.add_events("eit_breaths", [Event(name="marker", modality="eit", time=0.0)])
+    raw = _FakeEITData(np.ones((3, 1, 1)), time=np.arange(3, dtype=float))
+
+    result = eeli(
+        raw,
+        eit_sequence=_FakeSequence(raw),
+        breath_detector=_FakeBreathDetector(3),
+        session=session,
+    )
+
+    assert len(result["eeli_result"]) == 3
 
 
 def test_pixel_breaths_rejects_unknown_phase_correction_mode():
@@ -553,6 +686,11 @@ def test_roi_lungspace_steps_preserve_nan_as_excluded_pixels(step_func, step_nam
     assert set(get_step(step_name).writes) <= set(result)
     mask_key = next(k for k in result if k.endswith("_mask"))
     assert np.isnan(result[mask_key].mask).any()
+    result_key = next(k for k in result if k.endswith("_result"))
+    assert isinstance(result[result_key], PixelMask)
+    np.testing.assert_array_equal(result[result_key].values, result[mask_key].mask)
+    assert list(session.pixel_masks) == [result[result_key]]
+    assert len(session.parameter_results) == 0
 
 
 @pytest.mark.parametrize("bad_threshold", [0.0, 1.0, -0.1, 1.5])
@@ -567,26 +705,25 @@ def test_roi_lungspace_steps_reject_out_of_range_threshold(bad_threshold):
 
 
 def test_roi_filter_by_size_accepts_the_native_mask_result():
-    """Either form of a mask can be bound: upstream object or native result."""
+    """Either form of a mask can be bound: upstream object or m3resp mask."""
 
     pytest.importorskip("eitprocessing")
     import numpy as np
-    from eitprocessing.roi import PixelMask
+    from eitprocessing.roi import PixelMask as UpstreamPixelMask
 
     from m3resp.adapters import EITProcessingAdapter
-    from m3resp.data import ParameterResult
 
     mask = np.full((4, 4), np.nan)
     mask[1:3, 1:3] = 1.0
     mask[0, 0] = 1.0
 
     adapter = EITProcessingAdapter()
-    native = ParameterResult(
-        name="watershed_lungspace_mask", value=mask, modality="eit", method="test"
-    )
+    native = PixelMask(name="watershed_lungspace_mask", values=mask, method="test")
 
     from_native = adapter.filter_roi_by_size(native, min_region_size=2)
-    from_upstream = adapter.filter_roi_by_size(PixelMask(mask), min_region_size=2)
+    from_upstream = adapter.filter_roi_by_size(
+        UpstreamPixelMask(mask), min_region_size=2
+    )
 
     np.testing.assert_array_equal(
         np.nan_to_num(from_native.mask, nan=-1),
@@ -745,12 +882,15 @@ def test_full_eit_example_pipeline_runs_end_to_end(tmp_path):
     # project's real output/ directory.
     result = run_pipeline(spec_path, session=M3Session())
 
-    assert result.value("pixel_tiv_result").value.shape[1:] == (32, 32)
-    assert result.value("size_filtered_roi_result").value.shape == (32, 32)
+    assert result.value("pixel_tiv_result").values[0].shape == (32, 32)
+    assert result.value("size_filtered_roi_result").shape == (32, 32)
 
     output_path = result.session.export_summary(tmp_path)
-    archive_path = output_path / "parameter_result_arrays.npz"
+    archive_path = output_path / "interval_data_arrays.npz"
     assert archive_path.exists()
     with np.load(archive_path) as archive:
         assert "pixel_tivs_0" in archive
         assert archive["pixel_tivs_0"].shape == (12, 32, 32)
+    assert (output_path / "interval_data.csv").exists()
+    with np.load(output_path / "pixel_masks.npz") as masks:
+        assert masks["size_filtered_roi_mask_0"].shape == (32, 32)

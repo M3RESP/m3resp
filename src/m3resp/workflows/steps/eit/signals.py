@@ -1,16 +1,14 @@
-"""Registered EIT global-signal pipeline steps (impedance/TIV/EELI)."""
+"""Registered EIT steps on impedance waveforms (global impedance, breaths, TIV, EELI)."""
 
 from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
-
 from m3resp.adapters.eitprocessing_adapter import (
     add_to_collection,
+    sparse_data_to_interval_data,
 )
 from m3resp.core.session import M3Session
-from m3resp.data import ParameterResult
 from m3resp.workflows.registry import (
     StepArtifact,
     StepParameter,
@@ -20,6 +18,7 @@ from m3resp.workflows.registry import (
 from ._shared import (
     _EITPROCESSING,
     _SESSION_ARTIFACT,
+    _breaths_used_by,
     _record_step,
     _upstream_metadata,
 )
@@ -29,7 +28,7 @@ from ._shared import (
     "eit.global_impedance",
     reads={"signal": "filtered_eit", "eit_sequence": "eit_sequence"},
     writes=("global_impedance",),
-    summary="Compute and store the summed (global) impedance of an EIT signal.",
+    summary="Compute and store the global impedance (sum of all pixels) of an EIT signal.",
     description="Sum pixel impedance across the image to produce the single-channel global impedance waveform used for breath detection.",
     category="preprocessing",
     modality="eit",
@@ -46,7 +45,7 @@ from ._shared import (
         StepArtifact(
             name="eit_sequence",
             artifact_type="eit_sequence",
-            description="Sequence the summed signal is added onto.",
+            description="Sequence the global impedance is added onto.",
             public=False,
             compatibility_only=True,
         ),
@@ -54,8 +53,8 @@ from ._shared import (
     output_artifacts=(
         StepArtifact(
             name="global_impedance",
-            artifact_type="eit_global_impedance",
-            description="Summed (global) impedance waveform.",
+            artifact_type="eit_impedance_waveform",
+            description="Global impedance: the sum of all pixels, with no mask.",
             compatibility_only=True,
         ),
     ),
@@ -75,14 +74,14 @@ def global_impedance(
     reads={"signal": "detection_signal"},
     writes=("breath_intervals", "breath_detector"),
     summary="Detect breaths on a continuous EIT impedance signal.",
-    description="Detect breath start/end times on the global impedance waveform via eitprocessing's BreathDetection.",
+    description="Detect breath start/end times on an impedance waveform (global, or regional from an ROI) via eitprocessing's BreathDetection.",
     category="detection",
     modality="eit",
     optional_packages=_EITPROCESSING,
     input_artifacts=(
         StepArtifact(
             name="signal",
-            artifact_type="eit_global_impedance",
+            artifact_type="eit_impedance_waveform",
             default_context_key="detection_signal",
             description="Continuous impedance signal (typically the detection-window slice) to detect breaths on.",
             compatibility_only=True,
@@ -162,20 +161,22 @@ def normalize_breaths(
         "signal": "global_impedance",
         "eit_sequence": "eit_sequence",
         "breath_detector": "breath_detector",
+        "session": "session",
     },
-    writes=("continuous_tiv",),
+    writes=("continuous_tiv", "continuous_tiv_result"),
     summary="Compute continuous tidal impedance variation (TIV).",
-    description="Compute per-breath tidal impedance variation on the global impedance waveform via eitprocessing's TIV.",
+    description="Compute per-breath tidal impedance variation on an impedance waveform (global, or regional from an ROI) via eitprocessing's TIV.",
     category="parameters",
     modality="eit",
     optional_packages=_EITPROCESSING,
     parameters_reviewed=True,
+    session_writes=("session.interval_data",),
     input_artifacts=(
         StepArtifact(
             name="signal",
-            artifact_type="eit_global_impedance",
+            artifact_type="eit_impedance_waveform",
             default_context_key="global_impedance",
-            description="Global impedance waveform to compute TIV on.",
+            description="Impedance waveform (global, or regional from an ROI) to compute TIV on.",
             compatibility_only=True,
         ),
         StepArtifact(
@@ -192,6 +193,7 @@ def normalize_breaths(
             public=False,
             compatibility_only=True,
         ),
+        _SESSION_ARTIFACT,
     ),
     output_artifacts=(
         StepArtifact(
@@ -200,6 +202,11 @@ def normalize_breaths(
             description="Per-breath continuous TIV values (upstream SparseData).",
             compatibility_only=True,
         ),
+        StepArtifact(
+            name="continuous_tiv_result",
+            artifact_type="interval_data",
+            description="One TIV value per breath, each stored with its breath (IntervalData).",
+        ),
     ),
 )
 def continuous_tiv(
@@ -207,6 +214,7 @@ def continuous_tiv(
     *,
     eit_sequence: Any,
     breath_detector: Any,
+    session: M3Session,
 ) -> dict[str, Any]:
     from eitprocessing.parameters.tidal_impedance_variation import TIV
 
@@ -214,31 +222,25 @@ def continuous_tiv(
         signal, sequence=eit_sequence, store=False, result_label="continuous_tivs"
     )
     add_to_collection(eit_sequence.sparse_data, result)
-    return {"continuous_tiv": result}
 
-
-def _sparse_data_to_array_parameter(
-    obj: Any, *, modality: str, method: str, metadata: dict[str, Any]
-) -> ParameterResult:
-    """Convert an `eitprocessing.SparseData`-shaped object (one value per
-    breath) into a single array-valued `ParameterResult`, preserving upstream
-    time coordinates and unit rather than exploding it into one result per
-    breath."""
-
-    values = np.asarray(obj.values, dtype=float)
-    metadata = dict(metadata)
-    metadata["time"] = np.asarray(obj.time, dtype=float).tolist()
-    metadata["shape"] = list(values.shape)
-    metadata["dtype"] = str(values.dtype)
-    name = getattr(obj, "label", None) or getattr(obj, "name", None) or "parameter"
-    return ParameterResult(
-        name=name,
-        value=values,
-        modality=modality,
-        unit=getattr(obj, "unit", None),
-        method=method,
-        metadata=metadata,
+    metadata = _upstream_metadata(
+        source_function=(
+            "eitprocessing.parameters.tidal_impedance_variation.TIV.compute_parameter"
+        ),
+        operation="eit.continuous_tiv",
+        parameters={"result_label": "continuous_tivs"},
     )
+    continuous_tiv_result = sparse_data_to_interval_data(
+        result,
+        _breaths_used_by(breath_detector, signal, session),
+        modality="eit",
+        method="eitprocessing.TIV",
+        metadata=dict(metadata),
+    )
+    session.interval_data.add(continuous_tiv_result)
+
+    _record_step(session, "eit.continuous_tiv", metadata=metadata)
+    return {"continuous_tiv": result, "continuous_tiv_result": continuous_tiv_result}
 
 
 @register_step(
@@ -255,13 +257,13 @@ def _sparse_data_to_array_parameter(
     category="parameters",
     modality="eit",
     optional_packages=_EITPROCESSING,
-    session_writes=("session.parameter_results",),
+    session_writes=("session.interval_data",),
     input_artifacts=(
         StepArtifact(
             name="signal",
-            artifact_type="eit_global_impedance",
+            artifact_type="eit_impedance_waveform",
             default_context_key="global_impedance",
-            description="Global impedance waveform to compute EELI on.",
+            description="Impedance waveform (global, or regional from an ROI) to compute EELI on.",
             compatibility_only=True,
         ),
         StepArtifact(
@@ -298,8 +300,8 @@ def _sparse_data_to_array_parameter(
         ),
         StepArtifact(
             name="eeli_result",
-            artifact_type="parameter_result",
-            description="Native array-valued ParameterResult for EELI, one value per breath.",
+            artifact_type="interval_data",
+            description="One EELI value per breath, each stored with its breath (IntervalData).",
         ),
     ),
 )
@@ -322,10 +324,14 @@ def eeli(
         operation="eit.eeli",
         parameters={"result_label": result_label},
     )
-    eeli_result = _sparse_data_to_array_parameter(
-        result, modality="eit", method="eitprocessing.EELI", metadata=dict(metadata)
+    eeli_result = sparse_data_to_interval_data(
+        result,
+        _breaths_used_by(breath_detector, signal, session),
+        modality="eit",
+        method="eitprocessing.EELI",
+        metadata=dict(metadata),
     )
-    session.parameter_results.add(eeli_result)
+    session.interval_data.add(eeli_result)
 
     _record_step(session, "eit.eeli", metadata=metadata)
     return {"eeli": result, "eeli_result": eeli_result}

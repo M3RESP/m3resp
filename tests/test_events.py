@@ -21,6 +21,7 @@ from m3resp import (
     coerce_intervals,
     event_to_dict,
 )
+from m3resp.data.events import reuse_matching_breaths
 from m3resp.export.tables import events_to_rows
 from m3resp.synchronization.alignment import (
     align_events_by_modality_offset,
@@ -384,3 +385,34 @@ def test_coerce_needs_both_times_in_a_dictionary():
         coerce_breath_event({"modality": "eit", "start_time": 1.0})
     with pytest.raises(ValueError, match="no start_time entry"):
         coerce_interval({"end_time": 1.0}, name="noise", modality="emg")
+
+
+class TestReuseMatchingBreaths:
+    """`reuse_matching_breaths` points results at breaths already stored."""
+
+    def test_a_stored_breath_with_the_same_times_is_used(self):
+        stored = BreathEvent("eit", 0.0, 1.0, peak_time=0.5)
+        found = [
+            BreathEvent("eit", 0.0, 1.0, peak_time=0.5),
+            BreathEvent("eit", 1.0, 2.0),
+        ]
+
+        reused = reuse_matching_breaths(found, [stored])
+
+        assert reused[0] is stored
+        assert reused[1] is found[1]
+
+    def test_other_modalities_and_items_that_are_not_breaths_are_ignored(self):
+        found = [BreathEvent("eit", 0.0, 1.0)]
+        stored = [
+            BreathEvent("emg", 0.0, 1.0),
+            Event(name="marker", modality="eit", time=0.0),
+            {"start_time": 0.0, "end_time": 1.0},
+        ]
+
+        assert reuse_matching_breaths(found, stored)[0] is found[0]
+
+    def test_nothing_stored_keeps_the_breaths(self):
+        found = [BreathEvent("eit", 0.0, 1.0)]
+
+        assert reuse_matching_breaths(found, None) == found

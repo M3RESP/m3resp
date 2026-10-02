@@ -16,7 +16,9 @@ from m3resp.data.categories import (
     register_category_alias,
 )
 from m3resp.data.collections import (
+    IntervalDataCollection,
     ParameterResultCollection,
+    PixelMaskCollection,
     QualityReport,
     SignalCollection,
 )
@@ -34,6 +36,7 @@ from m3resp.data.events import (
 )
 from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
+from m3resp.data.pixel_maps import PixelMap, PixelMask
 from m3resp.data.processing import ProcessingHistory, ProcessingStep
 from m3resp.data.quality import QualityFlag
 from m3resp.data.signals import Signal
@@ -47,9 +50,13 @@ __all__ = [
     "EventData",
     "Interval",
     "IntervalData",
+    "IntervalDataCollection",
     "LinkedBreath",
     "ParameterResult",
     "ParameterResultCollection",
+    "PixelMap",
+    "PixelMask",
+    "PixelMaskCollection",
     "ProcessingHistory",
     "ProcessingStep",
     "QualityFlag",

@@ -135,7 +135,7 @@ def test_multimodal_full_example_runs_end_to_end():
     assert "estimated_offset_seconds" not in result.context.values
 
     # Full EIT chain, through the ROI lung-space steps.
-    assert result.value("size_filtered_roi_result").value.shape == (32, 32)
+    assert result.value("size_filtered_roi_result").shape == (32, 32)
 
     # Full EMG/ventilator chain, through the clinical quality steps.
     assert len(result.value("ecg_peak_indices")) > 0

@@ -182,6 +182,27 @@ raises `ValueError`, so a value can never end up next to the wrong breath.
 `to_dict()` gives the same content as plain lists and dictionaries, ready to
 write to a JSON file.
 
+Steps store their `IntervalData` in `session.interval_data`. The EIT steps
+that do this:
+
+| Step | Name | One value per breath |
+|---|---|---|
+| `eit.continuous_tiv` | `continuous_tivs` | TIV |
+| `eit.eeli` | `continuous_eelis` | EELI |
+| `eit.pixel_tiv` | `pixel_tivs` | a `PixelMap` of TIV (see [pixel-maps.md](pixel-maps.md)) |
+| `eit.pixel_breaths` | `pixel_breaths` | each pixel's breath start, middle and end time |
+
+The breaths are the ones eitprocessing computed the values over, found on the
+impedance waveform (global or regional) the step was given. Steps that use the
+same breath detector and signal share the very same breath objects, and a
+breath that is also in `session.events["eit_breaths"]` (same start and end
+time) is that stored breath. `preprocess_eit()` and `detect_eit_breaths()` do
+the same, in either order. The rule lives in
+`m3resp.data.events.reuse_matching_breaths`. Their times are on the EIT
+recording's own clock, like the breaths in `session.events`. A NaN value (for
+example the TIV of a breath that could not be measured) stays next to its
+breath; it is not dropped.
+
 ## Where breath/event lists live
 
 There is deliberately no `BreathCollection` type: breaths live in

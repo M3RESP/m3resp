@@ -16,9 +16,11 @@ if TYPE_CHECKING:
 
 from m3resp.export.tables import (
     events_to_rows,
+    interval_data_to_rows_and_archive,
     linked_breaths_to_rows,
     parameter_results_to_rows_and_archive,
     parameters_to_rows,
+    pixel_masks_to_rows_and_archive,
 )
 
 
@@ -38,8 +40,9 @@ def export_session_summary(
     ``structured_export`` (Milestone 2.6, plan_stage2.md Sec 22) additionally
     writes the Layer 1 typed collections (Milestone 2.1/2.2/2.5) each to their
     own file: ``session_metadata.json``, ``signals_manifest.csv``,
-    ``parameter_results.csv``, ``quality_flags.csv``, ``linked_breaths.csv``,
-    and ``processing_history.json``. These are additive - ``summary.json``
+    ``parameter_results.csv``, ``interval_data.csv``, ``pixel_masks.csv``,
+    ``quality_flags.csv``, ``linked_breaths.csv``, and
+    ``processing_history.json``. These are additive - ``summary.json``
     and the per-event-list CSVs above are unchanged and keep their Stage 1
     shape.
 
@@ -50,6 +53,13 @@ def export_session_summary(
     the ``ProcessingRun`` that produced it when a ``DataModelRecorder`` is
     attached; a manual export with no associated pipeline run still writes the
     archive but leaves it unlinked rather than inventing a run.
+
+    Values per breath (`IntervalData`, e.g. TIV and EELI) go to
+    ``interval_data.csv``, with each result's metadata in
+    ``interval_data_metadata.json`` and array values, such as a pixel map per
+    breath, in ``interval_data_arrays.npz``. Pixel masks go to
+    ``pixel_masks.csv`` and their grids to ``pixel_masks.npz``. All three
+    ``.npz`` archives are linked to the ``ProcessingRun`` the same way.
     """
 
     output_path = Path(output_dir)
@@ -105,37 +115,69 @@ def _export_structured_collections(
 ) -> None:
     """Write the Milestone 2.6 per-entity files (see ``export_session_summary``)."""
 
-    _write_json(output_path / "session_metadata.json", _jsonable(session.metadata))
+    def path_to(filename: str) -> Path:
+        return Path(os.path.join(str(output_path), filename))
+
+    # Convert the values per breath and the masks before writing anything, so
+    # a result that cannot be stored stops the export before it has written
+    # only part of the files.
+    interval_data = getattr(session, "interval_data", None)
+    interval_export = (
+        interval_data_to_rows_and_archive(interval_data) if interval_data else None
+    )
+    pixel_masks = getattr(session, "pixel_masks", None)
+    mask_export = pixel_masks_to_rows_and_archive(pixel_masks) if pixel_masks else None
+
+    _write_json(path_to("session_metadata.json"), _jsonable(session.metadata))
     _write_json(
-        output_path / "processing_history.json",
+        path_to("processing_history.json"),
         {"provenance": _jsonable(session.provenance)},
     )
     if session.signals:
-        _write_csv(
-            output_path / "signals_manifest.csv", session.signals.to_manifest_rows()
-        )
+        _write_csv(path_to("signals_manifest.csv"), session.signals.to_manifest_rows())
     if session.parameter_results:
         rows, archive = parameter_results_to_rows_and_archive(session.parameter_results)
-        _write_csv(output_path / "parameter_results.csv", rows)
+        _write_csv(path_to("parameter_results.csv"), rows)
         if archive:
-            archive_path = Path(
-                os.path.join(str(output_path), "parameter_result_arrays.npz")
-            )
+            archive_path = path_to("parameter_result_arrays.npz")
             # numpy's stub declares an `allow_pickle: bool` keyword alongside
             # `**kwds: ArrayLike`, so mypy conservatively checks **archive's
             # value type against `bool` too; this a stub limitation, not a
             # real type error (archive is never given an `allow_pickle` key).
             np.savez_compressed(str(archive_path), **archive)  # type: ignore[arg-type]
-            if session.datamodel is not None and processing_run_id is not None:
-                session.datamodel.record_parameter_file(
-                    archive_path, processing_run_id=processing_run_id
-                )
+            _link_to_run(session, archive_path, processing_run_id)
+    if interval_export is not None:
+        rows, archive, descriptions = interval_export
+        _write_csv(path_to("interval_data.csv"), rows)
+        _write_json(path_to("interval_data_metadata.json"), _jsonable(descriptions))
+        if archive:
+            archive_path = path_to("interval_data_arrays.npz")
+            np.savez_compressed(str(archive_path), **archive)  # type: ignore[arg-type]
+            _link_to_run(session, archive_path, processing_run_id)
+    if mask_export is not None:
+        rows, archive = mask_export
+        _write_csv(path_to("pixel_masks.csv"), rows)
+        archive_path = path_to("pixel_masks.npz")
+        np.savez_compressed(str(archive_path), **archive)  # type: ignore[arg-type]
+        _link_to_run(session, archive_path, processing_run_id)
     if session.quality:
-        _write_csv(output_path / "quality_flags.csv", session.quality.to_rows())
+        _write_csv(path_to("quality_flags.csv"), session.quality.to_rows())
     if session.linked_breaths:
         _write_csv(
-            output_path / "linked_breaths.csv",
+            path_to("linked_breaths.csv"),
             linked_breaths_to_rows(session.linked_breaths),
+        )
+
+
+def _link_to_run(
+    session: Any, archive_path: Path, processing_run_id: str | None
+) -> None:
+    """Record an exported array file in the data model and link it to the
+    run that made it, when a data model is attached and the run is known."""
+
+    if session.datamodel is not None and processing_run_id is not None:
+        session.datamodel.record_parameter_file(
+            archive_path, processing_run_id=processing_run_id
         )
 
 

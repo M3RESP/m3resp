@@ -11,9 +11,17 @@ import csv
 import json
 
 import numpy as np
+import pytest
 
 from m3resp import M3Session
-from m3resp.data import ParameterResult, QualityFlag, Signal
+from m3resp.data import (
+    IntervalData,
+    ParameterResult,
+    PixelMap,
+    PixelMask,
+    QualityFlag,
+    Signal,
+)
 from m3resp.data.events import BreathEvent
 from m3resp.data.linked_breath import LinkedBreath
 
@@ -261,3 +269,230 @@ def test_manual_export_without_a_processing_run_still_writes_the_archive_but_doe
 
     assert (output_dir / "parameter_result_arrays.npz").exists()
     assert session.datamodel.store.data_files == {}
+
+
+# -- IntervalData and PixelMask export ---------------------------------------
+
+
+def _read_csv(path) -> list[dict]:
+    with path.open(newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+def _two_breaths() -> list[BreathEvent]:
+    return [
+        BreathEvent("eit", 0.0, 2.0, peak_time=1.0),
+        BreathEvent("eit", 2.0, 4.0, peak_time=3.0),
+    ]
+
+
+def test_numbers_per_breath_are_written_one_row_per_breath(tmp_path):
+    session = M3Session()
+    session.interval_data.add(
+        IntervalData(
+            name="continuous_tivs",
+            modality="eit",
+            intervals=_two_breaths(),
+            values=np.array([1.5, np.nan]),
+            unit="a.u.",
+            method="eitprocessing.TIV",
+        )
+    )
+
+    output_dir = session.export_summary(tmp_path)
+
+    rows = _read_csv(output_dir / "interval_data.csv")
+    assert [row["interval_index"] for row in rows] == ["0", "1"]
+    assert [row["start_time"] for row in rows] == ["0.0", "2.0"]
+    assert [row["end_time"] for row in rows] == ["2.0", "4.0"]
+    assert rows[0]["value"] == "1.5"
+    assert rows[1]["value"] == "nan"  # a missing value stays, it is not dropped
+    assert rows[0]["interval_name"] == "breath"
+    assert not (output_dir / "interval_data_arrays.npz").exists()
+
+
+def test_pixel_maps_per_breath_are_stacked_into_the_archive(tmp_path):
+    first = np.array([[1.0, np.nan], [2.0, 3.0]])
+    second = np.array([[4.0, 5.0], [np.nan, 6.0]])
+    session = M3Session()
+    session.interval_data.add(
+        IntervalData(
+            name="pixel_tivs",
+            modality="eit",
+            intervals=_two_breaths(),
+            values=[
+                PixelMap(name="pixel_tivs", values=first),
+                PixelMap(name="pixel_tivs", values=second),
+            ],
+        )
+    )
+
+    output_dir = session.export_summary(tmp_path)
+
+    rows = _read_csv(output_dir / "interval_data.csv")
+    assert [row["array_index"] for row in rows] == ["0", "1"]
+    assert {row["array_key"] for row in rows} == {"pixel_tivs_0"}
+    assert {row["value_file"] for row in rows} == {"interval_data_arrays.npz"}
+    with np.load(output_dir / "interval_data_arrays.npz") as archive:
+        stacked = archive["pixel_tivs_0"]
+    np.testing.assert_array_equal(stacked[0], first)
+    np.testing.assert_array_equal(stacked[1], second)
+
+
+def test_arrays_of_different_shapes_in_one_result_are_refused():
+    from m3resp.export.tables import interval_data_to_rows_and_archive
+
+    item = IntervalData(
+        name="odd",
+        modality="eit",
+        intervals=_two_breaths(),
+        values=[np.ones((2, 2)), np.ones((3, 3))],
+    )
+
+    with pytest.raises(ValueError, match="different shapes"):
+        interval_data_to_rows_and_archive([item])
+
+
+def test_pixel_masks_are_written_with_their_grids(tmp_path):
+    grid = np.array([[1.0, np.nan], [np.nan, 1.0]])
+    session = M3Session()
+    session.pixel_masks.add(
+        PixelMask(name="tiv_lungspace_mask", values=grid, method="eitprocessing")
+    )
+
+    output_dir = session.export_summary(tmp_path)
+
+    [row] = _read_csv(output_dir / "pixel_masks.csv")
+    assert row["array_key"] == "tiv_lungspace_mask_0"
+    assert row["included_pixel_count"] == "2"
+    assert (row["rows"], row["columns"]) == ("2", "2")
+    with np.load(output_dir / "pixel_masks.npz") as archive:
+        np.testing.assert_array_equal(archive["tiv_lungspace_mask_0"], grid)
+
+
+def test_no_interval_data_or_masks_means_no_files(tmp_path):
+    output_dir = M3Session().export_summary(tmp_path)
+
+    for filename in (
+        "interval_data.csv",
+        "interval_data_arrays.npz",
+        "pixel_masks.csv",
+        "pixel_masks.npz",
+    ):
+        assert not (output_dir / filename).exists()
+
+
+def test_names_that_clean_up_to_the_same_key_do_not_overwrite_each_other():
+    from m3resp.export.tables import (
+        interval_data_to_rows_and_archive,
+        parameter_results_to_rows_and_archive,
+        pixel_masks_to_rows_and_archive,
+    )
+
+    breaths = _two_breaths()
+    items = [
+        IntervalData(name=name, modality="eit", intervals=breaths, values=[grid, grid])
+        for name, grid in (
+            ("pixel-tiv", np.zeros((1, 1))),
+            ("pixel tiv", np.ones((1, 1))),
+        )
+    ]
+    _, archive, _ = interval_data_to_rows_and_archive(items)
+    assert sorted(archive) == ["pixel_tiv_0", "pixel_tiv_1"]
+    np.testing.assert_array_equal(archive["pixel_tiv_1"], np.ones((2, 1, 1)))
+
+    masks = [
+        PixelMask(name="lung-space", values=[[1.0]]),
+        PixelMask(name="lung space", values=[[np.nan]]),
+    ]
+    _, mask_archive = pixel_masks_to_rows_and_archive(masks)
+    assert sorted(mask_archive) == ["lung_space_0", "lung_space_1"]
+
+    parameters = [
+        ParameterResult(name="a-b", value=np.zeros(2), modality="eit"),
+        ParameterResult(name="a b", value=np.ones(2), modality="eit"),
+    ]
+    _, parameter_archive = parameter_results_to_rows_and_archive(parameters)
+    assert sorted(parameter_archive) == ["a_b_0", "a_b_1"]
+
+
+def test_metadata_of_values_per_breath_and_masks_is_exported(tmp_path):
+    session = M3Session()
+    session.interval_data.add(
+        IntervalData(
+            name="pixel_breaths",
+            modality="eit",
+            intervals=_two_breaths(),
+            values=[np.zeros((1, 1, 3)), np.ones((1, 1, 3))],
+            metadata={"landmarks": ["start_time", "middle_time", "end_time"]},
+        )
+    )
+    session.pixel_masks.add(
+        PixelMask(
+            name="tiv_lungspace_mask",
+            values=[[1.0]],
+            metadata={"parameters": {"threshold": 0.15}},
+        )
+    )
+
+    output_dir = session.export_summary(tmp_path)
+
+    [description] = json.loads(
+        (output_dir / "interval_data_metadata.json").read_text(encoding="utf-8")
+    )
+    assert description["metadata"]["landmarks"] == [
+        "start_time",
+        "middle_time",
+        "end_time",
+    ]
+    assert description["array_key"] == "pixel_breaths_0"
+    rows = _read_csv(output_dir / "interval_data.csv")
+    assert {row["result_index"] for row in rows} == {"0"}
+    [mask_row] = _read_csv(output_dir / "pixel_masks.csv")
+    assert ast.literal_eval(mask_row["metadata"]) == {"parameters": {"threshold": 0.15}}
+
+
+def test_a_missing_value_next_to_arrays_is_written_as_an_empty_row(tmp_path):
+    session = M3Session()
+    session.interval_data.add(
+        IntervalData(
+            name="pixel_tivs",
+            modality="eit",
+            intervals=_two_breaths(),
+            values=[None, np.ones((2, 2))],
+        )
+    )
+    session.quality.add(
+        QualityFlag(name="check", passed=True, severity="info", modality="eit")
+    )
+
+    output_dir = session.export_summary(tmp_path)
+
+    rows = _read_csv(output_dir / "interval_data.csv")
+    assert rows[0]["value"] == "" and rows[0]["array_index"] == ""
+    assert rows[1]["array_index"] == "0"
+    with np.load(output_dir / "interval_data_arrays.npz") as archive:
+        assert archive["pixel_tivs_0"].shape == (1, 2, 2)
+    # The rest of the export is still written.
+    assert (output_dir / "quality_flags.csv").exists()
+
+
+def test_a_result_that_cannot_be_stored_stops_the_export_before_any_file(tmp_path):
+    session = M3Session()
+    session.parameter_results.add(
+        ParameterResult(name="tiv", value=1.5, modality="eit")
+    )
+    session.interval_data.add(
+        IntervalData(
+            name="odd",
+            modality="eit",
+            intervals=_two_breaths(),
+            values=[np.ones((2, 2)), np.ones((3, 3))],
+        )
+    )
+
+    with pytest.raises(ValueError, match="different shapes"):
+        session.export_summary(tmp_path)
+
+    assert not (tmp_path / "parameter_results.csv").exists()
+    assert not (tmp_path / "session_metadata.json").exists()

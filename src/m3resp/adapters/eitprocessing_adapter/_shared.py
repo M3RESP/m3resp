@@ -9,7 +9,8 @@ from typing import Any
 import numpy as np
 
 from m3resp.core.exceptions import OptionalDependencyError
-from m3resp.data import ParameterResult, Signal
+from m3resp.data import IntervalData, PixelMap, Signal
+from m3resp.data.events import BreathEvent, coerce_breath_events
 from m3resp.data.signals import Modality, ProcessingState
 
 
@@ -214,44 +215,70 @@ def continuous_data_to_signal(
     )
 
 
-def _sparse_data_to_parameters(
-    obj: Any, *, modality: str, method: str
-) -> list[ParameterResult]:
-    """Convert an `eitprocessing.SparseData`-shaped object (one value per
-    breath) into one `ParameterResult` per non-NaN sample.
+def breath_intervals_to_breath_events(breath_intervals: Any) -> list[BreathEvent]:
+    """Convert eitprocessing's breaths (an ``IntervalData`` of ``Breath``
+    objects) into m3resp `BreathEvent` objects, in the same order. The
+    breath's middle time (the switch from inhalation to exhalation) becomes
+    the turning point."""
 
-    Per-breath timing is usually a scalar, but pixel-resolved results (e.g.
-    pixel TIV) carry a full array (row, column, ...) per breath. Both shapes
-    are preserved; the array case is never truncated to a single float.
+    return coerce_breath_events(
+        _breath_intervals_to_dicts(breath_intervals),
+        modality="eit",
+        source="eitprocessing.BreathDetection",
+    )
+
+
+def sparse_data_to_interval_data(
+    obj: Any,
+    breaths: list[BreathEvent],
+    *,
+    modality: str,
+    method: str,
+    metadata: dict[str, Any] | None = None,
+    as_pixel_maps: bool = False,
+) -> IntervalData:
+    """Convert an eitprocessing ``SparseData`` with one value per breath
+    (TIV, EELI, pixel TIV) into an `IntervalData` that keeps each value next
+    to its breath.
+
+    eitprocessing keeps only one time per breath (its middle or its end) and
+    not the breath itself, so ``breaths`` must be the breaths the values were
+    computed over, in the same order. With ``as_pixel_maps=True`` each value
+    is a (row, column) grid and becomes a `PixelMap`.
+
+    Raises:
+        ValueError: If the number of values and breaths differ, which means
+            the breaths are not the ones the values belong to.
     """
 
-    values = np.asarray(obj.values)
-    times = np.asarray(obj.time, dtype=object)
-    name = getattr(obj, "name", None) or getattr(obj, "label", None) or "parameter"
-    unit = getattr(obj, "unit", None)
-
-    results: list[ParameterResult] = []
-    for index, value in enumerate(values):
-        if np.ndim(value) == 0 and np.isnan(value):
-            continue
-        metadata: dict[str, Any] = {}
-        if index < len(times):
-            time_entry = np.asarray(times[index])
-            if time_entry.ndim == 0:
-                metadata["time"] = float(time_entry)
-            else:
-                metadata["time"] = time_entry.tolist()
-                metadata["time_shape"] = list(time_entry.shape)
-                metadata["time_axes"] = ["row", "column"][: time_entry.ndim]
-        results.append(
-            ParameterResult(
-                name=name,
-                value=value,
-                modality=modality,
-                unit=unit,
-                breath_id=str(index),
-                method=method,
-                metadata=metadata,
-            )
+    values = np.asarray(obj.values, dtype=float)
+    if len(values) != len(breaths):
+        raise ValueError(
+            f"Got {len(values)} per-breath values but {len(breaths)} breaths; "
+            "the breaths must be the ones the values were computed over."
         )
-    return results
+    name = getattr(obj, "label", None) or getattr(obj, "name", None) or "parameter"
+    unit = getattr(obj, "unit", None)
+    per_breath: list[Any] | np.ndarray = values
+    if as_pixel_maps:
+        per_breath = [
+            PixelMap(
+                name=name,
+                values=grid,
+                modality=modality,
+                category="impedance",
+                unit=unit,
+                method=method,
+            )
+            for grid in values
+        ]
+    return IntervalData(
+        name=name,
+        modality=modality,
+        intervals=list(breaths),
+        values=per_breath,
+        category="impedance",
+        unit=unit,
+        method=method,
+        metadata=dict(metadata or {}),
+    )

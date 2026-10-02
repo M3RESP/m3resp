@@ -71,6 +71,7 @@ _SPEC: dict[str, Any] = {
             "in": {"signal": "global_impedance"},
             "with": {"min_duration_s": 2 / 3},
         },
+        {"uses": "eit.continuous_tiv"},
         {"uses": "eit.eeli"},
         {"uses": "eit.pixel_tiv"},
         {"uses": "eit.pixel_breaths"},
@@ -142,12 +143,37 @@ def test_eeli_matches_direct_eeli_call(pipeline_result):
 
     eeli_result = pipeline_result.value("eeli_result")
     np.testing.assert_array_equal(
-        eeli_result.value, np.asarray(expected.values, dtype=float)
+        eeli_result.values, np.asarray(expected.values, dtype=float)
     )
+    # eitprocessing puts each EELI at the end of its breath, so the stored
+    # breaths must end at exactly those times.
     np.testing.assert_array_equal(
-        eeli_result.metadata["time"], np.asarray(expected.time, dtype=float)
+        [breath.end_time for breath in eeli_result.intervals],
+        np.asarray(expected.time, dtype=float),
     )
     assert eeli_result.unit == expected.unit
+
+
+def test_continuous_tiv_matches_direct_tiv_call(pipeline_result):
+    from eitprocessing.parameters.tidal_impedance_variation import TIV
+
+    global_impedance = pipeline_result.value("global_impedance")
+    breath_detector = pipeline_result.value("breath_detector")
+
+    expected = TIV(breath_detection=breath_detector).compute_parameter(
+        global_impedance, store=False, result_label="continuous_tivs"
+    )
+
+    tiv_result = pipeline_result.value("continuous_tiv_result")
+    np.testing.assert_array_equal(
+        tiv_result.values, np.asarray(expected.values, dtype=float)
+    )
+    # eitprocessing puts each TIV at the middle of its breath, which is the
+    # turning point of the stored breath.
+    assert [breath.peak_time for breath in tiv_result.intervals] == [
+        float(time) for time in expected.time
+    ]
+    assert tiv_result in list(pipeline_result.session.interval_data)
 
 
 def test_pixel_tiv_matches_direct_tiv_call(pipeline_result):
@@ -172,7 +198,18 @@ def test_pixel_tiv_matches_direct_tiv_call(pipeline_result):
     expected_values = np.asarray(expected.values, dtype=float)
 
     pixel_tiv_result = pipeline_result.value("pixel_tiv_result")
-    np.testing.assert_array_equal(pixel_tiv_result.value, expected_values)
+    np.testing.assert_array_equal(
+        np.stack([pixel_map.values for pixel_map in pixel_tiv_result.values]),
+        expected_values,
+    )
+    # With continuous timing every pixel uses the breath's middle time, which
+    # is the turning point of the stored breath.
+    expected_middle_times = [
+        float(np.asarray(times, dtype=float)[0, 0]) for times in expected.time
+    ]
+    assert [
+        breath.peak_time for breath in pixel_tiv_result.intervals
+    ] == expected_middle_times
 
 
 def test_pixel_breaths_matches_direct_pixel_breath_call(pipeline_result):
@@ -202,7 +239,13 @@ def test_pixel_breaths_matches_direct_pixel_breath_call(pipeline_result):
                     )
 
     pixel_breath_timing_result = pipeline_result.value("pixel_breath_timing_result")
-    np.testing.assert_array_equal(pixel_breath_timing_result.value, expected_landmarks)
+    np.testing.assert_array_equal(
+        np.stack(pixel_breath_timing_result.values), expected_landmarks
+    )
+    assert [
+        (breath.start_time, breath.end_time)
+        for breath in pixel_breath_timing_result.intervals
+    ] == [(float(start), float(end)) for start, end in expected.intervals]
 
 
 def test_roi_tiv_lungspace_matches_direct_call(pipeline_result):
@@ -216,7 +259,7 @@ def test_roi_tiv_lungspace_matches_direct_call(pipeline_result):
     )
 
     result = pipeline_result.value("tiv_lungspace_result")
-    np.testing.assert_array_equal(result.value, expected_mask.mask)
+    np.testing.assert_array_equal(result.values, expected_mask.mask)
 
 
 def test_roi_amplitude_lungspace_matches_direct_call(pipeline_result):
@@ -230,7 +273,7 @@ def test_roi_amplitude_lungspace_matches_direct_call(pipeline_result):
     )
 
     result = pipeline_result.value("amplitude_lungspace_result")
-    np.testing.assert_array_equal(result.value, expected_mask.mask)
+    np.testing.assert_array_equal(result.values, expected_mask.mask)
 
 
 def test_roi_watershed_matches_direct_call(pipeline_result):
@@ -244,7 +287,7 @@ def test_roi_watershed_matches_direct_call(pipeline_result):
     )
 
     result = pipeline_result.value("watershed_lungspace_result")
-    np.testing.assert_array_equal(result.value, expected_mask.mask)
+    np.testing.assert_array_equal(result.values, expected_mask.mask)
 
 
 def test_roi_filter_by_size_matches_direct_call(pipeline_result):
@@ -254,4 +297,4 @@ def test_roi_filter_by_size_matches_direct_call(pipeline_result):
     expected_mask = FilterROIBySize(min_region_size=1).apply(watershed_mask)
 
     result = pipeline_result.value("size_filtered_roi_result")
-    np.testing.assert_array_equal(result.value, expected_mask.mask)
+    np.testing.assert_array_equal(result.values, expected_mask.mask)

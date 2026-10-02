@@ -1,4 +1,9 @@
-"""Registered pixel-level EIT pipeline steps."""
+"""Registered pixel-level EIT pipeline steps.
+
+Both steps give one result per breath, so both store an `IntervalData` on
+``session.interval_data``: per-pixel TIV as one `PixelMap` per breath, and
+per-pixel breath timing as one (row, column, landmark) grid per breath.
+"""
 
 from __future__ import annotations
 
@@ -6,8 +11,12 @@ from typing import Any, Literal, get_args
 
 import numpy as np
 
+from m3resp.adapters.eitprocessing_adapter import (
+    breath_intervals_to_breath_events,
+    sparse_data_to_interval_data,
+)
 from m3resp.core.session import M3Session
-from m3resp.data import ParameterResult
+from m3resp.data import BreathEvent, IntervalData
 from m3resp.workflows.registry import (
     StepArtifact,
     StepParameter,
@@ -17,18 +26,11 @@ from m3resp.workflows.registry import (
 from ._shared import (
     _EITPROCESSING,
     _SESSION_ARTIFACT,
+    _breaths_used_by,
     _record_step,
     _upstream_metadata,
+    _use_stored_eit_breaths,
 )
-
-
-def _object_array_to_float(values: Any) -> np.ndarray:
-    """Convert an object-dtype array using `None` for missing entries into a
-    float array with NaN in place of `None`, preserving its shape."""
-
-    array = np.asarray(values, dtype=object)
-    flat = [np.nan if value is None else float(value) for value in array.ravel()]
-    return np.array(flat, dtype=float).reshape(array.shape)
 
 
 @register_step(
@@ -46,7 +48,7 @@ def _object_array_to_float(values: Any) -> np.ndarray:
     category="parameters",
     modality="eit",
     optional_packages=_EITPROCESSING,
-    session_writes=("session.parameter_results",),
+    session_writes=("session.interval_data",),
     input_artifacts=(
         StepArtifact(
             name="eit_data",
@@ -60,9 +62,9 @@ def _object_array_to_float(values: Any) -> np.ndarray:
         ),
         StepArtifact(
             name="signal",
-            artifact_type="eit_global_impedance",
+            artifact_type="eit_impedance_waveform",
             default_context_key="global_impedance",
-            description="Global impedance waveform supplying breath timing.",
+            description="Impedance waveform (global, or regional from an ROI) supplying breath timing.",
             compatibility_only=True,
         ),
         StepArtifact(
@@ -90,8 +92,8 @@ def _object_array_to_float(values: Any) -> np.ndarray:
             description=(
                 "Whether breath timing is taken per-pixel, or from the "
                 "continuous waveform bound to 'signal'. That waveform is the "
-                "global impedance by default, but it can be a regional or "
-                "functional one instead."
+                "global impedance (all pixels) by default, but a regional "
+                "impedance waveform (from an ROI, e.g. a lung region) works too."
             ),
         ),
         StepParameter(
@@ -111,8 +113,8 @@ def _object_array_to_float(values: Any) -> np.ndarray:
         ),
         StepArtifact(
             name="pixel_tiv_result",
-            artifact_type="parameter_result",
-            description="Native array-valued ParameterResult, shape (breath, row, column).",
+            artifact_type="interval_data",
+            description="One pixel map of TIV per breath, each stored with its breath (IntervalData of PixelMap).",
             axes=("breath", "row", "column"),
         ),
     ),
@@ -136,12 +138,6 @@ def pixel_tiv(
         result_label=result_label,
     )
 
-    values = _object_array_to_float(result.values)
-    time = _object_array_to_float(result.time)
-    valid_breath_indices = [
-        index for index in range(values.shape[0]) if not np.all(np.isnan(values[index]))
-    ]
-
     metadata = _upstream_metadata(
         source_function=(
             "eitprocessing.parameters.tidal_impedance_variation."
@@ -150,30 +146,37 @@ def pixel_tiv(
         operation="eit.pixel_tiv",
         parameters={"tiv_timing": tiv_timing, "result_label": result_label},
     )
-    parameter_metadata = dict(metadata)
-    parameter_metadata.update(
+    # With tiv_timing="pixel" each pixel has its own breath timing; those
+    # times are the result of 'eit.pixel_breaths', so only the breath each
+    # map belongs to is kept here.
+    pixel_tiv_result = sparse_data_to_interval_data(
+        result,
+        _breaths_used_by(breath_detector, signal, session),
+        modality="eit",
+        method="eitprocessing.TIV",
+        metadata=metadata,
+        as_pixel_maps=True,
+    )
+    pixel_maps = (
+        [] if pixel_tiv_result.values is None else list(pixel_tiv_result.values)
+    )
+    valid_breath_indices = [
+        index
+        for index, pixel_map in enumerate(pixel_maps)
+        if not np.all(np.isnan(pixel_map.values))
+    ]
+    pixel_tiv_result.metadata.update(
         {
-            "time": time.tolist(),
-            "shape": list(values.shape),
-            "dtype": str(values.dtype),
-            "axes": ["breath", "row", "column"],
+            "axes": ["row", "column"],
             "tiv_timing": tiv_timing,
             "result_label": result_label,
             "valid_breath_indices": valid_breath_indices,
             "valid_breath_fraction": (
-                len(valid_breath_indices) / values.shape[0] if values.shape[0] else 0.0
+                len(valid_breath_indices) / len(pixel_maps) if pixel_maps else 0.0
             ),
         }
     )
-    pixel_tiv_result = ParameterResult(
-        name=getattr(result, "label", None) or result_label,
-        value=values,
-        modality="eit",
-        unit=getattr(result, "unit", None),
-        method="eitprocessing.TIV",
-        metadata=parameter_metadata,
-    )
-    session.parameter_results.add(pixel_tiv_result)
+    session.interval_data.add(pixel_tiv_result)
 
     _record_step(session, "eit.pixel_tiv", metadata=metadata)
     return {"pixel_tiv": result, "pixel_tiv_result": pixel_tiv_result}
@@ -212,6 +215,35 @@ def _pixel_breaths_to_landmark_array(values: Any) -> np.ndarray:
     return landmarks
 
 
+def _pixel_breath_intervals(
+    intervals: Any, breath_intervals: Any, session: M3Session
+) -> list[BreathEvent]:
+    """The breaths PixelBreath looked inside, with their turning points.
+
+    PixelBreath finds the breaths on the impedance waveform first and then each
+    pixel's breath inside them, but it hands back only the start and end of
+    those breaths. ``breath_intervals`` are the same breaths found again with
+    the same settings; they add the middle time, so these breaths are stored
+    the same way as the breaths of TIV and EELI.
+
+    Raises:
+        ValueError: If the breaths found again do not have the same start
+            and end times as PixelBreath's intervals.
+    """
+
+    breaths = _use_stored_eit_breaths(
+        breath_intervals_to_breath_events(breath_intervals), session
+    )
+    expected = [(float(start), float(end)) for start, end in intervals]
+    found = [(breath.start_time, breath.end_time) for breath in breaths]
+    if found != expected:
+        raise ValueError(
+            "eit.pixel_breaths: the breaths found on 'timing_data' do not match "
+            f"the {len(expected)} breaths PixelBreath used (found {len(found)})."
+        )
+    return breaths
+
+
 @register_step(
     "eit.pixel_breaths",
     reads={
@@ -226,7 +258,7 @@ def _pixel_breaths_to_landmark_array(values: Any) -> np.ndarray:
     category="detection",
     modality="eit",
     optional_packages=_EITPROCESSING,
-    session_writes=("session.parameter_results",),
+    session_writes=("session.interval_data",),
     input_artifacts=(
         StepArtifact(
             name="eit_data",
@@ -237,9 +269,9 @@ def _pixel_breaths_to_landmark_array(values: Any) -> np.ndarray:
         ),
         StepArtifact(
             name="timing_data",
-            artifact_type="eit_global_impedance",
+            artifact_type="eit_impedance_waveform",
             default_context_key="global_impedance",
-            description="Global impedance waveform supplying overall breath timing.",
+            description="Impedance waveform (global, or regional from an ROI) supplying overall breath timing.",
             compatibility_only=True,
         ),
         StepArtifact(
@@ -289,9 +321,9 @@ def _pixel_breaths_to_landmark_array(values: Any) -> np.ndarray:
         ),
         StepArtifact(
             name="pixel_breath_timing_result",
-            artifact_type="parameter_result",
+            artifact_type="interval_data",
             unit="s",
-            description="Native array-valued ParameterResult of [start, middle, end] landmark times.",
+            description="Per breath, the [start, middle, end] time of each pixel's breath, stored with the breath it belongs to (IntervalData).",
             axes=("breath", "row", "column", "landmark"),
         ),
     ),
@@ -345,23 +377,29 @@ def pixel_breaths(
     )
     metadata.update(
         {
-            "shape": list(landmarks.shape),
-            "dtype": str(landmarks.dtype),
-            "axes": ["breath", "row", "column", "landmark"],
+            "axes": ["row", "column", "landmark"],
             "landmarks": ["start_time", "middle_time", "end_time"],
             "valid_pixel_breath_count": int(valid.sum()),
             "valid_pixel_breath_fraction": float(valid.mean()) if valid.size else 0.0,
         }
     )
-    pixel_breath_timing_result = ParameterResult(
+    breaths = _pixel_breath_intervals(
+        result.intervals,
+        session.eit_adapter.find_breaths(
+            timing_data, minimum_duration_seconds=minimum_duration_seconds
+        ),
+        session,
+    )
+    pixel_breath_timing_result = IntervalData(
         name=result_label,
-        value=landmarks,
         modality="eit",
+        intervals=list(breaths),
+        values=list(landmarks),
         unit="s",
         method="eitprocessing.PixelBreath",
         metadata=metadata,
     )
-    session.parameter_results.add(pixel_breath_timing_result)
+    session.interval_data.add(pixel_breath_timing_result)
 
     _record_step(session, "eit.pixel_breaths", metadata=metadata)
     return {

@@ -66,6 +66,10 @@ internal and may change without notice.
    m3resp.BreathEvent
    m3resp.EventData
    m3resp.IntervalData
+   m3resp.IntervalDataCollection
+   m3resp.PixelMap
+   m3resp.PixelMask
+   m3resp.PixelMaskCollection
    m3resp.LinkedBreath
    m3resp.coerce_event
    m3resp.coerce_interval
