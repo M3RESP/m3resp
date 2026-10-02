@@ -13,10 +13,9 @@
 #   outputs:     where to write results and which artifacts to produce
 #   inputs:      data paths (referenced in steps with @name)
 #
-# *** USER TEMPLATE - `inputs.eit_file` below is a private, site-specific ***
-# *** absolute path (a researcher's local recording), not a repo fixture. ***
-# *** Point it at your own `.bin` file before running; this cannot be a   ***
-# *** portable spec-relative path like the other examples in `examples/`.***
+# `inputs.eit_file` points to the synthetic Draeger recording shipped in
+# tests/data/, relative to this file. To use your own recording, replace it
+# with the path to your `.bin` file and check the slice ranges below.
 
 schema_version: 1
 name: rotarc-breath-duration
@@ -43,7 +42,7 @@ outputs:
   figures: true
 
 inputs:
-  eit_file: /home/mahyart/Desktop/M3Resp/EIT_EMG/ajM3resp_02_001_01.bin #.../PCvPS-Blankman/raw .bin files/B001/B001_01_01.bin
+  eit_file: ../../tests/data/draeger_synthetic_draeger_20Hz.bin
   vendor: draeger
 
 steps:
@@ -51,16 +50,16 @@ steps:
     uses: eit.load
     with: { file_path: "@eit_file", vendor: "@vendor" }
 
-  # start/end are sample indices into eit_file above (0:1550 = the full
-  # recording for the currently configured file, 1550 samples at 50 Hz).
+  # start/end are sample indices into eit_file above (0:1200 = the full
+  # synthetic recording, 1200 samples at 20 Hz = 60 s).
   # Re-check these against len(raw_eit) if you point eit_file at a
   # different recording - an out-of-range slice fails silently (empty
   # result) rather than raising, and shows up later as a confusing crash
   # in rate/breath detection.
   - id: slice_raw
-    uses: eit.slice
+    uses: eit.slice_signal
     in:  { signal: raw_eit }
-    with: { start: 0, end: 1550, mode: index }
+    with: { start: 0, end: 1200, mode: index }
     out: { result: selected_eit }
 
   - id: detect_rates
@@ -77,9 +76,9 @@ steps:
     in:  { signal: filtered_eit }
 
   - id: slice_global_impedance
-    uses: eit.slice
+    uses: eit.slice_signal
     in:  { signal: global_impedance }
-    with: { start: 0, end: 1550, mode: index }
+    with: { start: 0, end: 1200, mode: index }
     out: { result: detection_signal }
 
   - id: detect_breaths

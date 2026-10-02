@@ -1,4 +1,10 @@
-"""Ventilator breath detection normalization into common `BreathEvent`s."""
+"""Turn ventilator breath detections into m3resp `BreathEvent`s.
+
+A breath detector returns either sample indices (one per breath) or objects
+that already have a start and end time. These helpers turn either kind into
+`BreathEvent`s with modality ``"ventilator"``, and read the sampling rate and
+length of a ventilator recording when they are needed to do so.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +15,7 @@ from typing import Any
 import numpy as np
 
 from m3resp.core.events import BreathEvent, Event, coerce_breath_event
-from m3resp.synchronization.cropping import VENTILATOR
+from m3resp.modalities.names import VENTILATOR
 
 
 def iter_ventilator_detections(detections: Any) -> list[Any]:
@@ -103,8 +109,7 @@ def infer_ventilator_duration(
     shape = np.asarray(array).shape
     if not shape:
         return None
-    # Same convention as the cropping helpers: channels first unless the
-    # array is stored one row per sample.
+    # Channels first unless the array is stored one row per sample.
     axis = 1 if len(shape) > 1 and shape[1] >= shape[0] else 0
     n_samples = shape[axis]
     return n_samples / float(fs) if n_samples else None

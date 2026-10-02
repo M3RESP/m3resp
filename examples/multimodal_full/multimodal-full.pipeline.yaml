@@ -5,7 +5,7 @@
 # ventilator processing chains (the same operations exercised individually
 # in eit-full.pipeline.yaml / emg-full.pipeline.yaml), then exports native
 # results. It does not add back any post-detection alignment step - raw
-# synchronization via `session.sync_raw` is the only cross-modality timing
+# synchronization via `sync.raw_modalities` is the only cross-modality timing
 # adjustment in this pipeline.
 #
 # For a smaller, easier-to-read introduction to multimodal pipelines, see
@@ -56,7 +56,7 @@ steps:
 
   # -- Raw synchronization, before any preprocessing ----------------------------
   - id: sync_raw
-    uses: session.sync_raw
+    uses: sync.raw_modalities
     with:
       method: manual_offset
       offset_seconds: { eit: 0.0, emg: -2.0, vent: 0.0 }

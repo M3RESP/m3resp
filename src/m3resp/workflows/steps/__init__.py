@@ -10,9 +10,8 @@ from m3resp.workflows.steps import (
     emg,
     export,
     metrics,
-    session,
     sync,
     ventilator,
 )
 
-__all__ = ["eit", "emg", "export", "metrics", "session", "sync", "ventilator"]
+__all__ = ["eit", "emg", "export", "metrics", "sync", "ventilator"]

@@ -49,7 +49,7 @@ steps:
   # the notebook, which processes only the selected window. The end is
   # 200.0005 s because the notebook keeps the sample at exactly 200 s too
   # (a slice keeps samples before its end time).
-  - uses: emg.slice
+  - uses: emg.slice_recording
     with: { start_seconds: 140.0, end_seconds: 200.0005 }
 
   # Stage 1: 50 Hz harmonic notch (Q 30, harmonics up to 950 Hz, just below

@@ -14,7 +14,7 @@ from m3resp import M3Session
 session = M3Session()
 
 session.load_emg(
-    "data/source/synthetic/20260610_153009/m3resp_multimodal_1_emg.Poly5"
+    "tests/data/m3resp_multimodal_1_emg.Poly5"
 )
 
 # Channel 1 carries the breathing muscle signal; channel 0 is mostly noise.

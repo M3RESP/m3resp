@@ -1,4 +1,4 @@
-"""Keeping only a time window of the loaded EMG recording (`emg.slice`)."""
+"""Keeping only a time window of the loaded EMG recording (`emg.slice_recording`)."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ import pytest
 
 from m3resp import M3Session
 from m3resp.emg import ReSurfEMG
+from m3resp.adapters.ventilator_adapter import VentilatorAdapter
 from m3resp.core.exceptions import MissingModalityDataError
-from m3resp.workflows.steps.emg.loading import slice_recording
-from known_divergences import MISSING_TEST_DATA_FILE
+from m3resp.workflows.steps.emg.slicing import slice_recording
 
 FS = 100.0
 DURATION_SECONDS = 60.0
@@ -38,7 +38,6 @@ def _session() -> M3Session:
     return session
 
 
-@MISSING_TEST_DATA_FILE
 def test_slice_keeps_only_the_window():
     session = _session()
 
@@ -52,7 +51,6 @@ def test_slice_keeps_only_the_window():
     assert session.parameters["emg_slice"] == summary
 
 
-@MISSING_TEST_DATA_FILE
 def test_without_an_end_the_rest_of_the_recording_is_kept():
     session = _session()
 
@@ -63,7 +61,6 @@ def test_without_an_end_the_rest_of_the_recording_is_kept():
     assert array[0, -1] == pytest.approx(DURATION_SECONDS - 1 / FS)
 
 
-@MISSING_TEST_DATA_FILE
 def test_airway_pressure_from_the_same_file_is_cut_the_same_way():
     """Paw and EMG share one clock, so they must stay lined up."""
 
@@ -77,7 +74,98 @@ def test_airway_pressure_from_the_same_file_is_cut_the_same_way():
     np.testing.assert_array_equal(ventilator, emg)
 
 
-@MISSING_TEST_DATA_FILE
+def test_ventilator_data_at_its_own_rate_is_cut_at_the_same_times():
+    """Ventilator data from the EMG file, sampled at a different rate and a
+    little longer, is cut at the same times, counted at its own rate: the
+    start from its first sample, the end from its own last sample."""
+
+    ventilator_fs = 50.0
+    n_ventilator = int(DURATION_SECONDS * ventilator_fs) + 7
+    time = np.arange(n_ventilator) / ventilator_fs
+    payload = {
+        "array": np.vstack([time, time, time]),
+        "metadata": {"fs": ventilator_fs, "labels": ["Paw", "Flow", "Volume"]},
+    }
+    session = M3Session(
+        emg_adapter=ReSurfEMGAdapter(loader=lambda *args, **kwargs: _recording()),
+        ventilator_adapter=VentilatorAdapter(loader=lambda *args, **kwargs: payload),
+    )
+    session.load_emg("study.txt")
+    session.load_ventilator("study.txt")  # on the EMG clock
+
+    session.slice_emg(10.0, 25.0)
+
+    ventilator = session.ventilator.data["array"]
+    # 10 s at 50 Hz off the front; 35 s at 50 Hz off its own end.
+    assert ventilator.shape == (3, n_ventilator - 500 - 1750)
+    assert ventilator[0, 0] == pytest.approx(10.0)
+    assert session.ventilator.raw is ventilator
+
+
+def test_emg_data_held_as_a_list_stays_a_list():
+    session = M3Session(
+        emg_adapter=ReSurfEMGAdapter(
+            loader=lambda *args, **kwargs: {
+                "array": _recording()["array"].tolist(),
+                "metadata": {"fs": FS},
+            }
+        )
+    )
+    session.load_emg("study.txt")
+
+    session.slice_emg(10.0, 25.0)
+
+    assert isinstance(session.emg.data["array"], list)
+    assert len(session.emg.data["array"][0]) == int(15.0 * FS)
+    assert session.emg.raw is session.emg.data["array"]
+
+
+def test_ventilator_data_at_its_own_rate_is_cut_at_the_same_times():
+    """Ventilator data from the EMG file, sampled at a different rate and a
+    little longer, is cut at the same times, counted at its own rate: the
+    start from its first sample, the end from its own last sample."""
+
+    ventilator_fs = 50.0
+    n_ventilator = int(DURATION_SECONDS * ventilator_fs) + 7
+    time = np.arange(n_ventilator) / ventilator_fs
+    payload = {
+        "array": np.vstack([time, time, time]),
+        "metadata": {"fs": ventilator_fs, "labels": ["Paw", "Flow", "Volume"]},
+    }
+    session = M3Session(
+        emg_adapter=ReSurfEMGAdapter(loader=lambda *args, **kwargs: _recording()),
+        ventilator_adapter=VentilatorAdapter(loader=lambda *args, **kwargs: payload),
+    )
+    session.load_emg("study.txt")
+    session.load_ventilator("study.txt")  # on the EMG clock
+
+    session.slice_emg(10.0, 25.0)
+
+    ventilator = session.ventilator.data["array"]
+    # 10 s at 50 Hz off the front; 35 s at 50 Hz off its own end.
+    assert ventilator.shape == (3, n_ventilator - 500 - 1750)
+    assert ventilator[0, 0] == pytest.approx(10.0)
+    assert session.ventilator.raw is ventilator
+
+
+def test_emg_data_held_as_a_list_stays_a_list():
+    session = M3Session(
+        emg_adapter=ReSurfEMGAdapter(
+            loader=lambda *args, **kwargs: {
+                "array": _recording()["array"].tolist(),
+                "metadata": {"fs": FS},
+            }
+        )
+    )
+    session.load_emg("study.txt")
+
+    session.slice_emg(10.0, 25.0)
+
+    assert isinstance(session.emg.data["array"], list)
+    assert len(session.emg.data["array"][0]) == int(15.0 * FS)
+    assert session.emg.raw is session.emg.data["array"]
+
+
 @pytest.mark.parametrize(
     ("start", "end"),
     [(-1.0, 10.0), (20.0, 10.0), (10.0, 10.0), (0.0, DURATION_SECONDS + 1.0)],
@@ -96,7 +184,6 @@ def test_slicing_needs_a_loaded_recording():
         M3Session().slice_emg(0.0, 1.0)
 
 
-@MISSING_TEST_DATA_FILE
 def test_step_calls_the_session_method():
     session = _session()
 
