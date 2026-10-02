@@ -30,8 +30,8 @@ if TYPE_CHECKING:
 
 
 class _CoreMixin:
-    # def __init__(self):#, loader: Callable[..., Any] | None = None):
-    # self._loader = loader
+    def __init__(self, loader: Callable[..., Any] | None = None):
+        self._loader = loader
 
     # def load(self, path: str, **kwargs: Any) -> Any:
     #     # """Load EMG data through m3resp or an injected loader."""
