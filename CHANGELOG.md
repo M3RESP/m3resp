@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+### `compute_multimodal_parameters` renamed to `compute_breath_timing_parameters` (#116)
+
+The old name could be read as "all results that use more than one
+modality". What it computes is breath timing: the delay between two
+modalities' breaths, the difference in breath duration, and how often the
+modalities agree that a breath happened. **The old names are removed.**
+
+| Before | Now |
+|---|---|
+| `session.compute_multimodal_parameters()` | `session.compute_breath_timing_parameters()` |
+| `m3resp.synchronization.compute_multimodal_parameters` | `m3resp.synchronization.compute_breath_timing_parameters` |
+| Module `m3resp.synchronization.multimodal_parameters` | `m3resp.synchronization.breath_timing_parameters` |
+| Provenance action `"compute_multimodal_parameters"` | `"compute_breath_timing_parameters"` |
+
+The results keep their names, units and `modality="multimodal"`.
+
+Found while doing the rename:
+
+- **Fixes** the event-agreement score counting linked breaths that hold
+  neither modality of the pair. With a ventilator breath linked on its own,
+  `eit_emg_event_agreement` dropped although EIT and EMG agreed on every
+  breath they saw. Now only linked breaths holding a breath from at least
+  one of the two count, so the score can be higher than before when a third
+  modality was linked.
+- **Fixes** a second call to `session.compute_breath_timing_parameters()`
+  adding a second copy of every result, which then counted twice in
+  `parameter_results.csv`. A second call now replaces the earlier results.
+- With no linked breath holding either modality of a pair (for example
+  when `link_breaths()` was not called), the event-agreement result is left
+  out instead of being stored as 0.0.
+- An unknown `anchor` (such as the old `"peak"`) is now always an error. It
+  used to pass when no linked breath held both modalities.
+- The provenance record now keeps `delay_pairs` and `duration_pairs`, so the
+  call can be repeated from it.
+
 ### A labelled ventilator file no longer hands on an unnamed column
 
 - **Fixes** ventilator channels being taken from columns 0, 1 and 2 when the
@@ -102,7 +137,7 @@ names are removed:**
 |---|---|
 | `BreathEvent.peak_time`, `BreathEvent.peak_index` | `BreathEvent.extremum_time`, `BreathEvent.extremum_index` |
 | Breath and linked-breath export columns `peak_time`, `peak_index`, `eit_peak_time`, `emg_peak_time`, `ventilator_peak_time` | `extremum_time`, `extremum_index`, `eit_extremum_time`, `emg_extremum_time`, `ventilator_extremum_time`; linked breaths also gain `eit_extremum_index`, `emg_extremum_index`, `ventilator_extremum_index` |
-| `compute_multimodal_parameters(anchor="peak")`, `compute_timing_delay(anchor="peak")` | `anchor="extremum"` |
+| `compute_breath_timing_parameters(anchor="peak")`, `compute_timing_delay(anchor="peak")` | `anchor="extremum"` (the first is called `compute_multimodal_parameters` before #116, see above) |
 | Metadata `peak_sample_index`, `peak_time` on EMG and ventilator results and quality flags | `extremum_sample_index`, `extremum_time` |
 
 `coerce_breath_event` still reads `peak_time`/`peak_index` from

@@ -178,9 +178,9 @@ src/m3resp/
 │   ├── sync_methods.py                 which recordings were synchronized, and how; the
 │   │                                       UnsynchronizedDataWarning check
 │   ├── raw_traces.py                   before/after traces for the raw synchronization plot
-│   └── multimodal_parameters.py        compute_timing_delay / compute_event_agreement /
+│   └── breath_timing_parameters.py     compute_timing_delay / compute_event_agreement /
 │                                           compute_breath_duration_difference /
-│                                           compute_multimodal_parameters
+│                                           compute_breath_timing_parameters
 │
 ├── workflows/                          Stage 1's declarative step-registry engine (YAML/JSON specs)
 │   └── steps/                          add a new @register_step here for a custom, composable step
@@ -265,7 +265,7 @@ does not need to touch them:
   never about which backend did the computing, so it is unaffected by the
   upstream swap.
 - **`synchronization/`**: alignment, resampling, breath linking,
-  multimodal parameters. These operate purely on `Signal`/`BreathEvent`
+  breath timing parameters. These operate purely on `Signal`/`BreathEvent`
   objects, not on upstream library objects, so they are already
   backend-neutral.
 - **`M3Session`'s public method names and signatures**: `load_eit`,

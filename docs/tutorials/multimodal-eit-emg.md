@@ -55,7 +55,7 @@ linked = session.link_breaths(time_tolerance=0.5)
 
 # Measure breath timing across modalities. These read only the breath
 # start/end times, never the signal values inside a breath.
-multimodal_parameters = session.compute_multimodal_parameters()
+timing_parameters = session.compute_breath_timing_parameters()
 
 session.export_summary("results/multimodal/")
 ```
@@ -81,7 +81,7 @@ offset (`method="manual_offset"` is currently the only method either accepts).
   ventilator breaths that occurred close together in time. A breath with no
   match in another modality still appears, with only its own slot filled.
   See [../concepts/synchronization.md](../concepts/synchronization.md).
-- `session.compute_multimodal_parameters()` turns those links into
+- `session.compute_breath_timing_parameters()` turns those links into
   `ParameterResult`s. All three are measures of breath *timing* - they use
   only breath start/end times, never the signal values within a breath:
   - `eit_to_emg_delay` (per breath, seconds, signed): the EMG breath anchor
@@ -98,8 +98,8 @@ offset (`method="manual_offset"` is currently the only method either accepts).
     other; that is separate work.
   - `eit_emg_duration_difference` (per breath, seconds): how much longer one
     modality's breath is than the other's.
-  - `eit_emg_event_agreement` (aggregate, fraction): how often both
-    modalities found a breath at all. A quality check on detection and
+  - `eit_emg_event_agreement` (aggregate, fraction): of the breaths EIT or
+    EMG found, how many both found. A quality check on detection and
     synchronization, not an outcome measure.
 
   If a ventilator breath list was also linked, the same three are produced
@@ -114,7 +114,7 @@ offset (`method="manual_offset"` is currently the only method either accepts).
   [../concepts/parameters.md](../concepts/parameters.md).
 
 ```python
-for p in multimodal_parameters:
+for p in timing_parameters:
     if p.name == "eit_to_emg_delay":
         print(p.breath_id, p.value, "s")  # signed delay, EMG relative to EIT
 ```
@@ -126,14 +126,14 @@ activity, which comes before end of inspiration). So the delay is not an
 end-of-inspiration timing difference:
 
 ```python
-session.compute_multimodal_parameters(anchor="extremum")
+session.compute_breath_timing_parameters(anchor="extremum")
 ```
 
 To restrict which modality pairs get computed (skipping a pairing you don't
 care about), pass `delay_pairs`/`duration_pairs` explicitly:
 
 ```python
-session.compute_multimodal_parameters(delay_pairs=[("emg", "eit")], duration_pairs=[])
+session.compute_breath_timing_parameters(delay_pairs=[("emg", "eit")], duration_pairs=[])
 ```
 
 ## The one-call preset for the synchronization half
@@ -145,6 +145,6 @@ session.run_preset("multimodal")
 Calls `synchronize_raw_modalities()` then `synchronize_multimodal_breaths()` - run this
 after the per-modality `"eit"`/`"emg"` presets so their breath events
 already exist, then call `session.link_breaths()` and
-`session.compute_multimodal_parameters()` directly (there is no preset for
+`session.compute_breath_timing_parameters()` directly (there is no preset for
 those two yet since they're commonly parameterized per study). See
 [../developer/preset-contracts.md](../developer/preset-contracts.md).

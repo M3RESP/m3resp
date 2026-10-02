@@ -13,12 +13,14 @@ from m3resp import M3Session
 from m3resp.data import Signal
 from m3resp.data.events import BreathEvent
 from m3resp.data.linked_breath import LinkedBreath
+from m3resp.data.parameters import ParameterResult
 from m3resp.synchronization import (
     compute_breath_duration_difference,
+    compute_breath_timing_parameters,
     compute_event_agreement,
-    compute_multimodal_parameters,
     compute_offsets_from_timestamps,
     compute_timing_delay,
+    is_breath_timing_result,
     link_breaths_by_time,
     resample_signal,
 )
@@ -240,6 +242,14 @@ class TestComputeTimingDelay:
         with pytest.raises(ValueError):
             compute_timing_delay(linked, "emg", "eit", anchor="middle")
 
+    def test_rejects_unknown_anchor_even_when_a_modality_is_missing(self):
+        linked = LinkedBreath(
+            breaths={"emg": BreathEvent(modality="emg", start_time=1.0, end_time=2.0)}
+        )
+
+        with pytest.raises(ValueError, match="anchor"):
+            compute_timing_delay(linked, "emg", "eit", anchor="peak")
+
 
 class TestComputeBreathDurationDifference:
     def test_computes_signed_difference(self):
@@ -279,8 +289,44 @@ class TestComputeEventAgreement:
     def test_empty_list_returns_zero(self):
         assert compute_event_agreement([], ("eit", "emg")) == 0.0
 
+    def test_breaths_from_another_modality_do_not_count(self):
+        # Ten breaths both EIT and EMG found, and ten ventilator breaths
+        # neither of them found: EIT and EMG still agree on every breath.
+        both = [
+            LinkedBreath(
+                breaths={
+                    "eit": BreathEvent(modality="eit", start_time=i, end_time=i + 0.5),
+                    "emg": BreathEvent(modality="emg", start_time=i, end_time=i + 0.5),
+                }
+            )
+            for i in range(10)
+        ]
+        ventilator_only = [
+            LinkedBreath(
+                breaths={
+                    "ventilator": BreathEvent(
+                        modality="ventilator", start_time=20 + i, end_time=20.5 + i
+                    )
+                }
+            )
+            for i in range(10)
+        ]
 
-class TestComputeMultimodalParameters:
+        assert compute_event_agreement(both + ventilator_only, ("eit", "emg")) == 1.0
+
+    def test_no_breath_from_either_modality_returns_zero(self):
+        ventilator_only = LinkedBreath(
+            breaths={
+                "ventilator": BreathEvent(
+                    modality="ventilator", start_time=0.0, end_time=1.0
+                )
+            }
+        )
+
+        assert compute_event_agreement([ventilator_only], ("eit", "emg")) == 0.0
+
+
+class TestComputeBreathTimingParameters:
     def test_default_pairs_come_from_observed_modalities(self):
         linked = [
             LinkedBreath(
@@ -295,7 +341,7 @@ class TestComputeMultimodalParameters:
             )
         ]
 
-        results = compute_multimodal_parameters(linked)
+        results = compute_breath_timing_parameters(linked)
 
         names = {p.name for p in results}
         assert "eit_to_emg_delay" in names
@@ -304,10 +350,35 @@ class TestComputeMultimodalParameters:
         assert all(p.modality == "multimodal" for p in results)
 
     def test_no_linked_breaths_returns_empty_list(self):
-        assert compute_multimodal_parameters([]) == []
+        assert compute_breath_timing_parameters([]) == []
+
+    def test_no_linked_breaths_with_given_pairs_returns_empty_list(self):
+        assert compute_breath_timing_parameters([], delay_pairs=[("eit", "emg")]) == []
+
+    def test_rejects_unknown_anchor_with_no_linked_breaths(self):
+        with pytest.raises(ValueError, match="anchor"):
+            compute_breath_timing_parameters([], anchor="peak")
+
+    def test_all_results_are_recognised_as_breath_timing_results(self):
+        linked = [
+            LinkedBreath(
+                breaths={
+                    "eit": BreathEvent(modality="eit", start_time=1.0, end_time=2.0),
+                    "emg": BreathEvent(modality="emg", start_time=1.1, end_time=2.1),
+                }
+            )
+        ]
+
+        results = compute_breath_timing_parameters(linked)
+
+        assert results
+        assert all(is_breath_timing_result(p) for p in results)
+        assert not is_breath_timing_result(
+            ParameterResult(name="respiratory_rate", value=12.0, modality="ventilator")
+        )
 
 
-class TestSessionComputeMultimodalParameters:
+class TestSessionComputeBreathTimingParameters:
     def test_adds_results_to_parameter_results_and_provenance(self):
         session = M3Session()
         session.add_events(
@@ -328,13 +399,48 @@ class TestSessionComputeMultimodalParameters:
         )
         session.link_breaths(time_tolerance=0.5)
 
-        results = session.compute_multimodal_parameters()
+        results = session.compute_breath_timing_parameters()
 
         assert results
         assert all(r in session.parameter_results.items for r in results)
-        assert session.provenance[-1].action == "compute_multimodal_parameters"
+        assert session.provenance[-1].action == "compute_breath_timing_parameters"
 
     def test_empty_linked_breaths_returns_empty_list(self):
         session = M3Session()
 
-        assert session.compute_multimodal_parameters() == []
+        assert session.compute_breath_timing_parameters() == []
+
+    def test_second_call_replaces_earlier_results(self):
+        session = M3Session()
+        session.add_events(
+            "eit_breaths",
+            [BreathEvent(modality="eit", start_time=1.0, end_time=2.0)],
+        )
+        session.add_events(
+            "emg_breaths",
+            [BreathEvent(modality="emg", start_time=1.1, end_time=2.1)],
+        )
+        other = session.parameter_results.add(
+            ParameterResult(name="respiratory_rate", value=12.0, modality="ventilator")
+        )
+        session.link_breaths(time_tolerance=0.5)
+
+        session.compute_breath_timing_parameters()
+        second = session.compute_breath_timing_parameters(anchor="end")
+
+        assert len(session.parameter_results.for_name("eit_to_emg_delay")) == 1
+        assert len(session.parameter_results.for_name("eit_emg_event_agreement")) == 1
+        assert other in session.parameter_results.items
+        assert all(r in session.parameter_results.items for r in second)
+
+    def test_provenance_keeps_the_pairs(self):
+        session = M3Session()
+
+        session.compute_breath_timing_parameters(
+            delay_pairs=[("emg", "eit")], duration_pairs=[]
+        )
+
+        parameters = session.provenance[-1].parameters
+        assert parameters["delay_pairs"] == [["emg", "eit"]]
+        assert parameters["duration_pairs"] == []
+        assert parameters["anchor"] == "start"

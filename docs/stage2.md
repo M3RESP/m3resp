@@ -9,7 +9,7 @@ Stage 2 turns `m3resp` from a thin wrapper around `eitprocessing`/`resurfemg` ([
 - [concepts/events-and-breaths.md](concepts/events-and-breaths.md) - `Event`/`Interval`/`BreathEvent`, and `IntervalData`/`EventData`.
 - [concepts/parameters.md](concepts/parameters.md) - `ParameterResult`.
 - [concepts/quality.md](concepts/quality.md) - `QualityFlag`.
-- [concepts/synchronization.md](concepts/synchronization.md) - alignment, `LinkedBreath`, and multimodal parameters.
+- [concepts/synchronization.md](concepts/synchronization.md) - alignment, `LinkedBreath`, and breath timing parameters.
 - [concepts/provenance.md](concepts/provenance.md) - `ProvenanceRecord`, `ProcessingHistory`, and the persisted (Layer 2) data model.
 
 ## Tutorials - end-to-end walkthroughs

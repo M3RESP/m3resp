@@ -60,8 +60,11 @@ from m3resp.synchronization.alignment import (
     resolve_alignment_offsets,
     ventilator_start_key,
 )
+from m3resp.synchronization.breath_timing_parameters import (
+    compute_breath_timing_parameters,
+    is_breath_timing_result,
+)
 from m3resp.synchronization.linking import link_breaths_by_time
-from m3resp.synchronization.multimodal_parameters import compute_multimodal_parameters
 from m3resp.synchronization.raw_traces import raw_synchronization_traces
 from m3resp.synchronization.start_times import (
     loaded_modalities,
@@ -1351,7 +1354,7 @@ class M3Session:
         self._record("link_breaths", parameters={"time_tolerance": time_tolerance})
         return self.linked_breaths
 
-    def compute_multimodal_parameters(
+    def compute_breath_timing_parameters(
         self,
         *,
         delay_pairs: Sequence[tuple[str, str]] | None = None,
@@ -1359,11 +1362,13 @@ class M3Session:
         anchor: str = "start",
     ) -> list[ParameterResult]:
         """Compute timing-delay/duration-difference/event-agreement
-        `ParameterResult`s from `self.linked_breaths` (plan_stage2.md Sec 21).
+        `ParameterResult`s from `self.linked_breaths`.
 
         Call `link_breaths` first; an empty `self.linked_breaths` yields an
         empty result rather than raising. Results are added to
-        `self.parameter_results` and also returned.
+        `self.parameter_results` and also returned. Calling this again
+        replaces the results of the earlier call, so each breath has one
+        delay per pair, not one per call.
 
         Args:
             delay_pairs (Sequence[tuple[str, str]] | None): Modality pairs to
@@ -1383,17 +1388,27 @@ class M3Session:
                 delay pair.
         """
 
-        results = compute_multimodal_parameters(
+        results = compute_breath_timing_parameters(
             self.linked_breaths,
             delay_pairs=delay_pairs,
             duration_pairs=duration_pairs,
             anchor=anchor,
         )
+        self.parameter_results.items = [
+            parameter
+            for parameter in self.parameter_results.items
+            if not is_breath_timing_result(parameter)
+        ]
         for parameter in results:
             self.parameter_results.add(parameter)
         self._record(
-            "compute_multimodal_parameters",
-            parameters={"anchor": anchor, "n_linked_breaths": len(self.linked_breaths)},
+            "compute_breath_timing_parameters",
+            parameters={
+                "anchor": anchor,
+                "delay_pairs": _pairs_as_lists(delay_pairs),
+                "duration_pairs": _pairs_as_lists(duration_pairs),
+                "n_linked_breaths": len(self.linked_breaths),
+            },
         )
         return results
 
@@ -1575,3 +1590,14 @@ def _coerce_metadata(
     if isinstance(metadata, SessionMetadata):
         return metadata
     return SessionMetadata(attributes=dict(metadata))
+
+
+def _pairs_as_lists(
+    pairs: Sequence[tuple[str, str]] | None,
+) -> list[list[str]] | None:
+    """Modality pairs as plain lists, so the provenance record can be saved as
+    JSON. None (meaning "every pair found") is kept as None."""
+
+    if pairs is None:
+        return None
+    return [list(pair) for pair in pairs]

@@ -64,7 +64,7 @@ happens underneath it without anything downstream needing to change.
 |---|---|---|
 | `session.signals` | `preprocess_eit`/`preprocess_emg`/`preprocess_ventilator` (default adapter path) | [`Signal`](signals.md) |
 | `session.events` | `detect_eit_breaths`/`detect_emg_breaths`/`detect_ventilator_breaths`/`add_events` | [`BreathEvent`/`Event`](events-and-breaths.md) lists, keyed by name |
-| `session.parameter_results` | `preprocess_eit`/`postprocess_emg`/`compute_multimodal_parameters` | [`ParameterResult`](parameters.md) |
+| `session.parameter_results` | `preprocess_eit`/`postprocess_emg`/`compute_breath_timing_parameters` | [`ParameterResult`](parameters.md) |
 | `session.quality` | `preprocess_eit`/`postprocess_emg` | [`QualityFlag`](quality.md) |
 | `session.linked_breaths` | `session.link_breaths()` | [`LinkedBreath`](synchronization.md) |
 | `session.start_times` | `synchronize_raw_modalities`, the `slice_*` methods | each recording's start time on the shared clock, in seconds; see [synchronization.md](synchronization.md) |
@@ -148,7 +148,7 @@ as before.
 | `postprocess_emg(**kwargs)` | Compute EMG features/quality; populates `parameter_results`/`quality`. |
 | `synchronize_multimodal_breaths(method="manual_offset", offset_seconds=..., reference_modality=...)` | Shift already-detected event lists onto a common time axis. |
 | `link_breaths(time_tolerance=0.5)` | Match breaths across modalities into [`LinkedBreath`](synchronization.md) objects. |
-| `compute_multimodal_parameters(...)` | Compute timing-delay/duration-difference/event-agreement [`ParameterResult`](parameters.md)s from `session.linked_breaths`. |
+| `compute_breath_timing_parameters(...)` | Compute timing-delay/duration-difference/event-agreement [`ParameterResult`](parameters.md)s from `session.linked_breaths`. |
 | `run_preset(name, config=...)` | Run a built-in `"eit"`/`"emg"`/`"multimodal"` preset - see [preset-contracts.md](../developer/preset-contracts.md). |
 | `export_summary(output_dir)` | Write the structured export - see [export-results tutorial](../tutorials/export-results.md). |
 
