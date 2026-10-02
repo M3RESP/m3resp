@@ -7,7 +7,7 @@ MDN filter below, but estimating them is not a filtering operation.
 from __future__ import annotations
 
 import copy
-from typing import Any, Literal, cast
+from typing import Any, cast, get_args
 
 from m3resp.adapters.eitprocessing_adapter import (
     add_to_collection,
@@ -15,6 +15,7 @@ from m3resp.adapters.eitprocessing_adapter import (
 )
 from m3resp.core.session import M3Session
 from m3resp.data import Signal
+from m3resp.processing.filters import ButterworthFilterType
 from m3resp.workflows.registry import (
     StepArtifact,
     StepParameter,
@@ -187,7 +188,7 @@ def mdn_filter(
             name="mode",
             value_type="choice",
             default="lowpass",
-            choices=("lowpass", "highpass", "bandpass", "bandstop"),
+            choices=get_args(ButterworthFilterType),
             description=(
                 "Filter type. 'lowpass' uses 'lowpass_hz', 'highpass' uses "
                 "'highpass_hz', and 'bandpass'/'bandstop' use both as the "
@@ -248,7 +249,7 @@ def butterworth_filter(
     *,
     eit_sequence: Any,
     session: M3Session,
-    mode: Literal["lowpass", "highpass", "bandpass", "bandstop"] = "lowpass",
+    mode: ButterworthFilterType = "lowpass",
     lowpass_hz: float = 1.0,
     highpass_hz: float = 0.05,
     order: int = 4,

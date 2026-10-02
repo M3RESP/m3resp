@@ -51,19 +51,20 @@ Full attribution notice: see top-level NOTICE.md.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, Literal
+from numbers import Integral, Real
+from typing import Any, Literal, TypeGuard, get_args
 
 import numpy as np
 
 from m3resp.core.exceptions import OptionalDependencyError
 
-FilterType = Literal["lowpass", "highpass", "bandpass", "bandstop"]
+ButterworthFilterType = Literal["lowpass", "highpass", "bandpass", "bandstop"]
 
 
 def butterworth_filter(
     values: np.ndarray,
     *,
-    filter_type: FilterType,
+    filter_type: ButterworthFilterType,
     cutoff_frequency: float | Sequence[float],
     sample_frequency: float,
     order: int,
@@ -74,8 +75,8 @@ def butterworth_filter(
 
     Args:
         values (numpy.ndarray): Input data to filter.
-        filter_type (str): Type of filter to apply. One of "lowpass", "highpass",
-            "bandpass", or "bandstop".
+        filter_type (ButterworthFilterType): Type of filter to apply. One of
+            "lowpass", "highpass", "bandpass", or "bandstop".
         cutoff_frequency (float or sequence of floats): Cutoff frequency(ies)
             for the filter. If `filter_type` is "bandpass" or "bandstop",
             `cutoff_frequency` should be a sequence of two values, (low, high),
@@ -91,6 +92,11 @@ def butterworth_filter(
     """
 
     scipy_signal = _scipy_signal()
+    allowed_types = get_args(ButterworthFilterType)
+    if filter_type not in allowed_types:
+        raise ValueError(
+            f"filter_type must be one of {allowed_types}, got {filter_type!r}"
+        )
     cutoff = _normalize_cutoff_frequency(filter_type, cutoff_frequency)
     _validate_common_filter_arguments(
         sample_frequency=sample_frequency,
@@ -98,10 +104,10 @@ def butterworth_filter(
     )
 
     data = np.asarray(values)
-    if np.any(np.isnan(data)):
+    if not np.all(np.isfinite(data)):
         raise ValueError(
-            "Input data contains NaN-values. Fill gaps before applying a "
-            "Butterworth filter."
+            "Input data contains NaN or infinite values. Fill gaps before "
+            "applying a Butterworth filter."
         )
 
     capture_value(captures, "unfiltered_data", data)
@@ -412,11 +418,11 @@ def compute_power_loss(
 
 
 def _normalize_cutoff_frequency(
-    filter_type: FilterType,
+    filter_type: ButterworthFilterType,
     cutoff_frequency: float | Sequence[float],
 ) -> float | tuple[float, float]:
     if filter_type in {"lowpass", "highpass"}:
-        if not isinstance(cutoff_frequency, int | float):
+        if not _is_number(cutoff_frequency):
             raise TypeError("cutoff_frequency must be numeric for low/high pass")
         return float(cutoff_frequency)
 
@@ -430,7 +436,7 @@ def _normalize_cutoff_frequency(
     if len(cutoff_frequency) != 2:
         raise ValueError("cutoff_frequency must contain two values")
     low, high = cutoff_frequency
-    if not isinstance(low, int | float) or not isinstance(high, int | float):
+    if not _is_number(low) or not _is_number(high):
         raise TypeError("cutoff_frequency values must be numeric")
     return (float(low), float(high))
 
@@ -440,14 +446,24 @@ def _validate_common_filter_arguments(
     sample_frequency: float,
     order: int,
 ) -> None:
-    if not isinstance(order, int):
-        raise TypeError("order must be an int")
+    if not _is_whole_number(order):
+        raise TypeError("order must be a whole number")
     if order < 1:
         raise ValueError("order must be positive")
-    if not isinstance(sample_frequency, int | float):
+    if not _is_number(sample_frequency):
         raise TypeError("sample_frequency must be numeric")
     if sample_frequency <= 0:
         raise ValueError("sample_frequency must be positive")
+
+
+def _is_number(value: Any) -> TypeGuard[float]:
+    """Return True for Python and numpy numbers, but not for True or False."""
+    return isinstance(value, Real) and not isinstance(value, bool | np.bool_)
+
+
+def _is_whole_number(value: Any) -> TypeGuard[int]:
+    """Return True for Python and numpy whole numbers, but not for True or False."""
+    return isinstance(value, Integral) and not isinstance(value, bool | np.bool_)
 
 
 def capture_value(
@@ -477,7 +493,7 @@ def capture_value(
 
 def _capture_butterworth_parameters(
     captures: dict[str, Any] | None,
-    filter_type: FilterType,
+    filter_type: ButterworthFilterType,
     cutoff: float | tuple[float, float],
 ) -> None:
     match filter_type:
@@ -486,7 +502,8 @@ def _capture_butterworth_parameters(
         case "highpass":
             capture_value(captures, "high_pass_frequency", cutoff)
         case "bandpass":
-            assert isinstance(cutoff, tuple), "bandpass cutoff must be (low, high)"
+            if not isinstance(cutoff, tuple):
+                raise TypeError("bandpass cutoff must be (low, high)")
             capture_value(captures, "low_pass_frequency", cutoff[1])
             capture_value(captures, "high_pass_frequency", cutoff[0])
         case "bandstop":

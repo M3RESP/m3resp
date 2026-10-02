@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+### `FilterType` renamed to `ButterworthFilterType` (#90)
+
+`m3resp.processing.filters` holds more than Butterworth filters, so the
+list of allowed `filter_type` values (`"lowpass"`, `"highpass"`,
+`"bandpass"`, `"bandstop"`) now says which filter it belongs to. The values
+themselves do not change. **The old name is removed.**
+
+| Before | Now |
+|---|---|
+| `from m3resp.processing.filters import FilterType` | `from m3resp.processing.filters import ButterworthFilterType` |
+
+The `mode` choices of the `eit.butterworth_filter` step now come from the
+same list, so the two cannot drift apart.
+
+Found while doing the rename, all in `butterworth_filter`:
+
+- **Fixes** infinite samples getting through the check for bad samples. One
+  `inf` in the signal turned every filtered sample into NaN, with no error.
+  Now NaN and infinite samples are both refused.
+- An unknown `filter_type` (such as `"low"` or `"notch"`) is now refused with
+  a clear message. It used to give a wrong message about `cutoff_frequency`,
+  or an error from inside SciPy.
+- numpy numbers (`np.float32`, `np.int64`, ...) are now accepted for
+  `cutoff_frequency`, `sample_frequency` and `order`, so values read from
+  data files work as they are.
+- `True` is no longer taken as a filter `order` or a `sample_frequency`. It
+  used to run quietly as order 1 or as 1 Hz.
+
 ### `compute_multimodal_parameters` renamed to `compute_breath_timing_parameters` (#116)
 
 The old name could be read as "all results that use more than one
