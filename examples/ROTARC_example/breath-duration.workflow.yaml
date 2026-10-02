@@ -1,11 +1,11 @@
-# ROTARC breath-duration variability pipeline.
+# ROTARC breath-duration variability workflow.
 #
-# Run with: python -m m3resp run breath-duration.pipeline.yaml
+# Run with: python -m m3resp run breath-duration.workflow.yaml
 #
 # `schema_version: 1` enables strict parsing (Stage 2 Phase 2/9); every step
 # below has an explicit `id:` so GUI/provenance references survive
 # reordering. `outputs.mode: explicit` because `export.rotarc_result` below
-# is itself the pipeline's export step - the `outputs:` section only
+# is itself the workflow's export step - the `outputs:` section only
 # supplies the settings it reads (dir/timestamped/summary_json/...), it does
 # not also run an automatic export.
 #

@@ -1,4 +1,4 @@
-"""Registered region-of-interest (ROI) EIT pipeline steps."""
+"""Registered region-of-interest (ROI) EIT workflow steps."""
 
 from __future__ import annotations
 

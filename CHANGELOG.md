@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+### "Pipeline" renamed to "workflow" everywhere; built-in pipelines are now presets (#112)
+
+The engine module was already `m3resp.workflows`, but most names, files and
+docs still said "pipeline", so one thing had two names. Everything now says
+**workflow**. The small built-in shortcuts (`"eit"`, `"emg"`, `"multimodal"`)
+are a different thing from a YAML workflow, so they are now called
+**presets**, like the package they live in. **The old names are removed.**
+
+| Before | Now |
+|---|---|
+| `run_pipeline(spec, session=...)`, `compile_pipeline`, `validate_pipeline` | `run_workflow`, `compile_workflow`, `validate_workflow` |
+| `PipelineSpec`, `PipelineResult`, `PipelineContext`, `PipelineService`, `PipelineGraph`, `CompiledPipeline`, `PipelineStatus` | `WorkflowSpec`, `WorkflowResult`, `WorkflowContext`, `WorkflowService`, `WorkflowGraph`, `CompiledWorkflow`, `WorkflowStatus` |
+| `PipelineError`, `PipelineSpecError`, `PipelineExecutionError` | `WorkflowError`, `WorkflowSpecError`, `WorkflowExecutionError` |
+| `summarize_pipeline_result`, `DataModelRecorder.record_pipeline_result` | `summarize_workflow_result`, `record_workflow_result` |
+| Events `pipeline_started`, `pipeline_completed`, `pipeline_failed`, `pipeline_cancelled` | `workflow_started`, `workflow_completed`, `workflow_failed`, `workflow_cancelled` |
+| `ProcessingRun.pipeline_name`, `ProcessingRun.pipeline_version` | `ProcessingRun.name`, `ProcessingRun.version`, plus a new `ProcessingRun.kind`: `"workflow"`, `"step"` or `"session_action"` |
+| Key `pipeline_name` in `run_manifest.json` | `workflow_name` (a manifest with `pipeline_name` was written by an older version) |
+| `session.run_pipeline("eit")` | `session.run_preset("eit")` |
+| `Pipeline`, `EITPipeline`, `EMGPipeline`, `MultimodalPipeline`, `PipelineConfig` | `Preset`, `EITPreset`, `EMGPreset`, `MultimodalPreset`, `PresetConfig` |
+| `available_pipelines`, `get_pipeline`, `register_pipeline`, `PIPELINE_REGISTRY`, `UnknownPipelineError` | `available_presets`, `get_preset`, `register_preset`, `PRESET_REGISTRY`, `UnknownPresetError` |
+| `examples/*/*.pipeline.yaml` | `examples/*/*.workflow.yaml` |
+| `docs/pipelines.md`, `docs/developer/pipeline-contracts.md` | `docs/workflows.md`, `docs/developer/preset-contracts.md` (the old pages forward to the new ones) |
+
+A `ProcessingRun` records a whole workflow, one step, or one session method
+call such as `postprocess_emg`, so its name field is now plain `name`, and
+`kind` says which of the three it is.
+
+The old import path `m3resp.pipeline`, kept with a warning since v0.2.0, is
+removed; import from `m3resp.workflows`. Its warning promised it would stay
+until at least 0.3.0, so **the next release must be 0.3.0 or later**. A workflow file without a `name`
+is now called `"workflow"` instead of `"pipeline"`. Error messages say
+"Workflow" too.
+
 ### `peak_time` and `peak_index` renamed to `extremum_time` and `extremum_index` (#93)
 
 "Peak" says the signal turns at a maximum. That holds for impedance, volume

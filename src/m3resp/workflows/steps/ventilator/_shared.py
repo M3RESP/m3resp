@@ -1,4 +1,4 @@
-"""Shared helpers for the registered ventilator pipeline step modules.
+"""Shared helpers for the registered ventilator workflow step modules.
 
 Mirrors `m3resp.workflows.steps.eit._shared`/`m3resp.workflows.steps.emg._shared`:
 each modality's step package keeps its own small copy of these helpers rather

@@ -1,4 +1,4 @@
-"""Registered pixel-level EIT pipeline steps.
+"""Registered pixel-level EIT workflow steps.
 
 Both steps give one result per breath, so both store an `IntervalData` on
 ``session.interval_data``: per-pixel TIV as one `PixelMap` per breath, and

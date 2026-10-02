@@ -134,7 +134,7 @@ def test_top_level_and_modality_load_helpers_return_recordings():
     assert modality_level.global_impedance.label == "global_impedance_(raw)"
 
 
-def test_eit_real_data_pipeline_uses_committed_sample():
+def test_eit_real_data_workflow_uses_committed_sample():
     repo_root = Path(__file__).resolve().parents[1]
     sibling_eitprocessing = os.path.join(repo_root.parent, "eitprocessing")
     if (

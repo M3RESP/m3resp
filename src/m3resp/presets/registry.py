@@ -1,40 +1,40 @@
-"""Name -> `Pipeline` class registry (plan_stage2.md Sec 19)."""
+"""Name -> `Preset` class registry."""
 
 from __future__ import annotations
 
-from m3resp.core.exceptions import UnknownPipelineError
-from m3resp.presets.base import Pipeline
-from m3resp.presets.eit import EITPipeline
-from m3resp.presets.emg import EMGPipeline
-from m3resp.presets.multimodal import MultimodalPipeline
+from m3resp.core.exceptions import UnknownPresetError
+from m3resp.presets.base import Preset
+from m3resp.presets.eit import EITPreset
+from m3resp.presets.emg import EMGPreset
+from m3resp.presets.multimodal import MultimodalPreset
 
-PIPELINE_REGISTRY: dict[str, type[Pipeline]] = {}
-
-
-def register_pipeline(name: str, pipeline_cls: type[Pipeline]) -> None:
-    """Register ``pipeline_cls`` under ``name``."""
-
-    PIPELINE_REGISTRY[name] = pipeline_cls
+PRESET_REGISTRY: dict[str, type[Preset]] = {}
 
 
-def get_pipeline(name: str) -> type[Pipeline]:
-    """Return the registered `Pipeline` class for ``name``."""
+def register_preset(name: str, preset_cls: type[Preset]) -> None:
+    """Register ``preset_cls`` under ``name``."""
+
+    PRESET_REGISTRY[name] = preset_cls
+
+
+def get_preset(name: str) -> type[Preset]:
+    """Return the registered `Preset` class for ``name``."""
 
     try:
-        return PIPELINE_REGISTRY[name]
+        return PRESET_REGISTRY[name]
     except KeyError as exc:
-        available = ", ".join(sorted(PIPELINE_REGISTRY)) or "(none registered)"
-        raise UnknownPipelineError(
-            f"Unknown pipeline '{name}'. Available pipelines: {available}."
+        available = ", ".join(sorted(PRESET_REGISTRY)) or "(none registered)"
+        raise UnknownPresetError(
+            f"Unknown preset '{name}'. Available presets: {available}."
         ) from exc
 
 
-def available_pipelines() -> list[str]:
-    """Return the names of all registered pipelines, sorted."""
+def available_presets() -> list[str]:
+    """Return the names of all registered presets, sorted."""
 
-    return sorted(PIPELINE_REGISTRY)
+    return sorted(PRESET_REGISTRY)
 
 
-register_pipeline("eit", EITPipeline)
-register_pipeline("emg", EMGPipeline)
-register_pipeline("multimodal", MultimodalPipeline)
+register_preset("eit", EITPreset)
+register_preset("emg", EMGPreset)
+register_preset("multimodal", MultimodalPreset)

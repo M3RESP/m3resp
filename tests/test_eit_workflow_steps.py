@@ -20,10 +20,10 @@ from typing import Any
 import numpy as np
 import pytest
 
-from m3resp.core.exceptions import PipelineSpecError
+from m3resp.core.exceptions import WorkflowSpecError
 from m3resp.core.session import M3Session
 from m3resp.data import BreathEvent, Event, IntervalData, PixelMap, PixelMask
-from m3resp.workflows import available_steps, run_pipeline
+from m3resp.workflows import available_steps, run_workflow
 from m3resp.workflows.registry import get_step
 from m3resp.workflows.spec import load_spec
 from m3resp.workflows.steps.eit import (
@@ -788,7 +788,7 @@ def test_validation_rejects_mdn_filter_without_explicit_signal_binding():
         ],
     }
 
-    with pytest.raises(PipelineSpecError, match="explicit 'in:"):
+    with pytest.raises(WorkflowSpecError, match="explicit 'in:"):
         from m3resp.workflows.engine import validate_spec
 
         validate_spec(load_spec(spec))
@@ -811,7 +811,7 @@ def test_validation_rejects_duplicate_context_writes():
         ],
     }
 
-    with pytest.raises(PipelineSpecError, match="already produced"):
+    with pytest.raises(WorkflowSpecError, match="already produced"):
         from m3resp.workflows.engine import validate_spec
 
         # respiratory_rate_hz/heart_rate_hz are pre-seeded here purely to
@@ -852,7 +852,7 @@ def test_output_renaming_lets_the_same_roi_step_run_twice():
     }
     raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float))
 
-    result = run_pipeline(spec, session=session, extra_context={"eit_data": raw})
+    result = run_workflow(spec, session=session, extra_context={"eit_data": raw})
 
     assert result.value("mask_a") is not result.value("mask_b")
     assert result.value("result_a").metadata["parameters"]["threshold"] == 0.1
@@ -862,7 +862,7 @@ def test_output_renaming_lets_the_same_roi_step_run_twice():
 # -- full example end to end (needs the real optional dependency) ----------
 
 
-def test_full_eit_example_pipeline_runs_end_to_end(tmp_path):
+def test_full_eit_example_workflow_runs_end_to_end(tmp_path):
     pytest.importorskip("eitprocessing")
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -875,12 +875,12 @@ def test_full_eit_example_pipeline_runs_end_to_end(tmp_path):
     assert os.path.exists(fixture), f"missing committed EIT fixture: {fixture}"
 
     spec_path = os.path.join(
-        repo_root, "examples", "eit_full_preprocessing", "eit-full.pipeline.yaml"
+        repo_root, "examples", "eit_full_preprocessing", "eit-full.workflow.yaml"
     )
-    # run_pipeline (unlike run_spec) does not touch the spec's `outputs:`
+    # run_workflow (unlike run_spec) does not touch the spec's `outputs:`
     # section, so this exercises the example without writing into the
     # project's real output/ directory.
-    result = run_pipeline(spec_path, session=M3Session())
+    result = run_workflow(spec_path, session=M3Session())
 
     assert result.value("pixel_tiv_result").values[0].shape == (32, 32)
     assert result.value("size_filtered_roi_result").shape == (32, 32)

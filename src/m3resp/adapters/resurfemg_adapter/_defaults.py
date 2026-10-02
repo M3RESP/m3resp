@@ -58,7 +58,7 @@ class _DefaultsMixin:
         notch_quality_factor: float = 30.0,
         notch_before_bandpass: bool = False,
     ) -> dict[str, Any]:
-        """Run the Stage 1 EMG preprocessing pipeline through ReSurfEMG.
+        """Run the Stage 1 EMG preprocessing workflow through ReSurfEMG.
 
         ``channel`` is the number of the EMG channel to analyse. When it is
         left out, the channel is picked from the channel names: a channel

@@ -26,7 +26,7 @@ compared on one shared time axis. Key pieces:
   signals on one shared sample grid (e.g. a sample-by-sample comparison).
   It uses linear interpolation between the original samples and applies no
   anti-aliasing filter, so low-pass filter the signal before lowering its
-  sampling rate. It's not part of the alignment pipeline above and isn't called
+  sampling rate. It's not part of the alignment workflow above and isn't called
   automatically: breath linking and the multimodal parameter calculations
   below work on real-world timestamps (`BreathEvent.start_time`/`end_time`/
   `extremum_time`), not sample indices, so most analysis stays at each

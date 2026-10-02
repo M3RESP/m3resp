@@ -1,6 +1,6 @@
 """Tests for Phase 3.1/3.5 of the pipeline-structure plan: the compiled,
-read-only execution plan (``compile_pipeline``/``CompiledPipeline``) and the
-structural-vs-readiness validation report (``validate_pipeline``).
+read-only execution plan (``compile_workflow``/``CompiledWorkflow``) and the
+structural-vs-readiness validation report (``validate_workflow``).
 """
 
 from __future__ import annotations
@@ -10,8 +10,8 @@ from typing import Any
 
 import pytest
 
-from m3resp.core.exceptions import PipelineSpecError, UnknownStepError
-from m3resp.workflows.compiler import compile_pipeline, validate_pipeline
+from m3resp.core.exceptions import UnknownStepError, WorkflowSpecError
+from m3resp.workflows.compiler import compile_workflow, validate_workflow
 from m3resp.workflows.registry import STEP_REGISTRY, StepParameter, register_step
 from m3resp.workflows.spec import load_spec
 
@@ -44,11 +44,11 @@ def _compiler_steps():
 
 
 # --------------------------------------------------------------------------- #
-# compile_pipeline / CompiledPipeline (3.1)                                   #
+# compile_workflow / CompiledWorkflow (3.1)                                   #
 # --------------------------------------------------------------------------- #
 
 
-def test_compile_pipeline_resolves_bindings_and_parameters(_compiler_steps, tmp_path):
+def test_compile_workflow_resolves_bindings_and_parameters(_compiler_steps, tmp_path):
     spec = load_spec(
         {
             "name": "p",
@@ -64,7 +64,7 @@ def test_compile_pipeline_resolves_bindings_and_parameters(_compiler_steps, tmp_
         },
         root=tmp_path,
     )
-    compiled = compile_pipeline(spec)
+    compiled = compile_workflow(spec)
     assert compiled.name == "p"
     assert len(compiled.steps) == 2
 
@@ -79,13 +79,13 @@ def test_compile_pipeline_resolves_bindings_and_parameters(_compiler_steps, tmp_
     assert second.parameters["p"] == str((tmp_path / "data" / "thing.bin").resolve())
 
 
-def test_compile_pipeline_fills_unset_optional_parameter_defaults(_compiler_steps):
+def test_compile_workflow_fills_unset_optional_parameter_defaults(_compiler_steps):
     spec = load_spec({"name": "p", "steps": [{"uses": "compiler_test.make"}]})
-    compiled = compile_pipeline(spec)
+    compiled = compile_workflow(spec)
     assert compiled.steps[0].parameters == {"value": 0}
 
 
-def test_compile_pipeline_carries_artifact_and_capability_metadata(
+def test_compile_workflow_carries_artifact_and_capability_metadata(
     _compiler_steps, tmp_path
 ):
     spec = load_spec(
@@ -102,12 +102,12 @@ def test_compile_pipeline_carries_artifact_and_capability_metadata(
         },
         root=tmp_path,
     )
-    compiled = compile_pipeline(spec)
+    compiled = compile_workflow(spec)
     step = compiled.steps[1]
     assert step.optional_packages == ("not_a_real_package_xyz",)
 
 
-def test_compile_pipeline_raises_pipeline_spec_error_for_structural_problems(
+def test_compile_workflow_raises_workflow_spec_error_for_structural_problems(
     _compiler_steps,
 ):
     bad_spec = load_spec(
@@ -116,17 +116,17 @@ def test_compile_pipeline_raises_pipeline_spec_error_for_structural_problems(
             "steps": [{"uses": "compiler_test.echo_path", "in": {"seed": "missing"}}],
         }
     )
-    with pytest.raises(PipelineSpecError):
-        compile_pipeline(bad_spec)
+    with pytest.raises(WorkflowSpecError):
+        compile_workflow(bad_spec)
 
 
-def test_compile_pipeline_raises_unknown_step_error():
+def test_compile_workflow_raises_unknown_step_error():
     spec = load_spec({"name": "p", "steps": [{"uses": "no.such.step"}]})
     with pytest.raises(UnknownStepError):
-        compile_pipeline(spec)
+        compile_workflow(spec)
 
 
-def test_compiled_pipeline_as_dict_is_json_serializable(_compiler_steps, tmp_path):
+def test_compiled_workflow_as_dict_is_json_serializable(_compiler_steps, tmp_path):
     spec = load_spec(
         {
             "name": "p",
@@ -141,11 +141,11 @@ def test_compiled_pipeline_as_dict_is_json_serializable(_compiler_steps, tmp_pat
         },
         root=tmp_path,
     )
-    compiled = compile_pipeline(spec)
+    compiled = compile_workflow(spec)
     json.dumps(compiled.as_dict())
 
 
-def test_compile_pipeline_does_not_import_optional_packages(_compiler_steps, tmp_path):
+def test_compile_workflow_does_not_import_optional_packages(_compiler_steps, tmp_path):
     """Compilation must not import optional scientific packages (Phase 3.1) -
     'compiler_test.echo_path' declares a nonexistent optional package and
     compiles fine, since compiling never checks capability/imports it."""
@@ -164,15 +164,15 @@ def test_compile_pipeline_does_not_import_optional_packages(_compiler_steps, tmp
         },
         root=tmp_path,
     )
-    compile_pipeline(spec)  # must not raise despite the fake optional package
+    compile_workflow(spec)  # must not raise despite the fake optional package
 
 
 # --------------------------------------------------------------------------- #
-# validate_pipeline / ValidationReport (3.5)                                  #
+# validate_workflow / ValidationReport (3.5)                                  #
 # --------------------------------------------------------------------------- #
 
 
-def test_validate_pipeline_structural_only_by_default(_compiler_steps, tmp_path):
+def test_validate_workflow_structural_only_by_default(_compiler_steps, tmp_path):
     spec = load_spec(
         {
             "name": "p",
@@ -187,13 +187,13 @@ def test_validate_pipeline_structural_only_by_default(_compiler_steps, tmp_path)
         },
         root=tmp_path,
     )
-    report = validate_pipeline(spec)
+    report = validate_workflow(spec)
     assert report.is_valid
     assert report.structural == ()
     assert report.readiness == ()  # readiness not requested
 
 
-def test_validate_pipeline_readiness_reports_missing_optional_dependency(
+def test_validate_workflow_readiness_reports_missing_optional_dependency(
     _compiler_steps, tmp_path
 ):
     spec = load_spec(
@@ -211,14 +211,14 @@ def test_validate_pipeline_readiness_reports_missing_optional_dependency(
         root=tmp_path,
     )
     (tmp_path / "x.bin").write_text("data")
-    report = validate_pipeline(spec, readiness=True)
+    report = validate_workflow(spec, readiness=True)
     assert report.is_valid
     assert any(
         d.code == "capability_missing_optional_dependency" for d in report.readiness
     )
 
 
-def test_validate_pipeline_readiness_reports_missing_file(_compiler_steps, tmp_path):
+def test_validate_workflow_readiness_reports_missing_file(_compiler_steps, tmp_path):
     spec = load_spec(
         {
             "name": "p",
@@ -233,13 +233,13 @@ def test_validate_pipeline_readiness_reports_missing_file(_compiler_steps, tmp_p
         },
         root=tmp_path,
     )
-    report = validate_pipeline(spec, readiness=True)
+    report = validate_workflow(spec, readiness=True)
     missing_file = [d for d in report.readiness if d.code == "missing_file"]
     assert len(missing_file) == 1
     assert "does_not_exist.bin" in missing_file[0].message
 
 
-def test_validate_pipeline_readiness_is_clean_when_file_exists_and_package_installed(
+def test_validate_workflow_readiness_is_clean_when_file_exists_and_package_installed(
     tmp_path,
 ):
     @register_step(
@@ -262,16 +262,16 @@ def test_validate_pipeline_readiness_is_clean_when_file_exists_and_package_insta
             },
             root=tmp_path,
         )
-        report = validate_pipeline(spec, readiness=True)
+        report = validate_workflow(spec, readiness=True)
         assert report.is_valid
         assert report.readiness == ()
     finally:
         STEP_REGISTRY.pop("compiler_test.clean", None)
 
 
-def test_validate_pipeline_reports_structural_errors_without_raising(_compiler_steps):
+def test_validate_workflow_reports_structural_errors_without_raising(_compiler_steps):
     spec = load_spec({"name": "p", "steps": [{"uses": "no.such.step"}]})
-    report = validate_pipeline(spec)
+    report = validate_workflow(spec)
     assert not report.is_valid
     assert any(d.code == "unknown_step" for d in report.structural)
 
@@ -291,7 +291,7 @@ def test_validation_report_as_dict_is_json_serializable(_compiler_steps, tmp_pat
         },
         root=tmp_path,
     )
-    report = validate_pipeline(spec, readiness=True)
+    report = validate_workflow(spec, readiness=True)
     json.dumps(report.as_dict())
 
 
@@ -333,7 +333,7 @@ def test_optional_read_compiles_when_nothing_produces_the_key(
         root=tmp_path,
     )
 
-    compiled = compile_pipeline(spec)
+    compiled = compile_workflow(spec)
 
     assert compiled.steps[0].optional_bindings == frozenset({"hint"})
 
@@ -341,9 +341,9 @@ def test_optional_read_compiles_when_nothing_produces_the_key(
 def test_optional_read_is_omitted_at_run_time_when_absent(
     _optional_read_steps, tmp_path
 ):
-    from m3resp.workflows import run_pipeline
+    from m3resp.workflows import run_workflow
 
-    result = run_pipeline({"name": "p", "steps": [{"uses": "optional_test.use_hint"}]})
+    result = run_workflow({"name": "p", "steps": [{"uses": "optional_test.use_hint"}]})
 
     assert result.value("used") == -1
 
@@ -351,9 +351,9 @@ def test_optional_read_is_omitted_at_run_time_when_absent(
 def test_optional_read_is_passed_when_an_earlier_step_produces_it(
     _optional_read_steps, tmp_path
 ):
-    from m3resp.workflows import run_pipeline
+    from m3resp.workflows import run_workflow
 
-    result = run_pipeline(
+    result = run_workflow(
         {
             "name": "p",
             "steps": [

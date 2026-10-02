@@ -1,8 +1,8 @@
-"""Convert a :class:`PipelineSpec` to and from a node-and-edge graph.
+"""Convert a :class:`WorkflowSpec` to and from a node-and-edge graph.
 
 This is the backend piece a node-based workflow editor (see the "Node-based
 workflow design panel" section of ``docs/stage3.md``) needs before any
-front end can exist: a pipeline spec is already a data-flow graph written
+front end can exist: a workflow spec is already a data-flow graph written
 in list form, so what's missing is a pure, JSON-safe conversion layer, not
 a new data model.
 
@@ -53,11 +53,11 @@ from m3resp.workflows.session_deps import (
     most_recent_matching_session_writer,
 )
 from m3resp.workflows.spec import (
-    PipelineSpec,
     SpecExecutionConfig,
     SpecExperimentConfig,
     SpecOutputsConfig,
     StepSpec,
+    WorkflowSpec,
 )
 
 #: One connection point's role in a spec-level ``GraphEdge``:
@@ -69,7 +69,7 @@ from m3resp.workflows.spec import (
 EdgeKind = Literal["artifact", "session", "spec_input"]
 
 #: Prefix for the synthetic ``source_node`` id of a ``"spec_input"`` edge,
-#: since a declared pipeline input has no corresponding ``GraphNode``.
+#: since a declared workflow input has no corresponding ``GraphNode``.
 _SPEC_INPUT_NODE_PREFIX = "spec_input:"
 
 #: Where per-node canvas UI state (e.g. ``{"x": 120, "y": 40}``) round-trips
@@ -123,7 +123,7 @@ class GraphEdge:
     :func:`m3resp.workflows.session_deps.resources_match`).
 
     For a ``"spec_input"`` edge, ``source_node`` is a synthetic id
-    (``"spec_input:<name>"``), since a declared pipeline input has no
+    (``"spec_input:<name>"``), since a declared workflow input has no
     ``GraphNode`` of its own.
     """
 
@@ -146,10 +146,10 @@ class GraphEdge:
 
 
 @dataclass(frozen=True)
-class PipelineGraph:
-    """A :class:`PipelineSpec`'s node-and-edge form. Every field except
+class WorkflowGraph:
+    """A :class:`WorkflowSpec`'s node-and-edge form. Every field except
     ``nodes``/``edges`` is a direct pass-through of the matching
-    ``PipelineSpec`` field - see the module docstring for why nodes, not
+    ``WorkflowSpec`` field - see the module docstring for why nodes, not
     edges, are what ``graph_to_spec`` trusts to reconstruct steps."""
 
     name: str
@@ -201,7 +201,7 @@ class PipelineGraph:
 
 
 def _resolve_steps_or_raise(
-    spec: PipelineSpec,
+    spec: WorkflowSpec,
 ) -> list[tuple[int, StepSpec, StepDefinition]]:
     """Like ``session_deps.resolve_step_definitions``, but raises on an
     unregistered operation instead of skipping it - a graph silently missing
@@ -215,11 +215,11 @@ def _resolve_steps_or_raise(
     ]
 
 
-def spec_to_graph(spec: PipelineSpec) -> PipelineGraph:
+def spec_to_graph(spec: WorkflowSpec) -> WorkflowGraph:
     """Convert ``spec`` into its node-and-edge graph form.
 
     Raises whatever ``get_step`` raises (``UnknownStepError``) for a step
-    naming an unregistered operation - like ``compile_pipeline``, this
+    naming an unregistered operation - like ``compile_workflow``, this
     assumes a spec worth graphing is already structurally resolvable;
     call ``collect_diagnostics`` first to report every problem in a spec
     that is not.
@@ -251,7 +251,7 @@ def spec_to_graph(spec: PipelineSpec) -> PipelineGraph:
     )
     edges = _build_edges(spec, steps)
 
-    return PipelineGraph(
+    return WorkflowGraph(
         name=spec.name,
         schema_version=spec.schema_version,
         description=spec.description,
@@ -266,7 +266,7 @@ def spec_to_graph(spec: PipelineSpec) -> PipelineGraph:
     )
 
 
-def graph_to_spec(graph: PipelineGraph) -> PipelineSpec:
+def graph_to_spec(graph: WorkflowGraph) -> WorkflowSpec:
     """The inverse of :func:`spec_to_graph`.
 
     Rebuilds each step purely from its node's own ``inputs``/``parameters``/
@@ -291,7 +291,7 @@ def graph_to_spec(graph: PipelineGraph) -> PipelineSpec:
     if nodes_ui:
         metadata[_UI_METADATA_KEY] = {_UI_NODES_KEY: nodes_ui}
 
-    return PipelineSpec(
+    return WorkflowSpec(
         name=graph.name,
         schema_version=graph.schema_version,
         description=graph.description,
@@ -306,7 +306,7 @@ def graph_to_spec(graph: PipelineGraph) -> PipelineSpec:
 
 
 def _build_edges(
-    spec: PipelineSpec, steps: list[tuple[int, StepSpec, StepDefinition]]
+    spec: WorkflowSpec, steps: list[tuple[int, StepSpec, StepDefinition]]
 ) -> tuple[GraphEdge, ...]:
     edges: list[GraphEdge] = []
 

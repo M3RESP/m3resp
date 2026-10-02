@@ -1,4 +1,4 @@
-"""Tests for the declarative pipeline engine."""
+"""Tests for the declarative workflow engine."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from typing import Any
 import pytest
 
 from m3resp.adapters import EITProcessingAdapter
-from m3resp.core.exceptions import PipelineSpecError, UnknownStepError
+from m3resp.core.exceptions import UnknownStepError, WorkflowSpecError
 from m3resp.core.session import M3Session
-from m3resp.workflows import load_spec, register_step, run_pipeline, validate_spec
+from m3resp.workflows import load_spec, register_step, run_workflow, validate_spec
 
 # --------------------------------------------------------------------------- #
 # Engine core (no upstream modality dependencies)                             #
@@ -63,14 +63,14 @@ def test_engine_binds_inputs_outputs_and_at_references():
             {"uses": "t.double", "in": {"x": "a"}, "out": {"result": "doubled"}},
         ],
     }
-    result = run_pipeline(spec)
+    result = run_workflow(spec)
     assert result.value("doubled") == 42
     assert result.outputs == {"a": 21, "doubled": 42}
 
 
 def test_validation_rejects_unproduced_context_key():
     spec = {"name": "bad", "steps": [{"uses": "t.double", "in": {"x": "nope"}}]}
-    with pytest.raises(PipelineSpecError, match="not produced"):
+    with pytest.raises(WorkflowSpecError, match="not produced"):
         validate_spec(load_spec(spec))
 
 
@@ -82,7 +82,7 @@ def test_validation_rejects_duplicate_output_keys():
             {"uses": "t.make", "with": {"value": 2}},  # writes "a" again
         ],
     }
-    with pytest.raises(PipelineSpecError, match="already produced"):
+    with pytest.raises(WorkflowSpecError, match="already produced"):
         validate_spec(load_spec(spec))
 
 
@@ -99,12 +99,12 @@ def test_validation_allows_duplicate_step_with_out_rename():
 
 def test_engine_rejects_undeclared_output():
     spec = {"name": "bad", "steps": [{"uses": "t.bad_output"}]}
-    with pytest.raises(PipelineSpecError, match="did not return it"):
-        run_pipeline(spec)
+    with pytest.raises(WorkflowSpecError, match="did not return it"):
+        run_workflow(spec)
 
 
 def test_engine_allows_none_for_a_step_with_no_outputs():
-    result = run_pipeline({"name": "no-output", "steps": [{"uses": "t.no_output"}]})
+    result = run_workflow({"name": "no-output", "steps": [{"uses": "t.no_output"}]})
 
     assert result.outputs == {}
 
@@ -119,19 +119,19 @@ def test_engine_rejects_falsy_non_mapping_step_returns(value, returned_type):
         "steps": [{"uses": "t.falsy_output", "with": {"value": value}}],
     }
 
-    with pytest.raises(PipelineSpecError, match=f"got {returned_type}"):
-        run_pipeline(spec)
+    with pytest.raises(WorkflowSpecError, match=f"got {returned_type}"):
+        run_workflow(spec)
 
 
 def test_unknown_step_raises():
     with pytest.raises(UnknownStepError, match="no_such.step"):
-        run_pipeline({"name": "x", "steps": [{"uses": "no_such.step"}]})
+        run_workflow({"name": "x", "steps": [{"uses": "no_such.step"}]})
 
 
 def test_unknown_input_reference_raises():
     spec = {"name": "x", "steps": [{"uses": "t.make", "with": {"value": "@absent"}}]}
-    with pytest.raises(PipelineSpecError, match="unknown input"):
-        run_pipeline(spec)
+    with pytest.raises(WorkflowSpecError, match="unknown input"):
+        run_workflow(spec)
 
 
 def test_yaml_and_json_parse_to_same_model():
@@ -146,14 +146,14 @@ def test_yaml_and_json_parse_to_same_model():
 
 
 def test_spec_requires_non_empty_steps():
-    with pytest.raises(PipelineSpecError, match="non-empty 'steps'"):
+    with pytest.raises(WorkflowSpecError, match="non-empty 'steps'"):
         load_spec({"name": "p", "steps": []})
 
 
 def test_public_api_exposes_engine_and_steps():
     import m3resp
 
-    assert callable(m3resp.run_pipeline)
+    assert callable(m3resp.run_workflow)
     steps = m3resp.available_steps()
     assert {
         "eit.load",
@@ -189,7 +189,7 @@ def test_apply_estimated_offset_consumes_estimator_output():
         ],
     }
 
-    result = run_pipeline(spec, session=session)
+    result = run_workflow(spec, session=session)
 
     assert calls == [
         {
@@ -239,7 +239,7 @@ def test_emg_postprocessing_registers_one_step_per_function():
 
 
 # --------------------------------------------------------------------------- #
-# ROTARC pipeline — fake eitprocessing primitives                             #
+# ROTARC workflow — fake eitprocessing primitives                             #
 # --------------------------------------------------------------------------- #
 
 
@@ -388,8 +388,8 @@ _ROTARC_SPEC: dict[str, Any] = {
 }
 
 
-def test_rotarc_pipeline_runs_through_engine(fake_eitprocessing):
-    result = run_pipeline(_ROTARC_SPEC, session=_fake_eit_session())
+def test_rotarc_workflow_runs_through_engine(fake_eitprocessing):
+    result = run_workflow(_ROTARC_SPEC, session=_fake_eit_session())
 
     expected_cv, expected_mean, _expected_std, expected_n = _expected_cv()
     assert result.value("cv") == pytest.approx(expected_cv)
@@ -473,7 +473,7 @@ def test_rotarc_result_step_writes_file_and_summary(tmp_path):
             }
         ],
     }
-    result = run_pipeline(
+    result = run_workflow(
         spec,
         session=session,
         extra_context={

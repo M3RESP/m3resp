@@ -83,7 +83,7 @@ html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 html_sidebars = {
     "getting-started": [],
-    "pipelines": [],
+    "workflows": [],
 }
 html_theme_options = {
     "navbar_align": "content",

@@ -2,7 +2,7 @@
 
 Mirrors the persisted ``QualityAnnotation`` entity
 (``m3resp.datamodel.entities``) but is the lightweight, in-memory object a
-quality check actually produces during a pipeline run; conversion to
+quality check actually produces during a workflow run; conversion to
 ``QualityAnnotation`` happens at the ``DataModelRecorder`` boundary
 (``plan/stage2_consolidation.md``), not here.
 """

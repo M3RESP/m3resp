@@ -52,7 +52,7 @@ middle), emit one `QualityFlag` per affected window with `start_time`/
 `QualityFlag` mirrors the persisted `QualityAnnotation` entity
 (`m3resp.datamodel.entities`, Layer 2 - see
 [provenance.md](provenance.md)) but is the lightweight, in-memory object a
-quality check actually produces during a pipeline run; conversion to
+quality check actually produces during a workflow run; conversion to
 `QualityAnnotation` happens at the `DataModelRecorder` boundary, not here. A
 skipped/not-applicable check should simply not emit a flag, rather than
 emitting one with an invented "passed" or "failed" verdict - this is what

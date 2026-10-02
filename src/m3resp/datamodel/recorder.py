@@ -1,8 +1,8 @@
-"""Wraps an ``M3Session`` / pipeline run, turning Stage 1 activity into
+"""Wraps an ``M3Session`` / workflow run, turning Stage 1 activity into
 data model entities in a ``DataModelStore``.
 
 This is the "merge" point between Stage 1 (``M3Session``, adapters, the
-pipeline engine) and the Stage 2 data model: it does not change what Stage 1
+workflow engine) and the Stage 2 data model: it does not change what Stage 1
 does, it only observes the two seams that already exist and existed before
 this module:
 
@@ -10,7 +10,7 @@ this module:
   point every session method already calls through. Attaching a recorder adds
   one call from ``_record`` into ``record_provenance`` here; no other method
   on ``M3Session`` changes.
-- ``run_pipeline`` (``pipeline/engine.py``) calls ``record_pipeline_result``
+- ``run_workflow`` (``workflows/engine/execution.py``) calls ``record_workflow_result``
   once, after a run finishes, turning named context artifacts into store
   entities.
 
@@ -19,7 +19,7 @@ so Stage 1 behavior is unchanged for sessions that never attach one.
 
 Per ``plan/stage2_consolidation.md``, this recorder prefers Layer 1 runtime
 objects (``m3resp.data.Signal``/``ParameterResult``/``QualityFlag``/
-``ProcessingStep``) when adapters or pipeline steps already produce them
+``ProcessingStep``) when adapters or workflow steps already produce them
 (Milestone 2.3), and falls back to inferring from ``ProvenanceRecord``/raw
 dicts for anything not yet migrated (Milestone 2.1/1). Both paths converge on
 the same store rows, keyed by modality, so it does not matter which path ran
@@ -68,7 +68,7 @@ from m3resp.synchronization.sync_methods import clock_key
 if TYPE_CHECKING:
     from m3resp.core.provenance import ProvenanceRecord
     from m3resp.core.session import M3Session
-    from m3resp.workflows.engine import PipelineResult
+    from m3resp.workflows.engine import WorkflowResult
 
 #: Provenance actions that correspond to loading a modality's raw data.
 _LOAD_ACTIONS = {"load_eit": "eit", "load_emg": "emg"}
@@ -159,7 +159,7 @@ _FILE_FORMAT_BY_SUFFIX: dict[str, FileFormat] = {
 
 
 class DataModelRecorder:
-    """Mirrors ``M3Session``/pipeline activity into a ``DataModelStore``."""
+    """Mirrors ``M3Session``/workflow activity into a ``DataModelStore``."""
 
     def __init__(
         self,
@@ -444,7 +444,8 @@ class DataModelRecorder:
             self._files[key] for key in step.input_keys if key in self._files
         ]
         run = ProcessingRun(
-            pipeline_name=step.name,
+            name=step.name,
+            kind="step",
             run_time=_parse_timestamp(step.timestamp),
             input_file_ids=input_file_ids,
             parameters=_json_safe_parameters(step.parameters),
@@ -470,7 +471,8 @@ class DataModelRecorder:
                 input_file_ids = [file_id]
 
         run = ProcessingRun(
-            pipeline_name=provenance.action,
+            name=provenance.action,
+            kind="session_action",
             run_time=_parse_timestamp(provenance.timestamp),
             input_file_ids=input_file_ids,
             parameters=_json_safe_parameters(provenance.parameters),
@@ -587,15 +589,15 @@ class DataModelRecorder:
                 )
                 self._files[modality] = data_file.file_id
 
-    # -- pipeline outputs -> DerivedFeature/QualityAnnotation/SignalStream ---
+    # -- workflow outputs -> DerivedFeature/QualityAnnotation/SignalStream ---
 
-    def record_pipeline_result(self, result: PipelineResult) -> ProcessingRun:
-        """Turn a finished pipeline run's outputs into store entities.
+    def record_workflow_result(self, result: WorkflowResult) -> ProcessingRun:
+        """Turn a finished workflow run's outputs into store entities.
 
         Named context artifacts that are already ``ParameterResult``/
         ``QualityFlag``/``Signal`` objects are materialized directly; bare
-        numeric outputs (Milestone 1 pipelines that have not adopted Layer 1
-        objects yet) still become a ``DerivedFeature`` with just a value. The
+        numeric outputs (from older workflow steps that have not adopted
+        Layer 1 objects yet) still become a ``DerivedFeature`` with just a value. The
         run's ``parameters["outputs"]`` also records a JSON-safe provenance
         summary (method/unit/metadata) for every native result, keyed by its
         context name, so the run's full output provenance survives even for
@@ -613,12 +615,12 @@ class DataModelRecorder:
         ``record_signal``/``record_provenance`` calls, and from any raw
         ``Signal`` this same run produces) is linked onto
         ``run.input_file_ids`` (Phase 5.3) - precise for the common one
-        pipeline per session case; a session that runs more than one
-        pipeline will over-attribute earlier files to a later run's inputs.
+        workflow per session case; a session that runs more than one
+        workflow will over-attribute earlier files to a later run's inputs.
         """
 
         run = self.store.add_processing_run(
-            ProcessingRun(pipeline_name=result.name, parameters={})
+            ProcessingRun(name=result.name, kind="workflow", parameters={})
         )
         output_provenance: dict[str, Any] = {}
         for name, value in result.outputs.items():
@@ -630,7 +632,7 @@ class DataModelRecorder:
         return run
 
     def _record_output_value(self, name: str, value: Any, run: ProcessingRun) -> Any:
-        """Recursively record one pipeline-output value, at any nesting
+        """Recursively record one workflow-output value, at any nesting
         depth of list/tuple/dict, returning a provenance entry mirroring
         the input's shape (or ``None`` if it had none)."""
 
@@ -650,7 +652,7 @@ class DataModelRecorder:
     def _record_output_item(
         self, name: str, value: Any, run: ProcessingRun
     ) -> dict[str, Any] | None:
-        """Record one pipeline-output value (not a list/tuple/dict of them)
+        """Record one workflow-output value (not a list/tuple/dict of them)
         and return its provenance entry, or ``None`` for a value that has no
         provenance entry of its own (a `QualityFlag`, or an unrecognized
         type). `name` is the output's context key, used as the
@@ -765,7 +767,7 @@ def _signal_type_for(signal: Signal) -> SignalType | None:
 
 
 def _output_provenance_entry(value: ParameterResult | Signal) -> dict[str, Any]:
-    """Build a JSON-safe provenance summary for one pipeline-output result,
+    """Build a JSON-safe provenance summary for one workflow-output result,
     for ``ProcessingRun.parameters["outputs"]``."""
 
     entry: dict[str, Any] = {

@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from m3resp.core.session import M3Session
-from m3resp.workflows import available_steps, run_pipeline
+from m3resp.workflows import available_steps, run_workflow
 from m3resp.workflows.registry import get_step
 
 # Every step this migration added (Phase 3/4/5.2/5.3) or extended with
@@ -87,7 +87,7 @@ def test_new_steps_declare_session_as_a_read(step_name):
 
 
 class TestFullExampleEndToEnd:
-    def test_full_emg_example_pipeline_runs_end_to_end(self, tmp_path):
+    def test_full_emg_example_workflow_runs_end_to_end(self, tmp_path):
         pytest.importorskip("resurfemg")
 
         repo_root = Path(__file__).resolve().parents[1]
@@ -109,12 +109,12 @@ class TestFullExampleEndToEnd:
         )
 
         spec_path = os.path.join(
-            repo_root, "examples", "emg_full_preprocessing", "emg-full.pipeline.yaml"
+            repo_root, "examples", "emg_full_preprocessing", "emg-full.workflow.yaml"
         )
-        # run_pipeline (unlike run_spec) does not touch the spec's `outputs:`
+        # run_workflow (unlike run_spec) does not touch the spec's `outputs:`
         # section, so this exercises the example without writing into the
         # project's real output/ directory.
-        result = run_pipeline(spec_path, session=M3Session())
+        result = run_workflow(spec_path, session=M3Session())
 
         # ECG removal ran and fed into breath detection.
         assert len(result.value("ecg_peak_indices")) > 0

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from m3resp.core.exceptions import PipelineSpecError, UnknownStepError
+from m3resp.core.exceptions import UnknownStepError, WorkflowSpecError
 from m3resp.workflows.context import (
     RESOLVED_OUTPUT_DIR_KEY,
     SESSION_KEY,
@@ -20,7 +20,7 @@ from m3resp.workflows.registry import (
     get_step,
 )
 from m3resp.workflows.session_deps import find_session_dependency_conflicts
-from m3resp.workflows.spec import PipelineSpec, StepSpec
+from m3resp.workflows.spec import StepSpec, WorkflowSpec
 
 from ._shared import _ensure_steps_registered
 
@@ -62,13 +62,13 @@ _RESERVED_ENGINE_KEYS = frozenset(
 )
 
 
-def validate_spec(spec: PipelineSpec, *, available: set[str] | None = None) -> None:
+def validate_spec(spec: WorkflowSpec, *, available: set[str] | None = None) -> None:
     """Statically check that every step's inputs are produced before use,
     that no two steps write to the same context key without explicit renaming,
-    and that every ``@name`` input reference names a declared pipeline input.
+    and that every ``@name`` input reference names a declared workflow input.
 
     Compatibility wrapper around :func:`collect_diagnostics`:
-    raises ``PipelineSpecError`` using the first error-severity diagnostic's
+    raises ``WorkflowSpecError`` using the first error-severity diagnostic's
     message when any exist. Call :func:`collect_diagnostics` directly to get
     every independent problem in one pass instead of only the first.
 
@@ -81,11 +81,11 @@ def validate_spec(spec: PipelineSpec, *, available: set[str] | None = None) -> N
         first = errors[0]
         if first.code == "unknown_step":
             raise UnknownStepError(first.message)
-        raise PipelineSpecError(first.message)
+        raise WorkflowSpecError(first.message)
 
 
 def collect_diagnostics(
-    spec: PipelineSpec, *, available: set[str] | None = None
+    spec: WorkflowSpec, *, available: set[str] | None = None
 ) -> list[Diagnostic]:
     """Return every independent structural problem in ``spec``.
 
@@ -98,7 +98,7 @@ def collect_diagnostics(
     _ensure_steps_registered()
     diagnostics: list[Diagnostic] = []
     # _spec_outputs, _spec_experiment, _resolved_output_dir, and _run_timestamp
-    # are always injected by run_spec before the pipeline executes, so treat
+    # are always injected by run_spec before the workflow executes, so treat
     # them as globally available. Pre-seeded keys are exempt from
     # duplicate-write detection.
     seeded: set[str] = {
@@ -111,7 +111,7 @@ def collect_diagnostics(
         *(available or set()),
     }
     # Maps context key -> label of the step that produced it, for messages.
-    produced: dict[str, str] = {key: "pipeline seed" for key in seeded}
+    produced: dict[str, str] = {key: "workflow seed" for key in seeded}
     # Maps context key -> declared StepArtifact.artifact_type of whatever
     # produced it, for the artifact-type compatibility check below. Only
     # populated where a producer actually declares one (additive metadata),
@@ -185,7 +185,7 @@ def collect_diagnostics(
     return diagnostics
 
 
-def _check_session_dependencies(spec: PipelineSpec) -> list[Diagnostic]:
+def _check_session_dependencies(spec: WorkflowSpec) -> list[Diagnostic]:
     """A step reading a declared ``session_reads`` resource before any step
     that (later in the same spec) declares writing it usually means the
     spec's step order silently reordered a session-mediated dependency -
@@ -481,7 +481,7 @@ def _check_static_parameters(
             continue
         try:
             value = resolve_value(raw_value, spec_inputs)
-        except PipelineSpecError:
+        except WorkflowSpecError:
             continue  # already reported by _check_references
 
         if value is None:

@@ -1,4 +1,4 @@
-"""Registered ECG-peak-detection pipeline step (for downstream ECG removal steps)."""
+"""Registered ECG-peak-detection workflow step (for downstream ECG removal steps)."""
 
 from __future__ import annotations
 

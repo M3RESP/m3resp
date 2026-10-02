@@ -177,7 +177,7 @@ def _choose_emg_channel(n_channels: int, labels: Sequence[str] | None) -> int:
         f"This EMG recording has {n_channels} channels ({channel_list}) and it is "
         "not clear which one is the breathing muscle. Pass the channel number, "
         "for example preprocess_emg(channel=1), or "
-        'run_pipeline("emg", config={"preprocess": {"channel": 1}}).'
+        'session.run_preset("emg", config={"preprocess": {"channel": 1}}).'
     )
 
 

@@ -1,6 +1,6 @@
-"""Milestone 2.4 - named `Pipeline` presets (plan_stage2.md Sec 18-19).
+"""Named, built-in presets (`session.run_preset("eit" | "emg" | "multimodal")`).
 
-Each `Pipeline.run` is just a fixed sequence of calls to `M3Session`'s own
+Each `Preset.run` is just a fixed sequence of calls to `M3Session`'s own
 methods (already covered by `tests/test_session.py`, `tests/test_eit.py`,
 `tests/test_emg.py`), so these tests verify the *contract* - which methods
 get called, in what order, with the `config` kwargs passed through - by
@@ -15,13 +15,13 @@ from typing import Any
 import pytest
 
 from m3resp import M3Session
-from m3resp.core.exceptions import UnknownPipelineError
+from m3resp.core.exceptions import UnknownPresetError
 from m3resp.presets import (
-    EITPipeline,
-    EMGPipeline,
-    MultimodalPipeline,
-    available_pipelines,
-    get_pipeline,
+    EITPreset,
+    EMGPreset,
+    MultimodalPreset,
+    available_presets,
+    get_preset,
 )
 from m3resp.workflows import register_step
 from m3resp.workflows.registry import STEP_REGISTRY
@@ -49,10 +49,10 @@ def _patch_ecg_removal_steps(
     monkeypatch: pytest.MonkeyPatch,
     calls: list[tuple[str, dict[str, Any]]],
 ) -> None:
-    """Spy on the two ECG-removal steps `EMGPipeline` calls.
+    """Spy on the two ECG-removal steps `EMGPreset` calls.
 
-    `EMGPipeline._remove_ecg` imports them lazily from their own modules, so
-    patching the module attributes is what the pipeline actually looks up.
+    `EMGPreset._remove_ecg` imports them lazily from their own modules, so
+    patching the module attributes is what the workflow actually looks up.
     """
 
     # `import_module`, not `from ... import ecg_gating`: the package's
@@ -71,26 +71,26 @@ def _patch_ecg_removal_steps(
     )
 
 
-class TestPipelineRegistry:
-    def test_built_in_pipelines_are_registered(self):
-        assert available_pipelines() == ["eit", "emg", "multimodal"]
-        assert get_pipeline("eit") is EITPipeline
-        assert get_pipeline("emg") is EMGPipeline
-        assert get_pipeline("multimodal") is MultimodalPipeline
+class TestPresetRegistry:
+    def test_built_in_presets_are_registered(self):
+        assert available_presets() == ["eit", "emg", "multimodal"]
+        assert get_preset("eit") is EITPreset
+        assert get_preset("emg") is EMGPreset
+        assert get_preset("multimodal") is MultimodalPreset
 
-    def test_get_pipeline_raises_for_unknown_name(self):
-        with pytest.raises(UnknownPipelineError, match="unknown_pipeline"):
-            get_pipeline("unknown_pipeline")
+    def test_get_preset_raises_for_unknown_name(self):
+        with pytest.raises(UnknownPresetError, match="Unknown preset 'unknown'"):
+            get_preset("unknown")
 
 
-class TestEITPipeline:
+class TestEITPreset:
     def test_run_calls_preprocess_then_detect_breaths_with_config(self):
         session = M3Session()
         calls: list[tuple[str, dict[str, Any]]] = []
         session.preprocess_eit = _spy(calls, "preprocess_eit")
         session.detect_eit_breaths = _spy(calls, "detect_eit_breaths")
 
-        result = session.run_pipeline(
+        result = session.run_preset(
             "eit",
             config={
                 "preprocess": {"filter_mode": "none"},
@@ -110,12 +110,12 @@ class TestEITPipeline:
         session.preprocess_eit = _spy(calls, "preprocess_eit")
         session.detect_eit_breaths = _spy(calls, "detect_eit_breaths")
 
-        session.run_pipeline("eit")
+        session.run_preset("eit")
 
         assert calls == [("preprocess_eit", {}), ("detect_eit_breaths", {})]
 
 
-class TestEMGPipeline:
+class TestEMGPreset:
     def _session_with_spies(self, calls: list[tuple[str, dict[str, Any]]]) -> M3Session:
         session = M3Session()
         session.preprocess_emg = _spy(
@@ -136,7 +136,7 @@ class TestEMGPipeline:
         session = self._session_with_spies(calls)
         _patch_ecg_removal_steps(monkeypatch, calls)
 
-        session.run_pipeline("emg", config={"postprocess": {"peep": 5.0}})
+        session.run_preset("emg", config={"postprocess": {"peep": 5.0}})
 
         assert [name for name, _ in calls] == [
             "preprocess_emg",
@@ -152,7 +152,7 @@ class TestEMGPipeline:
         session = self._session_with_spies(calls)
         _patch_ecg_removal_steps(monkeypatch, calls)
 
-        session.run_pipeline(
+        session.run_preset(
             "emg",
             config={
                 "ecg_detect_peaks": {"ecg_channel": 0},
@@ -168,7 +168,7 @@ class TestEMGPipeline:
         session = self._session_with_spies(calls)
         _patch_ecg_removal_steps(monkeypatch, calls)
 
-        session.run_pipeline("emg", config={"ecg_removal": {"enabled": False}})
+        session.run_preset("emg", config={"ecg_removal": {"enabled": False}})
 
         assert [name for name, _ in calls] == [
             "preprocess_emg",
@@ -202,7 +202,7 @@ class TestEMGPipeline:
 
         monkeypatch.setattr(gating_module, "ecg_gating", _capture_gating)
 
-        session.run_pipeline(
+        session.run_preset(
             "emg", config={"ecg_removal": {"ecg_peak_indices": [10, 20, 30]}}
         )
 
@@ -222,7 +222,7 @@ class TestEMGPipeline:
         session = self._session_with_spies(calls)
 
         with pytest.raises(TypeError, match="would have no effect"):
-            session.run_pipeline(
+            session.run_preset(
                 "emg",
                 config={
                     "ecg_removal": {"ecg_peak_indices": [10]},
@@ -235,10 +235,10 @@ class TestEMGPipeline:
         session = self._session_with_spies(calls)
 
         with pytest.raises(TypeError, match="only accepts 'enabled' and"):
-            session.run_pipeline("emg", config={"ecg_removal": {"fill_method": 1}})
+            session.run_preset("emg", config={"ecg_removal": {"fill_method": 1}})
 
 
-class TestMultimodalPipeline:
+class TestMultimodalPreset:
     def test_run_calls_synchronize_then_align_in_order(self):
         session = M3Session()
         calls: list[tuple[str, dict[str, Any]]] = []
@@ -247,7 +247,7 @@ class TestMultimodalPipeline:
             calls, "synchronize_multimodal_breaths"
         )
 
-        session.run_pipeline(
+        session.run_preset(
             "multimodal",
             config={"align": {"offset_seconds": 0.5}},
         )
@@ -259,16 +259,15 @@ class TestMultimodalPipeline:
         assert calls[-1] == ("synchronize_multimodal_breaths", {"offset_seconds": 0.5})
 
 
-def test_session_run_pipeline_is_distinct_from_module_level_run_pipeline():
-    """`session.run_pipeline(name)` and `m3resp.run_pipeline(spec, ...)` are two
-    different mechanisms (Milestone 2.4 named presets vs. the Stage 1
-    declarative engine) that happen to share a name; this pins that both
-    remain independently usable.
+def test_session_run_preset_is_distinct_from_module_level_run_workflow():
+    """`session.run_preset(name)` and `m3resp.run_workflow(spec, ...)` are two
+    different mechanisms (named presets vs. the declarative workflow
+    engine); this pins that both remain independently usable.
     """
 
     import m3resp
 
-    @register_step("t.named_pipeline_smoke", writes=("value",))
+    @register_step("t.named_workflow_smoke", writes=("value",))
     def _noop(**kwargs: Any) -> dict[str, Any]:
         return {"value": 1}
 
@@ -277,12 +276,12 @@ def test_session_run_pipeline_is_distinct_from_module_level_run_pipeline():
         session.preprocess_eit = lambda **kwargs: None
         session.detect_eit_breaths = lambda **kwargs: None
 
-        assert session.run_pipeline("eit") is session
+        assert session.run_preset("eit") is session
 
-        result = m3resp.run_pipeline(
-            {"name": "noop", "steps": [{"uses": "t.named_pipeline_smoke"}]}
+        result = m3resp.run_workflow(
+            {"name": "noop", "steps": [{"uses": "t.named_workflow_smoke"}]}
         )
         assert result.name == "noop"
         assert result.outputs["value"] == 1
     finally:
-        STEP_REGISTRY.pop("t.named_pipeline_smoke", None)
+        STEP_REGISTRY.pop("t.named_workflow_smoke", None)

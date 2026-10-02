@@ -1,4 +1,4 @@
-"""Stage 2 wrapper tests: M3Session/pipeline activity -> DataModelStore."""
+"""Stage 2 wrapper tests: M3Session/workflow activity -> DataModelStore."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from m3resp.datamodel import (
     export_store,
     validate_store,
 )
-from m3resp.workflows import register_step, run_pipeline
+from m3resp.workflows import register_step, run_workflow
 
 
 @pytest.fixture(autouse=True)
@@ -66,11 +66,11 @@ def test_recorder_mirrors_loads_and_provenance_into_store():
     files = store.files_for_signal(eit_stream.signal_id)
     assert [f.file_path for f in files] == ["subject.eit"]
 
-    run_names = {run.pipeline_name for run in store.processing_runs.values()}
+    run_names = {run.name for run in store.processing_runs.values()}
     assert run_names == {"load_eit", "load_emg"}
 
 
-def test_pipeline_run_populates_derived_features_when_datamodel_attached():
+def test_workflow_run_populates_derived_features_when_datamodel_attached():
     session = M3Session()
     store = DataModelStore()
     session.datamodel = DataModelRecorder(session, store)
@@ -79,7 +79,7 @@ def test_pipeline_run_populates_derived_features_when_datamodel_attached():
         "name": "demo",
         "steps": [{"uses": "t.constant", "with": {"value": 1.23}}],
     }
-    run_pipeline(spec, session=session)
+    run_workflow(spec, session=session)
 
     features = [
         f
@@ -90,7 +90,7 @@ def test_pipeline_run_populates_derived_features_when_datamodel_attached():
     assert features[0].value == 1.23
 
     run = store.processing_runs[features[0].processing_run_id]
-    assert run.pipeline_name == "demo"
+    assert run.name == "demo"
 
 
 def test_record_signal_materializes_signal_stream_and_data_file():
@@ -153,7 +153,7 @@ def test_a_result_naming_no_instrument_resolves_to_the_primary_recording():
     recorder = DataModelRecorder(session, store)
     primary = recorder.record_signal(_airway_pressure("pressure"))
     recorder.record_signal(_airway_pressure("pressure__pod"))
-    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+    run = store.add_processing_run(ProcessingRun(name="demo"))
 
     feature = recorder.record_parameter(
         ParameterResult(
@@ -195,7 +195,7 @@ def test_reprocessing_one_instrument_replaces_its_own_stream():
     recorder = DataModelRecorder(session, store)
     recorder.record_signal(_airway_pressure("pressure"))
     reprocessed = recorder.record_signal(_airway_pressure("pressure"))
-    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+    run = store.add_processing_run(ProcessingRun(name="demo"))
 
     feature = recorder.record_parameter(
         ParameterResult(
@@ -241,7 +241,7 @@ def test_two_eit_impedance_streams_keep_separate_attribution():
     )
     assert global_stream.signal_id != pixel_stream.signal_id
 
-    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+    run = store.add_processing_run(ProcessingRun(name="demo"))
     pixel_feature = recorder.record_parameter(
         ParameterResult(
             name="pixel_tiv",
@@ -279,7 +279,7 @@ def test_record_parameter_and_quality_flag_link_to_recorded_signal():
     stream = recorder.record_signal(
         Signal(values=[1.0], time=[0.0], modality="eit", unit="a.u.")
     )
-    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+    run = store.add_processing_run(ProcessingRun(name="demo"))
 
     feature = recorder.record_parameter(
         ParameterResult(name="tiv", value=1.5, modality="eit", unit="a.u."),
@@ -302,7 +302,7 @@ def test_record_parameter_converts_a_numpy_scalar_to_float():
     session = M3Session()
     store = DataModelStore()
     recorder = DataModelRecorder(session, store)
-    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+    run = store.add_processing_run(ProcessingRun(name="demo"))
 
     feature = recorder.record_parameter(
         ParameterResult(name="sample_count", value=np.int64(12), modality="eit"),
@@ -368,7 +368,7 @@ def test_record_processing_step_converts_bare_numpy_scalar_parameters():
     }
 
 
-def test_pipeline_result_records_bare_numpy_integer_outputs():
+def test_workflow_result_records_bare_numpy_integer_outputs():
     import numpy as np
 
     from m3resp.workflows.registry import STEP_REGISTRY
@@ -382,7 +382,7 @@ def test_pipeline_result_records_bare_numpy_integer_outputs():
         store = DataModelStore()
         session.datamodel = DataModelRecorder(session, store)
 
-        result = run_pipeline(
+        result = run_workflow(
             {"name": "numpy-scalar", "steps": [{"uses": "t.numpy_integer"}]},
             session=session,
         )
@@ -399,7 +399,7 @@ def test_pipeline_result_records_bare_numpy_integer_outputs():
         STEP_REGISTRY.pop("t.numpy_integer", None)
 
 
-def test_pipeline_result_prefers_layer1_objects_over_bare_scalars():
+def test_workflow_result_prefers_layer1_objects_over_bare_scalars():
     from m3resp.workflows.registry import STEP_REGISTRY
 
     @register_step("t.layer1", writes=("tiv", "quality"))
@@ -419,7 +419,7 @@ def test_pipeline_result_prefers_layer1_objects_over_bare_scalars():
             Signal(values=[1.0], time=[0.0], modality="eit")
         )
 
-        run_pipeline({"name": "demo", "steps": [{"uses": "t.layer1"}]}, session=session)
+        run_workflow({"name": "demo", "steps": [{"uses": "t.layer1"}]}, session=session)
 
         features = [
             f for f in store.derived_features.values() if f.feature_name == "tiv"
@@ -468,8 +468,8 @@ def test_record_signal_skips_signal_with_unrecordable_modality():
     assert store.signal_streams == {}
 
 
-def test_pipeline_result_records_output_provenance_for_array_valued_results():
-    """Phase 5.2/7: `record_pipeline_result` stores an output-provenance
+def test_workflow_result_records_output_provenance_for_array_valued_results():
+    """`record_workflow_result` stores an output-provenance
     mapping on the run for every native result, and an array-valued
     `ParameterResult` still gets a `DerivedFeature` (with a null value, since
     the array itself lives in the parameter artifact, not the store)."""
@@ -496,7 +496,7 @@ def test_pipeline_result_records_output_provenance_for_array_valued_results():
         store = DataModelStore()
         session.datamodel = DataModelRecorder(session, store)
 
-        result = run_pipeline(
+        result = run_workflow(
             {"name": "demo", "steps": [{"uses": "t.array_result"}]}, session=session
         )
 
@@ -518,7 +518,7 @@ def test_pipeline_result_records_output_provenance_for_array_valued_results():
         STEP_REGISTRY.pop("t.array_result", None)
 
 
-def test_pipeline_result_records_provenance_for_values_per_breath_and_masks():
+def test_workflow_result_records_provenance_for_values_per_breath_and_masks():
     """`IntervalData` and `PixelMask` outputs are stored as `DerivedFeature`s,
     and the run records how they were made."""
 
@@ -549,7 +549,7 @@ def test_pipeline_result_records_provenance_for_values_per_breath_and_masks():
         store = DataModelStore()
         session.datamodel = DataModelRecorder(session, store)
 
-        result = run_pipeline(
+        result = run_workflow(
             {"name": "demo", "steps": [{"uses": "t.grouped_results"}]},
             session=session,
         )
@@ -599,7 +599,7 @@ def test_missing_values_per_breath_are_stored_without_a_value_and_export_as_json
     session = M3Session()
     store = DataModelStore()
     recorder = DataModelRecorder(session, store)
-    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+    run = store.add_processing_run(ProcessingRun(name="demo"))
     breaths = [BreathEvent("eit", 0.0, 1.0), BreathEvent("eit", 1.0, 2.0)]
 
     features = recorder.record_interval_data(
@@ -623,7 +623,7 @@ def test_values_that_are_not_numbers_are_stored_without_a_value():
     session = M3Session()
     store = DataModelStore()
     recorder = DataModelRecorder(session, store)
-    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+    run = store.add_processing_run(ProcessingRun(name="demo"))
 
     features = recorder.record_interval_data(
         IntervalData(
@@ -642,7 +642,7 @@ def test_values_per_event_use_the_event_time_as_their_window():
     session = M3Session()
     store = DataModelStore()
     recorder = DataModelRecorder(session, store)
-    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+    run = store.add_processing_run(ProcessingRun(name="demo"))
 
     [feature] = recorder.record_interval_data(
         EventData(
@@ -658,6 +658,39 @@ def test_values_per_event_use_the_event_time_as_their_window():
     assert feature.value == 0.8
 
 
+def test_each_processing_run_says_what_kind_of_run_it_was():
+    """A run is a whole workflow, one step, or one session method call; the
+    `kind` field keeps these apart, so filtering by kind finds only workflows."""
+
+    from m3resp.core.provenance import record
+
+    session = M3Session()
+    store = DataModelStore()
+    recorder = DataModelRecorder(session, store)
+
+    step_run = recorder.record_processing_step(ProcessingStep(name="eit.mdn_filter"))
+    action_run = recorder.record_provenance(record("postprocess_emg", modality="emg"))
+    session.datamodel = recorder
+
+    from m3resp.workflows.registry import STEP_REGISTRY
+
+    @register_step("t.kind_noop", writes=())
+    def _noop(**kwargs: Any) -> dict[str, Any]:
+        return {}
+
+    try:
+        workflow = run_workflow(
+            {"name": "demo", "steps": [{"uses": "t.kind_noop"}]}, session=session
+        )
+    finally:
+        STEP_REGISTRY.pop("t.kind_noop", None)
+    workflow_run = store.processing_runs[workflow.processing_run_id]
+
+    assert (step_run.kind, step_run.name) == ("step", "eit.mdn_filter")
+    assert (action_run.kind, action_run.name) == ("session_action", "postprocess_emg")
+    assert (workflow_run.kind, workflow_run.name) == ("workflow", "demo")
+
+
 def test_record_parameter_file_links_data_file_onto_processing_run(tmp_path):
     """Phase 5.3/7: the array archive becomes a `DataFile` with role
     'parameter', listed in the run's `ProcessingRun.parameter_file_ids`."""
@@ -668,7 +701,7 @@ def test_record_parameter_file_links_data_file_onto_processing_run(tmp_path):
     session.parameter_results.add(
         ParameterResult(name="mask", value=[1.0, 2.0], modality="eit")
     )
-    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+    run = store.add_processing_run(ProcessingRun(name="demo"))
 
     output_dir = session.export_summary(
         tmp_path, processing_run_id=run.processing_run_id
@@ -709,7 +742,7 @@ def test_all_exported_array_files_are_linked_to_the_run(tmp_path):
         )
     )
     session.pixel_masks.add(PixelMask(name="lung", values=[[1.0, np.nan]]))
-    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+    run = store.add_processing_run(ProcessingRun(name="demo"))
 
     session.export_summary(tmp_path, processing_run_id=run.processing_run_id)
     session.export_summary(tmp_path, processing_run_id=run.processing_run_id)
@@ -728,7 +761,7 @@ def test_all_exported_array_files_are_linked_to_the_run(tmp_path):
 
 def test_validate_store_reports_a_run_that_names_a_missing_file():
     store = DataModelStore()
-    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+    run = store.add_processing_run(ProcessingRun(name="demo"))
     run.parameter_file_ids.append("file_missing")
 
     problems = validate_store(store)
@@ -764,9 +797,7 @@ def test_export_store_survives_array_valued_parameters(tmp_path):
     written = export_store(store, tmp_path)  # must not raise
 
     rows = json.loads(written["processing_runs"].read_text())["rows"]
-    params = next(
-        r["parameters"] for r in rows if r["pipeline_name"] == "postprocess_emg"
-    )
+    params = next(r["parameters"] for r in rows if r["name"] == "postprocess_emg")
     assert params["peep"] == 5.0
     assert params["ventilator"].startswith("<array shape=(5,)")
     assert params["minimum_samples"] == 12

@@ -3,8 +3,8 @@
 This walks through loading, preprocessing, detecting breaths, and
 postprocessing a single EMG recording using `M3Session` directly. For the
 same processing expressed as a declarative YAML spec, see
-`examples/emg_full_preprocessing/emg-full.pipeline.yaml` and
-[../pipelines.md](../pipelines.md).
+`examples/emg_full_preprocessing/emg-full.workflow.yaml` and
+[../workflows.md](../workflows.md).
 
 ## Step by step
 
@@ -44,7 +44,7 @@ After this:
 ## The one-call preset
 
 ```python
-session.run_pipeline("emg", config={"preprocess": {"channel": 1}})
+session.run_preset("emg", config={"preprocess": {"channel": 1}})
 ```
 
 When `channel` is not given, the channel is picked from the channel names: a
@@ -56,7 +56,7 @@ Calls `preprocess_emg()`, then ECG peak detection + gating, then
 `detect_emg_breaths()` and `postprocess_emg()` in sequence. Pass
 `config={"preprocess": {...}, "ecg_detect_peaks": {...}, "ecg_gating": {...}, "detect_breaths": {...}, "postprocess": {...}}`
 to override any call's keyword arguments. See
-[../developer/pipeline-contracts.md](../developer/pipeline-contracts.md).
+[../developer/preset-contracts.md](../developer/preset-contracts.md).
 
 ECG removal is part of the preset because it has to happen *before* the
 envelope that breath detection and every amplitude-derived parameter are
@@ -98,8 +98,8 @@ ECG in the signal. ECG
 removal (gating or wavelet denoising), custom baselines, and Pocc-specific quality checks are exposed
 individually on `ReSurfEMGAdapter` (see
 [../developer/adapters.md](../developer/adapters.md)) and as composable
-steps in the declarative pipeline engine - see "ECG-removal alternatives" in
-[../pipelines.md](../pipelines.md) for the full comparison and when to use
+steps in the declarative workflow engine - see "ECG-removal alternatives" in
+[../workflows.md](../workflows.md) for the full comparison and when to use
 each.
 
 Any `resurfemg.postprocessing` function not covered by a named wrapper is

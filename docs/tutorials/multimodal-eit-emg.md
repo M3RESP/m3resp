@@ -4,9 +4,9 @@ This walks through loading EIT and EMG (and, optionally, ventilator) data
 into one session, synchronizing them, processing each modality, linking
 their breaths, and computing cross-modality timing parameters. For the same
 processing (plus ventilator) expressed as a declarative YAML spec, see
-`examples/multimodal_full/multimodal-full.pipeline.yaml`
-or `examples/multimodal_example/multimodal.pipeline.yaml`, and
-[../pipelines.md](../pipelines.md).
+`examples/multimodal_full/multimodal-full.workflow.yaml`
+or `examples/multimodal_example/multimodal.workflow.yaml`, and
+[../workflows.md](../workflows.md).
 
 ## Step by step
 
@@ -139,7 +139,7 @@ session.compute_multimodal_parameters(delay_pairs=[("emg", "eit")], duration_pai
 ## The one-call preset for the synchronization half
 
 ```python
-session.run_pipeline("multimodal")
+session.run_preset("multimodal")
 ```
 
 Calls `synchronize_raw_modalities()` then `synchronize_multimodal_breaths()` - run this
@@ -147,4 +147,4 @@ after the per-modality `"eit"`/`"emg"` presets so their breath events
 already exist, then call `session.link_breaths()` and
 `session.compute_multimodal_parameters()` directly (there is no preset for
 those two yet since they're commonly parameterized per study). See
-[../developer/pipeline-contracts.md](../developer/pipeline-contracts.md).
+[../developer/preset-contracts.md](../developer/preset-contracts.md).

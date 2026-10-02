@@ -2,7 +2,7 @@
 
 Adapters convert whatever ``eitprocessing``/``resurfemg`` return into
 ``Signal`` instances at the public boundary (Milestone 2.3); everything
-downstream - session storage, pipeline steps, export - operates on this type
+downstream - session storage, workflow steps, export - operates on this type
 instead of vendor-specific objects.
 """
 
@@ -43,7 +43,7 @@ KNOWN_MODALITIES = frozenset(get_args(_KNOWN_MODALITIES_LITERAL))
 #:   parameters/results from.
 #: - ``derived``: computed from another signal (e.g. a difference between
 #:   two signals, or a transform), rather than a step in that signal's own
-#:   raw -> intermediate -> processed pipeline. Use ``Signal.derived_from``
+#:   raw -> intermediate -> processed workflow. Use ``Signal.derived_from``
 #:   to record which processing_state it was derived from (raw or
 #:   intermediate), since a channel can have derived signals from either.
 #:
@@ -79,7 +79,7 @@ class Signal(TimeSeries):
       distinguishes two signals sharing the same ``channel`` and
       ``processing_state`` (e.g. two differently-filtered variants).
     - ``processing_state``: how far along the raw -> intermediate -> processed
-      pipeline this signal is, or ``"derived"`` if computed from another
+      workflow this signal is, or ``"derived"`` if computed from another
       signal. See :data:`ProcessingState`.
     - ``derived_from``: for a ``"derived"`` signal, the ``processing_state``
       it was computed from (e.g. a baseline derived from the ``"processed"``

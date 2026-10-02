@@ -1,6 +1,6 @@
 """Session-resource dependency tracking.
 
-Most pipeline steps communicate through declared context keys (``reads``/
+Most workflow steps communicate through declared context keys (``reads``/
 ``writes``, bound via ``in:``/``out:``), and ``engine/diagnostics.py``
 already tracks that positionally: each read binds to the most recent
 preceding writer of the same context key. But a large share of steps also
@@ -33,7 +33,7 @@ from dataclasses import dataclass
 
 from m3resp.core.exceptions import UnknownStepError
 from m3resp.workflows.registry import StepDefinition, get_step
-from m3resp.workflows.spec import PipelineSpec, StepSpec
+from m3resp.workflows.spec import StepSpec, WorkflowSpec
 
 #: One resolved context-key producer: the position, ``StepSpec``, and
 #: natural output ``name`` (from ``StepDefinition.writes``) of the step
@@ -56,7 +56,7 @@ def resources_match(write: str, read: str) -> bool:
 
 
 def resolve_step_definitions(
-    spec: PipelineSpec,
+    spec: WorkflowSpec,
 ) -> list[tuple[int, StepSpec, StepDefinition]]:
     """Every step in ``spec`` paired with its registered definition, in
     order. Steps naming an unregistered operation are skipped - that is
@@ -132,15 +132,15 @@ class SessionDependencyConflict:
 
 
 def find_session_dependency_conflicts(
-    spec: PipelineSpec,
+    spec: WorkflowSpec,
 ) -> list[SessionDependencyConflict]:
     """Find every session-resource read that a later step in ``spec``
     writes, but no earlier step does.
 
     A read resource satisfied by nothing anywhere in the spec is not
     flagged: it may come from state the caller pre-populated on the
-    session before running the pipeline (e.g. a fixture, or a prior
-    pipeline run against the same session), which is legitimate and
+    session before running the workflow (e.g. a fixture, or a prior
+    workflow run against the same session), which is legitimate and
     outside the spec's view.
     """
 
@@ -199,7 +199,7 @@ def _first_matching_writer_after(
     return None
 
 
-def downstream_step_positions(spec: PipelineSpec, start_position: int) -> set[int]:
+def downstream_step_positions(spec: WorkflowSpec, start_position: int) -> set[int]:
     """Positions of every step that depends on the step at ``start_position``,
     transitively, through either an explicit context-key binding or a
     declared session-resource dependency.

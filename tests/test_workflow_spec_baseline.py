@@ -14,40 +14,40 @@ from typing import Any
 import pytest
 
 from m3resp.workflows import (
-    PipelineContext,
-    PipelineResult,
-    PipelineSpec,
     StepSpec,
+    WorkflowContext,
+    WorkflowResult,
+    WorkflowSpec,
     available_steps,
     load_spec,
     register_step,
-    run_pipeline,
     run_spec,
+    run_workflow,
     validate_spec,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_DIR = REPO_ROOT / "examples"
-SNAPSHOT_DIR = Path(__file__).resolve().parent / "snapshots" / "pipeline_specs"
+SNAPSHOT_DIR = Path(__file__).resolve().parent / "snapshots" / "workflow_specs"
 
 # Every shipped example spec, as of the Stage 2 EIT/EMG gap-migration merge.
 EXAMPLE_SPECS: dict[str, Path] = {
-    "rotarc": EXAMPLES_DIR / "ROTARC_example" / "breath-duration.pipeline.yaml",
+    "rotarc": EXAMPLES_DIR / "ROTARC_example" / "breath-duration.workflow.yaml",
     "multimodal_example": EXAMPLES_DIR
     / "multimodal_example"
-    / "multimodal.pipeline.yaml",
+    / "multimodal.workflow.yaml",
     "multidomain_recording1_a2": EXAMPLES_DIR
     / "multidomain_recording1"
-    / "recording1_a2.pipeline.yaml",
+    / "recording1_a2.workflow.yaml",
     "eit_full_preprocessing": EXAMPLES_DIR
     / "eit_full_preprocessing"
-    / "eit-full.pipeline.yaml",
+    / "eit-full.workflow.yaml",
     "emg_full_preprocessing": EXAMPLES_DIR
     / "emg_full_preprocessing"
-    / "emg-full.pipeline.yaml",
+    / "emg-full.workflow.yaml",
     "multimodal_full": EXAMPLES_DIR
     / "multimodal_full"
-    / "multimodal-full.pipeline.yaml",
+    / "multimodal-full.workflow.yaml",
 }
 
 
@@ -61,7 +61,7 @@ def _normalize_step(step: StepSpec) -> dict[str, Any]:
     }
 
 
-def normalize_spec(spec: PipelineSpec) -> dict[str, Any]:
+def normalize_spec(spec: WorkflowSpec) -> dict[str, Any]:
     """Convert a parsed spec into a JSON-safe, machine-portable structure.
 
     ``outputs.dir`` is stored relative to the repository root rather than as
@@ -107,17 +107,17 @@ def normalize_spec(spec: PipelineSpec) -> dict[str, Any]:
 
 def test_workflows_public_api_is_stable():
     """Guards the symbols compatibility shim will need to
-    re-export from a future ``m3resp.pipeline`` package."""
+    re-export from a future ``m3resp.workflow`` package."""
 
-    assert callable(run_pipeline)
+    assert callable(run_workflow)
     assert callable(run_spec)
     assert callable(validate_spec)
     assert callable(available_steps)
     assert callable(load_spec)
     assert callable(register_step)
-    assert PipelineResult is not None
-    assert PipelineContext is not None
-    assert PipelineSpec is not None
+    assert WorkflowResult is not None
+    assert WorkflowContext is not None
+    assert WorkflowSpec is not None
 
 
 def test_available_steps_covers_every_modality_prefix():
@@ -133,20 +133,20 @@ def test_available_steps_covers_every_modality_prefix():
     }
 
 
-def test_pipeline_result_value_reads_produced_context_key():
+def test_workflow_result_value_reads_produced_context_key():
     @register_step("baseline.make", writes=("value",))
     def _make(*, x: int) -> dict[str, Any]:
         return {"value": x * 2}
 
     try:
-        result = run_pipeline(
+        result = run_workflow(
             {
                 "name": "baseline-smoke",
                 "inputs": {"x": 5},
                 "steps": [{"uses": "baseline.make", "with": {"x": "@x"}}],
             }
         )
-        assert isinstance(result, PipelineResult)
+        assert isinstance(result, WorkflowResult)
         assert result.value("value") == 10
     finally:
         from m3resp.workflows.registry import STEP_REGISTRY

@@ -171,7 +171,7 @@ YAML/JSON file.
   parameters/results from.
 - `"derived"` - computed from another signal (e.g. a difference between two
   signals), rather than a step in that signal's own raw -> intermediate ->
-  processed pipeline; `derived_from` records which state it was derived
+  processed workflow; `derived_from` records which state it was derived
   from.
 
 Multiple differently produced signals can share the same `channel` and
@@ -183,7 +183,7 @@ methods) - use `method` to tell them apart, not a new state.
 Adapters (`EITProcessingAdapter.to_signals`/`ReSurfEMGAdapter.to_signals`,
 see [../developer/adapters.md](../developer/adapters.md)) convert whatever
 `eitprocessing`/`resurfemg` return into `Signal` instances at the public
-boundary - everything downstream (session storage, pipeline steps, export)
+boundary - everything downstream (session storage, workflow steps, export)
 operates on this type instead of vendor-specific objects.
 `session.preprocess_eit()`/`session.preprocess_emg()` call this conversion
 by default and add the results to `session.signals`

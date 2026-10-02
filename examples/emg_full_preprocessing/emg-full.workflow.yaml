@@ -1,4 +1,4 @@
-# Full EMG/ventilator preprocessing pipeline (Stage 2 ReSurfEMG gap
+# Full EMG/ventilator preprocessing workflow (Stage 2 ReSurfEMG gap
 # migration, Phase 7: plan/stage2/2_resurfemg_gap_migration_implementation_plan.md).
 #
 # Exercises every EMG/ventilator operation the gap migration closed onto
@@ -7,19 +7,19 @@
 # ventilator-breath and Pocc-manoeuvre detection, Pocc prerequisites, and all
 # ten clinical quality operations. Run with:
 #
-#   m3resp run examples/emg_full_preprocessing/emg-full.pipeline.yaml
+#   m3resp run examples/emg_full_preprocessing/emg-full.workflow.yaml
 #
 # from the repository root - path-typed `with:`/`inputs:` values (like
 # `inputs.emg_file`/`vent_file` below) resolve relative to this spec file's
 # own directory, same as `outputs.dir`, not the process working directory.
 #
 # ECG removal and baseline are each one of two available alternatives (see
-# `docs/pipelines.md` "Baseline alternatives" / "ECG-removal alternatives"):
-# this pipeline picks emg.ecg_gating and emg.moving_baseline; short YAML
+# `docs/workflows.md` "Baseline alternatives" / "ECG-removal alternatives"):
+# this workflow picks emg.ecg_gating and emg.moving_baseline; short YAML
 # snippets showing the emg.ecg_wavelet_denoising / emg.slopesum_baseline
 # substitutes are in the docs rather than run here too, since both write the
 # same context keys (processed_emg / baseline) and are not meant to run
-# together in one pipeline.
+# together in one workflow.
 #
 # `schema_version: 1` enables strict parsing (Stage 2 Phase 2/9); every step
 # below has an explicit `id:` so GUI/provenance references survive reordering.
@@ -91,7 +91,7 @@ steps:
 
   # min_breath_width_seconds is narrower than the 1.0 s default: this
   # fixture's "quiet breathing" envelope bursts are shorter than that,
-  # so the default finds zero breaths - see docs/pipelines.md "Channel
+  # so the default finds zero breaths - see docs/workflows.md "Channel
   # selection and time-base rules".
   - id: detect_breaths
     uses: emg.detect_breaths

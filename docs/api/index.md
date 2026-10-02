@@ -4,7 +4,7 @@ This reference covers names intentionally exported for researchers and
 application authors. Modules and helpers that are not listed here remain
 internal and may change without notice.
 
-## Sessions and pipelines
+## Sessions and workflows
 
 ```{eval-rst}
 .. autosummary::
@@ -12,27 +12,27 @@ internal and may change without notice.
    :nosignatures:
 
    m3resp.M3Session
-   m3resp.Pipeline
-   m3resp.EITPipeline
-   m3resp.EMGPipeline
-   m3resp.MultimodalPipeline
-   m3resp.PipelineResult
-   m3resp.available_pipelines
-   m3resp.get_pipeline
-   m3resp.register_pipeline
+   m3resp.Preset
+   m3resp.EITPreset
+   m3resp.EMGPreset
+   m3resp.MultimodalPreset
+   m3resp.WorkflowResult
+   m3resp.available_presets
+   m3resp.get_preset
+   m3resp.register_preset
    m3resp.load_spec
-   m3resp.run_pipeline
+   m3resp.run_workflow
    m3resp.run_spec
    m3resp.available_steps
    m3resp.register_step
-   m3resp.workflows.PipelineSpec
+   m3resp.workflows.WorkflowSpec
    m3resp.workflows.StepSpec
    m3resp.workflows.ValidationReport
-   m3resp.workflows.CompiledPipeline
-   m3resp.workflows.PipelineService
+   m3resp.workflows.CompiledWorkflow
+   m3resp.workflows.WorkflowService
    m3resp.workflows.collect_diagnostics
-   m3resp.workflows.compile_pipeline
-   m3resp.workflows.validate_pipeline
+   m3resp.workflows.compile_workflow
+   m3resp.workflows.validate_workflow
    m3resp.workflows.validate_spec
 ```
 

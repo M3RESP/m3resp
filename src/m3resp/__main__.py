@@ -2,8 +2,8 @@
 
 Usage::
 
-    m3resp run <pipeline.yaml> [--dry-run] [--debug]
-    m3resp validate <pipeline.yaml> [--readiness] [--json] [--debug]
+    m3resp run <workflow.yaml> [--dry-run] [--debug]
+    m3resp validate <workflow.yaml> [--readiness] [--json] [--debug]
     m3resp steps [--details] [--json]
     m3resp describe <operation>
 
@@ -19,7 +19,7 @@ Code    Meaning
         failing static validation before any step executes).
 3       Readiness failure: structurally valid but not runnable here
         (missing optional dependency, missing input file).
-4       Execution failure: a step raised (``PipelineExecutionError``).
+4       Execution failure: a step raised (``WorkflowExecutionError``).
 5       Cancelled (a ``cancellation_token`` stopped the run early).
 ======  ===================================================================
 
@@ -78,9 +78,9 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command")
 
     run_parser = subparsers.add_parser(
-        "run", help="Execute a declarative pipeline spec"
+        "run", help="Execute a declarative workflow spec"
     )
-    run_parser.add_argument("spec", help="Path to the pipeline spec (YAML/JSON)")
+    run_parser.add_argument("spec", help="Path to the workflow spec (YAML/JSON)")
     run_parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -91,9 +91,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     validate_parser = subparsers.add_parser(
-        "validate", help="Validate a pipeline spec without running it"
+        "validate", help="Validate a workflow spec without running it"
     )
-    validate_parser.add_argument("spec", help="Path to the pipeline spec (YAML/JSON)")
+    validate_parser.add_argument("spec", help="Path to the workflow spec (YAML/JSON)")
     validate_parser.add_argument(
         "--readiness",
         action="store_true",
@@ -107,7 +107,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     steps_parser = subparsers.add_parser(
-        "steps", help="List all registered pipeline steps"
+        "steps", help="List all registered workflow steps"
     )
     steps_parser.add_argument(
         "--details",
@@ -129,12 +129,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _exit_code_for(exc: Exception) -> int:
-    from m3resp.core.exceptions import PipelineSpecError, UnknownStepError
-    from m3resp.workflows.lifecycle import PipelineExecutionError
+    from m3resp.core.exceptions import UnknownStepError, WorkflowSpecError
+    from m3resp.workflows.lifecycle import WorkflowExecutionError
 
-    if isinstance(exc, PipelineExecutionError):
+    if isinstance(exc, WorkflowExecutionError):
         return EXIT_EXECUTION_FAILURE
-    if isinstance(exc, PipelineSpecError | UnknownStepError | OSError):
+    if isinstance(exc, WorkflowSpecError | UnknownStepError | OSError):
         # OSError covers a spec path that doesn't exist/can't be read - a
         # problem with what was asked for, same category as a structurally
         # invalid spec, not a step execution failure.
@@ -143,12 +143,12 @@ def _exit_code_for(exc: Exception) -> int:
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
-    from m3resp.workflows.compiler import compile_pipeline
+    from m3resp.workflows.compiler import compile_workflow
     from m3resp.workflows.spec import load_spec
 
     if args.dry_run:
         parsed = load_spec(args.spec)
-        compiled = compile_pipeline(parsed)
+        compiled = compile_workflow(parsed)
         print(json.dumps(compiled.as_dict(), indent=2, sort_keys=True))
         return EXIT_SUCCESS
 
@@ -168,7 +168,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     signal.signal(signal.SIGINT, _handle_sigint)
     try:
-        # A step failure raises PipelineExecutionError - deliberately not
+        # A step failure raises WorkflowExecutionError - deliberately not
         # caught here, so it reaches main()'s single except block, which
         # prints either a short message or (with --debug) the full
         # traceback, uniformly for every subcommand.
@@ -177,17 +177,17 @@ def _cmd_run(args: argparse.Namespace) -> int:
         signal.signal(signal.SIGINT, previous_handler)
 
     if result.status == "cancelled":
-        print("Pipeline cancelled.", file=sys.stderr)
+        print("Workflow cancelled.", file=sys.stderr)
         return EXIT_CANCELLED
     return EXIT_SUCCESS
 
 
 def _cmd_validate(args: argparse.Namespace) -> int:
-    from m3resp.workflows.compiler import validate_pipeline
+    from m3resp.workflows.compiler import validate_workflow
     from m3resp.workflows.spec import load_spec
 
     parsed = load_spec(args.spec)
-    report = validate_pipeline(parsed, readiness=args.readiness)
+    report = validate_workflow(parsed, readiness=args.readiness)
 
     if args.json:
         print(json.dumps(report.as_dict(), indent=2, sort_keys=True))

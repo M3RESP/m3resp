@@ -23,8 +23,8 @@ _SENSITIVE_KEY_MARKERS = ("password", "secret", "token", "credential", "api_key"
 _REDACTED = "***redacted***"
 
 if TYPE_CHECKING:
-    from m3resp.workflows.engine import PipelineResult
-    from m3resp.workflows.spec import PipelineSpec
+    from m3resp.workflows.engine import WorkflowResult
+    from m3resp.workflows.spec import WorkflowSpec
 
 
 def is_sensitive_key(name: str) -> bool:
@@ -55,7 +55,7 @@ def sha256_file(path: str | Path) -> str | None:
         return None
 
 
-def collect_input_checksums(result: PipelineResult) -> dict[str, str]:
+def collect_input_checksums(result: WorkflowResult) -> dict[str, str]:
     """Sha256 every existing file referenced by a path-typed step parameter
     across the run's step records (Phase 6.3's "input ... checksums when
     configured"). Skips values that are not existing regular files."""
@@ -78,8 +78,8 @@ def build_manifest(
     *,
     run_id: str,
     status: str,
-    pipeline_name: str,
-    spec: PipelineSpec,
+    workflow_name: str,
+    spec: WorkflowSpec,
     started_at: str | None,
     finished_at: str | None = None,
     duration_seconds: float | None = None,
@@ -101,7 +101,7 @@ def build_manifest(
     return {
         "run_id": run_id,
         "status": status,
-        "pipeline_name": pipeline_name,
+        "workflow_name": workflow_name,
         "schema_version": spec.schema_version,
         "started_at": started_at,
         "finished_at": finished_at,

@@ -50,12 +50,12 @@ session.export_summary(
 ```
 
 Pass `structured_export=False` to get only the Stage 1 files. `processing_run_id`
-(typically `PipelineResult.processing_run_id`, from a `m3resp.run_pipeline(...)`
-call - see [../pipelines.md](../pipelines.md)) links the array files
+(typically `WorkflowResult.processing_run_id`, from a `m3resp.run_workflow(...)`
+call - see [../workflows.md](../workflows.md)) links the array files
 (`parameter_result_arrays.npz`, `interval_data_arrays.npz`, `pixel_masks.npz`)
 to the `ProcessingRun` that produced them, listed in its `parameter_file_ids`,
 when a `DataModelRecorder` is attached. Omit it for a manual export with no
-associated pipeline run; the files are still written, just not linked.
+associated workflow run; the files are still written, just not linked.
 
 ## Exporting the persisted (Layer 2) data model
 
@@ -86,9 +86,9 @@ problem:
 To see the problems without exporting, call `validate_store(store)`; it
 returns them as a list.
 
-## Declarative pipelines
+## Declarative workflows
 
-Running a pipeline through `m3resp.run_pipeline(spec, session=...)` (the
-YAML/JSON engine, see [../pipelines.md](../pipelines.md)) can also trigger
+Running a workflow through `m3resp.run_workflow(spec, session=...)` (the
+YAML/JSON engine, see [../workflows.md](../workflows.md)) can also trigger
 export automatically via the spec's `outputs:` section - `export.*` steps
 and automatic export share one resolved output directory per run.

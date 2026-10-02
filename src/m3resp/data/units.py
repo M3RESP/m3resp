@@ -10,9 +10,9 @@ un-normalized until an alias for it is registered.
 Registrations made with `register_unit_alias` only live for the current
 process. To persist a custom vocabulary, `save_unit_aliases`/
 `load_unit_aliases` round-trip the map through a YAML or JSON file, using the
-same dual-format convention as the pipeline-spec loader
+same dual-format convention as the workflow-spec loader
 (`m3resp.workflows.spec.load_spec`), so a project can keep its unit map
-alongside its pipeline specs and load it before a run.
+alongside its workflow specs and load it before a run.
 """
 
 from __future__ import annotations

@@ -13,17 +13,17 @@ from m3resp.workflows.context import (
 from m3resp.workflows.lifecycle import (
     CancellationToken,
     EventSink,
-    PipelineExecutionError,
+    WorkflowExecutionError,
     new_run_id,
     utc_now_iso,
 )
-from m3resp.workflows.spec import PipelineSpec, load_spec
+from m3resp.workflows.spec import WorkflowSpec, load_spec
 
-from ._shared import PipelineResult
-from .execution import run_pipeline
+from ._shared import WorkflowResult
+from .execution import run_workflow
 
 
-def _resolve_output_mode(spec: PipelineSpec) -> tuple[str, bool]:
+def _resolve_output_mode(spec: WorkflowSpec) -> tuple[str, bool]:
     """replaces the old "any of three hardcoded export step names
     present" heuristic with an explicit ``outputs.mode``.
 
@@ -48,13 +48,13 @@ def run_spec(
     emg_adapter: Any = None,
     event_sink: EventSink | None = None,
     cancellation_token: CancellationToken | None = None,
-) -> PipelineResult:
+) -> WorkflowResult:
     """Load a spec file and run it end-to-end, including automatic export.
 
     This is the entry point for the ``m3resp run <spec.yaml>`` CLI. It injects
     the spec's ``outputs`` and ``experiment`` sections into the context (so steps
     like ``export.rotarc_result`` can read them) and applies the ``outputs:``
-    section after the pipeline finishes.
+    section after the workflow finishes.
 
     ``outputs.timestamped`` is resolved exactly once here into
     ``_resolved_output_dir`` (and the raw stamp into ``_run_timestamp``), both
@@ -79,7 +79,7 @@ def run_spec(
     mode, inferred = _resolve_output_mode(parsed)
     if inferred:
         warnings.warn(
-            f"Pipeline outputs.mode was not set; inferred {mode!r} from the "
+            f"Workflow outputs.mode was not set; inferred {mode!r} from the "
             "presence/absence of an 'export.*' step. This becomes required "
             "once 'schema_version' is set.",
             FutureWarning,
@@ -116,7 +116,7 @@ def run_spec(
             build_manifest(
                 run_id=run_id,
                 status="running",
-                pipeline_name=parsed.name,
+                workflow_name=parsed.name,
                 spec=parsed,
                 started_at=started_at,
                 output_dir=resolved_output_dir,
@@ -124,7 +124,7 @@ def run_spec(
         )
 
     try:
-        result = run_pipeline(
+        result = run_workflow(
             parsed,
             session=session,
             eit_adapter=eit_adapter,
@@ -134,7 +134,7 @@ def run_spec(
             cancellation_token=cancellation_token,
             run_id=run_id,
         )
-    except PipelineExecutionError as exc:
+    except WorkflowExecutionError as exc:
         if manifest_path is not None:
             _write_failed_manifest(manifest_path, parsed, exc)
         raise
@@ -149,7 +149,7 @@ def run_spec(
 
 
 def _write_failed_manifest(
-    manifest_path: Path, spec: PipelineSpec, exc: PipelineExecutionError
+    manifest_path: Path, spec: WorkflowSpec, exc: WorkflowExecutionError
 ) -> None:
     """a failed run still gets a manifest, honestly marked
     ``"failed"`` - never left as ``"running"`` and never mistaken for a
@@ -162,7 +162,7 @@ def _write_failed_manifest(
         build_manifest(
             run_id=exc.run_id or "unknown",
             status="failed",
-            pipeline_name=spec.name,
+            workflow_name=spec.name,
             spec=spec,
             started_at=exc.started_at,
             finished_at=utc_now_iso(),
@@ -179,8 +179,8 @@ def _write_failed_manifest(
 
 def _write_result_manifest(
     manifest_path: Path,
-    spec: PipelineSpec,
-    result: PipelineResult,
+    spec: WorkflowSpec,
+    result: WorkflowResult,
     output_dir: Path | None,
 ) -> Path:
     """the terminal manifest for a run that returned normally
@@ -199,7 +199,7 @@ def _write_result_manifest(
         build_manifest(
             run_id=result.run_id or "unknown",
             status=result.status,
-            pipeline_name=spec.name,
+            workflow_name=spec.name,
             spec=spec,
             started_at=result.started_at,
             finished_at=result.finished_at,
@@ -214,8 +214,8 @@ def _write_result_manifest(
     )
 
 
-def _apply_outputs(spec: PipelineSpec, result: PipelineResult, *, mode: str) -> None:
-    """Apply the spec's ``outputs:`` section after the pipeline has run.
+def _apply_outputs(spec: WorkflowSpec, result: WorkflowResult, *, mode: str) -> None:
+    """Apply the spec's ``outputs:`` section after the workflow has run.
 
     ``mode`` replaces the old "any explicit export step present"
     heuristic: ``"none"`` writes nothing, ``"explicit"`` leaves output
@@ -266,8 +266,8 @@ def _apply_outputs(spec: PipelineSpec, result: PipelineResult, *, mode: str) -> 
     _maybe_log_summary(session, output_dir, spec)
 
 
-def _maybe_assemble_eit(result: PipelineResult) -> None:
-    """Populate ``session.processed['eit']`` from the pipeline context."""
+def _maybe_assemble_eit(result: WorkflowResult) -> None:
+    """Populate ``session.processed['eit']`` from the workflow context."""
 
     ctx = result.context.values
     if "raw_eit" not in ctx:
@@ -313,7 +313,7 @@ def _infer_filter_mode(filtered_eit: Any) -> str:
 
 
 def _maybe_log_summary(
-    session: M3Session, output_dir: Path, spec: PipelineSpec
+    session: M3Session, output_dir: Path, spec: WorkflowSpec
 ) -> None:
     """Log a compact workflow summary if loguru is available."""
 

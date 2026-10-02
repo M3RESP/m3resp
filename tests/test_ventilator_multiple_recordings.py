@@ -117,7 +117,7 @@ class TestPositionalProducersNowResolveByName:
         with pytest.raises(TypeError, match="needs a sampling rate"):
             ventilator_signals({"array": np.vstack([_wave()] * 3), "metadata": {}})
 
-    def test_the_pipeline_step_can_select_channels(self):
+    def test_the_workflow_step_can_select_channels(self):
         from m3resp.workflows.steps.ventilator.loading import (
             channels as ventilator_channels,
         )

@@ -198,7 +198,7 @@ def test_wavelet_denoise_ecg_reproduces_resurfemg_exactly_including_padding():
 
     fs = 2048.0
     # >=15 s: wavelet_denoising's internal noise-estimation window is
-    # 15 * fs samples wide (see docs/pipelines.md "ECG-removal alternatives"),
+    # 15 * fs samples wide (see docs/workflows.md "ECG-removal alternatives"),
     # so shorter signals raise inside resurfemg itself, independent of this
     # wrapper's own behavior. 20.002 s (not 20.0 s) gives a sample count that
     # is not already a multiple of 2**4, so real zero-padding is exercised.
