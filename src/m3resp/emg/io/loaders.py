@@ -45,11 +45,13 @@ class _LoaderMixin:
             TypeError: If file_path is not a str.
             FileNotFoundError: If the file does not exist.
         """
+        if self._loader is not None:
+            return self._loader(file_path, **kwargs)
         if not isinstance(file_path, str):
             msg = "file_path should be a str."
             raise TypeError(msg)
         if not Path(file_path).exists():
-            msg = f"File {file_path} does not exist."
+            msg = f"File {file_path} does not exist. No EMG data will be imported."
             raise FileNotFoundError(msg)
         if self._loader is not None:
             return self._loader(file_path, **kwargs)
