@@ -46,7 +46,7 @@ def linked_breaths_to_rows(linked_breaths: list[LinkedBreath]) -> list[dict[str,
     """Flatten `LinkedBreath` objects into one row per link (Milestone 2.5/2.6).
 
     Each modality's breath fields are prefixed (``eit_start_time``,
-    ``emg_peak_time``, ...) and left ``None`` when that modality has no
+    ``emg_extremum_time``, ``emg_extremum_index``, ...) and left ``None`` when that modality has no
     breath in the link, so the CSV has a stable column set regardless of
     which modalities matched.
     """
@@ -62,7 +62,12 @@ def linked_breaths_to_rows(linked_breaths: list[LinkedBreath]) -> list[dict[str,
             breath = linked.breaths.get(slot)
             row[f"{slot}_start_time"] = None if breath is None else breath.start_time
             row[f"{slot}_end_time"] = None if breath is None else breath.end_time
-            row[f"{slot}_peak_time"] = None if breath is None else breath.peak_time
+            row[f"{slot}_extremum_time"] = (
+                None if breath is None else breath.extremum_time
+            )
+            row[f"{slot}_extremum_index"] = (
+                None if breath is None else breath.extremum_index
+            )
         rows.append(row)
     return rows
 

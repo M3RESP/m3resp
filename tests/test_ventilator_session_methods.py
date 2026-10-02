@@ -208,7 +208,7 @@ class TestDetectVentilatorBreaths:
         session.preprocess_ventilator()
         breaths = session.detect_ventilator_breaths(detector=lambda bundle, **kw: [7])
         assert len(breaths) == 1
-        assert breaths[0].peak_time == pytest.approx(7 / FS)
+        assert breaths[0].extremum_time == pytest.approx(7 / FS)
 
 
 class TestDetectVentilatorBreathsVariants:

@@ -30,9 +30,9 @@ def compute_timing_delay(
 
     Positive means `to_modality`'s breath anchor occurs after
     `from_modality`'s. `anchor` selects which point on each breath to
-    compare (``"start"``, ``"peak"``, or ``"end"``). Returns `None` when
+    compare (``"start"``, ``"extremum"``, or ``"end"``). Returns `None` when
     either modality did not contribute a breath to this link, or when
-    ``anchor="peak"`` and either breath has no `peak_time`.
+    ``anchor="extremum"`` and either breath has no `extremum_time`.
     """
 
     from_breath = linked.breaths.get(from_modality)
@@ -170,6 +170,6 @@ def _anchor_time(breath: BreathEvent, anchor: str) -> float | None:
         return breath.start_time
     if anchor == "end":
         return breath.end_time
-    if anchor == "peak":
-        return breath.peak_time
-    raise ValueError(f"anchor ({anchor!r}) must be one of 'start', 'peak', 'end'")
+    if anchor == "extremum":
+        return breath.extremum_time
+    raise ValueError(f"anchor ({anchor!r}) must be one of 'start', 'extremum', 'end'")

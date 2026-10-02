@@ -51,8 +51,10 @@ def align_events_manual_offset(
                     event,
                     start_time=event.start_time + offset,
                     end_time=event.end_time + offset,
-                    peak_time=(
-                        None if event.peak_time is None else event.peak_time + offset
+                    extremum_time=(
+                        None
+                        if event.extremum_time is None
+                        else event.extremum_time + offset
                     ),
                 )
             )

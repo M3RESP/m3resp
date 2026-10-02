@@ -57,7 +57,7 @@ def _session_with_ventilator(
 
 
 def _breath(modality: str, peak: float) -> BreathEvent:
-    return BreathEvent(modality, peak - 0.5, peak + 0.5, peak_time=peak)
+    return BreathEvent(modality, peak - 0.5, peak + 0.5, extremum_time=peak)
 
 
 def _linked_modalities(session: M3Session) -> list[set[str]]:
@@ -153,7 +153,7 @@ class TestStartTimesMoveBreathsWhenLinking:
 
         assert _linked_modalities(session) == [{"eit", "emg"}]
         # Each modality's own results stay on its own clock.
-        assert session.events["emg_breaths"][0].peak_time == 3.0
+        assert session.events["emg_breaths"][0].extremum_time == 3.0
 
     def test_eit_time_of_day_is_counted_from_the_first_sample(self):
         # A Draeger file's time axis is the time of day, while EMG time
@@ -192,7 +192,7 @@ class TestStartTimesMoveBreathsWhenLinking:
             offset_seconds={"emg": 0.5}, reference_modality="eit"
         )
 
-        assert synchronized["emg_breaths"][0].peak_time == pytest.approx(1.5)
+        assert synchronized["emg_breaths"][0].extremum_time == pytest.approx(1.5)
         assert (
             session.parameters["alignment"]["start_time_shift_seconds"]["emg"] == -2.0
         )

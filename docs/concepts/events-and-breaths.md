@@ -9,7 +9,7 @@ All modalities share them.
 |---|---|---|
 | `Event` | Something that happens at one instant: one `time` | a heartbeat, a blood-gas draw |
 | `Interval` | Something that lasts: a `start_time` and an `end_time` | an occlusion, a period of noise, an intervention |
-| `BreathEvent` | One breath: an `Interval` with a turning point (`peak_time`) inside it | a breath found in EIT, EMG or ventilator data |
+| `BreathEvent` | One breath: an `Interval` with a turning point (`extremum_time`) inside it | a breath found in EIT, EMG or ventilator data |
 
 Every `BreathEvent` is also an `Interval`, so anything written for intervals
 works on breaths too. EIT, EMG and ventilator breath detection all produce
@@ -123,18 +123,25 @@ One breath. It has every field of `Interval`, with `name` always
 @dataclass(kw_only=True)
 class BreathEvent(Interval):
     name: str = field(default="breath", init=False)
-    peak_time: float | None = None
-    peak_index: int | None = None
+    extremum_time: float | None = None
+    extremum_index: int | None = None
 ```
 
 ```python
-breath = BreathEvent("eit", 1.0, 2.0, peak_time=1.5)
+breath = BreathEvent("eit", 1.0, 2.0, extremum_time=1.5)
 isinstance(breath, Interval)  # True
 ```
 
-`peak_time` is the moment the signal turns from inhalation to exhalation;
-`peak_index` is its sample position. Both are `None` when the detector
-didn't report one.
+`extremum_time` is the moment the signal turns from inhalation to exhalation;
+`extremum_index` is its sample position. Both are `None` when the detector
+didn't report one. It is called an extremum, not a peak, because the signal
+can turn at a maximum (impedance, volume, EMG envelope) or at a minimum
+(esophageal pressure, the deepest pressure of an occlusion).
+`coerce_breath_event` reads the turning point from the first of
+`extremum_time`/`extremum_index`, `peak_time`/`peak_index` (older m3resp
+versions and other detectors; a warning names the new keys) and
+`middle_time` (eitprocessing). The time and its position always come from
+the same pair.
 
 A `BreathEvent` and an `Interval` with the same times are not equal: one
 says "this was a breath", the other does not. `coerce_breath_event` refuses

@@ -170,7 +170,7 @@ def test_continuous_tiv_matches_direct_tiv_call(pipeline_result):
     )
     # eitprocessing puts each TIV at the middle of its breath, which is the
     # turning point of the stored breath.
-    assert [breath.peak_time for breath in tiv_result.intervals] == [
+    assert [breath.extremum_time for breath in tiv_result.intervals] == [
         float(time) for time in expected.time
     ]
     assert tiv_result in list(pipeline_result.session.interval_data)
@@ -208,7 +208,7 @@ def test_pixel_tiv_matches_direct_tiv_call(pipeline_result):
         float(np.asarray(times, dtype=float)[0, 0]) for times in expected.time
     ]
     assert [
-        breath.peak_time for breath in pixel_tiv_result.intervals
+        breath.extremum_time for breath in pixel_tiv_result.intervals
     ] == expected_middle_times
 
 

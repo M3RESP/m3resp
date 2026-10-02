@@ -4,6 +4,7 @@ turn other libraries' outputs into them."""
 from __future__ import annotations
 
 import uuid
+import warnings
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import KW_ONLY, asdict, dataclass, field, is_dataclass
 from typing import TYPE_CHECKING, Any, NoReturn, cast
@@ -145,18 +146,21 @@ class BreathEvent(Interval):
     cannot be set to anything else), plus the two below.
 
     Attributes:
-        peak_time: Real-world time of the turning point between inhalation
-            and exhalation. ``None`` when the detector didn't report one.
-        peak_index: Position of ``peak_time`` in the signal named by
+        extremum_time: Real-world time of the turning point between
+            inhalation and exhalation. It is called an extremum, not a peak,
+            because the signal can turn at a maximum (impedance, volume, EMG
+            envelope) or at a minimum (esophageal pressure, an occlusion's
+            deepest pressure). ``None`` when the detector didn't report one.
+        extremum_index: Position of ``extremum_time`` in the signal named by
             ``signal_name``, or ``None``.
 
     Only ``modality``, ``start_time`` and ``end_time`` may be given by
-    position, e.g. ``BreathEvent("eit", 1.0, 2.0, peak_time=1.5)``.
+    position, e.g. ``BreathEvent("eit", 1.0, 2.0, extremum_time=1.5)``.
     """
 
     name: str = field(default="breath", init=False)
-    peak_time: float | None = None
-    peak_index: int | None = None
+    extremum_time: float | None = None
+    extremum_index: int | None = None
 
 
 def coerce_event(
@@ -232,10 +236,17 @@ def coerce_breath_event(
 
     Accepts a `BreathEvent` (returned as it is), a dictionary, an object with
     ``start_time``/``end_time`` attributes (such as eitprocessing's
-    ``Breath``, whose ``middle_time`` becomes ``peak_time``), or a
-    ``(start_time, end_time)`` or ``(start_time, end_time, peak_time)``
+    ``Breath``, whose ``middle_time`` becomes ``extremum_time``), or a
+    ``(start_time, end_time)`` or ``(start_time, end_time, extremum_time)``
     sequence. ``modality`` and ``source`` fill in whatever the input does
     not carry.
+
+    The turning point is read from the first of these that is given:
+    ``extremum_time``/``extremum_index``, then ``peak_time``/``peak_index``
+    (the names older m3resp versions and other detectors use; a warning
+    names the new keys), then eitprocessing's ``middle_time``. The time and
+    its position always come from the same pair, so they point at the same
+    moment.
 
     Raises:
         ValueError: If the input names itself as something other than a
@@ -252,21 +263,22 @@ def coerce_breath_event(
                 f"Cannot use a {name!r} interval as a breath. Only intervals "
                 f"named 'breath' (or with no name) can become a BreathEvent."
             )
+        turning_time, turning_index, _ = _turning_point(value, warn=True)
         return BreathEvent(
             **_interval_fields(value, modality=modality, source=source),
-            peak_time=_optional_float(_peak_time(value)),
-            peak_index=_read(value, "peak_index"),
+            extremum_time=_optional_float(turning_time),
+            extremum_index=turning_index,
         )
 
     start_time, end_time, *rest = _coerce_positional_sequence(
         value, min_length=2, max_length=3, target="BreathEvent"
     )
-    peak_time = rest[0] if rest else None
+    extremum_time = rest[0] if rest else None
     return BreathEvent(
         modality=_required_str(modality, "modality"),
         start_time=float(start_time),
         end_time=float(end_time),
-        peak_time=_optional_float(peak_time),
+        extremum_time=_optional_float(extremum_time),
         source=source,
     )
 
@@ -300,7 +312,8 @@ def coerce_interval(
     ``modality`` and ``source`` fill in whatever the input does not carry.
 
     An input that is a breath (named ``'breath'``, or carrying a turning
-    point in ``peak_time``, ``peak_index`` or ``middle_time``) comes back as
+    point in ``extremum_time``, ``extremum_index``, ``peak_time``,
+    ``peak_index`` or ``middle_time``) comes back as
     a `BreathEvent`, which is also an `Interval`, so the turning point is
     kept.
 
@@ -315,12 +328,13 @@ def coerce_interval(
 
     if _has_start_and_end(value):
         resolved_name = _read(value, "name") or name
-        if _has_turning_point(value):
+        turning_key = _turning_point(value)[2]
+        if turning_key is not None:
             if resolved_name not in (None, "breath"):
                 raise ValueError(
                     f"This {resolved_name!r} interval has a turning point "
-                    f"(peak_time, peak_index or middle_time), which an "
-                    f"Interval cannot keep. Only breaths keep a turning point."
+                    f"({turning_key!r}), which an Interval cannot keep. Only "
+                    f"breaths keep a turning point."
                 )
             return coerce_breath_event(value, modality=modality, source=source)
         if resolved_name == "breath":
@@ -380,14 +394,39 @@ def _has_start_and_end(value: Any) -> bool:
     return hasattr(value, "start_time") and hasattr(value, "end_time")
 
 
-def _peak_time(value: Any) -> Any:
-    # eitprocessing calls the turning point `middle_time`.
-    peak_time = _read(value, "peak_time")
-    return _read(value, "middle_time") if peak_time is None else peak_time
+#: The names a breath's turning point can be given under, as (time key,
+#: index key), most preferred first. ``peak_*`` is what older m3resp
+#: versions and other detectors use; eitprocessing has only ``middle_time``.
+_TURNING_POINT_KEYS: tuple[tuple[str, str | None], ...] = (
+    ("extremum_time", "extremum_index"),
+    ("peak_time", "peak_index"),
+    ("middle_time", None),
+)
 
 
-def _has_turning_point(value: Any) -> bool:
-    return _peak_time(value) is not None or _read(value, "peak_index") is not None
+def _turning_point(value: Any, *, warn: bool = False) -> tuple[Any, Any, str | None]:
+    """The turning point of ``value`` as (time, index, key it was read from).
+
+    The first pair in `_TURNING_POINT_KEYS` with a time or an index is used,
+    and both come from that pair, so they never describe different moments.
+    Returns (None, None, None) when there is no turning point. With
+    ``warn=True``, reading the old ``peak_*`` names gives a warning.
+    """
+
+    for time_key, index_key in _TURNING_POINT_KEYS:
+        time = _read(value, time_key)
+        index = None if index_key is None else _read(value, index_key)
+        if time is None and index is None:
+            continue
+        if warn and time_key == "peak_time":
+            warnings.warn(
+                "Breath turning point given as 'peak_time'/'peak_index'; these "
+                "are now called 'extremum_time'/'extremum_index'.",
+                UserWarning,
+                stacklevel=3,
+            )
+        return time, index, time_key if time is not None else index_key
+    return None, None, None
 
 
 def _interval_fields(

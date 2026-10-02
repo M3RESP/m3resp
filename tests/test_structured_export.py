@@ -38,10 +38,10 @@ def _populated_session() -> M3Session:
         QualityFlag(name="snr_check", passed=True, severity="info", modality="eit")
     )
     eit_breath = BreathEvent(
-        modality="eit", start_time=1.0, end_time=2.0, peak_time=1.5
+        modality="eit", start_time=1.0, end_time=2.0, extremum_time=1.5
     )
     emg_breath = BreathEvent(
-        modality="emg", start_time=1.1, end_time=2.1, peak_time=1.6
+        modality="emg", start_time=1.1, end_time=2.1, extremum_time=1.6
     )
     session.linked_breaths.append(
         LinkedBreath(breaths={"eit": eit_breath, "emg": emg_breath}, confidence=0.9)
@@ -281,8 +281,8 @@ def _read_csv(path) -> list[dict]:
 
 def _two_breaths() -> list[BreathEvent]:
     return [
-        BreathEvent("eit", 0.0, 2.0, peak_time=1.0),
-        BreathEvent("eit", 2.0, 4.0, peak_time=3.0),
+        BreathEvent("eit", 0.0, 2.0, extremum_time=1.0),
+        BreathEvent("eit", 2.0, 4.0, extremum_time=3.0),
     ]
 
 
@@ -496,3 +496,22 @@ def test_a_result_that_cannot_be_stored_stops_the_export_before_any_file(tmp_pat
 
     assert not (tmp_path / "parameter_results.csv").exists()
     assert not (tmp_path / "session_metadata.json").exists()
+
+
+def test_linked_breaths_csv_has_the_turning_point_time_and_index(tmp_path):
+    session = M3Session()
+    session.linked_breaths.append(
+        LinkedBreath(
+            breaths={
+                "eit": BreathEvent(
+                    "eit", 1.0, 2.0, extremum_time=1.5, extremum_index=30
+                ),
+            }
+        )
+    )
+
+    output_dir = session.export_summary(tmp_path)
+
+    [row] = _read_csv(output_dir / "linked_breaths.csv")
+    assert (row["eit_extremum_time"], row["eit_extremum_index"]) == ("1.5", "30")
+    assert row["emg_extremum_index"] == ""

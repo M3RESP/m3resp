@@ -136,7 +136,7 @@ def test_detect_breaths_reproduces_resurfemg_peak_detection_exactly():
 
     events = adapter.detect_breaths(processed)
 
-    actual_peak_indices = [round(event.peak_time * fs) for event in events]
+    actual_peak_indices = [round(event.extremum_time * fs) for event in events]
     assert actual_peak_indices == [int(p) for p in expected_peaks]
 
 

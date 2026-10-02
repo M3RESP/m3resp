@@ -380,7 +380,7 @@ ventilator.pocc_quality             (needs all of the above)
 
 - A quality step whose prerequisites are entirely missing (no ventilator input, no detected breaths) simply has nothing to iterate over - it produces no native results for that run rather than raising, so a pipeline with a partial dataset still completes.
 - `emg.evaluate_event_timing` pairs EMG and ventilator events by position; if the two lists have different lengths, it still pairs as many as it can (keeping the existing raw-output truncation behavior for backward compatibility) but also reports `evaluate_event_timing_unmatched_count` and adds an `evaluate_event_timing_unmatched` warning `QualityFlag` - the unmatched events are never silently dropped without a trace.
-- Per-breath/per-manoeuvre native results use `breath_id=str(position)` (a stable event ID is future work) and record the source peak/pressure sample index in `metadata["peak_sample_index"]`, so a GUI can always explain which detected event a given flag or measurement belongs to.
+- Per-breath/per-manoeuvre native results use `breath_id=str(position)` (a stable event ID is future work) and record the source peak/pressure sample index in `metadata["extremum_sample_index"]`, so a GUI can always explain which detected event a given flag or measurement belongs to.
 
 ### Array export
 

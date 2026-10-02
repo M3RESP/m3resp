@@ -107,7 +107,7 @@ def test_custom_detector_normalization_still_works():
             modality="eit",
             start_time=1.0,
             end_time=2.0,
-            peak_time=1.5,
+            extremum_time=1.5,
             source="eitprocessing",
         )
     ]
@@ -120,7 +120,7 @@ def test_default_detection_reads_processed_breath_intervals():
 
     assert events[0].modality == "eit"
     assert events[0].source == "eitprocessing.BreathDetection"
-    assert events[0].peak_time == 1.5
+    assert events[0].extremum_time == 1.5
 
 
 def test_top_level_and_modality_load_helpers_return_recordings():

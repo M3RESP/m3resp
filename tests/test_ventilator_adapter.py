@@ -193,7 +193,7 @@ class TestDetectBreaths:
     def test_breaths_have_real_times_not_just_indices(self):
         adapter = _adapter()
         breaths = adapter.detect_breaths(adapter.preprocess(_payload()))
-        assert all(breath.peak_time is not None for breath in breaths)
+        assert all(breath.extremum_time is not None for breath in breaths)
         assert all(breath.end_time > breath.start_time for breath in breaths)
 
     def test_a_custom_detector_is_used_when_given(self):
@@ -201,7 +201,7 @@ class TestDetectBreaths:
         processed = adapter.preprocess(_payload())
         breaths = adapter.detect_breaths(processed, detector=lambda bundle, **kw: [5])
         assert len(breaths) == 1
-        assert breaths[0].peak_time == pytest.approx(5 / FS)
+        assert breaths[0].extremum_time == pytest.approx(5 / FS)
 
     def test_rejects_a_bundle_it_did_not_produce(self):
         with pytest.raises(UnsupportedWorkflowError, match="detector"):
