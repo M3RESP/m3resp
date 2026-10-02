@@ -3,8 +3,8 @@
 This package mirrors the former single ``eitprocessing_adapter.py`` module,
 with standalone helper functions factored out into ``_shared.py`` for
 readability; ``EITProcessingAdapter`` itself is unchanged. ``add_to_collection``,
-``continuous_data_to_signal``, and ``_sparse_data_to_parameters`` are
-re-exported here so ``from m3resp.adapters.eitprocessing_adapter import
+``continuous_data_to_signal``, ``breath_intervals_to_breath_events`` and
+``sparse_data_to_interval_data`` are re-exported here so ``from m3resp.adapters.eitprocessing_adapter import
 <name>`` keeps working unchanged.
 """
 
@@ -12,32 +12,38 @@ from __future__ import annotations
 
 import copy
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any, Literal, cast
 
 import numpy as np
 
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
-from m3resp.data import ParameterResult, QualityFlag, Signal
-from m3resp.data.events import BreathEvent, coerce_breath_events
+from m3resp.data import IntervalData, ParameterResult, PixelMask, QualityFlag, Signal
+from m3resp.data.events import (
+    BreathEvent,
+    coerce_breath_events,
+    reuse_matching_breaths,
+)
 from m3resp.processing.filters import butterworth_filter
 
 from ._shared import (
     _breath_intervals_to_dicts,
     _lazy_import,
     _require_eit_sequence,
-    _sparse_data_to_parameters,
     add_to_collection,
+    breath_intervals_to_breath_events,
     continuous_data_to_signal,
     filter_pixels_preserving_gaps,
+    sparse_data_to_interval_data,
 )
 
 __all__ = [
     "EITProcessingAdapter",
-    "_sparse_data_to_parameters",
     "add_to_collection",
+    "breath_intervals_to_breath_events",
     "continuous_data_to_signal",
     "filter_pixels_preserving_gaps",
+    "sparse_data_to_interval_data",
 ]
 
 
@@ -194,6 +200,20 @@ class EITProcessingAdapter:
         ).apply(signal, captures=captures, **apply_kwargs)
         return {"filtered_eit": filtered_eit, "filter_captures": captures}
 
+    def find_breaths(
+        self, timing_data: Any, *, minimum_duration_seconds: float = 2 / 3
+    ) -> Any:
+        """Detect breaths on an impedance waveform (global or regional) with eitprocessing's
+        `BreathDetection`, the same way `find_pixel_breaths` does before it
+        looks at each pixel."""
+
+        (BreathDetection,) = _lazy_import(
+            "eitprocessing.features.breath_detection.BreathDetection"
+        )
+        return BreathDetection(minimum_duration=minimum_duration_seconds).find_breaths(
+            timing_data
+        )
+
     def find_pixel_breaths(
         self,
         eit_data: Any,
@@ -342,9 +362,8 @@ class EITProcessingAdapter:
     ) -> Any:
         """Keep only connected mask regions at or above `min_region_size`.
 
-        Accepts either an upstream `PixelMask` or the native array-valued
-        `ParameterResult` the mask steps produce, so a pipeline can bind
-        whichever form it has.
+        Accepts either an upstream `PixelMask` or the m3resp `PixelMask` the
+        mask steps produce, so a workflow can bind whichever form it has.
         """
 
         (FilterROIBySize,) = _lazy_import(
@@ -358,24 +377,38 @@ class EITProcessingAdapter:
     def as_pixel_mask(self, mask: Any) -> Any:
         """Return `mask` as an upstream `PixelMask`.
 
-        A `PixelMask` is passed through. A native `ParameterResult` holding a
-        2D mask is rebuilt into one: excluded pixels are NaN in both
-        representations, so nothing is reinterpreted on the way across.
+        An upstream `PixelMask` is passed through. An m3resp `PixelMask`, or
+        a plain 2D array, is rebuilt into one: excluded pixels are NaN in
+        both, so nothing is reinterpreted on the way across.
+
+        Raises:
+            UnsupportedWorkflowError: If ``mask`` is none of these, or is not
+                a 2D grid of numbers.
         """
 
         if hasattr(mask, "mask"):
             return mask
 
-        value = getattr(mask, "value", mask)
-        array = np.asarray(value, dtype=float)
+        value = mask.values if isinstance(mask, PixelMask) else mask
+        if not isinstance(value, (np.ndarray, list, tuple)):
+            raise UnsupportedWorkflowError(
+                "An ROI mask must be an m3resp PixelMask, an eitprocessing "
+                f"PixelMask, or a 2D array of pixels; got {type(mask).__name__}."
+            )
+        try:
+            array = np.asarray(value, dtype=float)
+        except (TypeError, ValueError) as error:
+            raise UnsupportedWorkflowError(
+                "An ROI mask must be a 2D (row, column) array of numbers."
+            ) from error
         if array.ndim != 2:
             raise UnsupportedWorkflowError(
                 "An ROI mask must be a 2D (row, column) array of pixels; got "
                 f"shape {array.shape}."
             )
 
-        (PixelMask,) = _lazy_import("eitprocessing.roi.PixelMask")
-        return PixelMask(array)
+        (UpstreamPixelMask,) = _lazy_import("eitprocessing.roi.PixelMask")
+        return UpstreamPixelMask(array)
 
     def preprocess(
         self,
@@ -652,7 +685,9 @@ class EITProcessingAdapter:
         return signals
 
     def to_parameters(self, preprocessed: dict[str, Any]) -> list[ParameterResult]:
-        """Convert rate/TIV/EELI results into `ParameterResult` objects."""
+        """Convert the respiratory and heart rate into `ParameterResult`
+        objects. TIV and EELI have one value per breath and are converted by
+        `to_interval_data` instead."""
 
         parameters: list[ParameterResult] = []
 
@@ -679,18 +714,56 @@ class EITProcessingAdapter:
                     method="eitprocessing.RateDetection",
                 )
             )
-
-        for key, method in (
-            ("continuous_tiv", "eitprocessing.TIV"),
-            ("eeli", "eitprocessing.EELI"),
-            ("pixel_tiv", "eitprocessing.TIV"),
-        ):
-            sparse = preprocessed.get(key)
-            if sparse is not None:
-                parameters.extend(
-                    _sparse_data_to_parameters(sparse, modality="eit", method=method)
-                )
         return parameters
+
+    def to_interval_data(
+        self,
+        preprocessed: dict[str, Any],
+        *,
+        stored_breaths: Iterable[Any] | None = None,
+    ) -> list[IntervalData]:
+        """Convert the per-breath TIV, EELI and pixel TIV into `IntervalData`,
+        each value next to the breath it was computed over.
+
+        `preprocess` computes all three over the breaths it stores as
+        ``"breath_intervals"`` (same detector, same signal), so those breaths
+        are used as the intervals. A breath that is also in
+        ``stored_breaths`` (same start and end time) is that stored breath.
+        """
+
+        per_breath = [
+            (preprocessed[key], method, as_pixel_maps)
+            for key, method, as_pixel_maps in (
+                ("continuous_tiv", "eitprocessing.TIV", False),
+                ("eeli", "eitprocessing.EELI", False),
+                ("pixel_tiv", "eitprocessing.TIV", True),
+            )
+            if preprocessed.get(key) is not None
+        ]
+        if not per_breath:
+            return []
+        breath_intervals = preprocessed.get("breath_intervals")
+        if breath_intervals is None:
+            raise ValueError(
+                "TIV/EELI values were given without the breaths they were "
+                "computed over ('breath_intervals')."
+            )
+        breaths = reuse_matching_breaths(
+            breath_intervals_to_breath_events(breath_intervals), stored_breaths
+        )
+
+        results: list[IntervalData] = []
+        for sparse, method, as_pixel_maps in per_breath:
+            results.append(
+                sparse_data_to_interval_data(
+                    sparse,
+                    breaths,
+                    modality="eit",
+                    method=method,
+                    as_pixel_maps=as_pixel_maps,
+                )
+            )
+        return results
 
     def to_quality_flags(self, preprocessed: dict[str, Any]) -> list[QualityFlag]:
         """Convert preprocessing completeness into `QualityFlag` objects.

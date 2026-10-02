@@ -31,8 +31,10 @@ string key such as `"eit"` or `"emg_breaths"`, with no fixed shape, so EIT
 and EMG results can look completely different from each other.
 
 Stage 2 adds a second, parallel set of attributes (`signals`,
-`parameter_results`, `quality`, `linked_breaths`) built from fixed, shared
-types (`Signal`, `ParameterResult`, `QualityFlag`, `BreathEvent`), so EIT and
+`parameter_results`, `interval_data`, `pixel_masks`, `quality`,
+`linked_breaths`) built from fixed, shared types (`Signal`,
+`ParameterResult`, `IntervalData`, `PixelMask`, `QualityFlag`,
+`BreathEvent`), so EIT and
 EMG data can be compared and displayed using the same shape. These are
 populated by each adapter's `to_signals`/`to_parameters`/`to_quality_flags`
 conversion methods and are additive: the Stage 1 dicts keep working exactly

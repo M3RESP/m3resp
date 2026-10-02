@@ -29,6 +29,7 @@ first.
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 from collections.abc import Mapping
 from datetime import datetime
@@ -38,7 +39,9 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from loguru import logger
 
+from m3resp.data.event_data import EventData, IntervalData
 from m3resp.data.parameters import ParameterResult
+from m3resp.data.pixel_maps import PixelMap, PixelMask
 from m3resp.data.processing import ProcessingStep
 from m3resp.data.quality import QualityFlag
 from m3resp.data.signals import Signal
@@ -326,6 +329,82 @@ class DataModelRecorder:
             )
         )
 
+    def record_interval_data(
+        self, interval_data: IntervalData | EventData, *, processing_run_id: str
+    ) -> list[DerivedFeature]:
+        """Materialize values per interval or event as ``DerivedFeature`` entries.
+
+        Numbers become one feature per interval (or event), with the
+        interval's start and end time as the feature's time window, so EIT
+        TIV and EELI keep one stored value per breath. A missing value (None
+        or NaN) is stored as no value, because the saved JSON files cannot
+        hold NaN. A value that is not a number is stored as no value too, with
+        a warning. Values that are arrays
+        (a pixel map per breath) become one feature for the whole result with
+        no value, like an array-valued ``ParameterResult``: the arrays
+        themselves live in the export archive.
+        """
+
+        signal_id = self._lookup_signal_id(
+            interval_data.modality, interval_data.category, None
+        )
+        source_signal_ids = [signal_id] if signal_id is not None else []
+        values = interval_data.values
+        items = (
+            interval_data.intervals
+            if isinstance(interval_data, IntervalData)
+            else interval_data.events
+        )
+        if values is not None and any(np.ndim(value) > 0 for value in values):
+            return [
+                self.store.add_derived_feature(
+                    DerivedFeature(
+                        source_signal_ids=source_signal_ids,
+                        processing_run_id=processing_run_id,
+                        feature_name=interval_data.name,
+                        value=None,
+                        unit=interval_data.unit,
+                    )
+                )
+            ]
+
+        features = []
+        for position, item in enumerate(items):
+            value = None if values is None else values[position]
+            start = getattr(item, "start_time", getattr(item, "time", None))
+            end = getattr(item, "end_time", start)
+            features.append(
+                self.store.add_derived_feature(
+                    DerivedFeature(
+                        source_signal_ids=source_signal_ids,
+                        processing_run_id=processing_run_id,
+                        feature_name=interval_data.name,
+                        time_window_start=start,
+                        time_window_end=end,
+                        value=_feature_value(value, interval_data.name),
+                        unit=interval_data.unit,
+                    )
+                )
+            )
+        return features
+
+    def record_pixel_grid(
+        self, grid: PixelMap | PixelMask, *, processing_run_id: str
+    ) -> DerivedFeature:
+        """Materialize a pixel map or mask as one ``DerivedFeature`` with no
+        value: the grid itself lives in the export archive."""
+
+        signal_id = self._lookup_signal_id(grid.modality, None, None)
+        return self.store.add_derived_feature(
+            DerivedFeature(
+                source_signal_ids=[signal_id] if signal_id is not None else [],
+                processing_run_id=processing_run_id,
+                feature_name=grid.name,
+                value=None,
+                unit=getattr(grid, "unit", None),
+            )
+        )
+
     def record_quality_flag(
         self,
         flag: QualityFlag,
@@ -586,6 +665,12 @@ class DataModelRecorder:
         if isinstance(value, Signal):
             self.record_signal(value)
             return _output_provenance_entry(value)
+        if isinstance(value, (IntervalData, EventData)):
+            self.record_interval_data(value, processing_run_id=run.processing_run_id)
+            return _grouped_output_provenance_entry(value)
+        if isinstance(value, (PixelMap, PixelMask)):
+            self.record_pixel_grid(value, processing_run_id=run.processing_run_id)
+            return _grouped_output_provenance_entry(value)
         if isinstance(value, bool):
             return None
         if isinstance(value, (int, float, np.integer, np.floating)):
@@ -602,14 +687,15 @@ class DataModelRecorder:
     def record_parameter_file(
         self, path: str | Path, *, processing_run_id: str
     ) -> DataFile:
-        """Record a structured-export parameter artifact (e.g. the
-        ``parameter_result_arrays.npz`` archive) as a ``DataFile`` with role
-        ``"parameter"``, and link it onto the ``ProcessingRun`` that produced
-        it via ``ProcessingRun.parameter_file_id``.
+        """Record an exported file of array results (e.g.
+        ``parameter_result_arrays.npz``, ``interval_data_arrays.npz`` or
+        ``pixel_masks.npz``) as a ``DataFile`` with role ``"parameter"``, and
+        add it to ``ProcessingRun.parameter_file_ids`` of the run that made
+        it.
 
-        Does not create a new entity type for array-valued results (per
-        ``plan/stage2/1_eit_gap_migration_implementation_plan.md`` Phase 5.3):
-        the existing ``DataFile``/``ProcessingRun`` link is reused.
+        Exporting again to the same path replaces the earlier link to that
+        path, so a run never lists the same file twice. The earlier
+        ``DataFile`` stays in the store as a record of the earlier export.
         """
 
         data_file = self.store.add_data_file(
@@ -623,7 +709,11 @@ class DataModelRecorder:
             )
         )
         run = self.store.processing_runs[processing_run_id]
-        run.parameter_file_id = data_file.file_id
+        run.parameter_file_ids = [
+            file_id
+            for file_id in run.parameter_file_ids
+            if self.store.data_files[file_id].file_path != str(path)
+        ] + [data_file.file_id]
         return data_file
 
 
@@ -692,6 +782,49 @@ def _output_provenance_entry(value: ParameterResult | Signal) -> dict[str, Any]:
     else:
         entry["channel"] = value.channel
         entry["processing_state"] = value.processing_state
+    return entry
+
+
+def _feature_value(value: Any, name: str) -> float | None:
+    """The value of one ``DerivedFeature`` made from a value per interval.
+
+    A missing value (None or NaN) becomes None: the store is saved as JSON,
+    which has no NaN, and None is how it says "no value". A value that is not
+    a number cannot be stored at all; it also becomes None, with a warning, so
+    one odd value does not stop a finished workflow from being recorded.
+    """
+
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        logger.warning(
+            f"Values of {name!r} are not numbers (got {value!r}); stored "
+            "without a value in the data model."
+        )
+        return None
+    return None if math.isnan(number) else number
+
+
+def _grouped_output_provenance_entry(
+    value: IntervalData | EventData | PixelMap | PixelMask,
+) -> dict[str, Any]:
+    """Build a JSON-safe provenance summary for one workflow output that
+    holds several values: values per interval or event, or a pixel grid."""
+
+    entry: dict[str, Any] = {
+        "type": type(value).__name__,
+        "name": value.name,
+        "method": value.method,
+        "modality": value.modality,
+        "unit": getattr(value, "unit", None),
+        "metadata": _json_safe_parameters(value.metadata),
+    }
+    if isinstance(value, (IntervalData, EventData)):
+        entry["count"] = len(value)
+    else:
+        entry["shape"] = list(value.shape)
     return entry
 
 

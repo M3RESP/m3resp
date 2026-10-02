@@ -21,6 +21,12 @@ all optional and can be combined:
   example "during the intervention").
 - If none of the above are set, the number applies to the whole recording.
 
+Results with one value per breath, such as EIT TIV and EELI, are not
+`ParameterResult`s: they are stored as
+[`IntervalData`](events-and-breaths.md#values-per-interval-or-event) in
+`session.interval_data`, so each value stays next to its breath. Masks that
+select EIT pixels are [`PixelMask`s](pixel-maps.md) in `session.pixel_masks`.
+
 Where they come from: same pattern as `Signal`, the adapters have
 `to_parameters()` methods, called automatically by
 `preprocess_eit`/`postprocess_emg`. There is also a cross-modality source:
@@ -30,8 +36,8 @@ Where they come from: same pattern as `Signal`, the adapters have
 `.for_modality("eit")` and exports to a CSV file.
 
 A named, unit-tagged metric produced by a processing step - covers both
-scalar metrics (EIT TIV, EMG amplitude, respiratory rate) and array-valued
-ones (regional ventilation maps).
+scalar metrics (EMG amplitude, respiratory rate) and array-valued ones
+(EMG gate masks, wavelet thresholds).
 
 ```python
 @dataclass

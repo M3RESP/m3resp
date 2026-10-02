@@ -4,7 +4,7 @@ turn other libraries' outputs into them."""
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import KW_ONLY, asdict, dataclass, field, is_dataclass
 from typing import TYPE_CHECKING, Any, NoReturn, cast
 
@@ -487,3 +487,36 @@ def _raise_missing_times(value: Mapping[str, Any], target: str) -> NoReturn:
         f"Cannot make {target} from this dictionary: it has no "
         f"{' or '.join(missing)} entry."
     )
+
+
+def reuse_matching_breaths(
+    breaths: Sequence[BreathEvent], stored: Iterable[Any] | None
+) -> list[BreathEvent]:
+    """Swap each breath for an already stored breath that is the same breath.
+
+    A stored breath counts as the same breath when it is a `BreathEvent`
+    with the same modality and exactly the same start and end time. Results
+    computed over a breath (a TIV value, say) can then point to the breath
+    object that is already stored, instead of a copy of it. Breaths with no
+    match are kept as they are, and stored items that are not a
+    `BreathEvent` are ignored.
+
+    Args:
+        breaths: The breaths a result was computed over.
+        stored: Breaths already stored, e.g. ``session.events["eit_breaths"]``,
+            or None.
+
+    Returns:
+        The breaths, in the same order, with matches swapped for the stored
+        ones.
+    """
+
+    by_times = {
+        (item.modality, item.start_time, item.end_time): item
+        for item in stored or ()
+        if isinstance(item, BreathEvent)
+    }
+    return [
+        by_times.get((breath.modality, breath.start_time, breath.end_time), breath)
+        for breath in breaths
+    ]

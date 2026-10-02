@@ -22,11 +22,13 @@ from m3resp.core.exceptions import MissingModalityDataError, VariantAlreadyExist
 from m3resp.core.metadata import SessionMetadata
 from m3resp.core.provenance import ProvenanceRecord, record
 from m3resp.data.collections import (
+    IntervalDataCollection,
     ParameterResultCollection,
+    PixelMaskCollection,
     QualityReport,
     SignalCollection,
 )
-from m3resp.data.events import BreathEvent
+from m3resp.data.events import BreathEvent, reuse_matching_breaths
 from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
 from m3resp.data.processing import ProcessingHistory
@@ -110,6 +112,13 @@ def set_ventilator_raw(raw: dict[str, Any], recording: Any) -> None:
     raw["vent"] = recording
 
 
+def _eit_event_key(variant: str | None) -> str:
+    """Where EIT breaths are stored in `session.events`: ``"eit_breaths"``,
+    or ``"eit_breaths:<variant>"`` for a named preprocessing variant."""
+
+    return "eit_breaths" if variant is None else f"eit_breaths:{variant}"
+
+
 class M3Session:
     """Small, explicit session object for Stage 1 multimodal workflows."""
 
@@ -180,6 +189,11 @@ class M3Session:
         # and behavior unchanged.
         self.signals = SignalCollection()
         self.parameter_results = ParameterResultCollection()
+        # Results with one value per breath (or other interval), e.g. EIT
+        # TIV and EELI, and the masks that select a region of EIT pixels.
+        # Their times are on each recording's own clock, like `events`.
+        self.interval_data = IntervalDataCollection()
+        self.pixel_masks = PixelMaskCollection()
         self.quality = QualityReport()
         # Milestone 2.5 (plan/plan_stage2.md Sec 20): breaths matched across
         # modalities by `link_breaths`, once per-modality breath events exist.
@@ -389,7 +403,9 @@ class M3Session:
         preprocess = kwargs.pop("preprocess", None)
         if preprocess is None:
             result = self.eit_adapter.preprocess(recording.data, **kwargs)
-            self._extend_typed_collections_from_eit(result)
+            self._extend_typed_collections_from_eit(
+                result, event_key=_eit_event_key(variant)
+            )
         else:
             # A custom `preprocess` callable's output shape is not guaranteed
             # to match what `EITProcessingAdapter.to_signals/to_parameters/
@@ -944,11 +960,20 @@ class M3Session:
                     f"No EIT preprocessing variant {variant!r}; call "
                     f"preprocess_eit(variant={variant!r}, ...) first."
                 )
-            event_key = f"eit_breaths:{variant}"
         else:
             data = self.processed.get("eit") or self._require_raw("eit").data
-            event_key = "eit_breaths"
+        event_key = _eit_event_key(variant)
         events = self.eit_adapter.detect_breaths(data, **kwargs)
+        # The same breaths may already be stored with TIV/EELI values; store
+        # those breath objects, so each value points to its stored breath.
+        events = reuse_matching_breaths(
+            events,
+            (
+                interval
+                for result in self.interval_data.for_modality("eit")
+                for interval in result.intervals
+            ),
+        )
         self.add_events(event_key, events)
         self._record("detect_eit_breaths", "eit", variant=variant, **kwargs)
         return self.events[event_key]
@@ -1453,11 +1478,17 @@ class M3Session:
             )
         return self.raw[modality]
 
-    def _extend_typed_collections_from_eit(self, preprocessed: dict[str, Any]) -> None:
+    def _extend_typed_collections_from_eit(
+        self, preprocessed: dict[str, Any], *, event_key: str = "eit_breaths"
+    ) -> None:
         for signal in self.eit_adapter.to_signals(preprocessed):
             self.signals.add(signal)
         for parameter in self.eit_adapter.to_parameters(preprocessed):
             self.parameter_results.add(parameter)
+        for interval_data in self.eit_adapter.to_interval_data(
+            preprocessed, stored_breaths=self.get_events(event_key, None)
+        ):
+            self.interval_data.add(interval_data)
         for flag in self.eit_adapter.to_quality_flags(preprocessed):
             self.quality.add(flag)
 

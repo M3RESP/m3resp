@@ -7,7 +7,7 @@ from typing import Any, Literal
 import numpy as np
 
 from m3resp.core.session import M3Session
-from m3resp.data import ParameterResult
+from m3resp.data import PixelMask
 from m3resp.workflows.registry import (
     ANY_ARTIFACT_TYPE,
     StepArtifact,
@@ -28,30 +28,27 @@ def _validate_unit_threshold(value: float, *, step: str, param: str) -> None:
         raise ValueError(f"{step} '{param}' must be between 0 and 1, got {value!r}.")
 
 
-def _pixel_mask_to_parameter_result(
+def _to_pixel_mask(
     mask: Any, *, name: str, method: str, metadata: dict[str, Any]
-) -> ParameterResult:
-    """Convert an `eitprocessing.roi.PixelMask` into an array-valued
-    `ParameterResult`. Excluded pixels are already NaN in `mask.mask`, so
-    this preserves that representation rather than cropping/flattening it."""
+) -> PixelMask:
+    """Convert an `eitprocessing.roi.PixelMask` into an m3resp `PixelMask`.
+    Pixels left out are already NaN in `mask.mask`, so the grid is kept as
+    it is, not cropped or flattened."""
 
-    value = np.asarray(mask.mask, dtype=float)
-    included = ~np.isnan(value)
+    values = np.asarray(mask.mask, dtype=float)
+    included = ~np.isnan(values)
     metadata = dict(metadata)
     metadata.update(
         {
-            "shape": list(value.shape),
-            "dtype": str(value.dtype),
             "axes": ["row", "column"],
             "included_pixel_count": int(included.sum()),
-            "included_pixel_fraction": float(included.mean()) if value.size else 0.0,
+            "included_pixel_fraction": float(included.mean()) if values.size else 0.0,
         }
     )
-    return ParameterResult(
+    return PixelMask(
         name=name,
-        value=value,
+        values=values,
         modality="eit",
-        unit=None,
         method=method,
         metadata=metadata,
     )
@@ -70,7 +67,7 @@ def _pixel_mask_to_parameter_result(
     category="roi",
     modality="eit",
     optional_packages=_EITPROCESSING,
-    session_writes=("session.parameter_results",),
+    session_writes=("session.pixel_masks",),
     input_artifacts=(
         StepArtifact(
             name="eit_data",
@@ -81,9 +78,9 @@ def _pixel_mask_to_parameter_result(
         ),
         StepArtifact(
             name="timing_data",
-            artifact_type="eit_global_impedance",
+            artifact_type="eit_impedance_waveform",
             default_context_key="global_impedance",
-            description="Global impedance waveform supplying breath timing.",
+            description="Impedance waveform (global, or regional from an ROI) supplying breath timing.",
             compatibility_only=True,
         ),
         _SESSION_ARTIFACT,
@@ -112,8 +109,8 @@ def _pixel_mask_to_parameter_result(
         ),
         StepArtifact(
             name="tiv_lungspace_result",
-            artifact_type="parameter_result",
-            description="Native array-valued ParameterResult (row, column), NaN for excluded pixels.",
+            artifact_type="pixel_mask",
+            description="m3resp PixelMask (row, column): 1 for pixels in the region, NaN for pixels left out.",
             axes=("row", "column"),
         ),
     ),
@@ -136,13 +133,13 @@ def roi_tiv_lungspace(
         operation="eit.roi_tiv_lungspace",
         parameters={"threshold": threshold},
     )
-    tiv_lungspace_result = _pixel_mask_to_parameter_result(
+    tiv_lungspace_result = _to_pixel_mask(
         mask,
         name="tiv_lungspace_mask",
         method="eitprocessing.TIVLungspace",
         metadata=dict(metadata),
     )
-    session.parameter_results.add(tiv_lungspace_result)
+    session.pixel_masks.add(tiv_lungspace_result)
 
     _record_step(session, "eit.roi_tiv_lungspace", metadata=metadata)
     return {
@@ -178,7 +175,7 @@ def roi_tiv_lungspace(
     category="roi",
     modality="eit",
     optional_packages=_EITPROCESSING,
-    session_writes=("session.parameter_results",),
+    session_writes=("session.pixel_masks",),
     input_artifacts=(
         StepArtifact(
             name="eit_data",
@@ -189,9 +186,9 @@ def roi_tiv_lungspace(
         ),
         StepArtifact(
             name="timing_data",
-            artifact_type="eit_global_impedance",
+            artifact_type="eit_impedance_waveform",
             default_context_key="global_impedance",
-            description="Global impedance waveform supplying breath timing.",
+            description="Impedance waveform (global, or regional from an ROI) supplying breath timing.",
             compatibility_only=True,
         ),
         _SESSION_ARTIFACT,
@@ -220,8 +217,8 @@ def roi_tiv_lungspace(
         ),
         StepArtifact(
             name="amplitude_lungspace_result",
-            artifact_type="parameter_result",
-            description="Native array-valued ParameterResult (row, column), NaN for excluded pixels.",
+            artifact_type="pixel_mask",
+            description="m3resp PixelMask (row, column): 1 for pixels in the region, NaN for pixels left out.",
             axes=("row", "column"),
         ),
     ),
@@ -254,13 +251,13 @@ def roi_amplitude_lungspace(
         operation="eit.roi_amplitude_lungspace",
         parameters={"threshold": threshold},
     )
-    amplitude_lungspace_result = _pixel_mask_to_parameter_result(
+    amplitude_lungspace_result = _to_pixel_mask(
         mask,
         name="amplitude_lungspace_mask",
         method="eitprocessing.AmplitudeLungspace",
         metadata=dict(metadata),
     )
-    session.parameter_results.add(amplitude_lungspace_result)
+    session.pixel_masks.add(amplitude_lungspace_result)
 
     _record_step(session, "eit.roi_amplitude_lungspace", metadata=metadata)
     return {
@@ -287,7 +284,7 @@ def roi_amplitude_lungspace(
     category="roi",
     modality="eit",
     optional_packages=_EITPROCESSING,
-    session_writes=("session.parameter_results",),
+    session_writes=("session.pixel_masks",),
     input_artifacts=(
         StepArtifact(
             name="eit_data",
@@ -298,9 +295,9 @@ def roi_amplitude_lungspace(
         ),
         StepArtifact(
             name="timing_data",
-            artifact_type="eit_global_impedance",
+            artifact_type="eit_impedance_waveform",
             default_context_key="global_impedance",
-            description="Global impedance waveform supplying breath timing.",
+            description="Impedance waveform (global, or regional from an ROI) supplying breath timing.",
             compatibility_only=True,
         ),
         _SESSION_ARTIFACT,
@@ -329,8 +326,8 @@ def roi_amplitude_lungspace(
         ),
         StepArtifact(
             name="watershed_lungspace_result",
-            artifact_type="parameter_result",
-            description="Native array-valued ParameterResult (row, column), NaN for excluded pixels.",
+            artifact_type="pixel_mask",
+            description="m3resp PixelMask (row, column): 1 for pixels in the region, NaN for pixels left out.",
             axes=("row", "column"),
         ),
     ),
@@ -355,13 +352,13 @@ def roi_watershed(
         operation="eit.roi_watershed",
         parameters={"threshold_fraction": threshold_fraction},
     )
-    watershed_lungspace_result = _pixel_mask_to_parameter_result(
+    watershed_lungspace_result = _to_pixel_mask(
         mask,
         name="watershed_lungspace_mask",
         method="eitprocessing.WatershedLungspace",
         metadata=dict(metadata),
     )
-    session.parameter_results.add(watershed_lungspace_result)
+    session.pixel_masks.add(watershed_lungspace_result)
 
     _record_step(session, "eit.roi_watershed", metadata=metadata)
     return {
@@ -380,7 +377,7 @@ def roi_watershed(
     category="roi",
     modality="eit",
     optional_packages=_EITPROCESSING,
-    session_writes=("session.parameter_results",),
+    session_writes=("session.pixel_masks",),
     input_artifacts=(
         StepArtifact(
             name="mask",
@@ -419,8 +416,8 @@ def roi_watershed(
         ),
         StepArtifact(
             name="size_filtered_roi_result",
-            artifact_type="parameter_result",
-            description="Native array-valued ParameterResult (row, column), NaN for excluded pixels.",
+            artifact_type="pixel_mask",
+            description="m3resp PixelMask (row, column): 1 for pixels in the region, NaN for pixels left out.",
             axes=("row", "column"),
         ),
     ),
@@ -449,13 +446,13 @@ def roi_filter_by_size(
             "connectivity": connectivity,
         },
     )
-    size_filtered_roi_result = _pixel_mask_to_parameter_result(
+    size_filtered_roi_result = _to_pixel_mask(
         result,
         name="size_filtered_roi_mask",
         method="eitprocessing.FilterROIBySize",
         metadata=dict(metadata),
     )
-    session.parameter_results.add(size_filtered_roi_result)
+    session.pixel_masks.add(size_filtered_roi_result)
 
     _record_step(session, "eit.roi_filter_by_size", metadata=metadata)
     return {

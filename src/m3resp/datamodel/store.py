@@ -112,7 +112,7 @@ class DataModelStore:
         return data_file
 
     def add_processing_run(self, run: ProcessingRun) -> ProcessingRun:
-        for file_id in run.input_file_ids:
+        for file_id in [*run.input_file_ids, *run.parameter_file_ids]:
             self._require(self.data_files, file_id, "DataFile")
         self.processing_runs[run.processing_run_id] = run
         return run

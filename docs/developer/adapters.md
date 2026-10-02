@@ -38,7 +38,8 @@ m3resp Signal / BreathEvent / ParameterResult / QualityFlag
 | `detect_breaths(data, **kwargs)` | Returns `list[BreathEvent]` directly - already converted. |
 | `compute_tiv(sequence, **kwargs)` | Runs TIV computation on a loaded sequence. |
 | `to_signals(preprocessed)` | **Conversion boundary.** Turns a `preprocess()` result into `list[Signal]`. |
-| `to_parameters(preprocessed)` | **Conversion boundary.** Turns a `preprocess()` result into `list[ParameterResult]` (TIV, EELI, rate, ...). |
+| `to_parameters(preprocessed)` | **Conversion boundary.** Turns a `preprocess()` result into `list[ParameterResult]` (respiratory and heart rate). |
+| `to_interval_data(preprocessed)` | **Conversion boundary.** Turns the per-breath TIV, EELI and pixel TIV of a `preprocess()` result into `list[IntervalData]`, each value next to the breath it was computed over. |
 | `to_quality_flags(preprocessed)` | **Conversion boundary.** Turns a `preprocess()` result into `list[QualityFlag]`. |
 
 ## `ReSurfEMGAdapter` (`src/m3resp/adapters/resurfemg_adapter/`)

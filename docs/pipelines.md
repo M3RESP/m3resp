@@ -384,7 +384,7 @@ ventilator.pocc_quality             (needs all of the above)
 
 ### Array export
 
-Array-valued `ParameterResult`s (gate masks, wavelet decomposition/thresholds, bell-curve fit parameters, ...) are not written inline into `parameter_results.csv` - like EIT's array-valued results, they're added to `session.parameter_results` and go through the same shared `parameter_result_arrays.npz` archive (`export_summary`/`export.*`), with a CSV row (`array_key`, `shape`, `dtype`) pointing into it. There is no EMG-specific array exporter.
+Array-valued `ParameterResult`s (gate masks, wavelet decomposition/thresholds, bell-curve fit parameters, ...) are not written inline into `parameter_results.csv` - they're added to `session.parameter_results` and go through the same shared `parameter_result_arrays.npz` archive (`export_summary`/`export.*`), with a CSV row (`array_key`, `shape`, `dtype`) pointing into it. There is no EMG-specific array exporter.
 
 ## Architecture
 

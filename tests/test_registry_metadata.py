@@ -297,6 +297,7 @@ _AUDITED_SESSION_STEPS = frozenset(
         "eit.mdn_filter",
         "eit.normalize_breaths",
         "eit.pixel_breaths",
+        "eit.continuous_tiv",
         "eit.pixel_tiv",
         "eit.roi_amplitude_lungspace",
         "eit.roi_filter_by_size",

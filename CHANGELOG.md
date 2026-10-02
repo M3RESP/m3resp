@@ -2,6 +2,82 @@
 
 ## Unreleased
 
+### EIT results per breath, pixel maps and masks get their own types; global and regional impedance (#120, #107)
+
+`ParameterResult` held real results (respiratory rate) next to in-between
+EIT data: TIV and EELI as bare arrays with no breaths, per-pixel breath
+timing, and lung-space masks. It was hard to tell what a `ParameterResult`
+was. TIV, EELI, pixel TIV and pixel breath timing now keep each value next to
+its breath, and masks have their own type.
+
+| Step | Before | Now |
+|---|---|---|
+| `eit.continuous_tiv` | upstream `SparseData` only | also `continuous_tiv_result`: `IntervalData`, one TIV per breath |
+| `eit.eeli` | `eeli_result`: array `ParameterResult` | `IntervalData`, one EELI per breath |
+| `eit.pixel_tiv` | `pixel_tiv_result`: (breath, row, column) `ParameterResult` | `IntervalData`, one `PixelMap` per breath |
+| `eit.pixel_breaths` | `pixel_breath_timing_result`: (breath, row, column, 3) `ParameterResult` | `IntervalData`, one (row, column, 3) grid per breath |
+| `eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace`, `eit.roi_watershed`, `eit.roi_filter_by_size` | `*_result`: 2D `ParameterResult` | `PixelMask` |
+
+New:
+
+| Name | What it is |
+|---|---|
+| `PixelMap` | One number per EIT pixel, a 2D (row, column) grid |
+| `PixelMask` | Which pixels belong to a region: NaN (left out), 1, or a weight between 0 and 1. A 0, or a number outside 0 to 1, raises `ValueError`. |
+| `session.interval_data` | `IntervalDataCollection` holding the `IntervalData` results |
+| `session.pixel_masks` | `PixelMaskCollection` holding the masks |
+| `EITProcessingAdapter.to_interval_data` | Converts the TIV, EELI and pixel TIV of `preprocess_eit()` into `IntervalData` |
+
+What changes for existing code:
+
+- These results are no longer in `session.parameter_results` or in
+  `parameter_results.csv`/`parameter_result_arrays.npz`. The export writes
+  them to `interval_data.csv`, `interval_data_metadata.json` and
+  `interval_data_arrays.npz` (values per breath) and `pixel_masks.csv` and
+  `pixel_masks.npz` (masks). With a `DataModelRecorder` attached, numbers
+  per breath are stored as one `DerivedFeature` per breath, with the breath's
+  start and end as its time window. A missing value (NaN) is stored as no
+  value, so the saved store stays valid JSON; a value that is not a number is
+  stored as no value with a warning.
+- Steps that use the same breath detector and signal share the same breath
+  objects, and reuse the breath in `session.events["eit_breaths"]` with the
+  same start and end time. The same holds for `preprocess_eit()` and
+  `detect_eit_breaths()`, in either order: each TIV or EELI value points to
+  the stored breath object. Stored items that are not a `BreathEvent` are
+  ignored. `eit.pixel_breaths` stores its breaths with their
+  turning point (`peak_time`), like TIV and EELI.
+- `preprocess_eit()` used to store TIV and EELI as one `ParameterResult` per
+  breath and **dropped breaths whose value was NaN**. They are now
+  `IntervalData` in `session.interval_data`, with every breath kept.
+- Pixel TIV no longer keeps the per-pixel breath times in its metadata. With
+  `tiv_timing="pixel"` these times are the result of `eit.pixel_breaths`.
+- `EITProcessingAdapter.to_parameters` returns only the respiratory and heart
+  rate. `_sparse_data_to_parameters` is removed; use
+  `sparse_data_to_interval_data` from `m3resp.adapters.eitprocessing_adapter`.
+- `eit.roi_filter_by_size` accepts a `PixelMask` or the eitprocessing mask,
+  no longer a `ParameterResult`.
+- The workflow input/output type `eit_global_impedance` is renamed
+  `eit_impedance_waveform`, because these steps accept a global *or* a
+  regional impedance waveform. The words follow the chest EIT consensus
+  (Physiol. Meas. 2026, doi:10.1088/1361-6579/ae8b55): **global** is the
+  whole image plane (all pixels), **regional** is a region of interest such
+  as a lung mask. The step `eit.global_impedance` and the `global_impedance`
+  output keep their names, so workflow files do not change.
+
+`ProcessingRun.parameter_file_id` (one file) is replaced by
+`ProcessingRun.parameter_file_ids` (a list), because one run can now write
+three array files: `parameter_result_arrays.npz`, `interval_data_arrays.npz`
+and `pixel_masks.npz`. The export links all three to the run. Exporting again
+to the same path replaces the earlier link, and `validate_store` reports a run
+that names a file missing from the store. **The old field is removed**, so
+code reading `run.parameter_file_id` must read `run.parameter_file_ids`.
+
+Also fixed: two array results whose names clean up to the same archive key
+(for example `"a-b"` and `"a b"`) no longer overwrite each other in
+`parameter_result_arrays.npz`.
+
+See [Pixel maps and masks](docs/concepts/pixel-maps.md).
+
 ### New `Interval`, `IntervalData` and `EventData` types; `BreathEvent` is now an `Interval` (#103)
 
 Only breaths could be stored with a start and an end. Other things that last,

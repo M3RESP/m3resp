@@ -108,6 +108,8 @@ def json_file(payload: dict[str, Any], *, path: str) -> dict[str, Any]:
     category="export",
     session_reads=(
         "session.parameter_results",
+        "session.interval_data",
+        "session.pixel_masks",
         "session.quality",
         "session.signals",
         "session.events",
@@ -213,6 +215,8 @@ def session_summary(
     category="export",
     session_reads=(
         "session.parameter_results",
+        "session.interval_data",
+        "session.pixel_masks",
         "session.quality",
         "session.signals",
         "session.events",

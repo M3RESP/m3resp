@@ -335,7 +335,10 @@ class ProcessingRun(Entity):
     pipeline_version: str | None = None
     code_commit_hash: str | None = None
     input_file_ids: list[str] = Field(default_factory=list)
-    parameter_file_id: str | None = None
+    # The files holding this run's array results (role "parameter"), e.g.
+    # parameter_result_arrays.npz, interval_data_arrays.npz, pixel_masks.npz.
+    # A list, because one run can write several of them.
+    parameter_file_ids: list[str] = Field(default_factory=list)
     run_time: float = Field(default_factory=_utc_now_ts)
     operator_ref: str | None = None
     # Beyond the doc: forward-compat for the Task Runner / Error Handler

@@ -11,10 +11,19 @@ import math
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
-from m3resp.adapters.eitprocessing_adapter import _sparse_data_to_parameters
-from m3resp.data import ParameterResult, QualityFlag, Signal
+from m3resp.adapters.eitprocessing_adapter import sparse_data_to_interval_data
+from m3resp.core.exceptions import UnsupportedWorkflowError
+from m3resp.data import (
+    BreathEvent,
+    IntervalData,
+    ParameterResult,
+    PixelMap,
+    QualityFlag,
+    Signal,
+)
 
 
 def _continuous(values, *, name="signal", unit="a.u.", sample_frequency=50.0):
@@ -30,6 +39,18 @@ def _continuous(values, *, name="signal", unit="a.u.", sample_frequency=50.0):
 def _sparse(values, *, name="parameter", unit="a.u."):
     return SimpleNamespace(
         values=values, time=list(range(len(values))), unit=unit, name=name
+    )
+
+
+def _breaths(start_middle_end):
+    """Fake eitprocessing breaths: an object whose ``values`` are breaths
+    with a start, middle and end time."""
+
+    return SimpleNamespace(
+        values=[
+            SimpleNamespace(start_time=start, middle_time=middle, end_time=end)
+            for start, middle, end in start_middle_end
+        ]
     )
 
 
@@ -66,12 +87,13 @@ class TestEITAdapterConversions:
         assert len(signals) == 1
         assert signals[0].processing_state == "raw"
 
-    def test_to_parameters_converts_rates_and_skips_nan_sparse_samples(self):
+    def test_to_parameters_converts_only_the_rates(self):
         adapter = EITProcessingAdapter()
         preprocessed = {
             "respiratory_rate_hz": 0.3,
             "heart_rate_hz": 1.2,
-            "continuous_tiv": _sparse([1.0, math.nan, 2.0], name="continuous_tivs"),
+            "breath_intervals": _breaths([(0.0, 1.0, 2.0)]),
+            "continuous_tiv": _sparse([1.0], name="continuous_tivs"),
             "eeli": None,
             "pixel_tiv": None,
         }
@@ -79,12 +101,40 @@ class TestEITAdapterConversions:
         parameters = adapter.to_parameters(preprocessed)
 
         assert all(isinstance(p, ParameterResult) for p in parameters)
-        names = [p.name for p in parameters]
-        assert names.count("respiratory_rate") == 1
-        assert names.count("heart_rate") == 1
-        tiv_params = [p for p in parameters if p.name == "continuous_tivs"]
-        assert len(tiv_params) == 2  # the NaN sample is skipped
-        assert {p.breath_id for p in tiv_params} == {"0", "2"}
+        assert [p.name for p in parameters] == ["respiratory_rate", "heart_rate"]
+
+    def test_to_interval_data_keeps_each_value_with_its_breath(self):
+        adapter = EITProcessingAdapter()
+        preprocessed = {
+            "breath_intervals": _breaths(
+                [(0.0, 1.0, 2.0), (2.0, 3.0, 4.0), (4.0, 5.0, 6.0)]
+            ),
+            "continuous_tiv": _sparse([1.0, math.nan, 2.0], name="continuous_tivs"),
+            "eeli": None,
+            "pixel_tiv": None,
+        }
+
+        [tiv] = adapter.to_interval_data(preprocessed)
+
+        assert isinstance(tiv, IntervalData)
+        assert tiv.name == "continuous_tivs"
+        # A NaN value stays next to its breath instead of being dropped.
+        np.testing.assert_array_equal(tiv.values, [1.0, math.nan, 2.0])
+        assert all(isinstance(b, BreathEvent) for b in tiv.intervals)
+        assert [b.start_time for b in tiv.intervals] == [0.0, 2.0, 4.0]
+        assert [b.peak_time for b in tiv.intervals] == [1.0, 3.0, 5.0]
+
+    def test_to_interval_data_needs_the_breaths(self):
+        adapter = EITProcessingAdapter()
+        preprocessed = {"continuous_tiv": _sparse([1.0], name="continuous_tivs")}
+
+        with pytest.raises(ValueError, match="breath_intervals"):
+            adapter.to_interval_data(preprocessed)
+
+    def test_to_interval_data_is_empty_without_tiv_or_eeli(self):
+        adapter = EITProcessingAdapter()
+
+        assert adapter.to_interval_data({"breath_intervals": object()}) == []
 
     def test_to_quality_flags_reports_missing_optional_outputs(self):
         adapter = EITProcessingAdapter()
@@ -97,21 +147,30 @@ class TestEITAdapterConversions:
         assert all(f.passed is False for f in flags)
 
 
-class TestSparseDataToParameters:
-    """Phase 0.2 - `_sparse_data_to_parameters()` must never assume a scalar
-    per-breath timestamp; pixel-resolved results (e.g. pixel TIV) carry a
-    full (row, column) array of timing values per breath instead.
-    """
+def test_as_pixel_mask_names_the_wrong_type_clearly():
+    adapter = EITProcessingAdapter()
+    not_a_mask = ParameterResult(name="mask", value=np.ones((2, 2)), modality="eit")
 
-    def test_scalar_sparse_values_keep_scalar_time(self):
+    with pytest.raises(UnsupportedWorkflowError, match="got ParameterResult"):
+        adapter.as_pixel_mask(not_a_mask)
+
+
+class TestSparseDataToIntervalData:
+    """`sparse_data_to_interval_data()` stores one value per breath next to
+    the breath, for numbers and for pixel maps alike."""
+
+    def test_numbers_become_one_value_per_breath(self):
         obj = _sparse([1.0, 2.0], name="continuous_tivs")
+        breaths = [BreathEvent("eit", 0.0, 1.0), BreathEvent("eit", 1.0, 2.0)]
 
-        results = _sparse_data_to_parameters(obj, modality="eit", method="m")
+        result = sparse_data_to_interval_data(obj, breaths, modality="eit", method="m")
 
-        assert [r.metadata["time"] for r in results] == [0.0, 1.0]
-        assert all("time_shape" not in r.metadata for r in results)
+        assert result.intervals == breaths
+        np.testing.assert_array_equal(result.values, [1.0, 2.0])
+        assert result.unit == "a.u."
+        assert result.category == "impedance"
 
-    def test_per_breath_map_values_keep_array_time_without_raising(self):
+    def test_maps_become_one_pixel_map_per_breath(self):
         map_value = np.full((2, 3), 5.5)
         obj = SimpleNamespace(
             values=[map_value],
@@ -120,38 +179,45 @@ class TestSparseDataToParameters:
             name="pixel_tivs",
         )
 
-        results = _sparse_data_to_parameters(obj, modality="eit", method="m")
+        result = sparse_data_to_interval_data(
+            obj,
+            [BreathEvent("eit", 0.0, 2.0)],
+            modality="eit",
+            method="m",
+            as_pixel_maps=True,
+        )
 
-        assert len(results) == 1
-        np.testing.assert_array_equal(results[0].value, map_value)
-        assert results[0].metadata["time"] == [[1.25, 1.25, 1.25], [1.25, 1.25, 1.25]]
-        assert results[0].metadata["time_shape"] == [2, 3]
-        assert results[0].metadata["time_axes"] == ["row", "column"]
+        [pixel_map] = result.values
+        assert isinstance(pixel_map, PixelMap)
+        np.testing.assert_array_equal(pixel_map.values, map_value)
+        assert pixel_map.name == "pixel_tivs"
 
-    def test_all_nan_map_slice_is_preserved_not_dropped(self):
-        all_nan = np.full((2, 2), np.nan)
+    def test_all_nan_map_is_kept_not_dropped(self):
         obj = SimpleNamespace(
-            values=[all_nan],
+            values=[np.full((2, 2), np.nan)],
             time=[np.zeros((2, 2))],
             unit="a.u.",
             name="pixel_tivs",
         )
 
-        results = _sparse_data_to_parameters(obj, modality="eit", method="m")
+        result = sparse_data_to_interval_data(
+            obj,
+            [BreathEvent("eit", 0.0, 2.0)],
+            modality="eit",
+            method="m",
+            as_pixel_maps=True,
+        )
 
-        assert len(results) == 1
-        assert np.all(np.isnan(results[0].value))
+        assert len(result) == 1
+        assert np.all(np.isnan(result.values[0].values))
 
-    def test_mismatched_value_and_time_lengths_do_not_raise(self):
+    def test_a_different_number_of_breaths_is_refused(self):
         obj = _sparse([1.0, 2.0, 3.0], name="continuous_tivs")
-        obj.time = obj.time[:1]
 
-        results = _sparse_data_to_parameters(obj, modality="eit", method="m")
-
-        assert len(results) == 3
-        assert results[0].metadata == {"time": 0.0}
-        assert results[1].metadata == {}
-        assert results[2].metadata == {}
+        with pytest.raises(ValueError, match="3 per-breath values but 1 breaths"):
+            sparse_data_to_interval_data(
+                obj, [BreathEvent("eit", 0.0, 1.0)], modality="eit", method="m"
+            )
 
 
 class TestReSurfEMGAdapterConversions:

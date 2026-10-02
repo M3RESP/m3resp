@@ -119,9 +119,9 @@ from ._shared import (
         ),
         StepArtifact(
             name="raw_global_impedance",
-            artifact_type="eit_global_impedance",
+            artifact_type="eit_impedance_waveform",
             required=False,
-            description="Raw upstream summed/global impedance signal object, when present.",
+            description="Raw global impedance (the upstream object), when present.",
             compatibility_only=True,
         ),
         StepArtifact(
