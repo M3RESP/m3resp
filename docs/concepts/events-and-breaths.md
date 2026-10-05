@@ -21,7 +21,7 @@ When a result has **one value per breath, interval or event**, keep the
 value next to the time it belongs to with `IntervalData` or `EventData`; see
 [Values per interval or event](#values-per-interval-or-event).
 
-Breaths are not kept in a container class of their own. They live inside
+Breaths live inside
 `session.events`, a plain dictionary, under keys like `"eit_breaths"`; see
 [Where breath/event lists live](#where-breathevent-lists-live).
 
