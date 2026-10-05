@@ -22,12 +22,13 @@ class Event:
         modality: The device or technique the event came from, e.g.
             ``'ventilator'`` or ``'eit'``.
         time: Real-world time at which the event occurred.
-        id: Per-process, in-memory identifier (not persisted or globally
-            unique like Layer 2's ids) that lets other Layer 1 objects -
-            notably ``ParameterResult.event_id`` - reference this specific
-            event. Generated automatically, and excluded from equality
-            (``compare=False``) so two structurally identical events - the
-            common case in tests and deduplication - still compare equal.
+        id: Random identifier, generated automatically. It stays the same
+            when the event is shifted onto a common clock and when it is
+            saved to a dictionary and read back, which Python's ``id(obj)``
+            does not. Results can use it to point at this exact event, e.g.
+            through ``ParameterResult.event_id``; nothing in m3resp sets
+            that link yet. Two events that differ only in ``id`` count as
+            equal.
         sample_index: Position of this event in the signal it was detected
             in. Only meaningful together with ``signal_name`` and
             ``sample_frequency``, which say which signal and time axis it is
@@ -77,9 +78,8 @@ class Interval:
         end_time: Real-world time at which the interval ends, in seconds.
         name: What kind of interval this is, e.g. ``'occlusion'`` or
             ``'noise'``. Required, and given by keyword.
-        id: Per-process, in-memory identifier, generated automatically and
-            excluded from equality. See :class:`Event` for the full
-            explanation.
+        id: Random identifier that stays the same through time shifts and
+            saving. See :class:`Event` for the full explanation.
         label: Optional name for this particular interval, as opposed to
             ``name``, which says what kind of interval it is.
         start_index: Position of ``start_time`` in the signal this interval
@@ -121,6 +121,8 @@ class Interval:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        # Zero duration is allowed on purpose: EMG breath detection finds only
+        # the peak, so those breaths start and end at the peak.
         if self.end_time < self.start_time:
             raise ValueError(
                 f"{type(self).__name__}.end_time ({self.end_time}) must not be "

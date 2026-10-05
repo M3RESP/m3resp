@@ -55,11 +55,7 @@ derived from indexing into a specific signal.
 
 ### `id`
 
-`id` is generated automatically (an in-memory identifier, not persisted or
-globally unique like Layer 2's ids) so other Layer 1 objects can reference
-this exact event, e.g. `ParameterResult.event_id`. It's excluded from
-equality so two structurally identical events still compare equal.
-`Interval.id` and `BreathEvent.id` work the same way.
+Every event, interval and breath gets a random `id` when it is created. The `id` stays the same when the event is shifted onto a common clock and when it is saved to a dictionary and read back. Python's built-in `id(obj)` changes in both cases. The `id` is therefore a reliable way for a result to point at one particular breath or event, for example through `ParameterResult.event_id`. Nothing in m3resp sets these links yet: per-breath results still refer to a breath by its position in the list, and they will move to `id`. Two events that differ only in `id` count as equal.
 
 ## `Interval`
 
@@ -93,9 +89,9 @@ occlusion = Interval("ventilator", 10.0, 12.5, name="occlusion")
 occlusion.duration  # 2.5
 ```
 
-Only `modality`, `start_time` and `end_time` may be given by position;
-everything else is given by name. An interval whose `end_time` is before its
-`start_time` raises `ValueError`.
+Only `modality`, `start_time` and `end_time` may be given by position; everything else is given by name. An interval whose `end_time` is before its `start_time` raises `ValueError`.
+
+An interval with `end_time` equal to `start_time` (zero duration) is allowed. It means only one time point is known so far. EMG breath detection is the main case: ReSurfEMG finds the peak of each breath, so the breath is stored with `start_time` and `end_time` both at the peak and `metadata["boundaries_measured"]` set to `False`. Onset and offset are measured separately by `emg.onoffpeak_baseline_crossing` and kept in that step's own output; the stored breaths keep zero duration.
 
 `start_time`/`end_time` are always the authoritative, real-world times, in
 seconds - they don't need to be recomputed from an index. The `*_index`
