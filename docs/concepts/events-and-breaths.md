@@ -7,7 +7,7 @@ All modalities share them.
 
 | Type | What it is | Example |
 |---|---|---|
-| `Event` | Something that happens at one instant: one `time` | a heartbeat, a blood-gas draw |
+| `Event` | Something that happens at one instant: one `time` | the peak of an R-wave, a blood-gas draw |
 | `Interval` | Something that lasts: a `start_time` and an `end_time` | an occlusion, a period of noise, an intervention |
 | `BreathEvent` | One breath: an `Interval` with a turning point (`peak_time`) inside it | a breath found in EIT, EMG or ventilator data |
 
