@@ -2,7 +2,7 @@
 
 ## Plain-language overview
 
-`m3resp.data.events` defines three types for things that happen in time.
+`m3resp.data.events` defines three types for things that happen in time, outside of continuous signals.
 All modalities share them.
 
 | Type | What it is | Example |
