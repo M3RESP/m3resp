@@ -17,6 +17,7 @@ from m3resp import (
     coerce_breath_event,
     coerce_breath_events,
     coerce_event,
+    coerce_events,
     coerce_interval,
     coerce_intervals,
     event_to_dict,
@@ -48,6 +49,19 @@ def test_event_and_breath_defaults_are_isolated():
     assert BreathEvent(modality="emg", start_time=0.0, end_time=1.0).metadata == {}
     assert event_to_dict(event)["metadata"] == {"event": True}
     assert event_to_dict(breath)["metadata"] == {"breath": True}
+
+
+def test_coerce_events_converts_a_list_and_fills_shared_fields():
+    events = coerce_events(
+        [{"time": 0.8}, Event(name="ecg_peak", modality="emg", time=1.6)],
+        name="ecg_peak",
+        modality="emg",
+    )
+
+    assert events == [
+        Event(name="ecg_peak", modality="emg", time=0.8),
+        Event(name="ecg_peak", modality="emg", time=1.6),
+    ]
 
 
 def test_coerce_event_from_dict():

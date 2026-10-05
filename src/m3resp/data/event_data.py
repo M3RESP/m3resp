@@ -168,7 +168,7 @@ class EventData(_ValuesPerItem):
 
     _items_field: ClassVar[str] = "events"
     _item_type: ClassVar[type] = Event
-    _convert_with: ClassVar[str] = "coerce_event"
+    _convert_with: ClassVar[str] = "coerce_events"
 
     name: str
     modality: str
