@@ -100,9 +100,6 @@ class Interval:
 
     Raises:
         ValueError: If ``end_time`` is before ``start_time``.
-
-    ``start_time``/``end_time`` are always the authoritative, real-world
-    times - they don't need to be recomputed from an index.
     """
 
     modality: str

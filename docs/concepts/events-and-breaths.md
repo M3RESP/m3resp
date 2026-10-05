@@ -93,8 +93,7 @@ Only `modality`, `start_time` and `end_time` may be given by position; everythin
 
 An interval with `end_time` equal to `start_time` (zero duration) is allowed. It means only one time point is known so far. EMG breath detection is the main case: ReSurfEMG finds the peak of each breath, so the breath is stored with `start_time` and `end_time` both at the peak and `metadata["boundaries_measured"]` set to `False`. Onset and offset are measured separately by `emg.onoffpeak_baseline_crossing` and kept in that step's own output; the stored breaths keep zero duration.
 
-`start_time`/`end_time` are always the authoritative, real-world times, in
-seconds. The `*_index`
+`start_time`/`end_time` are real-world times, in seconds. The `*_index`
 fields are optional sample positions in the signal the interval was found
 in; `sample_frequency` and `signal_name` say which time axis those positions
 are relative to, since different signals have different start times,
