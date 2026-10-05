@@ -68,6 +68,7 @@ internal and may change without notice.
    m3resp.IntervalData
    m3resp.LinkedBreath
    m3resp.coerce_event
+   m3resp.coerce_events
    m3resp.coerce_interval
    m3resp.coerce_intervals
    m3resp.coerce_breath_event

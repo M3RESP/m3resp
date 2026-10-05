@@ -223,6 +223,22 @@ def coerce_event(
     )
 
 
+def coerce_events(
+    values: Iterable[Any],
+    *,
+    name: str | None = None,
+    modality: str | None = None,
+    label: str | None = None,
+) -> list[Event]:
+    """Turn a list of events, in any form `coerce_event` accepts, into
+    `Event` objects."""
+
+    return [
+        coerce_event(value, name=name, modality=modality, label=label)
+        for value in values
+    ]
+
+
 def coerce_breath_event(
     value: Any,
     *,
