@@ -44,7 +44,7 @@ class Event:
     metadata: dict[str, Any] = field(default_factory=dict)
 ```
 
-`name` says what kind of event it is (`"blood_gas_draw"`); `label` names one
+`name` says what kind of event it is (`"arterial_blood_gas_draw"`); `label` names one
 particular occurrence (`"baydur_maneuver"`).
 
 `sample_index` is only meaningful together with `signal_name`/
