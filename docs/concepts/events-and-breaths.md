@@ -180,16 +180,22 @@ write to a JSON file. A value that is an m3resp object is written with its own `
 ## Where breath/event lists live
 
 Breaths are stored in `session.events`, a dictionary that maps a name to a
-list of `BreathEvent`s. Each modality fills its own key:
+list of `BreathEvent`s. Each detection step fills its own key:
 
 | Key | Filled by |
 |---|---|
 | `"eit_breaths"` | `session.detect_eit_breaths()` |
 | `"emg_breaths"` | `session.detect_emg_breaths()` |
 | `"ventilator_breaths"` | `session.postprocess_emg()` or the `ventilator.normalize_breaths` step, when ventilator data is present |
+| `"pocc_breaths"` | the `ventilator.pocc_intervals` step: occluded breaths (Pocc), marked `metadata["event_type"] == "pocc"` |
 
 Use `session.add_events(name, events)` to store a list and
 `session.get_events(name)` to read it back.
+
+Occluded breaths are kept apart from normal ventilator breaths, so
+`session.get_events("ventilator_breaths")` returns normal breaths only and
+nothing needs to be filtered out. Ventilator breaths are found as peaks in
+the volume signal, and an occluded breath moves no air.
 
 Moving breaths, intervals and events onto a common clock is done by
 `align_events_by_modality_offset`, which shifts all three types.
