@@ -80,7 +80,8 @@ class _ValuesPerItem:
 
     def to_dict(self) -> dict[str, Any]:
         """The same content as plain lists and dictionaries, ready to write to
-        a JSON file. Arrays become lists."""
+        a JSON file. Arrays become lists, and a value with its own
+        ``to_dict()`` (such as a ``ParameterResult``) becomes a dictionary."""
 
         return {
             "name": self.name,
@@ -107,8 +108,9 @@ class IntervalData(_ValuesPerItem):
             an ``Interval``, so a list of breaths works here too.
         values: One value per interval, in the same order: a list, a tuple,
             or an array whose first axis runs over the intervals. A value can
-            be a number or an array (for example a pixel map). ``None`` when
-            only the intervals themselves are the result.
+            be a number, an array (for example a pixel map) or an m3resp
+            object such as a ``ParameterResult``. ``None`` when only the
+            intervals themselves are the result.
         category: The physical quantity the values are derived from (see
             :mod:`m3resp.data.categories`).
         unit: Unit of the values.
@@ -219,10 +221,16 @@ def _is_float_like(value: Any) -> bool:
 def _values_to_lists(values: Any) -> list[Any] | None:
     if values is None:
         return None
-    return [
-        np.asarray(value).tolist() if np.ndim(value) > 0 else _scalar(value)
-        for value in values
-    ]
+    return [_value_to_plain(value) for value in values]
+
+
+def _value_to_plain(value: Any) -> Any:
+    # An m3resp object such as a ParameterResult describes itself.
+    if callable(getattr(value, "to_dict", None)):
+        return value.to_dict()
+    if np.ndim(value) > 0:
+        return np.asarray(value).tolist()
+    return _scalar(value)
 
 
 def _scalar(value: Any) -> Any:

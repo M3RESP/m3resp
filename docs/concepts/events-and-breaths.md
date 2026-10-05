@@ -168,14 +168,14 @@ tiv = IntervalData(
 | `name` | What the values are |
 | `modality` | Which device the values were measured with. This can differ from the device the intervals came from: EIT values can be computed over breaths found in ventilator data. |
 | `intervals` (`IntervalData`) / `events` (`EventData`) | The intervals or events, in order. A list of breaths works as intervals. |
-| `values` | One value per interval or event, in the same order: a list, a tuple, or an array whose first axis runs over the intervals. A value can be a number or an array, such as a pixel map. `None` when the intervals themselves are the result. A dictionary or a single number is refused. |
+| `values` | One value per interval or event, in the same order: a list, a tuple, or an array whose first axis runs over the intervals. A value can be a number, an array such as a pixel map, or an m3resp object such as a `ParameterResult`. `None` when the intervals themselves are the result. A dictionary or a single number is refused. |
 | `category`, `unit` | Physical quantity and unit, tidied the same way as on `ParameterResult` |
 | `method`, `metadata` | Which method produced the values, and any extra information |
 
 A `values` list that does not have exactly one entry per interval or event
 raises `ValueError`, so a value can never end up next to the wrong breath.
 `to_dict()` gives the same content as plain lists and dictionaries, ready to
-write to a JSON file.
+write to a JSON file. A value that is an m3resp object is written with its own `to_dict()`. Note that a `ParameterResult` also carries its own timing (`breath_id`, `start_time`/`end_time`); keep it consistent with the interval it is stored next to.
 
 ## Where breath/event lists live
 
