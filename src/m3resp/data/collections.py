@@ -1,16 +1,8 @@
-"""Typed collections for `Signal`/`ParameterResult`/`QualityFlag` (plan_stage2.md
-Sec 6, Milestone 2.2).
+"""Lists of `Signal`, `ParameterResult` and `QualityFlag` objects, with helpers
+to look items up.
 
-Built now rather than in Milestone 2.1: `M3Session` is the first real
-consumer that needs list-like containers with query helpers, and
-`plan/stage2_consolidation.md` calls for adding collections only once
-something actually needs them.
-
-`Event`/`BreathEvent` are deliberately not given a collection type here: they
-already have one, `session.events` (a `dict[str, list[BreathEvent]]`, see
-`M3Session.add_events`/`get_events`), which predates this milestone and is
-depended on throughout Stage 1. Introducing a second container would fork
-that API rather than reconcile with it.
+Events and breaths are kept in `session.events` (see
+`M3Session.add_events`/`get_events`).
 """
 
 from __future__ import annotations
