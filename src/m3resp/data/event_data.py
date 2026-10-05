@@ -66,7 +66,7 @@ class _TimedData:
     def __eq__(self, other: object) -> bool:
         if type(other) is not type(self):
             return NotImplemented
-        assert isinstance(other, _ValuesPerItem)
+        assert isinstance(other, _TimedData)
         return (
             self.name == other.name
             and self.modality == other.modality
@@ -96,7 +96,7 @@ class _TimedData:
 
 
 @dataclass(eq=False)
-class IntervalData(_ValuesPerItem):
+class IntervalData(_TimedData):
     """One value for each interval, in the same order as the intervals.
 
     Attributes:
@@ -142,7 +142,7 @@ class IntervalData(_ValuesPerItem):
 
 
 @dataclass(eq=False)
-class EventData(_ValuesPerItem):
+class EventData(_TimedData):
     """One value for each event, in the same order as the events.
 
     The same as :class:`IntervalData`, but for things that happen at one
