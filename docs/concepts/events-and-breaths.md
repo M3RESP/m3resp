@@ -184,15 +184,17 @@ write to a JSON file.
 
 ## Where breath/event lists live
 
-There is deliberately no `BreathCollection` type: breaths live in
-`session.events`, a `dict[str, list[BreathEvent]]` populated by
-`session.detect_eit_breaths()` (`"eit_breaths"`),
-`session.detect_emg_breaths()` (`"emg_breaths"`), and any ventilator breaths
-normalized during `postprocess_emg` (`"ventilator_breaths"`). Use
-`session.add_events(name, events)`/`session.get_events(name)` for direct
-access. This predates the typed-collection work and is depended on
-throughout Stage 1 - introducing a second container would fork that API
-rather than reconcile with it.
+Breaths are stored in `session.events`, a dictionary that maps a name to a
+list of `BreathEvent`s. Each modality fills its own key:
+
+| Key | Filled by |
+|---|---|
+| `"eit_breaths"` | `session.detect_eit_breaths()` |
+| `"emg_breaths"` | `session.detect_emg_breaths()` |
+| `"ventilator_breaths"` | `session.postprocess_emg()` or the `ventilator.normalize_breaths` step, when ventilator data is present |
+
+Use `session.add_events(name, events)` to store a list and
+`session.get_events(name)` to read it back.
 
 Moving breaths, intervals and events onto a common clock is done by
 `align_events_by_modality_offset`, which shifts all three types.
