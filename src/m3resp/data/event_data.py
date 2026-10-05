@@ -23,7 +23,7 @@ from m3resp.data.events import Event, Interval, event_to_dict
 from m3resp.data.units import normalize_unit
 
 
-class _ValuesPerItem:
+class _TimedData:
     """The checks, comparison and conversion shared by `IntervalData` and
     `EventData`. Each of the two says which list holds its items
     (``_items_field``) and what those items must be (``_item_type``)."""
