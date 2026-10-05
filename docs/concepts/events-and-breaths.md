@@ -44,8 +44,7 @@ class Event:
     metadata: dict[str, Any] = field(default_factory=dict)
 ```
 
-`name` says what kind of event it is (`"arterial_blood_gas_draw"`); `label` names one
-particular occurrence (`"baydur_maneuver"`).
+`name` says what kind of event it is (`"arterial_blood_gas_draw"`); `label` is an optional free-text note that tells one occurrence apart from others of the same kind (`"before PEEP step 2"`). Nothing in m3resp reads `label`; it is kept for your own use.
 
 `sample_index` is only meaningful together with `signal_name`/
 `sample_frequency`, which say which signal and time axis it's relative to -

@@ -17,8 +17,8 @@ class Event:
     """A timestamped event from one modality.
 
     Attributes:
-        name: What kind of event this is, e.g. ``'blood_gas_draw'`` or
-            ``'intervention'``.
+        name: What kind of event this is, e.g. ``'arterial_blood_gas_draw'``
+            or ``'baydur_maneuver'``.
         modality: The device or technique the event came from, e.g.
             ``'ventilator'`` or ``'eit'``.
         time: Real-world time at which the event occurred.
@@ -38,11 +38,10 @@ class Event:
             the event wasn't derived from indexing into a signal.
         sample_frequency: Sampling rate of that signal, in Hz. ``None`` when
             the event wasn't derived from indexing into a signal.
-        label: Optional name for this particular occurrence, as opposed to
-            ``name``, which says what kind of event it is: an intervention
-            event carries ``name='intervention'`` and, say,
-            ``label='baydur_maneuver'``. Nothing in the library reads it
-            today; it is carried through for downstream use.
+        label: Optional free-text note that tells this occurrence apart from
+            others of the same kind, e.g. ``name='arterial_blood_gas_draw'``
+            with ``label='before PEEP step 2'``. Nothing in the library reads
+            it; it is kept for your own use.
         confidence: Optional measure of how sure the detector was.
         metadata: Optional extra information about the event.
 
