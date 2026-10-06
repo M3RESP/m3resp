@@ -11,48 +11,26 @@ if TYPE_CHECKING:
 
 
 class EMGPreset(Preset):
-    """Preprocess, remove ECG, detect breaths, and postprocess loaded EMG data.
+    """Preprocess loaded EMG, remove ECG, detect breaths and calculate features.
 
-    Equivalent to calling ``session.preprocess_emg()``, the
-    ``emg.ecg_detect_peaks`` + ``emg.ecg_gating`` steps,
-    ``session.detect_emg_breaths()``, then ``session.postprocess_emg()``
-    directly; expects ``session.load_emg(...)`` to have already been called.
+    Runs preprocessing, ECG peak detection and gating, a moving baseline,
+    breath detection and postprocessing in that order. Gating recomputes the
+    EMG envelope before baseline estimation and breath detection.
 
-    ECG removal by gating runs *by default*, between preprocessing and breath
-    detection. ``session.preprocess_emg()`` only band-passes and envelopes the
-    signal, and a band-pass high enough to suppress ECG (the ``high_pass_hz``
-    default) leaves the higher-frequency part of each QRS complex inside the
-    pass band - so an envelope computed straight off the filtered signal is
-    ECG-contaminated. Gating each detected ECG peak and recomputing the
-    envelope from the gated signal is the standard preprocessing chain
-    (band-pass -> ECG peak detection -> gating -> envelope -> baseline), and
-    this preset is what "the standard EMG preset" means, so it does that
-    rather than leaving it to the caller.
+    Config groups keyword arguments under ``preprocess``, ``ecg_detect_peaks``,
+    ``ecg_gating``, ``baseline``, ``detect_breaths`` and ``postprocess``.
+    Baseline options are ``window_seconds`` (30 s by default), ``step_seconds``
+    (1 s) and additional moving-baseline options such as ``percentile``.
+    ``ecg_detect_peaks.ecg_channel`` selects a reference ECG channel.
 
-    Config keys, each a mapping of keyword arguments:
+    ``ecg_removal.enabled=False`` skips gating; cardiac activity can then
+    remain in the envelope and derived measurements. Supplying
+    ``ecg_removal.ecg_peak_indices`` gates known sample positions and skips
+    peak detection. Supplied peaks and nonempty ``ecg_detect_peaks`` options
+    are mutually exclusive.
 
-    - ``preprocess`` -> ``session.preprocess_emg``
-    - ``ecg_detect_peaks`` -> the ``emg.ecg_detect_peaks`` step (pass
-      ``{"ecg_channel": n}`` when a dedicated reference ECG channel was
-      recorded; the default detects peaks in the EMG channel itself)
-    - ``ecg_gating`` -> the ``emg.ecg_gating`` step
-    - ``baseline`` -> the moving baseline that breath detection measures
-      against (``window_seconds``, ``step_seconds``, ``percentile``)
-    - ``detect_breaths`` -> ``session.detect_emg_breaths``
-    - ``postprocess`` -> ``session.postprocess_emg``
-
-    Plus two ``{"ecg_removal": {...}}`` options:
-
-    - ``{"enabled": False}`` skips ECG removal entirely, leaving the pre-gating
-      envelope in place. That is a data-check / exploratory path, not a
-      scientifically valid default - the resulting envelope, breath detections,
-      and every amplitude-derived parameter downstream of it still contain
-      cardiac signal.
-    - ``{"ecg_peak_indices": [...]}`` gates known peaks and skips detection
-      (for peaks already established elsewhere - a separate ECG recording, an
-      annotation file, a previous run). Mutually exclusive with the
-      ``ecg_detect_peaks`` config key, which would otherwise silently
-      configure a detection pass that never runs.
+    Attributes:
+        name: Registered preset name, ``"emg"``.
     """
 
     name = "emg"
@@ -60,6 +38,24 @@ class EMGPreset(Preset):
     def run(
         self, session: M3Session, *, config: PresetConfig | None = None
     ) -> M3Session:
+        """Process loaded EMG and store breath events and measurements.
+
+        Args:
+            session: Session with EMG data already loaded.
+            config: Settings grouped as described in `EMGPreset`. None uses the
+                operation defaults, including ECG gating and moving-baseline
+                estimation before breath detection.
+
+        Returns:
+            M3Session: The supplied session with processed signals, detected
+                breaths, parameters, quality flags and provenance.
+
+        Raises:
+            MissingModalityDataError: If the required EMG recording is unavailable.
+            TypeError: If ECG-removal options are unsupported or supplied ECG
+                peaks conflict with peak-detection options.
+        """
+
         processed = session.preprocess_emg(**self._kwargs_for(config, "preprocess"))
         self._remove_ecg(session, processed, config)
         baseline = self._moving_baseline(session, config)
@@ -70,12 +66,12 @@ class EMGPreset(Preset):
         return session
 
     def _moving_baseline(self, session: M3Session, config: PresetConfig | None) -> Any:
-        """The quiet level the breath-detection threshold is measured against.
+        """Estimate the quiet level of the stored EMG envelope.
 
-        A breath is a rise above the local quiet level, which drifts through a
-        recording, so the baseline has to exist before breaths are detected.
-        It depends only on the envelope, never on the peaks, so computing it
-        first is not circular.
+        Config's baseline window_seconds and step_seconds are converted using
+        fs in Hz to at least one sample each; other options reach the adapter.
+        Returns one value per envelope sample, in envelope units, or None when
+        an envelope is unavailable.
         """
 
         import numpy as np
@@ -102,12 +98,13 @@ class EMGPreset(Preset):
         processed: Any,
         config: PresetConfig | None,
     ) -> None:
-        """Detect ECG peaks and gate them out, updating `session.processed`.
+        """Gate ECG peaks and update the session's EMG signal and envelope.
 
-        The two registered steps are called as plain functions: they already
-        record provenance through `M3Session._record()` and populate the typed
-        collections themselves, so this stays a sequence of instrumented calls
-        and does not need the declarative engine (see `presets.base`).
+        Read ECG detection, gating and removal options from config. Use supplied
+        ECG sample positions when available; otherwise detect them with the
+        registered step. Returns immediately when removal is disabled.
+        Raises TypeError for unsupported removal options or conflicting supplied
+        peaks and detection options.
         """
 
         removal_options = dict((config or {}).get("ecg_removal", {}))

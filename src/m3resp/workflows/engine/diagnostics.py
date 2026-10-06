@@ -63,16 +63,18 @@ _RESERVED_ENGINE_KEYS = frozenset(
 
 
 def validate_spec(spec: WorkflowSpec, *, available: set[str] | None = None) -> None:
-    """Statically check that every step's inputs are produced before use,
-    that no two steps write to the same context key without explicit renaming,
-    and that every ``@name`` input reference names a declared workflow input.
+    """Check workflow structure and raise for its first error.
 
-    Compatibility wrapper around :func:`collect_diagnostics`:
-    raises ``WorkflowSpecError`` using the first error-severity diagnostic's
-    message when any exist. Call :func:`collect_diagnostics` directly to get
-    every independent problem in one pass instead of only the first.
+    Args:
+        spec: Parsed workflow to inspect.
+        available: Additional context keys supplied before execution.
 
-    ``available`` lists extra context keys seeded outside the spec.
+    Raises:
+        UnknownStepError: If the first error concerns an unregistered operation.
+        WorkflowSpecError: If the first error concerns inputs, outputs, parameter
+            references, values or other workflow structure.
+
+    Use `collect_diagnostics` to obtain the complete diagnostic list.
     """
 
     diagnostics = collect_diagnostics(spec, available=available)
@@ -87,12 +89,18 @@ def validate_spec(spec: WorkflowSpec, *, available: set[str] | None = None) -> N
 def collect_diagnostics(
     spec: WorkflowSpec, *, available: set[str] | None = None
 ) -> list[Diagnostic]:
-    """Return every independent structural problem in ``spec``.
+    """Collect structural errors and warnings for all resolvable workflow steps.
 
-    Does not raise. Unlike ``validate_spec()``, this reports every violation
-    found in one pass rather than stopping at the first, and returns
-    JSON-safe :class:`Diagnostic` objects instead of exception messages.
-    ``available`` lists extra context keys seeded outside the spec.
+    Args:
+        spec: Parsed workflow with ordered steps and declared inputs.
+        available: Additional context keys supplied before execution.
+
+    Returns:
+        list[Diagnostic]: Findings about unknown operations, input/output bindings,
+            declared parameter types and limits, input references, duplicate
+            output keys and session-dependency order. Empty when no issues are
+            found. Checks use registered metadata and leave scientific data
+            processing to execution.
     """
 
     _ensure_steps_registered()
@@ -186,12 +194,11 @@ def collect_diagnostics(
 
 
 def _check_session_dependencies(spec: WorkflowSpec) -> list[Diagnostic]:
-    """A step reading a declared ``session_reads`` resource before any step
-    that (later in the same spec) declares writing it usually means the
-    spec's step order silently reordered a session-mediated dependency -
-    see ``m3resp.workflows.session_deps``. Reported as a warning, not an
-    error: the resource may also come from state supplied outside the
-    spec, which this check cannot see and is not a bug."""
+    """Warn when a session resource is read before its first declared writer.
+
+    The warning allows for a caller having supplied the resource on the session
+    before the workflow starts.
+    """
 
     diagnostics: list[Diagnostic] = []
     for conflict in find_session_dependency_conflicts(spec):
@@ -460,12 +467,10 @@ def _check_static_parameters(
     position: int,
     step_label: str,
 ) -> list[Diagnostic]:
-    """validate static parameter values against declared metadata.
+    """Check resolved parameter values against their declared types and limits.
 
-    Only checked when the step declares metadata for that parameter name.
-    ``@name`` references are resolved against ``spec_inputs`` first (an unknown
-    reference is already reported by ``_check_reference``, so it is skipped
-    here rather than reported twice).
+    Unknown input references are reported by _check_references. Values without
+    parameter metadata and None values skip type and limit checks.
     """
 
     diagnostics: list[Diagnostic] = []

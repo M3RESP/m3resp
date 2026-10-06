@@ -430,7 +430,46 @@ class EITProcessingAdapter:
         include_filtered_data: bool = True,
         include_global_impedance: bool = True,
     ) -> dict[str, Any]:
-        """Run the Stage 1 EIT preprocessing workflow through `eitprocessing`."""
+        """Filter EIT data and compute selected breath-related results.
+
+        Adds computed signals, breath intervals and measurements to the supplied
+        sequence. MDN filtering requires respiratory and heart rates, so those
+        rates are calculated even when compute_rates is False.
+
+        Args:
+            sequence: Loaded eitprocessing Sequence containing pixel impedance data.
+            subject_type: adult or neonate, used for rate detection.
+            welch_window_seconds: Rate-estimation window duration in seconds.
+            filter_mode: mdn, lowpass, bandpass or none.
+            filter_enabled: Use the selected filter when True; otherwise use none.
+            lowpass_hz: Low-pass cutoff, or band-pass upper cutoff, in Hz.
+            highpass_hz: Band-pass lower cutoff in Hz.
+            filter_order: Butterworth filter order for lowpass or bandpass.
+            breath_min_duration_seconds: Minimum detected breath duration in seconds.
+            compute_rates: Estimate respiratory and heart rates.
+            compute_breath_intervals: Detect and store EIT breath intervals.
+            compute_continuous_tiv: Compute a tidal impedance variation per breath.
+            compute_eeli: Compute end-expiratory lung impedance per breath.
+            compute_pixel_tiv: Compute a pixel-TIV map per breath.
+            include_filtered_data: Include the filtered EIT object in the return mapping.
+            include_global_impedance: Obtain raw global impedance and, after filtering,
+                filtered global impedance. Breath calculations obtain global impedance
+                as needed even when this option is False.
+
+        Returns:
+            dict[str, Any]: The sequence, raw/filtered EIT and global impedance,
+                filter mode and captures, rate detector and captures, respiratory
+                and heart rates in Hz, breath intervals, TIV, EELI and pixel TIV.
+                Disabled optional results are None; capture mappings are empty when
+                their calculation is skipped. Impedance results retain input units.
+
+        Raises:
+            OptionalDependencyError: If eitprocessing is unavailable.
+            TypeError: If sequence does not provide the expected EIT collections.
+            KeyError: If sequence.eit_data has no raw EIT entry.
+            ValueError: If the filter mode is unsupported, or TIV/EELI/pixel TIV
+                is requested while breath-interval calculation is disabled.
+        """
 
         BreathDetection, TIV = _lazy_import(
             "eitprocessing.features.breath_detection.BreathDetection",

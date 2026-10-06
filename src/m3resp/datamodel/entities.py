@@ -1,18 +1,7 @@
-"""Pydantic entities for the M3Resp conceptual/logical data model.
+"""Validated records for study sessions, recordings, results and provenance.
 
-Fields mirror the logical tables in ``main_v0.3.tex`` (data model design doc):
-Sections 7.1-7.11 for the MVP entities (doc Sec 9) and Section 11 for
-``QualityAnnotation``. Coded fields use ``Literal`` unions built from the
-vocabularies the doc already spells out (Sec 2.5, 7.4, 7.9-7.11, 11).
-
-Two fields go beyond the doc, both flagged here rather than hidden: they exist
-so the future Controller/Service layer (Session Manager, State Manager,
-Workflow Manager, Error Handler, Task Runner) has somewhere to record
-execution/async state without a schema break.
-
-- ``ProcessingRun.status`` / ``ProcessingRun.error``: Task Runner needs to
-  track jobs across pending/running/succeeded/failed, and the Error Handler
-  needs a place to attach a technical error message to the run that failed.
+Entities use the fields and vocabularies in the project's logical data model.
+ProcessingRun also records execution status and an optional error message.
 """
 
 from __future__ import annotations
@@ -332,9 +321,22 @@ ProcessingRunKind = Literal["workflow", "step", "session_action"]
 
 
 class ProcessingRun(Entity):
-    """One processing run: a whole workflow, one step, or one
-    session method call. ``kind`` says which, and ``name`` is the name of
-    that workflow, step or method."""
+    """A stored record of a workflow, processing step or session action.
+
+    Attributes:
+        processing_run_id: Automatically generated identifier.
+        name: Workflow, step or session-method name.
+        kind: workflow, step or session_action; defaults to workflow.
+        version: Optional workflow or operation version.
+        code_commit_hash: Optional code revision used for the calculation.
+        input_file_ids: Identifiers of recorded input files.
+        parameter_file_ids: Identifiers of exported result-array files.
+        run_time: Unix timestamp in seconds; defaults to the current time.
+        operator_ref: Optional reference to the person running the analysis.
+        status: pending, running, succeeded or failed; defaults to succeeded.
+        error: Optional error message.
+        parameters: Processing settings and output provenance summaries.
+    """
 
     processing_run_id: str = Field(default_factory=lambda: new_id("run"))
     name: str
@@ -348,8 +350,7 @@ class ProcessingRun(Entity):
     parameter_file_ids: list[str] = Field(default_factory=list)
     run_time: float = Field(default_factory=_utc_now_ts)
     operator_ref: str | None = None
-    # Beyond the doc: forward-compat for the Task Runner / Error Handler
-    # components in the roadmap image (see module docstring).
+    # Outcome of the recorded operation and its error message, when available.
     status: ProcessingStatus = "succeeded"
     error: str | None = None
     parameters: dict[str, Any] = Field(default_factory=dict)

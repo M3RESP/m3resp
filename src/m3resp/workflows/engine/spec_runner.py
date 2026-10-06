@@ -24,14 +24,10 @@ from .execution import run_workflow
 
 
 def _resolve_output_mode(spec: WorkflowSpec) -> tuple[str, bool]:
-    """replaces the old "any of three hardcoded export step names
-    present" heuristic with an explicit ``outputs.mode``.
+    """Return (output mode, whether it was inferred from the steps).
 
-    Returns ``(mode, was_inferred)``. A versioned spec always states its
-    mode when ``outputs.dir`` is set (enforced at parse time), so
-    ``was_inferred`` is only ever ``True`` for a legacy spec that omitted
-    ``outputs.mode``; the inference itself now checks for *any* step under
-    the ``export.*`` prefix, not just the three names the old heuristic knew.
+    Use the stated mode when supplied. Otherwise choose explicit when any
+    step name starts with ``"export."``, and automatic for other workflows.
     """
 
     if spec.outputs.mode is not None:
@@ -49,27 +45,36 @@ def run_spec(
     event_sink: EventSink | None = None,
     cancellation_token: CancellationToken | None = None,
 ) -> WorkflowResult:
-    """Load a spec file and run it end-to-end, including automatic export.
+    """Run a workflow file, write its manifest and apply its export settings.
 
-    This is the entry point for the ``m3resp run <spec.yaml>`` CLI. It injects
-    the spec's ``outputs`` and ``experiment`` sections into the context (so steps
-    like ``export.rotarc_result`` can read them) and applies the ``outputs:``
-    section after the workflow finishes.
+    Resolves a timestamped output directory once for the run and supplies it,
+    output settings and experiment metadata to the steps. An inferred output
+    mode in an unversioned spec emits a FutureWarning.
 
-    ``outputs.timestamped`` is resolved exactly once here into
-    ``_resolved_output_dir`` (and the raw stamp into ``_run_timestamp``), both
-    seeded into context alongside ``_spec_outputs``/``_spec_experiment``. Every
-    export path in the run - the automatic export below, built-in steps like
-    ``export.rotarc_result``, and any custom export step that reads
-    ``_resolved_output_dir`` - shares that one resolved directory, so a run
-    never ends up split across two different timestamp folders.
+    Args:
+        path: YAML or JSON workflow file. Relative paths within the file are
+            resolved against its parent directory.
+        session: Session to process; None creates a new session.
+        eit_adapter: EIT adapter used when creating a new session.
+        emg_adapter: EMG adapter used when creating a new session.
+        event_sink: Optional synchronous progress-event receiver.
+        cancellation_token: Optional flag checked between steps.
 
-    When ``outputs.dir`` is set and the resolved mode is not ``"none"``, a
-    JSON run manifest is written to ``<output_dir>/run_manifest.json``:
-    once with ``status: "running"`` before any step executes, then
-    atomically replaced with the terminal state - including on failure, so
-    a crashed run leaves an honestly-marked-failed manifest rather than
-    nothing.
+    Returns:
+        WorkflowResult: The executed workflow's results, with its resolved
+            output directory and manifest path when configured. Automatic mode
+            exports the successful session; explicit mode uses the declared
+            export steps. Requested figures are saved for successful runs in
+            either mode. With outputs.dir and a mode other than none, writes
+            run_manifest.json before execution and replaces it with the terminal
+            run state before applying automatic exports.
+
+    Raises:
+        WorkflowSpecError: If the spec or workflow bindings are invalid.
+        UnknownStepError: If the first structural error names an unknown step.
+        WorkflowExecutionError: If a step function fails. The failure is written
+            to the configured manifest before this error is re-raised.
+        OSError: If the spec cannot be read or an output cannot be written.
     """
 
     from m3resp.workflows.manifest import build_manifest, write_manifest_atomic
@@ -151,9 +156,7 @@ def run_spec(
 def _write_failed_manifest(
     manifest_path: Path, spec: WorkflowSpec, exc: WorkflowExecutionError
 ) -> None:
-    """a failed run still gets a manifest, honestly marked
-    ``"failed"`` - never left as ``"running"`` and never mistaken for a
-    success, using whatever step records were gathered before the failure."""
+    """Write a failed-run manifest with the error and gathered step records."""
 
     from m3resp.workflows.manifest import build_manifest, write_manifest_atomic
 
@@ -183,9 +186,7 @@ def _write_result_manifest(
     result: WorkflowResult,
     output_dir: Path | None,
 ) -> Path:
-    """the terminal manifest for a run that returned normally
-    - ``"succeeded"`` or ``"cancelled"``, both honestly distinguished from
-    ``"failed"`` (see ``_write_failed_manifest``) and from ``"running"``."""
+    """Write the completed run's state, records and optional file checksums."""
 
     from m3resp.workflows.manifest import (
         build_manifest,
@@ -215,14 +216,11 @@ def _write_result_manifest(
 
 
 def _apply_outputs(spec: WorkflowSpec, result: WorkflowResult, *, mode: str) -> None:
-    """Apply the spec's ``outputs:`` section after the workflow has run.
+    """Apply configured figures and automatic session exports after execution.
 
-    ``mode`` replaces the old "any explicit export step present"
-    heuristic: ``"none"`` writes nothing, ``"explicit"`` leaves output
-    entirely to the spec's own declared export steps (already run during
-    execution), and ``"automatic"`` performs session export here - but only
-    for a run that actually succeeded (never write a success
-    summary after a failed or cancelled run).
+    A successful run with an output directory may save figures in automatic
+    or explicit mode. Automatic mode also writes the configured session files.
+    Cancelled runs skip these exports; mode none skips this output handling.
     """
 
     out = spec.outputs
@@ -267,7 +265,7 @@ def _apply_outputs(spec: WorkflowSpec, result: WorkflowResult, *, mode: str) -> 
 
 
 def _maybe_assemble_eit(result: WorkflowResult) -> None:
-    """Populate ``session.processed['eit']`` from the workflow context."""
+    """Store the available EIT context outputs in session.processed when raw_eit exists."""
 
     ctx = result.context.values
     if "raw_eit" not in ctx:
