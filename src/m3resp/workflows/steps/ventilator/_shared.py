@@ -96,13 +96,21 @@ def _record_step(
 
 
 def _airway_pressure(ventilator_signals: Any, step_name: str) -> tuple[np.ndarray, str]:
-    """The airway pressure from a ventilator channel bundle, with its unit.
+    """Read the bundle's main airway-pressure array and its unit.
 
-    Takes the bundle's main airway pressure channel (`primary_channel`), so a
-    second recording's ``airway_pressure__<name>`` is found too. The unit is
-    the one the recording reported for that channel. A bundle built by hand
-    with no per-channel units may give one ``"unit"`` for all; with neither,
-    cmH2O is assumed. Raises a clear error when there is no airway pressure.
+    Uses the primary channel mapping, including qualified channel keys. Units
+    come from the per-channel units mapping, then the bundle's unit field, then
+    "cmH2O". Values are converted to a float array in those units.
+
+    Args:
+        ventilator_signals (Any): Ventilator channel bundle.
+        step_name (str): Workflow step name included in error messages.
+
+    Returns:
+        tuple[numpy.ndarray, str]: Pressure samples and their unit.
+
+    Raises:
+        MissingModalityDataError: If the bundle lacks airway-pressure values.
     """
 
     key = primary_channel(ventilator_signals, "airway_pressure")

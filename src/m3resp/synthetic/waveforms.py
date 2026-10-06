@@ -239,7 +239,26 @@ def generate_medibus_data(
     respiratory_rate_bpm: float,
     config: MedibusConfig,
 ) -> np.ndarray:
-    """Create synthetic Medibus channels with pressure, flow, and volume."""
+    """Create synthetic airway pressure, flow, volume, rate and FiO2 channels.
+
+    Args:
+        time_seconds (numpy.ndarray): One-dimensional sample times in seconds,
+            matching signal in length and increasing for gradient calculation.
+        signal (numpy.ndarray): One-dimensional breathing waveform. Its range is
+            scaled for pressure and its mean and standard deviation for volume.
+            Flow is its time derivative, in signal units per second.
+        n_medibus_fields (int): Number of output channels, including the configured
+            airway-pressure, flow and volume indices.
+        respiratory_rate_bpm (float): Constant respiratory rate in breaths/min.
+        config (MedibusConfig): Zero-based channel indices, pressure settings in
+            cmH2O, volume settings in mL, and FiO2 in percent.
+
+    Returns:
+        numpy.ndarray: Float32 array shaped (n_medibus_fields, samples). Unassigned
+            channels contain zeros. Respiratory rate and FiO2 are filled when their
+            configured indices fit. A constant input produces baseline pressure
+            and volume and zero flow.
+    """
 
     medibus = np.zeros(
         (n_medibus_fields, len(time_seconds)),

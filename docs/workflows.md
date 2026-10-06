@@ -204,6 +204,17 @@ service.run_workflow(spec, event_sink=..., cancellation_token=...)  # run summar
 
 ## Built-in steps
 
+`ventilator.channels` selects `airway_pressure`, `flow` and `volume` by default.
+For a pressure-only recording, set `channels: [airway_pressure]`. Channel labels
+determine the selection; default column positions (0, 1 and 2) apply when all
+labels are absent or unrecognized. Unrecognized nonempty labels produce a
+warning. Explicit zero-based indices, such as `airway_pressure_channel: 0`,
+override label matching and must refer to channels in the requested selection.
+The returned bundle preserves recorded units. Pocc pressure thresholds use
+that pressure unit, and pressure-time products use the pressure unit times
+seconds. For repeated pressure measurements, steps use the bundle's primary
+airway-pressure channel, including keys such as `airway_pressure__pod`.
+
 Run `m3resp steps` to see the full list with descriptions. The main groups are:
 
 | Prefix | What it covers |

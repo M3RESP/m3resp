@@ -110,9 +110,28 @@ def _per_breath_flags(
     threshold: float | None = None,
     extra_metadata: dict[str, Any] | None = None,
 ) -> list[QualityFlag]:
-    """One `QualityFlag` per breath - `breath_id=str(position)` until a
-    stable event ID is available, with the source peak sample index recorded
-    in metadata."""
+    """Create one quality flag for each breath extremum.
+
+    Args:
+        name (str): Quality check name.
+        valid (Any): Pass/fail values in the same order as peak_indices.
+        modality (str): Recording modality for each flag.
+        category (str | None): Physical quantity assessed.
+        peak_indices (Any): Zero-based samples of each breath's turning point.
+        severity (Severity): Severity of a failed check. Defaults to "info".
+        fs (float | None): Sampling rate in Hz. When supplied, metadata also
+            records extremum_time in seconds from the recording's first sample.
+        threshold (float | None): Threshold used by the quality check.
+        extra_metadata (dict[str, Any] | None): Fields added to every flag.
+            These values override matching extremum metadata keys.
+
+    Returns:
+        list[QualityFlag]: Flags with passed=bool(valid), breath_id equal to the
+            string-valued position, and extremum_sample_index in metadata.
+
+    Raises:
+        ValueError: If valid and peak_indices differ in length.
+    """
 
     _require_equal_length(valid=valid, peak_indices=peak_indices)
     flags = []

@@ -1,11 +1,8 @@
-"""Breath timing metrics computed from `LinkedBreath` objects.
+"""Breath timing measures from breaths linked across modalities.
 
-Deliberately narrow, initial metrics rather than the full "coupling metric"
-list: a signed timing delay between two modalities' breath anchors, a breath
-duration difference, and a breath-to-breath event-agreement fraction. All
-three are pure functions over `LinkedBreath`/`list[LinkedBreath]`;
-`compute_breath_timing_parameters` turns them into `ParameterResult`s, and
-is what `M3Session.compute_breath_timing_parameters` calls.
+These functions compare breath anchors and durations in seconds and count
+agreement between detections. Breath times must share a common time axis.
+`compute_breath_timing_parameters` collects the measures as `ParameterResult`s.
 """
 
 from __future__ import annotations
@@ -30,16 +27,23 @@ def compute_timing_delay(
     *,
     anchor: str = "start",
 ) -> float | None:
-    """Signed delay in seconds from `from_modality` to `to_modality`.
+    """Compute the signed delay between two linked breaths, in seconds.
 
-    Positive means `to_modality`'s breath anchor occurs after
-    `from_modality`'s. `anchor` selects which point on each breath to
-    compare (``"start"``, ``"extremum"``, or ``"end"``). Returns `None` when
-    either modality did not contribute a breath to this link, or when
-    ``anchor="extremum"`` and either breath has no `extremum_time`.
+    Args:
+        linked (LinkedBreath): Breaths on a shared time axis.
+        from_modality (str): Modality whose breath supplies the reference time.
+        to_modality (str): Modality whose breath supplies the comparison time.
+        anchor (str): Breath point to compare: "start" (default), "extremum",
+            or "end".
+
+    Returns:
+        float | None: Comparison time minus reference time, in seconds.
+            Positive values mean the second modality occurs later. None means
+            either breath or its selected anchor is missing.
 
     Raises:
-        ValueError: If `anchor` is not one of the three names above.
+        ValueError: If the anchor name is invalid, including for a link with
+            missing breaths.
     """
 
     _check_anchor(anchor)
@@ -73,17 +77,21 @@ def compute_breath_duration_difference(
 def compute_event_agreement(
     linked_breaths: Sequence[LinkedBreath], modalities: Sequence[str]
 ) -> float:
-    """Fraction of breaths seen by any of `modalities` that were seen by all
-    of them - a coarse breath-to-breath timing agreement score.
+    """Compute the fraction of linked breaths found by every requested modality.
 
-    Only linked breaths that hold a breath from at least one of `modalities`
-    are counted. A breath seen only by another modality (say, a ventilator
-    breath while EIT and EMG are compared) says nothing about whether EIT
-    and EMG agree, so it does not lower the score.
+    The denominator counts links containing at least one requested modality.
+    The numerator counts links containing all requested modalities. For EIT
+    and EMG, a link containing only a ventilator breath is excluded from both
+    counts.
 
-    Returns ``0.0`` when no linked breath holds any of `modalities`,
-    including for an empty `linked_breaths` (no evidence of agreement,
-    rather than an undefined ``0/0``).
+    Args:
+        linked_breaths (Sequence[LinkedBreath]): Breaths linked on a shared
+            time axis, including links with missing modalities.
+        modalities (Sequence[str]): Modalities whose detections to compare.
+
+    Returns:
+        float: Agreement from 0 to 1. Returns 0.0 when the denominator is zero,
+            including when either input sequence is empty.
     """
 
     matched, counted = _agreement_counts(linked_breaths, modalities)
@@ -95,8 +103,7 @@ def compute_event_agreement(
 def _agreement_counts(
     linked_breaths: Sequence[LinkedBreath], modalities: Sequence[str]
 ) -> tuple[int, int]:
-    """(linked breaths holding all of `modalities`, linked breaths holding at
-    least one of them)."""
+    """Return counts of links with all and with any requested modalities."""
 
     required = set(modalities)
     matched = 0
@@ -117,25 +124,32 @@ def compute_breath_timing_parameters(
     duration_pairs: Sequence[tuple[str, str]] | None = None,
     anchor: str = "start",
 ) -> list[ParameterResult]:
-    """Turn `linked_breaths` into `ParameterResult`s: a per-breath timing
-    delay for each pair in `delay_pairs`, a per-breath duration difference
-    for each pair in `duration_pairs`, and one aggregate event-agreement
-    result per delay pair.
+    """Compute timing delays, duration differences, and detection agreement.
 
-    `delay_pairs`/`duration_pairs` default to every unordered pair of
-    modalities actually observed across `linked_breaths`, so a session that
-    only linked EIT and EMG does not get a meaningless ventilator pairing.
-    A breath missing either side of a pair is skipped for that pair rather
-    than raising, so a partially-linked recording still yields parameters
-    for the breaths that do have both modalities. The event-agreement result
-    is left out for a pair when no linked breath holds either modality, so
-    an empty `linked_breaths` always gives an empty list.
+    Args:
+        linked_breaths (Sequence[LinkedBreath]): Breaths linked on a shared
+            time axis. Their position in this sequence becomes each per-breath
+            result's string-valued `breath_id`.
+        delay_pairs (Sequence[tuple[str, str]] | None): Ordered modality pairs
+            (from, to). Delays are to minus from, in seconds. Each pair also
+            produces an aggregate event-agreement fraction when at least one
+            link contains either modality. None selects all unordered pairs
+            of observed modalities in alphabetical order; [] selects none.
+        duration_pairs (Sequence[tuple[str, str]] | None): Ordered modality
+            pairs (a, b). Differences are duration(a) minus duration(b), in
+            seconds. None uses the same default pairs; [] selects none.
+        anchor (str): Breath point for delays: "start" (default), "extremum",
+            or "end".
 
-    Results carry ``modality="multimodal"``; `is_breath_timing_result` tells
-    them apart from other results.
+    Returns:
+        list[ParameterResult]: Results with modality "multimodal". Per-breath
+            values have unit "s" and require both breaths; delays also require
+            both selected anchors. Agreement counts links containing either
+            requested modality and measures the fraction containing both.
+            An empty linked-breath sequence returns an empty list.
 
     Raises:
-        ValueError: If `anchor` is not ``"start"``, ``"extremum"`` or ``"end"``.
+        ValueError: If the anchor name is invalid, including for empty inputs.
     """
 
     _check_anchor(anchor)
@@ -209,7 +223,12 @@ def compute_breath_timing_parameters(
 
 
 def is_breath_timing_result(parameter: ParameterResult) -> bool:
-    """True when `parameter` was made by `compute_breath_timing_parameters`."""
+    """Return whether a result's modality and method identify breath timing.
+
+    Matches modality "multimodal" with method "event_agreement",
+    "breath_duration_difference", or a method starting with "timing_delay[".
+    These are the tags used by `compute_breath_timing_parameters`.
+    """
 
     if parameter.modality != "multimodal" or parameter.method is None:
         return False
@@ -220,6 +239,8 @@ def is_breath_timing_result(parameter: ParameterResult) -> bool:
 
 
 def _check_anchor(anchor: str) -> None:
+    """Raise ValueError unless the anchor is start, extremum, or end."""
+
     if anchor not in _ANCHORS:
         raise ValueError(
             f"anchor ({anchor!r}) must be one of 'start', 'extremum', 'end'"
@@ -227,6 +248,8 @@ def _check_anchor(anchor: str) -> None:
 
 
 def _anchor_time(breath: BreathEvent, anchor: str) -> float | None:
+    """Return a breath's selected time in seconds for a validated anchor."""
+
     if anchor == "start":
         return breath.start_time
     if anchor == "end":
