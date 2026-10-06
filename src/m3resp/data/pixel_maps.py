@@ -1,7 +1,7 @@
 """``PixelMap`` and ``PixelMask``: one number for each EIT pixel.
 
 An EIT image is a grid of pixels (rows by columns). Some results give one
-number for every pixel rather than one number for the whole lung: the tidal
+number for every pixel: the tidal
 impedance variation of each pixel in one breath, for example. A
 :class:`PixelMap` holds such a grid.
 
@@ -35,7 +35,7 @@ class PixelMap:
         modality: The device the values were measured with.
         category: The physical quantity the values are derived from (see
             :mod:`m3resp.data.categories`).
-        unit: Unit of the values.
+        unit: Unit of the values, normalized to a recognized spelling.
         method: Name of the method that produced the values.
         metadata: Optional extra information.
 
@@ -54,22 +54,31 @@ class PixelMap:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        """Check the 2D numeric grid, then normalize unit and category names."""
+
         self.values = _as_float_grid(self.values, owner="PixelMap")
         self.unit = normalize_unit(self.unit)
         self.category = normalize_category(self.category) or self.category
 
     @property
     def shape(self) -> tuple[int, int]:
-        """Number of (rows, columns)."""
+        """Return the number of rows and columns, in that order."""
 
         rows, columns = self.values.shape
         return rows, columns
 
     def __array__(self, dtype: Any = None, copy: bool | None = None) -> np.ndarray:
-        # Lets numpy read a PixelMap as its grid, e.g. np.nanmean(pixel_map).
+        """Return the grid as a NumPy array with the requested dtype.
+
+        Conversion follows ``numpy.asarray``; the ``copy`` argument is accepted
+        but does not change how the array is returned.
+        """
+
         return np.asarray(self.values, dtype=dtype)
 
     def __eq__(self, other: object) -> bool:
+        """Compare fields and grids, treating matching NaN pixels as equal."""
+
         if type(other) is not type(self):
             return NotImplemented
         assert isinstance(other, PixelMap)
@@ -84,8 +93,13 @@ class PixelMap:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        """The same content as plain lists and dictionaries, ready to write to
-        a JSON file. The grid becomes a list of rows."""
+        """Return the grid and its descriptive fields as a dictionary.
+
+        Returns:
+            dict[str, Any]: The grid as a list of rows, together with name,
+                modality, category, unit, method and metadata. NaN pixels
+                remain NaN. Metadata is copied at the top level.
+        """
 
         return {
             "name": self.name,
@@ -102,8 +116,8 @@ class PixelMap:
 class PixelMask:
     """Which pixels of an EIT image belong to a region.
 
-    Each pixel holds NaN when it is not part of the region, 1 when it is, or
-    a number between 0 and 1 when it counts only partly (a weight). Applying
+    Each pixel holds NaN when it is outside the region, 1 when it is included,
+    or a weight greater than 0 and less than 1 when it counts partly. Applying
     the mask multiplies each pixel by this number, so a NaN pixel drops out.
 
     A grid of true/false values is accepted too: true becomes 1 and false
@@ -133,6 +147,8 @@ class PixelMask:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        """Convert boolean masks and check grid shape and numeric weights."""
+
         raw = np.asarray(self.values)
         if raw.dtype == bool:
             grid = np.where(raw, 1.0, np.nan)
@@ -157,22 +173,29 @@ class PixelMask:
 
     @property
     def shape(self) -> tuple[int, int]:
-        """Number of (rows, columns)."""
+        """Return the number of rows and columns, in that order."""
 
         rows, columns = self.values.shape
         return rows, columns
 
     @property
     def included_pixel_count(self) -> int:
-        """Number of pixels that are part of the region (not NaN)."""
+        """Return the count of included pixels, including partly weighted pixels."""
 
         return int(np.count_nonzero(~np.isnan(self.values)))
 
     def __array__(self, dtype: Any = None, copy: bool | None = None) -> np.ndarray:
-        # Lets numpy read a PixelMask as its grid.
+        """Return the grid as a NumPy array with the requested dtype.
+
+        Conversion follows ``numpy.asarray``; the ``copy`` argument is accepted
+        but does not change how the array is returned.
+        """
+
         return np.asarray(self.values, dtype=dtype)
 
     def __eq__(self, other: object) -> bool:
+        """Compare fields and grids, treating matching NaN pixels as equal."""
+
         if type(other) is not type(self):
             return NotImplemented
         assert isinstance(other, PixelMask)
@@ -185,8 +208,13 @@ class PixelMask:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        """The same content as plain lists and dictionaries, ready to write to
-        a JSON file. The grid becomes a list of rows."""
+        """Return the mask and its descriptive fields as a dictionary.
+
+        Returns:
+            dict[str, Any]: The grid as a list of rows, together with name,
+                modality, method and metadata. Excluded pixels remain NaN.
+                Metadata is copied at the top level.
+        """
 
         return {
             "name": self.name,
@@ -198,8 +226,11 @@ class PixelMask:
 
 
 def _as_float_grid(values: Any, *, owner: str) -> np.ndarray:
-    """Return ``values`` as a 2D float array, refusing anything that would
-    change on the way (text, or numbers too large for a float)."""
+    """Return a 2D float grid whose values equal the input, including NaNs.
+
+    Conversion that changes a value raises ``TypeError``. A grid with other
+    than two dimensions raises ``ValueError``.
+    """
 
     raw = np.asarray(values)
     try:

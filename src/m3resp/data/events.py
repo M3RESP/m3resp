@@ -492,23 +492,22 @@ def _raise_missing_times(value: Mapping[str, Any], target: str) -> NoReturn:
 def reuse_matching_breaths(
     breaths: Sequence[BreathEvent], stored: Iterable[Any] | None
 ) -> list[BreathEvent]:
-    """Swap each breath for an already stored breath that is the same breath.
+    """Reuse stored breaths with the same modality, start time and end time.
 
-    A stored breath counts as the same breath when it is a `BreathEvent`
-    with the same modality and exactly the same start and end time. Results
-    computed over a breath (a TIV value, say) can then point to the breath
-    object that is already stored, instead of a copy of it. Breaths with no
-    match are kept as they are, and stored items that are not a
-    `BreathEvent` are ignored.
+    Matching uses exact equality of the modality and both times, in seconds
+    on the same time axis. A match uses the stored object's identifier, peak
+    timing and metadata. When several stored breaths match, the last one is
+    used. Only ``BreathEvent`` objects in ``stored`` are considered.
 
     Args:
-        breaths: The breaths a result was computed over.
+        breaths: Breaths to match, in the order required by the result.
         stored: Breaths already stored, e.g. ``session.events["eit_breaths"]``,
             or None.
 
     Returns:
-        The breaths, in the same order, with matches swapped for the stored
-        ones.
+        list[BreathEvent]: Stored matches and unmatched input breaths, in
+            input order. The list holds the original objects, so subsequent
+            changes to a matched breath also affect its stored result.
     """
 
     by_times = {

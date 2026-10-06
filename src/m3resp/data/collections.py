@@ -2,10 +2,8 @@
 `IntervalData` and `PixelMask`, with helpers to pick items by modality,
 category or name. `M3Session` keeps one of each.
 
-Breaths and other events have no collection type here: they already live in
-`session.events` (a `dict[str, list[BreathEvent]]`, see
-`M3Session.add_events`/`get_events`), which older code depends on. A second
-container would split that in two.
+Breaths and other events are stored in `session.events` (see
+`M3Session.add_events`/`get_events`).
 """
 
 from __future__ import annotations
@@ -144,53 +142,70 @@ class QualityReport:
 
 @dataclass
 class IntervalDataCollection:
-    """An ordered collection of `IntervalData` results, e.g. one TIV value
-    per breath."""
+    """An ordered collection of results with values per interval or breath.
+
+    Attributes:
+        items: ``IntervalData`` results in insertion order.
+    """
 
     items: list[IntervalData] = field(default_factory=list)
 
     def add(self, interval_data: IntervalData) -> IntervalData:
-        """Append `interval_data`, unless this exact object is already
-        present (see `SignalCollection.add`)."""
+        """Add and return the result, keeping each object once in insertion order."""
 
         if not any(interval_data is existing for existing in self.items):
             self.items.append(interval_data)
         return interval_data
 
     def for_modality(self, modality: str) -> list[IntervalData]:
-        """Filter by the device the values were measured with."""
+        """Return results whose modality exactly matches the given device name."""
 
         return [item for item in self.items if item.modality == modality]
 
     def for_name(self, name: str) -> list[IntervalData]:
+        """Return results with this exact name, in insertion order."""
+
         return [item for item in self.items if item.name == name]
 
     def __iter__(self) -> Iterator[IntervalData]:
+        """Iterate over results in insertion order."""
+
         return iter(self.items)
 
     def __len__(self) -> int:
+        """Return the number of interval results."""
+
         return len(self.items)
 
 
 @dataclass
 class PixelMaskCollection:
-    """An ordered collection of `PixelMask` objects, e.g. lung-space masks."""
+    """An ordered collection of pixel masks, such as lung-space masks.
+
+    Attributes:
+        items: ``PixelMask`` objects in insertion order.
+    """
 
     items: list[PixelMask] = field(default_factory=list)
 
     def add(self, mask: PixelMask) -> PixelMask:
-        """Append `mask`, unless this exact object is already present (see
-        `SignalCollection.add`)."""
+        """Add and return the mask, keeping each object once in insertion order."""
 
         if not any(mask is existing for existing in self.items):
             self.items.append(mask)
         return mask
 
     def for_name(self, name: str) -> list[PixelMask]:
+        """Return masks with this exact name, in insertion order."""
+
         return [mask for mask in self.items if mask.name == name]
 
     def __iter__(self) -> Iterator[PixelMask]:
+        """Iterate over masks in insertion order."""
+
         return iter(self.items)
 
     def __len__(self) -> int:
+        """Return the number of masks."""
+
         return len(self.items)
