@@ -1356,29 +1356,38 @@ class M3Session:
         duration_pairs: Sequence[tuple[str, str]] | None = None,
         anchor: str = "start",
     ) -> list[ParameterResult]:
-        """Compute timing-delay/duration-difference/event-agreement
-        `ParameterResult`s from `self.linked_breaths` (plan_stage2.md Sec 21).
+        """Compute timing delays, duration differences and event agreement.
 
-        Call `link_breaths` first; an empty `self.linked_breaths` yields an
-        empty result rather than raising. Results are added to
-        `self.parameter_results` and also returned.
+        Call `link_breaths` first. Results are added to
+        `self.parameter_results` and returned, and the calculation is recorded
+        in the processing history. Missing breaths or extremum times are
+        skipped for the affected timing measurements. Agreement results use
+        all linked groups, including groups with missing modalities.
 
         Args:
             delay_pairs (Sequence[tuple[str, str]] | None): Modality pairs to
                 compute the per-breath timing delay for, for example
                 ``[("eit", "emg")]``. Positive means the second modality's
                 breath comes later. None uses every pair of modalities found
-                in the linked breaths.
+                in the linked breaths, in alphabetical order.
             duration_pairs (Sequence[tuple[str, str]] | None): Modality pairs
-                to compute the per-breath duration difference for. None uses
-                every pair of modalities found in the linked breaths.
+                to compute the per-breath duration difference for, as the
+                first modality's duration minus the second's. None uses every
+                pair found in the linked breaths, in alphabetical order.
             anchor (str): Which point of each breath the delay is measured
                 between: ``"start"``, ``"extremum"`` or ``"end"``.
+                Defaults to ``"start"``.
 
         Returns:
             list[ParameterResult]: The timing delays and duration differences
                 per breath (in seconds), and one event-agreement result per
-                delay pair.
+                delay pair as a fraction from 0 to 1. With no linked breaths,
+                default pairs give an empty list; explicit delay pairs give
+                agreement results of 0.
+
+        Raises:
+            ValueError: If anchor is unknown and a requested delay pair has
+                both breaths present.
         """
 
         results = compute_multimodal_parameters(

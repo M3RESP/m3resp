@@ -19,8 +19,9 @@ names are removed:**
 `coerce_breath_event` still reads `peak_time`/`peak_index` from
 dictionaries and objects made by other detectors, with a warning naming the
 new keys. It tries `extremum_time`/`extremum_index` first, then
-`peak_time`/`peak_index`, then eitprocessing's `middle_time`, and takes the
-time and its position from the same pair. Likewise
+`peak_time`/`peak_index`, then eitprocessing's `middle_time`. It selects
+the first pair with either value set and reads both from that pair,
+even if one is `None`. Likewise
 `emg.remove_invalid_breaths` still matches a quality flag carrying the old
 `peak_sample_index`, with a warning.
 

@@ -348,6 +348,34 @@ def pocc_intervals(
     baseline_step_seconds: float = 0.2,
     baseline_percentile: float = 33.0,
 ) -> dict[str, Any]:
+    """Find occluded-breath boundaries from airway-pressure baseline crossings.
+
+    For each pressure minimum, use the preceding and following crossings of
+    a moving percentile baseline. Boundaries and their validity follow
+    `onoff_from_baseline_crossings`; all detections are kept with validity
+    recorded in each event's metadata.
+    Stores the breaths under ``session.events["pocc_breaths"]`` and records
+    the calculation settings in the session's processing history.
+
+    Args:
+        session: Session providing the EMG adapter's moving-baseline calculation
+            and receiving the occluded-breath events and processing history.
+        ventilator_signals: Channel dictionary with ``pressure`` in cmH2O,
+            one value per sample, and ``fs`` in Hz.
+        pocc_indices: Sample positions of occlusion pressure minima, one per
+            manoeuvre.
+        baseline_window_seconds: Duration of each moving-baseline window in seconds.
+        baseline_step_seconds: Time between baseline windows in seconds.
+        baseline_percentile: Pressure percentile within each window, from 0 to 100.
+
+    Returns:
+        dict[str, Any]: Start/end sample arrays, a boolean interval-validity array
+            and a BreathEvent list in pocc_indices order, plus the baseline
+            array in cmH2O. Each breath carries times in seconds from recording
+            start, start/end/extremum indices, and ``event_type="pocc"`` metadata.
+            The extremum is the pressure minimum.
+    """
+
     pressure = np.asarray(ventilator_signals["pressure"], dtype=float)
     fs = float(ventilator_signals["fs"])
     peaks = np.asarray(pocc_indices, dtype=int)
@@ -367,10 +395,9 @@ def pocc_intervals(
         pressure, baseline, peaks
     )
 
-    # A Pocc is an occluded breath: an effort to breathe in against a closed
-    # airway. It is kept as a BreathEvent, not a plain Interval, because it
-    # has a turning point (the deepest pressure, `extremum_index`) that an
-    # Interval has no place for. `metadata["event_type"]` marks it as a Pocc.
+    # A Pocc is an effort to breathe in against a closed airway. Its
+    # BreathEvent records the deepest pressure at extremum_index, with
+    # metadata["event_type"] marking it as a Pocc.
     events: list[BreathEvent] = []
     for index, peak in enumerate(peaks):
         events.append(

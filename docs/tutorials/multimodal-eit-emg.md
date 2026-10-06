@@ -88,9 +88,11 @@ offset (`method="manual_offset"` is currently the only method either accepts).
     minus the EIT breath anchor. Read it as a check on detection and
     alignment, not as an outcome measure. With the default `anchor="start"`
     the two sides are not the same kind of landmark: the EIT start is a
-    detected breath start, while the EMG start is built from the envelope
-    peak by subtracting a fixed half-window (`half_window_seconds`, 0.5 s by
-    default), so changing that setting shifts the delay by the same amount.
+    detected breath start, while default EMG detection initially sets the
+    start and end to the envelope peak time. In that case the delay compares
+    EIT breath onset with peak EMG activity. `emg.onoffpeak_baseline_crossing`
+    returns separate onset/offset arrays and validity flags; these boundaries
+    must be used to construct breath events before comparing measured onsets.
     With `anchor="extremum"` it compares the EIT breath middle against the EMG
     envelope peak. Calling this electromechanical coupling time would need
     the EMG anchor to be diaphragm activation onset and the EIT anchor the
@@ -119,11 +121,11 @@ for p in multimodal_parameters:
         print(p.breath_id, p.value, "s")  # signed delay, EMG relative to EIT
 ```
 
-To compare the turning point of each breath instead of its start, pass
+To compare the turning point of each breath, pass
 `anchor="extremum"`. For EIT this is the breath middle (the impedance
 maximum, end of inspiration); for EMG it is the envelope peak (peak
-activity, which comes before end of inspiration). So the delay is not an
-end-of-inspiration timing difference:
+activity). These signals mark different physiological moments, so this
+delay measures the time between impedance maximum and peak EMG activity:
 
 ```python
 session.compute_multimodal_parameters(anchor="extremum")

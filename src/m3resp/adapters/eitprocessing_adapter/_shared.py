@@ -146,6 +146,13 @@ def filter_pixels_preserving_gaps(
 
 
 def _breath_intervals_to_dicts(breath_intervals: Any) -> list[dict[str, Any]]:
+    """Return one row per EIT breath, preserving times in seconds.
+
+    Read ``breath_intervals.values`` in order and map each breath's
+    ``middle_time`` to ``extremum_time``, using None when it is unavailable.
+    Rows also carry the source ``"eitprocessing.BreathDetection"``.
+    """
+
     return [
         {
             "start_time": breath.start_time,

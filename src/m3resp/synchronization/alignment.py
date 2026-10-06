@@ -1,4 +1,4 @@
-"""Basic Stage 1 modality alignment."""
+"""Align modality timelines using fixed time offsets."""
 
 from __future__ import annotations
 
@@ -40,7 +40,21 @@ def align_events_manual_offset(
 def align_events_manual_offset(
     events: Sequence[Event | Interval], offset_seconds: float
 ) -> list[Any]:
-    """Return copies of events, intervals and breaths shifted by a manual offset."""
+    """Copy events and shift their times by a fixed offset in seconds.
+
+    Args:
+        events: Timestamped events, intervals or breath events.
+        offset_seconds: Offset added to all times; positive moves events later.
+
+    Returns:
+        list: New objects in input order. Event times, interval start/end times
+            and available breath extremum times are shifted. Identifiers,
+            sample indices and sampling rates are preserved; metadata
+            dictionaries are shared with the original objects.
+
+    Raises:
+        TypeError: If an input is not an Event, Interval or BreathEvent.
+    """
 
     offset = float(offset_seconds)
     aligned: list[Any] = []

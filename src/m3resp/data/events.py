@@ -69,8 +69,7 @@ class Interval:
 
     Use it for anything that lasts rather than happens at one instant: an
     occlusion, a period of noise, an expiratory hold, an intervention.
-    :class:`BreathEvent` is an ``Interval`` with one more point inside it, the
-    moment the signal turns from inhalation to exhalation.
+    :class:`BreathEvent` is an ``Interval`` with a signal turning point.
 
     Attributes:
         modality: The device or technique the interval came from, e.g.
@@ -102,9 +101,6 @@ class Interval:
 
     Raises:
         ValueError: If ``end_time`` is before ``start_time``.
-
-    ``start_time``/``end_time`` are always the authoritative, real-world
-    times - they don't need to be recomputed from an index.
     """
 
     modality: str
@@ -138,24 +134,24 @@ class Interval:
 
 @dataclass(kw_only=True)
 class BreathEvent(Interval):
-    """One breath from one modality: an :class:`Interval` with a turning point.
+    """One breath from one modality, with a signal turning point.
 
-    EIT, EMG, and ventilator breath detectors all produce this one type, so
-    breaths from different modalities can be compared and matched. It has
-    every field of :class:`Interval`, with ``name`` always ``'breath'`` (it
-    cannot be set to anything else), plus the two below.
+    EIT, EMG and ventilator detectors produce this type so breaths can be
+    compared across modalities. It includes the fields of :class:`Interval`,
+    with ``name`` fixed to ``"breath"``. The turning point can be a maximum
+    (e.g. impedance or the EMG envelope) or a minimum (e.g. airway pressure
+    during an occlusion). Its physiological meaning depends on the signal
+    and detector.
 
     Attributes:
-        extremum_time: Real-world time of the turning point between
-            inhalation and exhalation. It is called an extremum, not a peak,
-            because the signal can turn at a maximum (impedance, volume, EMG
-            envelope) or at a minimum (esophageal pressure, an occlusion's
-            deepest pressure). ``None`` when the detector didn't report one.
-        extremum_index: Position of ``extremum_time`` in the signal named by
-            ``signal_name``, or ``None``.
+        extremum_time: Turning-point time in seconds on the same time axis as
+            ``start_time`` and ``end_time``, or None when unavailable.
+        extremum_index: Turning-point sample position in ``signal_name``,
+            whose sampling rate is ``sample_frequency``, or None when
+            unavailable.
 
-    Only ``modality``, ``start_time`` and ``end_time`` may be given by
-    position, e.g. ``BreathEvent("eit", 1.0, 2.0, extremum_time=1.5)``.
+    Give fields after ``end_time`` by keyword, e.g.
+    ``BreathEvent("eit", 1.0, 2.0, extremum_time=1.5)``.
     """
 
     name: str = field(default="breath", init=False)
@@ -232,25 +228,39 @@ def coerce_breath_event(
     modality: str | None = None,
     source: str | None = None,
 ) -> BreathEvent:
-    """Turn one breath, written in any of the forms below, into a `BreathEvent`.
+    """Convert a breath description into a `BreathEvent`.
 
-    Accepts a `BreathEvent` (returned as it is), a dictionary, an object with
-    ``start_time``/``end_time`` attributes (such as eitprocessing's
-    ``Breath``, whose ``middle_time`` becomes ``extremum_time``), or a
-    ``(start_time, end_time)`` or ``(start_time, end_time, extremum_time)``
-    sequence. ``modality`` and ``source`` fill in whatever the input does
-    not carry.
+    Turning-point fields are read in this order: ``extremum_time`` and
+    ``extremum_index``, then ``peak_time`` and ``peak_index``, then
+    ``middle_time`` from eitprocessing. The first pair with either value
+    set is used; both values are read from that pair, even if one is None.
+    Reading the older ``peak_*`` fields emits a UserWarning naming the
+    current fields.
 
-    The turning point is read from the first of these that is given:
-    ``extremum_time``/``extremum_index``, then ``peak_time``/``peak_index``
-    (the names older m3resp versions and other detectors use; a warning
-    names the new keys), then eitprocessing's ``middle_time``. The time and
-    its position always come from the same pair, so they point at the same
-    moment.
+    Args:
+        value: A BreathEvent, a mapping or object with ``start_time`` and
+            ``end_time``, or a sequence of two or three values:
+            ``(start_time, end_time[, extremum_time])``. Times are in seconds.
+            Mappings and objects may also supply the other Interval fields.
+            An explicit ``name`` must be ``"breath"``.
+        modality: Modality used when the input's modality is missing or empty.
+            Required for positional sequences.
+        source: Detection method used when the input's source is missing or
+            empty.
+
+    Returns:
+        BreathEvent: The original object if it is already a BreathEvent;
+            otherwise a new breath with numeric times converted to floats.
+            For mappings and objects, the identifier and optional Interval
+            fields are preserved and metadata is copied into a new dictionary.
 
     Raises:
-        ValueError: If the input names itself as something other than a
-            breath, e.g. an ``Interval`` with ``name="occlusion"``.
+        ValueError: If the modality is missing, an explicit name differs from
+            ``"breath"``, required times are missing, the sequence length is
+            wrong, a time cannot be converted to a float, or the end precedes
+            the start.
+        TypeError: If the input form is unsupported or a time has an
+            incompatible type.
     """
 
     if isinstance(value, BreathEvent):
@@ -304,23 +314,37 @@ def coerce_interval(
     modality: str | None = None,
     source: str | None = None,
 ) -> Interval:
-    """Turn one interval, written in any of the forms below, into an `Interval`.
+    """Convert an interval description into an `Interval` or `BreathEvent`.
 
-    Accepts an `Interval` (returned as it is), a dictionary, an object with
-    ``start_time``/``end_time`` attributes (such as eitprocessing's
-    ``Interval``), or a ``(start_time, end_time)`` pair. ``name``,
-    ``modality`` and ``source`` fill in whatever the input does not carry.
+    An input named ``"breath"`` becomes a BreathEvent. A mapping or object
+    with a non-None turning-point field also becomes a BreathEvent when its
+    name is missing or ``"breath"``. Turning-point fields and warnings follow
+    `coerce_breath_event`.
 
-    An input that is a breath (named ``'breath'``, or carrying a turning
-    point in ``extremum_time``, ``extremum_index``, ``peak_time``,
-    ``peak_index`` or ``middle_time``) comes back as
-    a `BreathEvent`, which is also an `Interval`, so the turning point is
-    kept.
+    Args:
+        value: An Interval, a mapping or object with ``start_time`` and
+            ``end_time``, or a ``(start_time, end_time)`` sequence. Times are
+            in seconds. Mappings and objects may carry optional Interval fields.
+        name: Interval name used when the input's name is missing or empty.
+            Required for an ordinary interval; ``"breath"`` creates a breath.
+        modality: Modality used when the input's modality is missing or empty.
+            Required for positional sequences.
+        source: Detection method used when the input's source is missing or
+            empty.
+
+    Returns:
+        Interval: The original object if it is already an Interval, including
+            a BreathEvent; otherwise a new interval or breath with float times.
+            For mappings and objects, the identifier and optional fields are
+            preserved and metadata is copied into a new dictionary.
 
     Raises:
-        ValueError: If the input carries a turning point but is named
-            something other than ``'breath'``: a plain `Interval` has no
-            place to keep that point.
+        ValueError: If a required name, modality or time is missing, the
+            sequence length is wrong, a time cannot be converted to a float,
+            the end precedes the start, or an input with a turning point has
+            a name other than ``"breath"``.
+        TypeError: If the input form is unsupported or a time has an
+            incompatible type.
     """
 
     if isinstance(value, Interval):
@@ -405,12 +429,13 @@ _TURNING_POINT_KEYS: tuple[tuple[str, str | None], ...] = (
 
 
 def _turning_point(value: Any, *, warn: bool = False) -> tuple[Any, Any, str | None]:
-    """The turning point of ``value`` as (time, index, key it was read from).
+    """Read the first available turning-point pair as (time, index, key).
 
-    The first pair in `_TURNING_POINT_KEYS` with a time or an index is used,
-    and both come from that pair, so they never describe different moments.
-    Returns (None, None, None) when there is no turning point. With
-    ``warn=True``, reading the old ``peak_*`` names gives a warning.
+    Pairs follow `_TURNING_POINT_KEYS` order. A pair is selected when either
+    value is non-None; both values come from that pair. The returned key is
+    the time key when its value is present, otherwise the index key.
+    Returns ``(None, None, None)`` when all values are None. With ``warn=True``,
+    selecting the older ``peak_*`` fields emits a UserWarning.
     """
 
     for time_key, index_key in _TURNING_POINT_KEYS:
