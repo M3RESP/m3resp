@@ -120,7 +120,7 @@ def _eit_event_key(variant: str | None) -> str:
 
 
 class M3Session:
-    """Small, explicit session object for Stage 1 multimodal workflows."""
+    """Recordings, processing results and provenance for a multimodal study session."""
 
     def __init__(
         self,
@@ -1398,28 +1398,26 @@ class M3Session:
     def run_preset(
         self, name: str, *, config: Mapping[str, Mapping[str, Any]] | None = None
     ) -> M3Session:
-        """Run a named, built-in preset against this session.
+        """Run a registered preset on this session.
 
-        This is a different mechanism from the module-level
-        ``m3resp.run_workflow(spec, session=...)``, which executes a fully
-        custom declarative step-list spec (the Stage 1 workflow engine in
-        ``m3resp.workflows``). ``session.run_preset(name)`` instead runs one
-        of the small, built-in presets registered in ``m3resp.presets``
-        (``"eit"``, ``"emg"``, ``"multimodal"``), which simply call this
-        session's own already-instrumented methods in sequence - see
-        ``m3resp.presets.base`` for the rationale.
+        The built-in presets are eit, emg and multimodal. Each runs a fixed
+        sequence of session methods or registered steps using the supplied settings.
+        Load the required recordings first; the multimodal preset uses previously
+        detected breaths to store aligned events.
 
         Args:
-            name (str): The preset to run: ``"eit"``, ``"emg"`` or
-                ``"multimodal"``.
-            config (Mapping[str, Mapping[str, Any]] | None): Settings for each
-                step, keyed by step name, for example
-                ``{"preprocess": {"high_pass_hz": 20.0}}`` for the ``"emg"``
-                preset. None uses the
-                preset's defaults.
+            name: Registered preset name.
+            config: Keyword arguments grouped by the preset's configuration keys,
+                e.g. ``{"preprocess": {"high_pass_hz": 20.0}}`` for emg. None uses
+                the preset's defaults. See `m3resp.presets` for the supported groups.
 
         Returns:
-            M3Session: This session, with the results of every step stored.
+            M3Session: This session with results and provenance added by the preset's
+                operations. Changes made before an operation fails remain available.
+
+        Raises:
+            UnknownPresetError: If name is unregistered.
+            MissingModalityDataError: If an operation needs an unavailable recording.
         """
 
         from m3resp.presets import get_preset
@@ -1430,19 +1428,22 @@ class M3Session:
     def export_summary(
         self, output_dir: str | Path, *, processing_run_id: str | None = None
     ) -> Path:
-        """Export the session summary to disk.
+        """Write session tables, JSON summaries and array archives.
+
+        Creates the destination directory and records the export in the session's
+        provenance after writing. See `export_session_summary` for file contents.
 
         Args:
-            output_dir (str | Path): The folder to write the files to. It is
-                created if it does not exist.
-            processing_run_id (str | None): Typically
-                `WorkflowResult.processing_run_id`. Links a written
-                parameter-array archive to the `ProcessingRun` that produced
-                it when a `DataModelRecorder` is attached; omit it for a
-                manual export with no associated workflow run.
+            output_dir: Destination folder; existing export files are replaced.
+            processing_run_id: Optional ProcessingRun identifier, typically from
+                WorkflowResult.processing_run_id. When a data-model recorder is
+                attached, links written array archives to that run.
 
         Returns:
-            Path: The folder the files were written to.
+            Path: Directory containing the exported files.
+
+        Raises:
+            OSError: If the directory or an export file cannot be written.
         """
 
         output_path = export_session_summary(

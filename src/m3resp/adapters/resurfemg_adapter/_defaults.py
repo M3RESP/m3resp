@@ -58,49 +58,41 @@ class _DefaultsMixin:
         notch_quality_factor: float = 30.0,
         notch_before_bandpass: bool = False,
     ) -> dict[str, Any]:
-        """Run the Stage 1 EMG preprocessing workflow through ReSurfEMG.
+        """Band-pass an EMG channel and optionally notch-filter and envelope it.
 
-        ``channel`` is the number of the EMG channel to analyse. When it is
-        left out, the channel is picked from the channel names: a channel
-        named ECG/EKG is never picked, and if more than one channel could be
-        the breathing muscle, an `UnresolvedChannelError` asks for
-        ``channel=`` rather than guessing.
+        ECG gating can be applied to the filtered signal as a subsequent operation.
+        When compute_envelope is False, the envelope settings remain in the output
+        so gating can use them when calculating a new envelope.
 
-        The band-pass defaults to 20-500 Hz, the range respiratory-sEMG
-        literature specifies. The high-pass is deliberately *not* set low
-        enough to double as ECG suppression: removing ECG is the job of a
-        dedicated gating step (``emg.ecg_gating``, which the ``"emg"`` preset
-        runs by default), because a high-pass steep enough to attenuate the
-        QRS complex still leaves its higher-frequency content inside the pass
-        band.
+        Args:
+            recording: Loaded dictionary with a channel-major array
+                (n_channels, n_samples) and metadata containing fs in Hz.
+            channel: Zero-based EMG channel index. When None, channel labels select
+                a breathing-muscle channel, excluding ECG/EKG labels.
+            high_pass_hz: Band-pass lower cutoff in Hz; defaults to 20 Hz.
+            low_pass_hz: Band-pass upper cutoff in Hz. None uses the smaller of
+                500 Hz and 95 percent of the Nyquist frequency.
+            envelope_window_seconds: Envelope window duration in seconds,
+                converted to at least one sample.
+            envelope_method: rms, arv or median absolute-signal envelope.
+            compute_envelope: Calculate the envelope when True.
+            notch_base_frequency: Optional fundamental notch frequency in Hz.
+            notch_max_frequency: Upper harmonic notch frequency in Hz; an unset
+                or zero value uses Nyquist.
+            notch_quality_factor: Quality factor for harmonic notch filters.
+            notch_before_bandpass: Apply the notch to raw data before band-pass
+                filtering when True; otherwise notch the band-passed data.
 
-        ``envelope_method`` selects the envelope computed on the band-passed
-        signal - ``"rms"`` (default), ``"arv"`` or ``"median"`` (median of the
-        absolute signal, which ignores short spikes such as heartbeat
-        leftovers; used for the multidomain results). RMS is what the literature
-        specifies; ARV is kept as an explicit opt-in because it is not an RMS
-        equivalent on real bursty sEMG. The choice is recorded in the returned
-        ``"filter"`` mapping so a later envelope recomputation (e.g. after ECG
-        gating) reuses the same method rather than silently switching.
+        Returns:
+            dict[str, Any]: Recording fields plus channel, fs, raw_channel,
+                filtered signal, optional envelope and filter settings. Signals have
+                one value per sample and retain the selected channel's units.
 
-        ``compute_envelope=False`` skips the envelope. Use it when ECG gating
-        follows: gating replaces the band-passed signal and recomputes the
-        envelope from the gated trace, so one computed here would be thrown
-        away. The window and method are still recorded, so the gating step
-        reuses the settings requested here.
-
-        ``notch_base_frequency`` opts into harmonic notch filtering (e.g.
-        ``50.0`` for mains hum, or a co-recorded EIT device's frame rate, which
-        injects a harmonic comb into the sEMG whenever the EIT device is
-        running simultaneously). It is applied to the band-passed signal, after
-        ``emg_bandpass_butter`` and before the envelope is computed, so a
-        narrow high-pass alone (which only removes the fundamental) doesn't
-        leave higher harmonics inside the pass band untouched.
-
-        ``notch_before_bandpass=True`` applies the notch to the raw signal
-        first and band-passes afterwards (the order used for the multidomain
-        results). Both filters are zero-phase, so the two orders differ only
-        slightly, mostly near the start and end of the signal.
+        Raises:
+            OptionalDependencyError: If ReSurfEMG is unavailable.
+            TypeError: If recording lacks the required array or metadata.
+            UnresolvedChannelError: If channel labels do not select an unambiguous
+                EMG channel and channel is None.
         """
 
         try:

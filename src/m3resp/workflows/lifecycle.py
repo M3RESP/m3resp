@@ -136,17 +136,18 @@ class StepExecutionRecord:
 
 
 class WorkflowExecutionError(RuntimeError):
-    """Wraps a step function's exception with step context (Phase 4.2).
+    """A step failure with its original cause and gathered execution records.
 
-    The original exception remains available as ``__cause__`` (and its
-    message is folded into this error's own message), so scientific detail
-    like "sample frequency must be positive" is never replaced with only
-    "workflow failed."
+    Attributes:
+        step_id: ID of the failing step.
+        position: Zero-based position in the workflow.
+        operation_id: Registered operation name.
+        run_id: Workflow execution identifier, when supplied.
+        started_at: Workflow start time as an ISO 8601 UTC string, when supplied.
+        step_records: Gathered execution records, including the failed step.
 
-    Also carries whatever run-level provenance had already been gathered
-    before the failure (Phase 6.4: a caller writing a run manifest needs
-    this to mark it honestly failed/incomplete, since ``run_workflow``
-    raises instead of returning a ``WorkflowResult`` on failure).
+    The message includes the step and cause message. The original exception
+    is retained as __cause__.
     """
 
     def __init__(
@@ -161,6 +162,8 @@ class WorkflowExecutionError(RuntimeError):
         started_at: str | None = None,
         step_records: tuple[StepExecutionRecord, ...] = (),
     ) -> None:
+        """Attach the failing step, original exception and gathered run records."""
+
         super().__init__(
             f"Step #{position} '{operation_id}' (id={step_id}) failed: {message}"
         )

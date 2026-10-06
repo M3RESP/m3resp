@@ -1,8 +1,7 @@
-"""Named, built-in presets: short, fixed sequences of `M3Session` calls.
+"""Named EIT, EMG and multimodal presets for loaded sessions.
 
-Distinct from ``m3resp.workflows``, the declarative step-registry engine used
-for fully custom YAML/JSON workflows. See ``base.py``'s module docstring and
-``plan/stage2_consolidation.md`` for how the two relate.
+Presets run fixed operation sequences with configurable settings. Use
+m3resp.workflows for custom YAML/JSON workflow descriptions.
 """
 
 from __future__ import annotations

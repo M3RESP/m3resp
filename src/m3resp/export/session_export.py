@@ -35,31 +35,33 @@ def export_session_summary(
     structured_export: bool = True,
     processing_run_id: str | None = None,
 ) -> Path:
-    """Export a minimal CSV/JSON summary for an M3Resp session.
+    """Write session summaries, result tables and array archives.
 
-    ``structured_export`` (Milestone 2.6, plan_stage2.md Sec 22) additionally
-    writes the Layer 1 typed collections (Milestone 2.1/2.2/2.5) each to their
-    own file: ``session_metadata.json``, ``signals_manifest.csv``,
-    ``parameter_results.csv``, ``interval_data.csv``, ``pixel_masks.csv``,
-    ``quality_flags.csv``, ``linked_breaths.csv``, and
-    ``processing_history.json``. These are additive - ``summary.json``
-    and the per-event-list CSVs above are unchanged and keep their Stage 1
-    shape.
+    Creates the output directory and replaces existing export files. Structured
+    exports include session metadata, signal descriptions, parameters, values
+    per interval, pixel masks, quality flags, linked breaths and processing
+    history. Array values and associated timing arrays are stored in NPZ files,
+    with references in the CSV rows.
 
-    Array-valued ``ParameterResult``s (Stage 2 EIT gap migration, Phase 5.3)
-    are written to a shared ``parameter_result_arrays.npz`` archive instead of
-    being serialized into ``parameter_results.csv`` cells. ``processing_run_id``
-    - typically ``WorkflowResult.processing_run_id`` - links that archive to
-    the ``ProcessingRun`` that produced it when a ``DataModelRecorder`` is
-    attached; a manual export with no associated workflow run still writes the
-    archive but leaves it unlinked rather than inventing a run.
+    Args:
+        session: Session supplying metadata, events, parameters, quality,
+            provenance and typed result collections.
+        output_dir: Destination directory.
+        summary_json: Write summary.json, including synchronization settings.
+        event_csvs: Write one CSV for each nonempty event list.
+        parameters_csv: Write parameters.csv when grouped parameters are present.
+        postprocessing: Include emg_postprocessing in the legacy parameter export.
+        structured_export: Write typed result tables, metadata files and NPZ
+            archives for parameter arrays, interval arrays and pixel masks.
+        processing_run_id: Optional stored run identifier, typically from
+            WorkflowResult.processing_run_id. When a data-model recorder is
+            attached, links written NPZ archives to this ProcessingRun.
 
-    Values per breath (`IntervalData`, e.g. TIV and EELI) go to
-    ``interval_data.csv``, with each result's metadata in
-    ``interval_data_metadata.json`` and array values, such as a pixel map per
-    breath, in ``interval_data_arrays.npz``. Pixel masks go to
-    ``pixel_masks.csv`` and their grids to ``pixel_masks.npz``. All three
-    ``.npz`` archives are linked to the ``ProcessingRun`` the same way.
+    Returns:
+        Path: Destination directory containing the requested export files.
+
+    Raises:
+        OSError: If a directory or export file cannot be written.
     """
 
     output_path = Path(output_dir)

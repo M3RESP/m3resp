@@ -120,6 +120,12 @@ Each `SignalStream` also records how its recording was synchronized
 (`sync_method`, `time_offset_ms`), copied from the session; see
 [synchronization.md](synchronization.md).
 
+Each stored `ProcessingRun` has a `name` and a `kind`: `workflow` for an
+engine run, `step` for an explicitly recorded `ProcessingStep`, or
+`session_action` for a session method call. `version` can record the
+workflow or operation version. `run_time` is a Unix timestamp in seconds;
+`parameter_file_ids` links exported array archives to the run.
+
 ```python
 from m3resp.datamodel.recorder import DataModelRecorder
 
