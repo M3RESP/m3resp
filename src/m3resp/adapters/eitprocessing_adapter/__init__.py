@@ -1,11 +1,7 @@
-"""Adapter boundary for the upstream `eitprocessing` package.
+"""Load and process EIT recordings through eitprocessing.
 
-This package mirrors the former single ``eitprocessing_adapter.py`` module,
-with standalone helper functions factored out into ``_shared.py`` for
-readability; ``EITProcessingAdapter`` itself is unchanged. ``add_to_collection``,
-``continuous_data_to_signal``, ``breath_intervals_to_breath_events`` and
-``sparse_data_to_interval_data`` are re-exported here so ``from m3resp.adapters.eitprocessing_adapter import
-<name>`` keeps working unchanged.
+Conversion helpers produce m3resp signals, breath events, rate parameters and
+values per breath from eitprocessing results.
 """
 
 from __future__ import annotations
@@ -203,9 +199,21 @@ class EITProcessingAdapter:
     def find_breaths(
         self, timing_data: Any, *, minimum_duration_seconds: float = 2 / 3
     ) -> Any:
-        """Detect breaths on an impedance waveform (global or regional) with eitprocessing's
-        `BreathDetection`, the same way `find_pixel_breaths` does before it
-        looks at each pixel."""
+        """Detect breaths on a global or regional impedance waveform.
+
+        Args:
+            timing_data: eitprocessing ``ContinuousData`` containing the
+                waveform and its time axis in seconds.
+            minimum_duration_seconds: Minimum separation used by the breath
+                detector, in seconds.
+
+        Returns:
+            eitprocessing.IntervalData: Detected breaths with start, middle
+                and end times on the waveform's time axis.
+
+        Raises:
+            OptionalDependencyError: If eitprocessing is unavailable.
+        """
 
         (BreathDetection,) = _lazy_import(
             "eitprocessing.features.breath_detection.BreathDetection"
@@ -360,10 +368,22 @@ class EITProcessingAdapter:
         min_region_size: int = 10,
         connectivity: Literal[1, 2] | np.ndarray = 1,
     ) -> Any:
-        """Keep only connected mask regions at or above `min_region_size`.
+        """Keep mask regions containing at least the specified number of pixels.
 
-        Accepts either an upstream `PixelMask` or the m3resp `PixelMask` the
-        mask steps produce, so a workflow can bind whichever form it has.
+        Args:
+            mask: An eitprocessing or m3resp ``PixelMask``, or a 2D numeric
+                grid with NaN for excluded pixels.
+            min_region_size: Minimum number of connected pixels to retain.
+            connectivity: ``1`` joins edge neighbours; ``2`` also joins
+                diagonal neighbours. A custom connection array is accepted.
+
+        Returns:
+            eitprocessing.PixelMask: Mask with small connected regions removed.
+
+        Raises:
+            OptionalDependencyError: If eitprocessing is unavailable.
+            UnsupportedWorkflowError: If the mask cannot be converted to a
+                2D numeric grid.
         """
 
         (FilterROIBySize,) = _lazy_import(
@@ -375,15 +395,23 @@ class EITProcessingAdapter:
         ).apply(self.as_pixel_mask(mask))
 
     def as_pixel_mask(self, mask: Any) -> Any:
-        """Return `mask` as an upstream `PixelMask`.
+        """Convert a mask to eitprocessing's ``PixelMask`` representation.
 
-        An upstream `PixelMask` is passed through. An m3resp `PixelMask`, or
-        a plain 2D array, is rebuilt into one: excluded pixels are NaN in
-        both, so nothing is reinterpreted on the way across.
+        Args:
+            mask: An eitprocessing ``PixelMask``, an m3resp ``PixelMask``, or
+                a 2D numeric array, list or tuple. Numeric grids use NaN for
+                excluded pixels and positive weights for included pixels.
+
+        Returns:
+            eitprocessing.PixelMask: An existing object with a ``mask``
+                attribute is returned unchanged. Other inputs are converted
+                to a float grid in row-column order.
 
         Raises:
-            UnsupportedWorkflowError: If ``mask`` is none of these, or is not
-                a 2D grid of numbers.
+            UnsupportedWorkflowError: If the input has an unsupported type
+                or cannot be converted to a 2D numeric grid.
+            OptionalDependencyError: If conversion requires eitprocessing
+                and it is unavailable.
         """
 
         if hasattr(mask, "mask"):
@@ -685,9 +713,21 @@ class EITProcessingAdapter:
         return signals
 
     def to_parameters(self, preprocessed: dict[str, Any]) -> list[ParameterResult]:
-        """Convert the respiratory and heart rate into `ParameterResult`
-        objects. TIV and EELI have one value per breath and are converted by
-        `to_interval_data` instead."""
+        """Convert available respiratory and heart rates to ``ParameterResult``.
+
+        Args:
+            preprocessed: Preprocessing output with optional
+                ``respiratory_rate_hz`` and ``heart_rate_hz`` entries, in Hz.
+
+        Returns:
+            list[ParameterResult]: Available numeric rates in respiratory-rate,
+                heart-rate order, tagged with unit ``Hz``. Missing entries
+                are omitted.
+
+        Raises:
+            ValueError: If a supplied rate cannot be converted to a number.
+            TypeError: If a supplied rate has an unsupported type.
+        """
 
         parameters: list[ParameterResult] = []
 
@@ -722,13 +762,25 @@ class EITProcessingAdapter:
         *,
         stored_breaths: Iterable[Any] | None = None,
     ) -> list[IntervalData]:
-        """Convert the per-breath TIV, EELI and pixel TIV into `IntervalData`,
-        each value next to the breath it was computed over.
+        """Convert per-breath TIV, EELI and pixel TIV into ``IntervalData``.
 
-        `preprocess` computes all three over the breaths it stores as
-        ``"breath_intervals"`` (same detector, same signal), so those breaths
-        are used as the intervals. A breath that is also in
-        ``stored_breaths`` (same start and end time) is that stored breath.
+        Args:
+            preprocessed: Preprocessing output with optional ``continuous_tiv``,
+                ``eeli`` and ``pixel_tiv`` results and their ``breath_intervals``.
+                Each result must have one value per detected breath, in the
+                same order. Units are taken from each result.
+            stored_breaths: Existing breaths to reuse when modality and exact
+                start and end times match. ``None`` uses newly converted breaths.
+
+        Returns:
+            list[IntervalData]: Available results in TIV, EELI, pixel-TIV
+                order, sharing their breath objects. Pixel TIV values are
+                ``PixelMap`` objects with row-column grids. An empty list is
+                returned when all three results are absent.
+
+        Raises:
+            ValueError: If results lack ``breath_intervals``, value and breath
+                counts differ, or pixel grids have other than two dimensions.
         """
 
         per_breath = [

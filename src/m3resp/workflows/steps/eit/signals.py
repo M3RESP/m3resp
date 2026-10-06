@@ -64,6 +64,18 @@ def global_impedance(
     *,
     eit_sequence: Any,
 ) -> dict[str, Any]:
+    """Sum pixel impedance into a waveform and add it to the EIT sequence.
+
+    Args:
+        signal: eitprocessing pixel data with time, row and column axes.
+        eit_sequence: Sequence whose continuous-data collection receives
+            the summed impedance waveform.
+
+    Returns:
+        dict[str, Any]: ``global_impedance`` containing the upstream waveform
+            with its time axis and impedance unit.
+    """
+
     summed = signal.get_summed_impedance()
     add_to_collection(eit_sequence.continuous_data, summed)
     return {"global_impedance": summed}
@@ -114,6 +126,19 @@ def global_impedance(
     ),
 )
 def detect_breaths(signal: Any, *, min_duration_s: float = 2 / 3) -> dict[str, Any]:
+    """Detect breaths on an impedance waveform with eitprocessing.
+
+    Args:
+        signal: Global or regional impedance waveform with times in seconds.
+        min_duration_s: Minimum separation used by the breath detector,
+            in seconds.
+
+    Returns:
+        dict[str, Any]: ``breath_intervals`` as upstream detected breaths and
+            ``breath_detector`` as the configured detector for later steps.
+            Breath times retain the waveform's time axis.
+    """
+
     from eitprocessing.features.breath_detection import BreathDetection
 
     detector = BreathDetection(minimum_duration=min_duration_s)
@@ -216,6 +241,27 @@ def continuous_tiv(
     breath_detector: Any,
     session: M3Session,
 ) -> dict[str, Any]:
+    """Compute tidal impedance variation (TIV) for each detected breath.
+
+    The upstream result is added to the sequence's sparse-data collection.
+    Values paired with their breaths are added to ``session.interval_data``,
+    and the processing step is recorded in the session's history.
+
+    Args:
+        signal: Global or regional impedance waveform to measure.
+        eit_sequence: Sequence that stores the upstream result.
+        breath_detector: Detector used to identify breaths on ``signal``.
+        session: Session that stores the per-breath values and history.
+
+    Returns:
+        dict[str, Any]: ``continuous_tiv`` as upstream sparse data and
+            ``continuous_tiv_result`` as ``IntervalData`` with one value per
+            breath, in detector order and in the signal's impedance unit.
+
+    Raises:
+        ValueError: If the numbers of values and detected breaths differ.
+    """
+
     from eitprocessing.parameters.tidal_impedance_variation import TIV
 
     result: Any = TIV(breath_detection=breath_detector).compute_parameter(
@@ -313,6 +359,28 @@ def eeli(
     session: M3Session,
     result_label: str = "continuous_eelis",
 ) -> dict[str, Any]:
+    """Compute end-expiratory lung impedance (EELI) for each detected breath.
+
+    The upstream result is stored in the EIT sequence. Values paired with
+    their breaths are added to ``session.interval_data``, and the processing
+    step is recorded in the session's history.
+
+    Args:
+        signal: Global or regional impedance waveform to measure.
+        eit_sequence: Sequence that stores the upstream result.
+        breath_detector: Detector used to identify breaths on ``signal``.
+        session: Session that stores the per-breath values and history.
+        result_label: Name used for the upstream and per-breath results.
+
+    Returns:
+        dict[str, Any]: ``eeli`` as upstream sparse data and ``eeli_result``
+            as ``IntervalData`` with one value per breath, in detector order
+            and in the signal's impedance unit.
+
+    Raises:
+        ValueError: If the numbers of values and detected breaths differ.
+    """
+
     result = session.eit_adapter.compute_eeli(
         signal,
         sequence=eit_sequence,

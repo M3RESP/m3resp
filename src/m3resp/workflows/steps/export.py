@@ -181,6 +181,28 @@ def session_summary(
     postprocessing: bool = True,
     structured_export: bool = True,
 ) -> dict[str, Any]:
+    """Export session summaries and scientific results to a directory.
+
+    Args:
+        session: Session containing the results to export.
+        output_dir: Directory to create and write into. Existing export files
+            with the same names are overwritten.
+        summary_json: Write ``summary.json``.
+        event_csvs: Write a CSV for each populated event list.
+        parameters_csv: Write the parameter-group table.
+        postprocessing: Include EMG postprocessing in the summary and
+            parameter-group table.
+        structured_export: Write the scientific collection tables and their
+            array archives; see ``export_session_summary``.
+
+    Returns:
+        dict[str, Any]: ``output_dir`` as the path used for the export.
+
+    Raises:
+        ValueError: If per-interval array values have different shapes.
+        OSError: If the directory or files cannot be written.
+    """
+
     target = Path(output_dir)
     target.mkdir(parents=True, exist_ok=True)
     export_session_summary(
@@ -285,12 +307,29 @@ def rotarc_result(
     *,
     precision: int = 8,
 ) -> dict[str, Any]:
-    """Derives the output path from the spec's ``experiment:`` and ``outputs:`` sections.
+    """Write a ROTARC breath-duration result and export the session beside it.
 
-    Output path: ``<outputs.dir>/[<timestamp>/]subject_results/<run_identifier>/<subject>-<mode>-<tp>-<selection>.txt``.
-    The optional timestamp segment is included when ``outputs.timestamped`` is
-    set - see ``_resolved_output_dir`` in ``run_spec`` for how it's computed
-    once per run and shared across every export step.
+    Results are stored in ``subject_results`` under the run identifier,
+    within the resolved output directory. The text filename identifies the
+    subject, mode, timepoint and selection. ``rotarc_summary.json`` records
+    those fields and the result value.
+
+    Args:
+        value: Dimensionless coefficient of variation of breath duration.
+        _spec_outputs: Workflow output settings controlling the session export.
+        _spec_experiment: Subject, mode, timepoint, selection and run identifier.
+        _resolved_output_dir: Output root resolved for this run, including a
+            timestamp when requested by the workflow.
+        session: Session whose scientific results are exported with the value.
+        precision: Number of digits after the decimal point in the text file.
+
+    Returns:
+        dict[str, Any]: ``result_path`` pointing to the text result file.
+
+    Raises:
+        ValueError: If the output root, subject identifier or run identifier
+            is missing, or per-interval arrays have different shapes.
+        OSError: If the output files cannot be written.
     """
 
     from m3resp.workflows.utils import subject_result_filename

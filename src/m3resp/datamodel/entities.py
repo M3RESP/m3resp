@@ -328,21 +328,31 @@ ProcessingStatus = Literal["pending", "running", "succeeded", "failed"]
 
 
 class ProcessingRun(Entity):
-    """One execution of a processing pipeline (doc Sec 7.10)."""
+    """One recorded execution of a processing workflow.
+
+    Attributes:
+        processing_run_id: Identifier of this run, generated automatically.
+        pipeline_name: Name of the workflow that ran.
+        pipeline_version: Optional workflow version.
+        code_commit_hash: Optional Git commit identifying the code used.
+        input_file_ids: Identifiers of the input file records.
+        parameter_file_ids: Identifiers of exported array-results files,
+            such as per-breath pixel maps and masks.
+        run_time: Run timestamp in Unix epoch seconds, UTC.
+        operator_ref: Optional name or identifier of the person running it.
+        status: ``'pending'``, ``'running'``, ``'succeeded'`` or ``'failed'``.
+        error: Optional description of a failure.
+        parameters: Settings used by the workflow.
+    """
 
     processing_run_id: str = Field(default_factory=lambda: new_id("run"))
     pipeline_name: str
     pipeline_version: str | None = None
     code_commit_hash: str | None = None
     input_file_ids: list[str] = Field(default_factory=list)
-    # The files holding this run's array results (role "parameter"), e.g.
-    # parameter_result_arrays.npz, interval_data_arrays.npz, pixel_masks.npz.
-    # A list, because one run can write several of them.
     parameter_file_ids: list[str] = Field(default_factory=list)
     run_time: float = Field(default_factory=_utc_now_ts)
     operator_ref: str | None = None
-    # Beyond the doc: forward-compat for the Task Runner / Error Handler
-    # components in the roadmap image (see module docstring).
     status: ProcessingStatus = "succeeded"
     error: str | None = None
     parameters: dict[str, Any] = Field(default_factory=dict)

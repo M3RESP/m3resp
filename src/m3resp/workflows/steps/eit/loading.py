@@ -154,6 +154,33 @@ def load(
     max_frames: int | None = None,
     loader_options: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Load an EIT recording and add its raw signals to the session.
+
+    Loading and signal conversion are recorded in the session's history.
+
+    Args:
+        session: Session that loads and stores the recording and signals.
+        file_path: EIT recording to read.
+        vendor: Device maker passed to the file reader; ``None`` uses its default.
+        sample_frequency: Sampling rate in Hz; ``None`` uses the reader's value.
+        first_frame: Index of the first frame to read, starting at zero.
+        max_frames: Maximum number of frames to read; ``None`` reads to the end.
+        loader_options: Additional file-reader settings. Sampling rate and
+            frame limits are supplied through the parameters above.
+
+    Returns:
+        dict[str, Any]: ``raw_eit`` pixel data, ``raw_global_impedance`` waveform,
+            ``eit_sequence``, and the m3resp signals
+            ``raw_global_impedance_signal`` and ``raw_pixel_impedance_signal``.
+            Pixel signal values have time, row and column axes. Signals retain
+            the recording's times, sampling rate and impedance unit.
+
+    Raises:
+        TypeError: If ``loader_options`` is other than a mapping.
+        ValueError: If ``loader_options`` includes ``sample_frequency``,
+            ``first_frame`` or ``max_frames``.
+    """
+
     if loader_options is not None and not isinstance(loader_options, Mapping):
         raise TypeError(
             "eit.load 'loader_options' must be a mapping of keyword arguments "
