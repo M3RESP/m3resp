@@ -97,7 +97,7 @@ offset (`method="manual_offset"` is currently the only method either accepts).
     start of volume change, defined consistently and validated against each
     other; that is separate work.
   - `eit_emg_duration_difference` (per breath, seconds): how much longer one
-    modality's breath is than the other's.
+    EIT breath is than its matched EMG breath: EIT duration minus EMG duration.
   - `eit_emg_event_agreement` (aggregate, fraction): of the breaths EIT or
     EMG found, how many both found. A quality check on detection and
     synchronization, not an outcome measure.
@@ -135,6 +135,10 @@ care about), pass `delay_pairs`/`duration_pairs` explicitly:
 ```python
 session.compute_breath_timing_parameters(delay_pairs=[("emg", "eit")], duration_pairs=[])
 ```
+
+This call stores EMG-to-EIT delays and agreement. `duration_pairs=[]` disables
+duration differences. Each successful call replaces the previous timing
+results, including those from another anchor or pair selection.
 
 ## The one-call preset for the synchronization half
 

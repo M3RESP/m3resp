@@ -123,14 +123,10 @@ def _stream_key(
 
 
 def _instrument_of(signal: Signal) -> str | None:
-    """Which instrument recorded this signal, when more than one did.
+    """Return the instrument qualifier after __ in a signal's channel key.
 
-    When a study records the same quantity on two instruments, the
-    non-primary recording's channels are qualified with its name
-    (``airway_pressure__pod`` rather than ``airway_pressure``, see
-    ``M3Session.preprocess_ventilator``). That qualifier is the instrument,
-    and it still decides the ``Device`` record. The stream keys themselves
-    are qualified by the full channel, which already tells the two apart.
+    For example, airway_pressure__pod yields "pod" for the Device record. A
+    channel key without a qualifier returns None.
     """
 
     channel = signal.channel

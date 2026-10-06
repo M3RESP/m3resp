@@ -1,15 +1,8 @@
-"""Native ventilator preprocessing and breath detection defaults.
+"""Ventilator channel extraction and breath detection defaults.
 
-Unlike the EIT and EMG adapters, this one has no upstream library to wrap:
-neither `eitprocessing` nor `resurfemg` implements ventilator preprocessing, so
-there was nothing to borrow. These defaults are therefore native from the
-start, built on :mod:`m3resp.processing.filters` and
-:mod:`m3resp.processing.peaks` - the direction Stage 3 takes for every
-operation.
-
-Preprocessing does not filter unless asked to. Low-passing pressure, flow and
-volume is not standard practice, so applying it by default would imply an
-endorsement this library does not make; pass ``lowpass_hz`` to opt in.
+Preprocessing extracts named channels with recorded units. Supplying lowpass_hz
+applies a Butterworth low-pass filter to each selected channel. Breath detection
+uses the volume channel.
 """
 
 from __future__ import annotations
@@ -24,15 +17,8 @@ from m3resp.processing.peaks import detect_ventilator_breath_peaks
 
 from ._channels import DEFAULT_CHANNELS, primary_channel, split_channels
 
-#: A conservative low-pass cutoff for ventilator channels, in Hz, offered as a
-#: starting point for callers who want to denoise.
-#:
-#: It is *not* applied unless requested and is *not* a clinical parameter:
-#: respiratory waveform content sits below roughly 5 Hz, so a 20 Hz cutoff
-#: removes sensor and quantization noise while leaving breath morphology
-#: (including the sharp pressure upstroke that Pocc quality assessment
-#: measures) untouched. Pass ``lowpass_hz=SUGGESTED_LOWPASS_HZ``, or any other
-#: cutoff, to use it.
+#: Suggested low-pass cutoff in Hz, applied when passed as lowpass_hz.
+#: Choose a cutoff appropriate for the waveform features being studied.
 SUGGESTED_LOWPASS_HZ = 20.0
 
 #: Butterworth order used when a low-pass cutoff is requested.
@@ -55,21 +41,37 @@ class _DefaultsMixin:
         lowpass_hz: float | None = None,
         filter_order: int = DEFAULT_FILTER_ORDER,
     ) -> dict[str, Any]:
-        """Split a ventilator recording into channels, filtering only if asked.
+        """Extract selected ventilator channels and optionally low-pass filter them.
 
-        Every channel `split_channels` resolved is kept, not a fixed three, so
-        a recording carrying esophageal or transpulmonary pressure survives
-        preprocessing.
+        Channel selection, explicit zero-based indices, origin, qualification and fs
+        in Hz follow `split_channels`. The default selection is airway_pressure, flow
+        and volume. All selected channels and their recorded units are retained.
 
-        No filter is applied unless ``lowpass_hz`` is given. Without it the
-        bundle holds the values exactly as the ventilator recorded them, under
-        both ``"raw"`` and each channel's own key, ``"filtered"`` is empty and
-        every signal stays ``"raw"``.
+        Args:
+            recording (Any): Recording or (channels, samples) array accepted by
+                `split_channels`.
+            channels (Any): Requested channel names.
+            airway_pressure_channel (int | None): Explicit airway-pressure index.
+            flow_channel (int | None): Explicit flow index.
+            volume_channel (int | None): Explicit volume index.
+            channel_indices (dict[str, int] | None): Indices for requested channels.
+            origin (str | None): Instrument or file name for channel metadata.
+            qualify (bool): Add origin to channel keys when supplied.
+            fs (float | None): Sampling rate in Hz, overriding metadata fs.
+            lowpass_hz (float | None): Low-pass cutoff in Hz. None returns copied raw
+                values. A supplied cutoff is limited to 95% of the Nyquist frequency
+                (half the sampling rate).
+            filter_order (int): Positive Butterworth order. Defaults to 4.
 
-        With a cutoff, every resolved channel is low-passed: the filtered
-        arrays appear under each channel's own key and under ``"filtered"``,
-        the unfiltered ones stay under ``"raw"`` - the same arrangement as the
-        EMG bundle's ``raw_channel``/``filtered``/``envelope``.
+        Returns:
+            dict[str, Any]: Channel bundle with original arrays under raw and copies
+                or filtered arrays at each channel key and under channels. With a
+                cutoff, filtered contains those filtered arrays; otherwise it is empty.
+                The filter mapping records the requested and applied cutoffs and order.
+
+        Raises:
+            UnresolvedChannelError: If a selected channel cannot be found.
+            ValueError: If a requested filter has invalid parameters or input samples.
         """
 
         bundle = split_channels(

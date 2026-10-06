@@ -296,6 +296,53 @@ class _DefaultsMixin:
         aub_window_seconds: float = 5.0,
         selected_functions: dict[str, dict[str, bool]] | None = None,
     ) -> dict[str, Any]:
+        """Compute selected EMG breath features and quality measurements.
+
+        Uses breath extrema from events and the envelope's own sampling rate. Results
+        are grouped under baseline, event_detection, features and quality_assessment.
+        Computations lacking required inputs are listed in skipped with a reason.
+        Missing upstream postprocessing support returns an unavailable result.
+
+        Args:
+            processed_emg (Any): Preprocessing dict with a one-dimensional envelope
+                and fs in Hz. Features retain the envelope's amplitude units.
+            events (Sequence[BreathEvent] | None): Detected EMG breaths. Extrema in
+                seconds are converted to EMG sample indices.
+            ventilator (Any | None): Optional recording dict or array of channels by
+                samples. Channel resolution follows `ventilator_signals`.
+            ventilator_airway_pressure_channel (int | None): Explicit zero-based
+                airway-pressure index, overriding label resolution.
+            ventilator_flow_channel (int | None): Explicit zero-based flow index.
+            ventilator_volume_channel (int | None): Explicit zero-based volume index.
+            ventilator_fs (float | None): Ventilator sampling rate in Hz, overriding
+                the recording metadata.
+            ventilator_breath_width_seconds (float): Minimum volume-peak width in
+                seconds for ventilator breath detection. Defaults to 0.5.
+            peep (float | None): PEEP in the airway-pressure channel's units. None
+                estimates it from pressure at end-expiratory volume minima.
+            baseline_window_seconds (float): Moving-baseline window in seconds.
+                Defaults to 30.0.
+            baseline_step_seconds (float): Baseline calculation step in seconds.
+                Defaults to 1.0.
+            baseline_percentile (float): Baseline percentile from 0 to 100.
+                Defaults to 33.0.
+            slope_window_seconds (float): Window in seconds for estimating breath
+                boundaries from slopes. Defaults to 0.5.
+            aub_window_seconds (float): Window in seconds for the area-under-baseline
+                calculation. Defaults to 5.0.
+            selected_functions (dict[str, dict[str, bool]] | None): Computations to
+                enable within each group. None uses the adapter's default selection.
+
+        Returns:
+            dict[str, Any]: Available computations, computed values, skip reasons,
+                EMG peak_indices and settings.
+
+        Raises:
+            UnsupportedWorkflowError: If processed_emg lacks an envelope dictionary.
+            TypeError: If supplied ventilator data lacks an array or sampling rate.
+            UnresolvedChannelError: If a requested ventilator channel cannot be found.
+        """
+
         try:
             import numpy as np
         except ImportError as exc:
@@ -612,14 +659,7 @@ class _DefaultsMixin:
                     "Needs ventilator breath timing."
                 )
 
-            # Deliberately independent of 'evaluate_event_timing' above: its
-            # only real prerequisite is that 'ventilator_respiratory_rate' was
-            # computed (near the top of this function), which does not
-            # require 'evaluate_event_timing' to be selected. Nesting this
-            # under that block previously meant selecting
-            # 'evaluate_respiratory_rates' alone (without also selecting
-            # 'evaluate_event_timing') silently produced nothing - no result,
-            # no skip reason.
+            # Comparing rates requires the ventilator respiratory rate.
             if (
                 enabled(("quality_assessment", "evaluate_respiratory_rates"))
                 and "ventilator_respiratory_rate" in computed["quality_assessment"]

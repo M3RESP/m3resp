@@ -255,6 +255,33 @@ def butterworth_filter(
     order: int = 4,
     label: str = "filtered",
 ) -> dict[str, Any]:
+    """Apply a zero-phase Butterworth filter to EIT pixel signals.
+
+    Args:
+        signal (Any): Upstream EIT data with pixel_impedance, sample_frequency
+            in Hz, and time along the first axis.
+        eit_sequence (Any): Sequence receiving the filtered EIT data.
+        session (M3Session): Session receiving the filtered Signal and provenance.
+        mode (ButterworthFilterType): "lowpass", "highpass", "bandpass", or
+            "bandstop". Defaults to "lowpass".
+        lowpass_hz (float): Upper cutoff in Hz. Defaults to 1.0; used for lowpass,
+            bandpass and bandstop modes.
+        highpass_hz (float): Lower cutoff in Hz. Defaults to 0.05; used for
+            highpass, bandpass and bandstop modes. Both band cutoffs must be
+            positive, ordered and below half the sampling rate.
+        order (int): Positive Butterworth order. Defaults to 4.
+        label (str): Label for the filtered copy. Defaults to "filtered".
+
+    Returns:
+        dict[str, Any]: filtered_eit upstream data, filter_captures diagnostics,
+            and filtered_eit_signal. Values retain their shape, units and time
+            coordinates. Pixels with only missing samples remain missing.
+
+    Raises:
+        ValueError: If a pixel has gaps among otherwise present samples, or the
+            filter parameters are invalid.
+    """
+
     from eitprocessing.filters.butterworth_filters import ButterworthFilter
 
     # One edge for the single-sided modes, both edges for the two-sided ones.

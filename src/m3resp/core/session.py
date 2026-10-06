@@ -486,45 +486,39 @@ class M3Session:
         overwrite: bool = False,
         **kwargs: Any,
     ) -> Any:
-        """Split and filter the ventilator channels through the adapter.
+        """Extract ventilator channels and optionally apply a low-pass filter.
 
-        Splits the recording into its pressure, flow and volume channels and
-        low-passes each one. See `preprocess_eit` for what
-        `variant`/`overwrite`/`allow_overwrite` do - the result persists under
-        `session.processed_variants["ventilator"][variant]`, an already
-        populated variant raises `VariantAlreadyExistsError` unless one of the
-        two overwrite flags is set, and the result is mirrored onto
-        `session.processed["ventilator"]` only when the variant is
-        `"default"`.
-
-        Unlike its EIT/EMG siblings this runs native code rather than an
-        upstream library: nothing in `eitprocessing`/`resurfemg` preprocesses
-        ventilator data, which is why these channels used to be consumed
-        unfiltered.
+        Stores the result in `processed_variants["ventilator"]`, adds signals,
+        parameters and quality flags from the adapter, and records provenance.
+        Updates the recording's `airway_pressure`, `flow`, `volume` and `fs` fields.
+        The default and primary-recording variants also update
+        `processed["ventilator"]`.
 
         Args:
-            name (str | None): Which loaded recording to preprocess when a
-                study recorded ventilator data on more than one instrument
-                (see `load_ventilator`). A non-primary recording's channel
-                keys are qualified with its name - ``airway_pressure__pod``
-                rather than ``airway_pressure`` - so its airway pressure does not collide
-                with the primary recording's in `session.signals`. None
-                preprocesses the primary recording.
-            variant (str | None): Name to store this result under. Defaults
-                to `name`, so each recording lands in its own slot rather
-                than overwriting, and to ``"default"`` when `name` is None.
-            overwrite (bool): Replace a result already stored under the same
-                name.
-            **kwargs (Any): Passed on to `VentilatorAdapter.preprocess`:
-                ``lowpass_hz`` sets the cut-off in Hz, with
-                ``lowpass_hz=None`` skipping the filter, and ``preprocess=``
-                replaces the whole step with a function of your own. See
-                `m3resp.adapters.ventilator_adapter` for the defaults.
+            name (str | None): Loaded recording to preprocess. None selects the
+                primary recording. Other recordings get channel keys ending in
+                their name, such as "airway_pressure__pod".
+            variant (str | None): Name for the stored result. Defaults to the
+                recording name supplied in `name`, or "default" when name is None.
+            overwrite (bool): Allow replacement of an existing variant. The
+                session's `allow_overwrite` setting also allows replacement.
+            **kwargs (Any): Options for `VentilatorAdapter.preprocess`, including
+                `channels`, explicit channel indices, `fs` in Hz, `lowpass_hz`
+                in Hz, and `filter_order`. The default selection is airway_pressure,
+                flow and volume. With lowpass_hz=None, values retain their recorded
+                units and are copied into the channel arrays. `preprocess` may
+                supply a custom function.
 
         Returns:
-            Any: The preprocessing result, a dictionary with one filtered
-                signal per channel (airway_pressure, flow, volume) and the sampling
-                rate ``"fs"`` in Hz.
+            Any: Adapter result. The default result contains channel arrays,
+                raw and filtered channel mappings, per-channel units, and `fs`
+                in Hz. Filtering is applied when lowpass_hz is supplied.
+
+        Raises:
+            MissingModalityDataError: If the selected recording is unavailable.
+            VariantAlreadyExistsError: If the variant exists and overwriting is
+                disabled.
+            UnresolvedChannelError: If a requested channel cannot be found.
         """
 
         primary = self.primary_ventilator_name()
@@ -1361,31 +1355,35 @@ class M3Session:
         duration_pairs: Sequence[tuple[str, str]] | None = None,
         anchor: str = "start",
     ) -> list[ParameterResult]:
-        """Compute timing-delay/duration-difference/event-agreement
-        `ParameterResult`s from `self.linked_breaths`.
+        """Compute and store breath timing measures from `linked_breaths`.
 
-        Call `link_breaths` first; an empty `self.linked_breaths` yields an
-        empty result rather than raising. Results are added to
-        `self.parameter_results` and also returned. Calling this again
-        replaces the results of the earlier call, so each breath has one
-        delay per pair, not one per call.
+        Call `link_breaths` after aligning the recordings' time axes. Each successful
+        call replaces all stored multimodal breath-timing results, including those
+        from earlier pairs or anchors, and records provenance. Other parameter
+        results are retained. Empty linked breaths clear the previous timing
+        results and return an empty list.
 
         Args:
-            delay_pairs (Sequence[tuple[str, str]] | None): Modality pairs to
-                compute the per-breath timing delay for, for example
-                ``[("eit", "emg")]``. Positive means the second modality's
-                breath comes later. None uses every pair of modalities found
-                in the linked breaths.
-            duration_pairs (Sequence[tuple[str, str]] | None): Modality pairs
-                to compute the per-breath duration difference for. None uses
-                every pair of modalities found in the linked breaths.
-            anchor (str): Which point of each breath the delay is measured
-                between: ``"start"``, ``"extremum"`` or ``"end"``.
+            delay_pairs (Sequence[tuple[str, str]] | None): Ordered pairs (from,
+                to) for delays and event agreement. Positive delays mean the second
+                modality occurs later. None selects every unordered pair of
+                observed modalities in alphabetical order; [] selects none.
+            duration_pairs (Sequence[tuple[str, str]] | None): Ordered pairs (a,
+                b) for duration(a) minus duration(b). None uses every observed
+                pair in alphabetical order; [] selects none.
+            anchor (str): Breath point for delays: "start" (default), "extremum",
+                or "end".
 
         Returns:
-            list[ParameterResult]: The timing delays and duration differences
-                per breath (in seconds), and one event-agreement result per
-                delay pair.
+            list[ParameterResult]: Stored results: per-breath delays and duration
+                differences in seconds, and aggregate agreement fractions per
+                delay pair. Agreement counts links holding either modality and
+                measures the fraction holding both. Per-breath results require
+                both breaths; delays also require both selected anchors.
+
+        Raises:
+            ValueError: If the anchor name is invalid, including for empty inputs.
+                Existing parameter results are retained when validation fails.
         """
 
         results = compute_breath_timing_parameters(
@@ -1595,8 +1593,7 @@ def _coerce_metadata(
 def _pairs_as_lists(
     pairs: Sequence[tuple[str, str]] | None,
 ) -> list[list[str]] | None:
-    """Modality pairs as plain lists, so the provenance record can be saved as
-    JSON. None (meaning "every pair found") is kept as None."""
+    """Convert modality pairs to lists for JSON provenance; preserve None."""
 
     if pairs is None:
         return None

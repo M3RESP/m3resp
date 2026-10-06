@@ -71,24 +71,37 @@ def butterworth_filter(
     axis: int = 0,
     captures: dict[str, Any] | None = None,
 ) -> np.ndarray:
-    """Apply a zero-phase Butterworth filter using second-order sections.
+    """Apply a zero-phase Butterworth filter along one axis.
+
+    Applies the filter forwards and backwards using SciPy second-order
+    sections. Values retain their physical units.
 
     Args:
-        values (numpy.ndarray): Input data to filter.
-        filter_type (ButterworthFilterType): Type of filter to apply. One of
-            "lowpass", "highpass", "bandpass", or "bandstop".
-        cutoff_frequency (float or sequence of floats): Cutoff frequency(ies)
-            for the filter. If `filter_type` is "bandpass" or "bandstop",
-            `cutoff_frequency` should be a sequence of two values, (low, high),
-            for both.
-        sample_frequency (float): Sampling rate of the input data.
-        order (int): Order of the filter.
-        axis (int): Axis along which to apply the filter.
-        captures (dict, optional): Dictionary to store captured values.
-            If None (default), no values will be captured.
+        values (numpy.ndarray): Finite input samples, with time along `axis`.
+        filter_type (ButterworthFilterType): "lowpass", "highpass", "bandpass",
+            or "bandstop".
+        cutoff_frequency (float | Sequence[float]): Cutoff in Hz. Lowpass and
+            highpass require one number; bandpass and bandstop require two
+            numbers (low, high), with low < high. Every cutoff must be positive
+            and below half the sampling rate.
+        sample_frequency (float): Positive sampling rate in Hz.
+        order (int): Positive integer filter order for each pass.
+        axis (int): Time axis to filter. Defaults to 0.
+        captures (dict[str, Any] | None): Optional dictionary updated with
+            unfiltered_data, filtered_data, sample_frequency, and the relevant
+            low_pass_frequency, high_pass_frequency or frequency_bands.
+            Bandstop cutoffs are appended to frequency_bands.
 
     Returns:
-        numpy.ndarray: Filtered data.
+        numpy.ndarray: Filtered values with the input shape and units.
+
+    Raises:
+        TypeError: If a cutoff or sampling rate has an invalid type, or order
+            is a non-integer. Boolean values are rejected for these arguments.
+        ValueError: If the filter type, order, sampling rate, or cutoffs are
+            invalid, samples contain NaN or infinity, or the time axis has too
+            few samples for SciPy's edge padding.
+        OptionalDependencyError: If SciPy is unavailable.
     """
 
     scipy_signal = _scipy_signal()
@@ -421,6 +434,12 @@ def _normalize_cutoff_frequency(
     filter_type: ButterworthFilterType,
     cutoff_frequency: float | Sequence[float],
 ) -> float | tuple[float, float]:
+    """Convert numeric cutoffs to one float or a two-float tuple.
+
+    Raises TypeError for invalid numeric types and ValueError for a sequence
+    whose length differs from two. Frequency limits are checked by SciPy.
+    """
+
     if filter_type in {"lowpass", "highpass"}:
         if not _is_number(cutoff_frequency):
             raise TypeError("cutoff_frequency must be numeric for low/high pass")
@@ -446,6 +465,12 @@ def _validate_common_filter_arguments(
     sample_frequency: float,
     order: int,
 ) -> None:
+    """Require a positive integer order and a positive numeric sampling rate.
+
+    Raises TypeError for invalid types, including boolean values, and
+    ValueError for zero or negative values.
+    """
+
     if not _is_whole_number(order):
         raise TypeError("order must be a whole number")
     if order < 1:
@@ -496,6 +521,8 @@ def _capture_butterworth_parameters(
     filter_type: ButterworthFilterType,
     cutoff: float | tuple[float, float],
 ) -> None:
+    """Record the filter's cutoff frequencies in Hz when captures is supplied."""
+
     match filter_type:
         case "lowpass":
             capture_value(captures, "low_pass_frequency", cutoff)

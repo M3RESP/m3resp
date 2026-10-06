@@ -19,13 +19,27 @@ def ventilator_signals(
     channels: Any = DEFAULT_CHANNELS,
     fs: float | None = None,
 ) -> dict[str, Any] | None:
-    """Split the ventilator channels an EMG postprocessing run needs.
+    """Extract the ventilator channels used for EMG postprocessing.
 
-    Delegates to `m3resp.adapters.ventilator_adapter.split_channels` rather
-    than indexing columns itself, so the ventilator channels reaching Pocc and
-    ventilator-breath detection are found by the same name resolution used
-    everywhere else. A recording that labels its channels is read by those
-    labels; an unlabelled array still falls back to fixed columns.
+    Args:
+        ventilator (Any | None): Dict with array and metadata, or a numeric array
+            with shape (channels, samples). None indicates unavailable data.
+        airway_pressure_channel (int | None): Explicit zero-based pressure index.
+        flow_channel (int | None): Explicit zero-based flow index.
+        volume_channel (int | None): Explicit zero-based volume index.
+        channels (Any): Names to extract; defaults to airway_pressure, flow and
+            volume. Labels and fallback positions follow `split_channels`.
+        fs (float | None): Sampling rate in Hz; overrides metadata fs.
+
+    Returns:
+        dict[str, Any] | None: Channel bundle from `split_channels`, including
+            per-channel units and fs in Hz, or None when ventilator is None.
+
+    Raises:
+        TypeError: If the array or sampling rate is missing.
+        ValueError: If a channel name or index selection is invalid.
+        UnresolvedChannelError: If a requested channel cannot be identified.
+        IndexError: If a resolved index exceeds the available channels.
     """
 
     if ventilator is None:

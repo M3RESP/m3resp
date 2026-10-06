@@ -84,7 +84,12 @@ class LungTemplateConfig:
 
 @dataclass
 class MedibusConfig:
-    """Synthetic Medibus channel layout and plausible values."""
+    """Channel indices and units for synthetic Medibus waveforms.
+
+    Channel indices are zero-based. Airway pressure uses a baseline and amplitude
+    in cmH2O; volume uses a baseline and amplitude in mL. FiO2 is a percentage.
+    The flow channel holds the time derivative of the input breathing waveform.
+    """
 
     airway_pressure_channel: int = 0
     flow_channel: int = 1
