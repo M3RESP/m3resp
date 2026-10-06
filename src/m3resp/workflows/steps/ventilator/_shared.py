@@ -1,12 +1,4 @@
-"""Shared helpers for the registered ventilator pipeline step modules.
-
-Mirrors `m3resp.workflows.steps.eit._shared`/`m3resp.workflows.steps.emg._shared`:
-each modality's step package keeps its own small copy of these helpers rather
-than importing another package's private module, so `_record_step` can
-hardcode the right modality string for its own steps without a cross-package
-dependency. Before this package existed, ventilator steps used the EMG copy of
-`_record_step`, which recorded their provenance under `modality="emg"`.
-"""
+"""Helpers for recording ventilator calculations and per-breath quality flags."""
 
 from __future__ import annotations
 
@@ -109,9 +101,15 @@ def _per_breath_flags(
     threshold: float | None = None,
     extra_metadata: dict[str, Any] | None = None,
 ) -> list[QualityFlag]:
-    """One `QualityFlag` per breath - `breath_id=str(position)` until a
-    stable event ID is available, with the source peak sample index recorded
-    in metadata."""
+    """Return one QualityFlag per breath in input order.
+
+    Pair valid values with peak_indices and use ``breath_id=str(position)``
+    for the zero-based input position. Metadata stores the turning-point
+    sample as ``extremum_sample_index`` and, when fs is supplied in Hz,
+    ``extremum_time`` in seconds from recording start. Extra metadata
+    overrides generated entries. Raises ValueError if the arrays differ
+    in length.
+    """
 
     _require_equal_length(valid=valid, peak_indices=peak_indices)
     flags = []

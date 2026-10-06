@@ -221,7 +221,33 @@ def sample_intervals_to_breath_events(
     modality: str,
     source: str | None = None,
 ) -> list[BreathEvent]:
-    """Convert sample-index breath intervals into common `BreathEvent` objects."""
+    """Convert breath sample positions into `BreathEvent` objects.
+
+    Use the supplied time vector when available; otherwise divide sample
+    positions by the sampling rate to obtain seconds from recording start.
+
+    Args:
+        start_indices: One start sample position per breath.
+        end_indices: One end sample position per breath, paired with starts.
+        peak_indices: Optional turning-point positions, one per breath. These
+            become ``extremum_index`` and ``extremum_time`` on each breath.
+        sample_frequency: Signal sampling rate in Hz, required when time is None.
+        time: Optional signal time vector in seconds, indexed by sample position.
+        modality: Device or technique that produced the breath detections.
+        source: Optional detection method name.
+
+    Returns:
+        list[BreathEvent]: Breaths in input order, with times in seconds and
+            original start/end/extremum sample indices. Turning-point fields
+            are None when peak_indices is None.
+
+    Raises:
+        ValueError: If start/end arrays differ in length, a converted interval
+            ends before it starts, or a nonempty input has neither time nor
+            sample_frequency.
+        IndexError: If a sample position is outside the time vector or
+            peak_indices has fewer entries than the breath intervals.
+    """
 
     starts = np.asarray(start_indices, dtype=int)
     ends = np.asarray(end_indices, dtype=int)

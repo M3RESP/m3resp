@@ -54,10 +54,8 @@ modality's breath looks compared to another's), and event agreement (what
 fraction of breaths were detected consistently across all requested
 modalities, a rough "did every sensor agree a breath happened here" score).
 
-`m3resp.synchronization` (Milestone 2.5) aligns and links data across
-modalities, deliberately kept modest: manual offset, timestamp alignment,
-resampling, and nearest-neighbor breath linking. Clock-drift correction is
-intentionally out of scope.
+`m3resp.synchronization` provides manual offsets, timestamp alignment,
+resampling and nearest-neighbor breath linking across modalities.
 
 ## Start times
 
@@ -212,7 +210,8 @@ Three primitives, usable standalone on any `LinkedBreath`/`list[LinkedBreath]`:
 - `compute_timing_delay(linked, from_modality, to_modality, anchor="start")` -
   signed delay in seconds between two modalities' breath anchors
   (`anchor` is `"start"`, `"extremum"`, or `"end"`); `None` if either modality
-  is missing from the link. Positive means `to_modality` occurs later.
+  is missing from the link or a requested extremum time is unavailable.
+  Positive means `to_modality` occurs later.
 - `compute_breath_duration_difference(linked, modality_a, modality_b)` -
   `duration(modality_a) - duration(modality_b)` in seconds; `None` if either
   modality is missing.

@@ -132,16 +132,20 @@ breath = BreathEvent("eit", 1.0, 2.0, extremum_time=1.5)
 isinstance(breath, Interval)  # True
 ```
 
-`extremum_time` is the moment the signal turns from inhalation to exhalation;
-`extremum_index` is its sample position. Both are `None` when the detector
-didn't report one. It is called an extremum, not a peak, because the signal
-can turn at a maximum (impedance, volume, EMG envelope) or at a minimum
-(esophageal pressure, the deepest pressure of an occlusion).
-`coerce_breath_event` reads the turning point from the first of
-`extremum_time`/`extremum_index`, `peak_time`/`peak_index` (older m3resp
-versions and other detectors; a warning names the new keys) and
-`middle_time` (eitprocessing). The time and its position always come from
-the same pair.
+`extremum_time` is the signal's turning-point time in seconds, on the same
+time axis as the breath's start and end. `extremum_index` is its sample
+position in `signal_name`, whose sampling rate is `sample_frequency`.
+Each field is `None` when unavailable. An extremum can be a maximum
+(impedance, volume, EMG envelope) or a minimum (esophageal pressure, the
+deepest pressure of an occlusion). Its physiological meaning depends on
+the signal and detector: for example, the EMG envelope peak marks peak
+activity, while the EIT impedance maximum marks the end of inspiration.
+
+`coerce_breath_event` checks `extremum_time`/`extremum_index` first, then
+`peak_time`/`peak_index`, then eitprocessing's `middle_time`. It selects
+the first pair with either value set and reads both values from that
+pair, even if one is `None`. Selecting the older `peak_*` fields emits a
+`UserWarning` naming the current fields.
 
 A `BreathEvent` and an `Interval` with the same times are not equal: one
 says "this was a breath", the other does not. `coerce_breath_event` refuses

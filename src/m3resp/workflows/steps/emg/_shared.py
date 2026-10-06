@@ -179,9 +179,15 @@ def _per_breath_flags(
     threshold: float | None = None,
     extra_metadata: dict[str, Any] | None = None,
 ) -> list[QualityFlag]:
-    """One `QualityFlag` per breath - `breath_id=str(position)` until a
-    stable event ID is available, with the source peak sample index
-    recorded in metadata (plan Phase 5.4)."""
+    """Return one QualityFlag per breath in input order.
+
+    Pair valid values with peak_indices and use ``breath_id=str(position)``
+    for the zero-based input position. Metadata stores the turning-point
+    sample as ``extremum_sample_index`` and, when fs is supplied in Hz,
+    ``extremum_time`` in seconds from recording start. Extra metadata
+    overrides generated entries. Raises ValueError if the arrays differ
+    in length.
+    """
 
     _require_equal_length(valid=valid, peak_indices=peak_indices)
     flags = []

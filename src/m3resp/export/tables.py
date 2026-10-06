@@ -43,12 +43,18 @@ def parameters_to_rows(parameters: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def linked_breaths_to_rows(linked_breaths: list[LinkedBreath]) -> list[dict[str, Any]]:
-    """Flatten `LinkedBreath` objects into one row per link (Milestone 2.5/2.6).
+    """Convert linked breaths into one table row per link.
 
-    Each modality's breath fields are prefixed (``eit_start_time``,
-    ``emg_extremum_time``, ``emg_extremum_index``, ...) and left ``None`` when that modality has no
-    breath in the link, so the CSV has a stable column set regardless of
-    which modalities matched.
+    Args:
+        linked_breaths: Linked breath groups in the desired row order.
+
+    Returns:
+        list[dict[str, Any]]: Rows with modalities, confidence and time tolerance
+            (seconds). Each row includes start/end/extremum times in seconds
+            and the extremum sample index for each of ``eit``, ``emg`` and
+            ``ventilator``, prefixed by the modality name. Missing breaths or
+            turning points give None. Sample indices refer to each breath's
+            own signal. Other modality names appear in ``modalities``.
     """
 
     rows: list[dict[str, Any]] = []
