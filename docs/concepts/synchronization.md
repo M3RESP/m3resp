@@ -26,12 +26,10 @@ compared on one shared time axis. Key pieces:
   signals on one shared sample grid (e.g. a sample-by-sample comparison).
   It uses linear interpolation between the original samples and applies no
   anti-aliasing filter, so low-pass filter the signal before lowering its
-  sampling rate. It's not part of the alignment pipeline above and isn't called
-  automatically: breath linking and the multimodal parameter calculations
-  below work on real-world timestamps (`BreathEvent.start_time`/`end_time`/
-  `peak_time`), not sample indices, so most analysis stays at each
-  modality's original sample rate and resampling is only needed when you
-  explicitly ask for it.
+  sampling rate. You call it yourself when you need it. Breath linking and
+  the multimodal parameter calculations below work on real-world timestamps
+  (`BreathEvent.start_time`/`end_time`/`peak_time`), so most analysis stays
+  at each modality's original sample rate.
 
 `LinkedBreath` is the object that represents "the same physical breath, as
 seen by different modalities." It is a dictionary-like structure
@@ -54,10 +52,9 @@ modality's breath looks compared to another's), and event agreement (what
 fraction of breaths were detected consistently across all requested
 modalities, a rough "did every sensor agree a breath happened here" score).
 
-`m3resp.synchronization` (Milestone 2.5) aligns and links data across
-modalities, deliberately kept modest: manual offset, timestamp alignment,
-resampling, and nearest-neighbor breath linking. Clock-drift correction is
-intentionally out of scope.
+`m3resp.synchronization` aligns and links data across modalities with
+manual offset, timestamp alignment, resampling, and nearest-neighbor breath
+linking. It does not correct clock drift.
 
 ## Start times
 

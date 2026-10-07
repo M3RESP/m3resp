@@ -67,11 +67,10 @@ peaks and skip detection entirely (the two are mutually exclusive - detection
 kwargs alongside supplied peaks would configure a pass that never runs, so
 that combination raises).
 
-There is deliberately no `BatchPipeline` yet - nothing in the current test
-suite or examples needs one; add it in `presets/` following the same shape
-when a real batch-processing use case appears.
+A preset that processes several recordings in one call would go in
+`presets/` as a `BatchPipeline`, following the same shape.
 
-## Why two mechanisms, not one
+## The two ways to run a pipeline
 
 - `m3resp.run_pipeline(spec, session=...)` (module-level) runs a fully
   custom YAML/JSON step-list spec built from individually composable steps

@@ -30,8 +30,8 @@ def _resolve_output_mode(spec: PipelineSpec) -> tuple[str, bool]:
     Returns ``(mode, was_inferred)``. A versioned spec always states its
     mode when ``outputs.dir`` is set (enforced at parse time), so
     ``was_inferred`` is only ever ``True`` for a legacy spec that omitted
-    ``outputs.mode``; the inference itself now checks for *any* step under
-    the ``export.*`` prefix, not just the three names the old heuristic knew.
+    ``outputs.mode``; the inference checks for any step under the
+    ``export.*`` prefix.
     """
 
     if spec.outputs.mode is not None:

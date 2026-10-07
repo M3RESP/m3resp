@@ -766,9 +766,8 @@ _SIGNAL_TYPE_BY_MODALITY_CATEGORY: dict[tuple[str, str], SignalType] = {
 }
 
 #: Fallback ``modality -> SignalType`` for signals with no ``category`` set,
-#: used only where the modality alone is unambiguous. ``"ventilator"`` is
-#: deliberately absent: without a category there is no way to tell pressure
-#: from flow from volume, and guessing is what produced wrong audit records.
+#: used only where the modality alone is unambiguous. ``"ventilator"`` has no
+#: entry: without a category, pressure, flow and volume cannot be told apart.
 _SIGNAL_TYPE_BY_MODALITY: dict[str, SignalType] = {
     "eit": "eit_waveform",
 }

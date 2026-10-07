@@ -49,9 +49,8 @@ from m3resp.data.categories import normalize_category
 #: ``Signal.channel``; the values are ``Signal.category`` (see
 #: :mod:`m3resp.data.categories`).
 #:
-#: The pressures are deliberately separate entries. Collapsing them onto one
-#: ``"pressure"`` channel would label an esophageal or transpulmonary trace as
-#: an airway pressure, which is a measurement error, not a naming one.
+#: Each pressure has its own entry, so an esophageal or transpulmonary trace
+#: is never labeled as an airway pressure.
 CHANNEL_CATEGORIES: dict[str, str] = {
     "pressure": "airway_pressure",
     "flow": "airflow",
@@ -134,9 +133,9 @@ _DEFAULT_CHANNEL_ALIASES: dict[str, str] = {
 _CHANNEL_ALIASES: dict[str, str] = dict(_DEFAULT_CHANNEL_ALIASES)
 
 #: Parenthesised tags naming the *file's* origin rather than a distinct sensor,
-#: dropped before matching. ``(pod)`` is deliberately absent: it marks a
-#: physically separate transducer, so it must survive normalization and is what
-#: distinguishes a pod airway pressure from the ventilator's own.
+#: dropped before matching. ``(pod)`` marks a physically separate transducer,
+#: so it is kept: it distinguishes a pod airway pressure from the ventilator's
+#: own.
 _VENDOR_TAGS = frozenset({"raw", "timpel", "draeger", "dräger", "sentec"})
 
 _WHITESPACE = re.compile(r"\s+")
@@ -193,7 +192,7 @@ def register_channel_alias(
     For a vendor's naming of an *existing* channel (pressure, flow, ...), this
     is only ever a label mapping: pass just `alias`/`channel`.
 
-    `channel` does not need to already be one of the seven built-ins. A
+    `channel` can be any name, including one outside the seven built-ins. A
     physical quantity this vocabulary has no name for yet - a new instrument,
     say - can be registered directly, the same way an unrecognized string
     passed to `m3resp.data.categories.normalize_category` is kept as a custom
@@ -429,8 +428,8 @@ def primary_channel(bundle: Any, quantity: str) -> str | None:
     key = primary.get(category) if category else None
     if key is not None:
         return str(key)
-    # A bundle that predates `primary` (or a hand-built one) still answers to
-    # the plain channel name.
+    # A bundle without `primary` (an older or hand-built one) answers to the
+    # plain channel name.
     return quantity if quantity in bundle else None
 
 

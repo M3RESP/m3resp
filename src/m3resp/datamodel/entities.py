@@ -5,10 +5,9 @@ Sections 7.1-7.11 for the MVP entities (doc Sec 9) and Section 11 for
 ``QualityAnnotation``. Coded fields use ``Literal`` unions built from the
 vocabularies the doc already spells out (Sec 2.5, 7.4, 7.9-7.11, 11).
 
-Two fields go beyond the doc, both flagged here rather than hidden: they exist
-so the future Controller/Service layer (Session Manager, State Manager,
-Pipeline Manager, Error Handler, Task Runner) has somewhere to record
-execution/async state without a schema break.
+Two fields are additions to the doc. They give the future Controller/Service
+layer (Session Manager, State Manager, Pipeline Manager, Error Handler, Task
+Runner) somewhere to record execution/async state without a schema break.
 
 - ``ProcessingRun.status`` / ``ProcessingRun.error``: Task Runner needs to
   track jobs across pending/running/succeeded/failed, and the Error Handler

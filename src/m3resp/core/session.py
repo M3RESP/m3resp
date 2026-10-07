@@ -1278,9 +1278,9 @@ class M3Session:
         For recordings that really did start at the same moment - for
         example when one trigger started every device. Each loaded recording
         that has not been synchronized is recorded as ``"none"`` in
-        `session.sync_methods`, so steps that compare recordings no longer
-        warn, while the choice stays visible in the provenance log and the
-        exported summary. Recordings already synchronized keep their record.
+        `session.sync_methods`, so steps that compare recordings skip their
+        missing-synchronization warning, while the choice stays visible in
+        the provenance log and the exported summary. Recordings already synchronized keep their record.
         Breath lists added directly with `add_events`, without a loaded
         recording, are covered too. Recordings loaded later are not.
 

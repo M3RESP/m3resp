@@ -108,8 +108,8 @@ class EMGPipeline(Pipeline):
 
         The two registered steps are called as plain functions: they already
         record provenance through `M3Session._record()` and populate the typed
-        collections themselves, so this stays a sequence of instrumented calls
-        and does not need the declarative engine (see `presets.base`).
+        collections themselves, so this is a plain sequence of calls (see
+        `presets.base`).
         """
 
         removal_options = dict((config or {}).get("ecg_removal", {}))

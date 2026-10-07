@@ -1,8 +1,8 @@
-"""Shared time-series container (plan_stage2.md Sec 9, Milestone 2.1).
+"""Shared time-series container.
 
 ``TimeSeries`` is the base runtime type every continuous signal in m3resp
-should be represented as, whatever its modality. It intentionally mirrors
-only what EIT, EMG, and ventilator signals actually have in common: values,
+should be represented as, whatever its modality. It holds what EIT, EMG, and
+ventilator signals have in common: values,
 a time vector, sampling rate, unit, and free-form metadata. Modality-specific
 fields live on :class:`~m3resp.data.signals.Signal`, which subclasses this.
 """

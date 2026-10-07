@@ -33,10 +33,10 @@ usually `atol=0, rtol=0`, i.e. exact equality - to calling the underlying
   `test_processing_quality_equivalence.py`, `test_processing_window_equivalence.py` -
   the shared `m3resp.processing` primitives vs. their `resurfemg` originals.
 - `test_ecg_peak_detection_ground_truth.py` - ECG peak detection against a
-  hand-labeled ground truth, not just the upstream package.
+  hand-labeled ground truth.
 
-If one of these starts failing, the wrapper has started transforming data
-instead of just passing it through - check the diff against the specific
+If one of these starts failing, the wrapper output now differs from the
+upstream output - check the diff against the specific
 method involved before assuming the test is wrong. See
 [adapters.md](adapters.md).
 
