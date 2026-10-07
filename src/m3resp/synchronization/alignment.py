@@ -40,7 +40,23 @@ def align_events_manual_offset(
 def align_events_manual_offset(
     events: Sequence[Event | Interval], offset_seconds: float
 ) -> list[Any]:
-    """Return copies of events, intervals and breaths shifted by a manual offset."""
+    """Return copies of events, intervals and breaths shifted by an offset.
+
+    Args:
+        events: Events, intervals or breaths on the time axis to shift.
+        offset_seconds: Seconds added to each time. Positive values move
+            events later; negative values move them earlier.
+
+    Returns:
+        list: Copies in input order with shifted ``time``, ``start_time``,
+            ``end_time`` and any supplied ``peak_time``. Sample indices,
+            identifiers and other fields retain their values. Metadata is
+            shared with the original objects.
+
+    Raises:
+        TypeError: If an item is other than an ``Event`` or ``Interval``
+            (including ``BreathEvent``).
+    """
 
     offset = float(offset_seconds)
     aligned: list[Any] = []
@@ -106,13 +122,27 @@ def align_events_by_modality_offset(
     events: Sequence[Event | Interval],
     offsets_seconds: Mapping[str, float],
 ) -> list[Any]:
-    """Return event copies shifted by the offset configured for each modality.
+    """Return event, interval and breath copies shifted by each modality's offset.
 
-    Both the event's modality and the offset keys are canonicalized before
-    matching, so an event still tagged with a legacy spelling (``"vent"``) is
-    shifted by an offset given under the canonical name (``"ventilator"``), and
-    vice versa. Without this, a mismatch would silently apply a zero offset
-    rather than raise.
+    Modality aliases are matched by their standard names, so ``'vent'`` and
+    ``'ventilator'`` select the same offset. A modality missing from the
+    offset mapping uses zero seconds.
+
+    Args:
+        events: Events, intervals or breaths to place on a shared clock.
+        offsets_seconds: Seconds added to the times for each modality.
+            Positive values move events later; negative values move them
+            earlier.
+
+    Returns:
+        list: Copies in input order, with times shifted by
+            ``align_events_manual_offset``. Sample indices, identifiers and
+            modality spellings retain their values. Metadata is shared with
+            the original objects.
+
+    Raises:
+        TypeError: If an item is other than an ``Event`` or ``Interval``
+            (including ``BreathEvent``).
     """
 
     offsets_by_canonical_modality = {
@@ -128,6 +158,8 @@ def align_events_by_modality_offset(
 
 
 def _event_modality(event: Any) -> str:
+    """Read an event or interval's modality, raising ``TypeError`` for other types."""
+
     if isinstance(event, (Interval, Event)):
         return event.modality
     raise TypeError(

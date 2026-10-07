@@ -1,8 +1,8 @@
-"""Ordered collections for `Signal`, `ParameterResult`, `QualityFlag`,
-`IntervalData` and `PixelMask`, with helpers to pick items by modality,
-category or name. `M3Session` keeps one of each.
+"""Lists of `Signal`, `ParameterResult`, `QualityFlag`, `IntervalData` and
+`PixelMask` objects, with helpers to look items up. `M3Session` keeps one of
+each.
 
-Breaths and other events are stored in `session.events` (see
+Events and breaths are kept in `session.events` (see
 `M3Session.add_events`/`get_events`).
 """
 
