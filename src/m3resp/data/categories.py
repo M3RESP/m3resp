@@ -7,19 +7,13 @@ pressure, a flow, a volume).
 
 Keeping these apart matters because they do not nest. Airway pressure can come
 from a ventilator or a standalone monitor; a ventilator emits pressure *and*
-flow *and* volume. Collapsing both axes into one string - which is what
-``modality`` alone used to do, with ``"pressure"``/``"flow"`` sitting in the
-same vocabulary as ``"eit"``/``"emg"`` - makes some combinations
-inexpressible. The persisted Layer 2 model never had this problem: it already
-separates ``Device.device_type`` from ``SignalStream.signal_type``, so
-``DataModelRecorder`` was left heuristically splitting the single Layer 1
-string back into two and guessing wrong (see ``_signal_type_for``).
+flow *and* volume. The persisted Layer 2 model separates them the same way, in
+``Device.device_type`` and ``SignalStream.signal_type``.
 
-The vocabulary here is deliberately *modality-agnostic*, following the same
-principle as ``eitprocessing``'s ``categories-compact.yaml``: it is a taxonomy
-of physical quantities and their physiological relationships, with no notion of
-which device measured them. That is what lets the two fields compose instead of
-overlap.
+The vocabulary here is *modality-agnostic*, following the same principle as
+``eitprocessing``'s ``categories-compact.yaml``: it is a taxonomy of physical
+quantities and their physiological relationships, with no notion of which
+device measured them.
 
 Like `m3resp.data.metrics`, an unrecognized name returns ``None`` rather than
 the input unchanged, so a custom/experimental category is never silently
@@ -41,8 +35,8 @@ from typing import Any, Literal, get_args
 #:
 #: This starter set covers the quantities m3resp currently emits, plus the
 #: near-neighbours needed to keep pressure sub-types distinguishable. It is
-#: provisional: the intent is to align these leaf names with ``eitprocessing``'s
-#: shared catalogue rather than maintain a competing taxonomy.
+#: provisional: these leaf names are to be aligned with ``eitprocessing``'s
+#: shared catalogue.
 _KNOWN_CATEGORIES_LITERAL = Literal[
     # electrical
     "impedance",

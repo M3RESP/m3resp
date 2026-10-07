@@ -1,11 +1,10 @@
 """In-memory relational store for data model entities.
 
-Deliberately not a database: the data model doc's own recommended process
-(Sec 4) is to build a small prototype against a handful of real sessions, run
-real workflows, and revise the schema *before* freezing and persisting it.
-This store gives us exactly that prototype - typed tables with cheap
-foreign-key checks, no migrations - and can be swapped for SQLite/Postgres
-later without changing the entities themselves.
+A prototype store: typed tables with cheap foreign-key checks. The data
+model design doc recommends trying the schema on a handful of real sessions
+and workflows before freezing and persisting it. This store is that
+prototype, and it can be swapped for SQLite/Postgres later without changing
+the entities themselves.
 """
 
 from __future__ import annotations

@@ -183,9 +183,9 @@ def _compile_step(
 
 @dataclass(frozen=True)
 class ValidationReport:
-    """Phase 3.5: structural validation is always run; readiness (optional
-    packages, file existence) is opt-in, since it needs the local machine's
-    installed packages and filesystem, not just the spec."""
+    """Structural validation always runs. Readiness (optional packages, file
+    existence) is opt-in, since it checks the local machine's installed
+    packages and files."""
 
     structural: tuple[Diagnostic, ...] = ()
     readiness: tuple[Diagnostic, ...] = ()

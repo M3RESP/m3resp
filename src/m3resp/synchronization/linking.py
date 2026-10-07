@@ -1,10 +1,7 @@
-"""Nearest-neighbor breath linking across modalities (plan_stage2.md Sec 20,
-Milestone 2.5).
+"""Nearest-neighbor breath linking across modalities.
 
-Deliberately simple: breaths are matched by how close their representative
-times are, greedily and one-to-one, with no clock-drift correction - matching
-plan_stage2.md's own guidance ("avoid overbuilding clock-drift correction in
-Stage 2 unless needed"). Run `align_events_by_modality_offset` first if the
+Breaths are matched by how close their representative times are, greedily and
+one-to-one, with no clock-drift correction. Run `align_events_by_modality_offset` first if the
 modalities are not already on a common time axis.
 """
 

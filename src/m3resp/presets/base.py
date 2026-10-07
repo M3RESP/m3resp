@@ -17,18 +17,13 @@ solve different problems:
   common case: "run the default preprocessing and detection for this
   modality." A concrete `Pipeline.run` just calls `M3Session`'s own
   already-instrumented methods (``preprocess_eit``, ``detect_eit_breaths``,
-  ...) in a fixed order - it is *those methods*, not this class, that
-  populate the typed collections and record provenance. Every option those
-  methods accept is still reachable through ``config``, so this isn't a
-  rigid, fixed algorithm - it's a name for "call these methods in this
-  order," with the actual behavior fully controlled by whatever `config` is
-  passed in.
+  ...) in a fixed order; those methods populate the typed collections and
+  record provenance. Every option those methods accept is reachable through
+  ``config``: a preset is a name for "call these methods in this order", and
+  ``config`` controls what they do.
 
-No new execution machinery is written here: this deliberately avoids
-building a second, parallel step-execution engine - that would duplicate
-`m3resp.workflows` for no benefit and would need its own copy of the
-typed-collection/provenance instrumentation those session methods already
-have.
+Presets call the session methods directly. `m3resp.workflows` is the
+step-by-step engine that runs YAML/JSON pipeline specs.
 """
 
 from __future__ import annotations

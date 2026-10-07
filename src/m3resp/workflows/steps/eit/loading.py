@@ -221,8 +221,7 @@ def load(
         )
         session.signals.add(raw_global_impedance_signal)
 
-    # The pixel impedance is a signal in its own right, not just the vendor
-    # object downstream steps are handed. It carries the same category as the
+    # The pixel impedance is also stored as its own Signal. It carries the same category as the
     # global impedance - both are impedances - and is told apart by its
     # channel.
     raw_pixel_impedance_signal = Signal(

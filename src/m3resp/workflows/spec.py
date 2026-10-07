@@ -11,7 +11,7 @@ Specs come in two modes (Stage 2 pipeline-structure plan, Phase 2):
   unsupported ``schema_version`` value is rejected with a clear message.
 
 Both modes build the same public frozen dataclasses below, so callers and
-the engine do not need to know which mode produced a given ``PipelineSpec``.
+the engine handle a ``PipelineSpec`` the same way whichever mode produced it.
 """
 
 from __future__ import annotations
@@ -38,8 +38,7 @@ from m3resp.core.path_helper import resolve_optional_path
 
 #: schema_version values this release of m3resp understands.
 #:
-#: Versions are whole numbers; there are deliberately no "1.1"-style minor
-#: versions. The number increases only when a spec file that used to load
+#: Versions are whole numbers, with no "1.1"-style minor versions. The number increases only when a spec file that used to load
 #: stops loading. Adding an optional key that older files simply lack is
 #: backwards compatible and does not bump it, so a spec written today keeps
 #: saying ``schema_version: 1`` for as long as it keeps working. Widening

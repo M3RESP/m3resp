@@ -1,7 +1,6 @@
 """Multimodal timing/agreement metrics computed from `LinkedBreath` objects.
 
-Deliberately narrow, initial metrics rather than the full "coupling metric"
-list: a signed timing delay between two modalities' breath anchors, a breath
+Three timing metrics: a signed timing delay between two modalities' breath anchors, a breath
 duration difference, and a breath-to-breath event-agreement fraction. All
 three are pure functions over `LinkedBreath`/`list[LinkedBreath]`;
 `compute_multimodal_parameters` is the convenience entry point that turns

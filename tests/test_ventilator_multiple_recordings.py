@@ -87,8 +87,8 @@ class _Sequence:
 
 class TestPositionalProducersNowResolveByName:
     def test_emg_postprocessing_finds_channels_by_label(self):
-        # Columns deliberately out of the historical pressure/flow/volume
-        # order: only name resolution gets these right.
+        # Columns out of the historical pressure/flow/volume order: only
+        # name resolution gets these right.
         signals = ventilator_signals(_payload(["Volume", "Paw", "Flow"]))
         assert signals is not None
         assert signals["channel_indices"] == {"pressure": 1, "flow": 2, "volume": 0}

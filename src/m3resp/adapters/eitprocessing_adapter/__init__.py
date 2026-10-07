@@ -46,8 +46,8 @@ __all__ = [
 class EITProcessingAdapter:
     """Thin wrapper around `eitprocessing`.
 
-    Stage 1 keeps this adapter deliberately small. It imports `eitprocessing`
-    only when used so `m3resp` can be installed without optional EIT support.
+    It imports `eitprocessing` only when used, so `m3resp` can be installed
+    without optional EIT support.
     """
 
     def __init__(self, loader: Callable[..., Any] | None = None):

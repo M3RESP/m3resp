@@ -1,13 +1,11 @@
-"""``ProcessingStep``/``ProcessingHistory``: what produced a result (plan_stage2.md Sec 13).
+"""``ProcessingStep``/``ProcessingHistory``: what produced a result.
 
 This is the runtime counterpart of ``ProvenanceRecord``
 (``m3resp.core.provenance``): where ``ProvenanceRecord`` is Stage 1's minimal
-"action + modality + parameters" log entry, ``ProcessingStep`` additionally
-names the context keys a step read and wrote, which is what lets the
-persisted ``ProcessingRun.input_file_ids`` (see
-``plan/stage2_consolidation.md``) be filled in precisely instead of guessed.
-``ProvenanceRecord`` is not replaced by this - both stay in use until pipeline
-steps are migrated to emit ``ProcessingStep`` (Milestone 2.3+).
+"action + modality + parameters" log entry, ``ProcessingStep`` also names the
+context keys a step read and wrote, so the persisted
+``ProcessingRun.input_file_ids`` can be filled in precisely. Both stay in use
+until every pipeline step emits ``ProcessingStep``.
 """
 
 from __future__ import annotations
@@ -37,9 +35,7 @@ class ProcessingStep:
     #: operation name and parameters.
     optional_package_versions: dict[str, str | None] = field(default_factory=dict)
     timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
-    #: Stage 2 pipeline-structure Phase 5.1: the step's outcome
-    #: ("succeeded"/"failed"/"cancelled"), so a universal per-step log entry
-    #: also carries what happened, not just what was configured.
+    #: The step's outcome: "succeeded", "failed" or "cancelled".
     status: str = "succeeded"
 
     def to_dict(self) -> dict[str, Any]:

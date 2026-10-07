@@ -90,7 +90,7 @@ def test_session_normalizes_ventilator_breaths_after_emg_postprocessing():
 
 
 def test_session_aligns_eit_emg_and_ventilator_events_with_offset_map():
-    # Deliberately uses the legacy "vent" spelling for both the event modality
+    # Uses the legacy "vent" spelling for both the event modality
     # and the offset key: it must keep aligning correctly, even though the
     # recorded offsets are normalized to the canonical "ventilator".
     session = M3Session()

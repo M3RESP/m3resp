@@ -1,10 +1,9 @@
-"""``QualityFlag``: a pass/fail quality check result (plan_stage2.md Sec 12).
+"""``QualityFlag``: a pass/fail quality check result.
 
 Mirrors the persisted ``QualityAnnotation`` entity
 (``m3resp.datamodel.entities``) but is the lightweight, in-memory object a
 quality check actually produces during a pipeline run; conversion to
-``QualityAnnotation`` happens at the ``DataModelRecorder`` boundary
-(``plan/stage2_consolidation.md``), not here.
+``QualityAnnotation`` happens in ``DataModelRecorder``.
 """
 
 from __future__ import annotations

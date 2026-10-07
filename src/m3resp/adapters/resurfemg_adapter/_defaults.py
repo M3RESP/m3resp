@@ -67,21 +67,20 @@ class _DefaultsMixin:
         ``channel=`` rather than guessing.
 
         The band-pass defaults to 20-500 Hz, the range respiratory-sEMG
-        literature specifies. The high-pass is deliberately *not* set low
-        enough to double as ECG suppression: removing ECG is the job of a
-        dedicated gating step (``emg.ecg_gating``, which the ``"emg"`` preset
-        runs by default), because a high-pass steep enough to attenuate the
-        QRS complex still leaves its higher-frequency content inside the pass
-        band.
+        literature specifies. The ECG stays in the band-passed signal: a
+        high-pass steep enough to attenuate the QRS complex still leaves its
+        higher-frequency content inside the pass band. A separate gating step
+        (``emg.ecg_gating``, which the ``"emg"`` preset runs by default)
+        removes the ECG.
 
         ``envelope_method`` selects the envelope computed on the band-passed
         signal - ``"rms"`` (default), ``"arv"`` or ``"median"`` (median of the
         absolute signal, which ignores short spikes such as heartbeat
         leftovers; used for the multidomain results). RMS is what the literature
-        specifies; ARV is kept as an explicit opt-in because it is not an RMS
-        equivalent on real bursty sEMG. The choice is recorded in the returned
+        specifies; ARV is an explicit opt-in, and on real bursty sEMG its
+        values differ from RMS. The choice is recorded in the returned
         ``"filter"`` mapping so a later envelope recomputation (e.g. after ECG
-        gating) reuses the same method rather than silently switching.
+        gating) uses the same method.
 
         ``compute_envelope=False`` skips the envelope. Use it when ECG gating
         follows: gating replaces the band-passed signal and recomputes the
@@ -612,14 +611,9 @@ class _DefaultsMixin:
                     "Needs ventilator breath timing."
                 )
 
-            # Deliberately independent of 'evaluate_event_timing' above: its
-            # only real prerequisite is that 'ventilator_respiratory_rate' was
-            # computed (near the top of this function), which does not
-            # require 'evaluate_event_timing' to be selected. Nesting this
-            # under that block previously meant selecting
-            # 'evaluate_respiratory_rates' alone (without also selecting
-            # 'evaluate_event_timing') silently produced nothing - no result,
-            # no skip reason.
+            # Runs whenever 'ventilator_respiratory_rate' was computed (near
+            # the top of this function), whether or not
+            # 'evaluate_event_timing' is selected.
             if (
                 enabled(("quality_assessment", "evaluate_respiratory_rates"))
                 and "ventilator_respiratory_rate" in computed["quality_assessment"]

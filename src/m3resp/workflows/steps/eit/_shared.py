@@ -106,11 +106,8 @@ def _eitprocessing_version() -> str | None:
 def _record_step(
     session: M3Session, step_name: str, *, metadata: dict[str, Any]
 ) -> None:
-    """Record per-step EIT provenance through the existing
-    `M3Session._record()` seam (see `plan/stage2/
-    1_eit_gap_migration_implementation_plan.md` Phase 5.2), reusing the
-    step's declared reads/writes from the registry rather than a second
-    EIT-only history mechanism."""
+    """Record per-step EIT provenance through `M3Session._record()`, using
+    the step's declared reads/writes from the registry."""
 
     from m3resp.workflows.registry import get_step
 

@@ -34,12 +34,12 @@ Modified for M3RESP:
       thin wrappers over `butterworth_filter`, so EIT, EMG and ventilator
       signals share one filter implementation.
     - Parameters renamed and reorganized as keyword-only arguments.
-    - `compute_power_loss` intentionally does NOT reproduce upstream. The
+    - `compute_power_loss` differs from upstream. The
       upstream version sums the whole `(frequencies, density)` pair returned
       by `scipy.signal.welch` instead of the density alone, and inverts the
       power ratio. This version unpacks the pair and uses
       `100 * (1 - processed / original)`. Upstream has been notified; until
-      that is resolved these two functions disagree by design.
+      that is resolved these two functions give different results.
     - `harmonic_notch_filter`, `bandstop_filter` and the validation helpers
       below are independent M3RESP code.
 
