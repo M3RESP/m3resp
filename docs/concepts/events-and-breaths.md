@@ -191,10 +191,11 @@ list of `BreathEvent`s. Each detection step fills its own key:
 Use `session.add_events(name, events)` to store a list and
 `session.get_events(name)` to read it back.
 
-Occluded breaths are kept apart from normal ventilator breaths, so
-`session.get_events("ventilator_breaths")` returns normal breaths only and
-nothing needs to be filtered out. Ventilator breaths are found as peaks in
-the volume signal, and an occluded breath moves no air.
+Occluded breaths are kept in their own list. `ventilator.detect_breaths` finds
+breaths as peaks in the volume signal; an occluded breath moves no air, so it
+never appears in `"ventilator_breaths"`. `ventilator.detect_pressure_breaths`
+finds breaths as dips in the airway pressure, and an occlusion also lowers the
+airway pressure, so with that step an occluded breath can appear in both lists.
 
 Moving breaths, intervals and events onto a common clock is done by
 `align_events_by_modality_offset`, which shifts all three types.
