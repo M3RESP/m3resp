@@ -33,8 +33,10 @@ def _to_pixel_mask(
 ) -> PixelMask:
     """Convert an upstream mask to a row-column ``PixelMask`` with EIT metadata.
 
-    NaN marks excluded pixels. Metadata records the axes and the count and
-    fraction of included pixels.
+    NaN marks excluded pixels. The values are copied unchanged, zeros and
+    out-of-range weights included, since the upstream mask has already run
+    the same checks. Metadata records the axes and the count and fraction of
+    included pixels.
     """
 
     values = np.asarray(mask.mask, dtype=float)
@@ -53,6 +55,9 @@ def _to_pixel_mask(
         modality="eit",
         method=method,
         metadata=metadata,
+        keep_zeros=True,
+        suppress_value_range_error=True,
+        suppress_all_nan_warning=True,
     )
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -50,11 +52,18 @@ class TestPixelMap:
 
 
 class TestPixelMask:
-    def test_true_false_grid_becomes_one_and_nan(self):
-        mask = PixelMask(name="lungspace", values=[[True, False], [False, True]])
+    def test_true_false_grid_becomes_one_and_nan_without_a_warning(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            mask = PixelMask(name="lungspace", values=[[True, False], [False, True]])
 
         np.testing.assert_array_equal(mask.values, [[1.0, np.nan], [np.nan, 1.0]])
         assert mask.included_pixel_count == 2
+
+    def test_true_false_grid_with_keep_zeros_keeps_false_as_zero(self):
+        mask = PixelMask(name="lungspace", values=[[True, False]], keep_zeros=True)
+
+        np.testing.assert_array_equal(mask.values, [[1.0, 0.0]])
 
     def test_weights_between_zero_and_one_are_kept(self):
         mask = PixelMask(name="lungspace", values=[[0.5, np.nan], [1.0, 0.25]])
@@ -62,14 +71,63 @@ class TestPixelMask:
         np.testing.assert_array_equal(mask.values, [[0.5, np.nan], [1.0, 0.25]])
         assert mask.included_pixel_count == 3
 
-    def test_zero_is_refused_because_its_meaning_is_unclear(self):
-        with pytest.raises(ValueError, match="holds 0"):
-            PixelMask(name="lungspace", values=[[0.0, 1.0]])
+    def test_zero_becomes_nan_with_a_warning(self):
+        with pytest.warns(UserWarning, match="keep_zeros=True"):
+            mask = PixelMask(name="lungspace", values=[[0.0, 1.0]])
+
+        np.testing.assert_array_equal(mask.values, [[np.nan, 1.0]])
+
+    def test_zero_conversion_warning_can_be_switched_off(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            mask = PixelMask(
+                name="lungspace",
+                values=[[0.0, 1.0]],
+                suppress_zero_conversion_warning=True,
+            )
+
+        np.testing.assert_array_equal(mask.values, [[np.nan, 1.0]])
+
+    def test_keep_zeros_keeps_weight_zero_apart_from_nan(self):
+        # NaN is outside the region; 0 is inside it with no weight.
+        mask = PixelMask(
+            name="ventral_weights",
+            values=[[np.nan, 0.0], [1.0, 0.5]],
+            keep_zeros=True,
+        )
+
+        np.testing.assert_array_equal(mask.values, [[np.nan, 0.0], [1.0, 0.5]])
+        assert mask.included_pixel_count == 3
+
+        pixel_values = np.array([[10.0, 10.0], [10.0, 10.0]])
+        masked = pixel_values * mask.values
+        np.testing.assert_array_equal(masked, [[np.nan, 0.0], [10.0, 5.0]])
+        assert np.nansum(masked) == 15.0
 
     @pytest.mark.parametrize("bad", [-0.5, 1.5])
     def test_numbers_outside_zero_to_one_are_refused(self, bad):
         with pytest.raises(ValueError, match="from 0 to 1"):
             PixelMask(name="lungspace", values=[[bad, 1.0]])
+
+    def test_range_check_can_be_switched_off(self):
+        mask = PixelMask(
+            name="lungspace", values=[[1.5, 1.0]], suppress_value_range_error=True
+        )
+
+        np.testing.assert_array_equal(mask.values, [[1.5, 1.0]])
+
+    def test_all_nan_grid_gives_a_warning(self):
+        with pytest.warns(UserWarning, match="NaN everywhere"):
+            PixelMask(name="lungspace", values=[[np.nan, np.nan]])
+
+    def test_all_nan_warning_can_be_switched_off(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            PixelMask(
+                name="lungspace",
+                values=[[np.nan, np.nan]],
+                suppress_all_nan_warning=True,
+            )
 
     def test_anything_but_a_2d_grid_is_refused(self):
         with pytest.raises(ValueError, match="2D grid"):

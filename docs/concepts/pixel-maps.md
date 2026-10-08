@@ -17,15 +17,24 @@ impedance tomography*, Physiol. Meas. 47(8), 2026,
 | **Regional impedance waveform** | The impedance change in a region of interest (ROI) over time. An ROI is any predefined area of the image: a layer, a quadrant, or the ventilated (functional) lung space. |
 | **Pixel impedance waveform** | The value of one pixel over time. |
 
-Anything computed inside a mask is **regional**, not global. "Functional" in
-the consensus refers to functional EIT *images* (fEIT), not to waveforms, so
-m3resp does not use it for waveforms.
+Anything computed inside a mask is **regional**. The regional waveform of the
+functional (ventilated) lung space is commonly called the **functional
+impedance**, and m3resp uses that name for it.
+
+| Step | Output | Waveform |
+|---|---|---|
+| `eit.global_impedance` | `global_impedance` | Global: the sum of all pixels |
+| `eit.regional_impedance` | `regional_impedance` | Regional: each pixel multiplied by its mask value, then summed |
+| `eit.functional_impedance` | `functional_impedance` | Regional, for the functional lung-space mask (by default `tiv_lungspace_result` from `eit.roi_tiv_lungspace`) |
+
+`eit.regional_impedance` and `eit.functional_impedance` do the same
+calculation. Both store the waveform as a `Signal` in `session.signals`, with
+the output name as its `channel`.
 
 Steps that work on any one-channel impedance waveform, global or regional
 (breath detection, TIV, EELI, pixel TIV, pixel breaths and the lung-space
-masks), declare their input as `eit_impedance_waveform`. The step
-`eit.global_impedance` and its output `global_impedance` are the global
-waveform (the sum of all pixels).
+masks), declare their input as `eit_impedance_waveform`, so any of the three
+waveforms above can feed them.
 
 ## `PixelMap`
 
@@ -53,19 +62,30 @@ numbers raise `TypeError`. numpy reads a `PixelMap` as its grid, so
 ## `PixelMask`
 
 Which pixels belong to a region, such as the functional lung space. Each pixel
-is NaN (not part of the region), 1 (part of it), or a weight between 0 and 1.
+is NaN (not part of the region), 1 (part of it), or a weight from 0 to 1.
 
 ```python
 from m3resp import PixelMask
 
 lung = PixelMask(name="tiv_lungspace_mask", values=grid)
-lung.included_pixel_count  # pixels that are not NaN
+lung.included_pixel_count  # pixels that are not NaN, weight 0 included
 ```
 
-A grid of true/false values is accepted: true becomes 1 and false becomes NaN.
-A grid of numbers must already use NaN for the pixels left out. A 0 raises
-`ValueError`, because it could mean "left out" or "weight 0". A number below 0
-or above 1 raises `ValueError` too.
+The checks follow eitprocessing's `PixelMask`:
+
+| Input | Result |
+|---|---|
+| 0 in a grid of numbers | Becomes NaN, with a warning. `keep_zeros=True` keeps it as weight 0 (inside the region, adds nothing to a sum); `suppress_zero_conversion_warning=True` skips the warning. |
+| A grid of true/false values | True becomes 1. False becomes NaN without a warning, or 0 with `keep_zeros=True`. |
+| A number below 0 or above 1 | `ValueError`, unless `suppress_value_range_error=True`. |
+| A grid that is NaN everywhere | A warning, unless `suppress_all_nan_warning=True`. |
+
+```python
+weighted = PixelMask(name="ventral_weights", values=grid, keep_zeros=True)
+```
+
+Masks read from eitprocessing, and masks passed back to it, keep their values
+unchanged, zeros included.
 
 The ROI steps (`eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace`,
 `eit.roi_watershed`, `eit.roi_filter_by_size`) store their mask in

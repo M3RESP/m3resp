@@ -96,6 +96,38 @@ class EITProcessingAdapter:
         add_to_collection(sequence.continuous_data, global_impedance)
         return global_impedance
 
+    def get_regional_impedance(self, eit_data: Any, mask: Any, *, label: str) -> Any:
+        """Return the impedance summed over the pixels of a mask, per frame.
+
+        Each pixel is multiplied by its mask value, so a NaN pixel drops out
+        and a weighted pixel counts partly; the result is summed over all
+        pixels in each frame. This is eitprocessing's ``PixelMask.apply``
+        followed by ``EITData.get_summed_impedance``.
+
+        Args:
+            eit_data: eitprocessing pixel data with time, row and column axes.
+            mask: An eitprocessing or m3resp ``PixelMask``, or a 2D grid with
+                NaN for pixels outside the region.
+            label: Label of the returned waveform, e.g.
+                ``'functional_impedance'``.
+
+        Returns:
+            eitprocessing ``ContinuousData``: the regional impedance waveform
+                on the time axis of ``eit_data``, in arbitrary units (AU).
+
+        Raises:
+            UnsupportedWorkflowError: If ``mask`` cannot be read as a 2D mask.
+            ValueError: If the mask shape does not match the image shape.
+        """
+
+        upstream_mask = self.as_pixel_mask(mask)
+        masked = upstream_mask.apply(eit_data)
+        return masked.get_summed_impedance(
+            return_label=label,
+            name=label.replace("_", " ").capitalize(),
+            description="Impedance summed over the pixels of a mask.",
+        )
+
     def slice_sequence(self, sequence: Any, start_index: int, end_index: int) -> Any:
         """Return a copy of `sequence` keeping frames `start_index` up to (not
         including) `end_index`.
@@ -400,7 +432,9 @@ class EITProcessingAdapter:
         Args:
             mask: An eitprocessing ``PixelMask``, an m3resp ``PixelMask``, or
                 a 2D numeric array, list or tuple. Numeric grids use NaN for
-                excluded pixels and positive weights for included pixels.
+                excluded pixels and weights from 0 to 1 for included pixels.
+                An m3resp ``PixelMask`` keeps its zeros as weight 0; in a
+                plain grid, eitprocessing turns zeros into NaN.
 
         Returns:
             eitprocessing.PixelMask: An existing object with a ``mask``
@@ -436,6 +470,12 @@ class EITProcessingAdapter:
             )
 
         (UpstreamPixelMask,) = _lazy_import("eitprocessing.roi.PixelMask")
+        if isinstance(mask, PixelMask):
+            # An m3resp mask has already been checked, so its zeros (weight 0)
+            # and weights are passed on unchanged.
+            return UpstreamPixelMask(
+                array, keep_zeros=True, suppress_value_range_error=True
+            )
         return UpstreamPixelMask(array)
 
     def preprocess(

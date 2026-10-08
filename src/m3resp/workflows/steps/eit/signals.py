@@ -1,4 +1,4 @@
-"""Registered EIT steps on impedance waveforms (global impedance, breaths, TIV, EELI)."""
+"""Registered EIT steps on impedance waveforms (global, regional and functional impedance, breaths, TIV, EELI)."""
 
 from __future__ import annotations
 
@@ -6,10 +6,13 @@ from typing import Any
 
 from m3resp.adapters.eitprocessing_adapter import (
     add_to_collection,
+    continuous_data_to_signal,
     sparse_data_to_interval_data,
 )
 from m3resp.core.session import M3Session
+from m3resp.data import PixelMask
 from m3resp.workflows.registry import (
+    ANY_ARTIFACT_TYPE,
     StepArtifact,
     StepParameter,
     register_step,
@@ -79,6 +82,237 @@ def global_impedance(
     summed = signal.get_summed_impedance()
     add_to_collection(eit_sequence.continuous_data, summed)
     return {"global_impedance": summed}
+
+
+def _mask_label(mask: Any) -> str | None:
+    """Return the name of an m3resp mask or the label of an upstream mask."""
+
+    if isinstance(mask, PixelMask):
+        return mask.name
+    label = getattr(mask, "label", None)
+    return label if isinstance(label, str) else None
+
+
+def _impedance_in_mask(
+    signal: Any,
+    mask: Any,
+    *,
+    eit_sequence: Any,
+    session: M3Session,
+    step: str,
+    output: str,
+) -> dict[str, Any]:
+    """Sum pixel impedance inside a mask, store the waveform and record the step.
+
+    The upstream waveform goes onto the EIT sequence; a native ``Signal``
+    with channel ``output`` goes into ``session.signals``.
+    """
+
+    waveform = session.eit_adapter.get_regional_impedance(signal, mask, label=output)
+    add_to_collection(eit_sequence.continuous_data, waveform)
+    metadata = _upstream_metadata(
+        source_function=(
+            "eitprocessing.roi.PixelMask.apply + "
+            "eitprocessing.datahandling.eitdata.EITData.get_summed_impedance"
+        ),
+        operation=step,
+        parameters={"mask": _mask_label(mask)},
+    )
+    native = continuous_data_to_signal(
+        waveform,
+        modality="eit",
+        channel=output,
+        processing_state="intermediate",
+        source="eitprocessing",
+        method="eitprocessing.PixelMask.apply",
+        name=output,
+    )
+    native.metadata.update(metadata)
+    session.signals.add(native)
+    _record_step(session, step, metadata=metadata)
+    return {output: waveform, f"{output}_signal": native}
+
+
+_PIXEL_SIGNAL_TO_SUM = StepArtifact(
+    name="signal",
+    artifact_type="eit_pixel_signal",
+    default_context_key="filtered_eit",
+    description="Filtered EIT pixel signal to sum.",
+    compatibility_only=True,
+)
+
+_SEQUENCE_FOR_WAVEFORM = StepArtifact(
+    name="eit_sequence",
+    artifact_type="eit_sequence",
+    description="Sequence the waveform is added onto.",
+    public=False,
+    compatibility_only=True,
+)
+
+
+@register_step(
+    "eit.regional_impedance",
+    reads={
+        "signal": "filtered_eit",
+        "mask": None,
+        "eit_sequence": "eit_sequence",
+        "session": "session",
+    },
+    writes=("regional_impedance", "regional_impedance_signal"),
+    summary="Sum pixel impedance inside a mask into a regional impedance waveform.",
+    description="Multiply each pixel by its mask value and sum the pixels per frame, giving the regional impedance waveform of any region (a layer, a quadrant, the lung space).",
+    category="preprocessing",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    session_writes=("session.signals",),
+    parameters_reviewed=True,
+    input_artifacts=(
+        _PIXEL_SIGNAL_TO_SUM,
+        StepArtifact(
+            name="mask",
+            artifact_type=ANY_ARTIFACT_TYPE,
+            description=(
+                "Mask of the region: an m3resp PixelMask (e.g. "
+                "'watershed_lungspace_result'), an eitprocessing PixelMask, "
+                "or a 2D grid with NaN for pixels outside the region."
+            ),
+        ),
+        _SEQUENCE_FOR_WAVEFORM,
+        _SESSION_ARTIFACT,
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="regional_impedance",
+            artifact_type="eit_impedance_waveform",
+            description="Regional impedance: the sum of the pixels inside the mask.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="regional_impedance_signal",
+            artifact_type="signal",
+            description="Native Signal wrapping the regional impedance.",
+        ),
+    ),
+)
+def regional_impedance(
+    signal: Any,
+    *,
+    mask: Any,
+    eit_sequence: Any,
+    session: M3Session,
+) -> dict[str, Any]:
+    """Sum pixel impedance inside a mask into one waveform.
+
+    Each pixel is multiplied by its mask value (NaN leaves it out, a weight
+    counts it partly) and the pixels are summed per frame. The waveform is
+    added to the EIT sequence and to ``session.signals``, and the step is
+    recorded in the session's history.
+
+    Args:
+        signal: eitprocessing pixel data with time, row and column axes.
+        mask: An m3resp or eitprocessing ``PixelMask``, or a 2D grid with
+            NaN for pixels outside the region; its shape must match the image.
+        eit_sequence: Sequence whose continuous-data collection receives the
+            waveform.
+        session: Session that stores the waveform and processing history.
+
+    Returns:
+        dict[str, Any]: ``regional_impedance``, the upstream waveform with its
+            time axis, in arbitrary units (AU), and ``regional_impedance_signal``, the
+            same waveform as a native ``Signal`` (also added to
+            ``session.signals``).
+    """
+
+    return _impedance_in_mask(
+        signal,
+        mask,
+        eit_sequence=eit_sequence,
+        session=session,
+        step="eit.regional_impedance",
+        output="regional_impedance",
+    )
+
+
+@register_step(
+    "eit.functional_impedance",
+    reads={
+        "signal": "filtered_eit",
+        "mask": "tiv_lungspace_result",
+        "eit_sequence": "eit_sequence",
+        "session": "session",
+    },
+    writes=("functional_impedance", "functional_impedance_signal"),
+    summary="Sum pixel impedance inside the functional lung space (functional impedance).",
+    description="Regional impedance of the functional (ventilated) lung space: each pixel is multiplied by its lung-space mask value and the pixels are summed per frame.",
+    category="preprocessing",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    session_writes=("session.signals",),
+    parameters_reviewed=True,
+    input_artifacts=(
+        _PIXEL_SIGNAL_TO_SUM,
+        StepArtifact(
+            name="mask",
+            artifact_type=ANY_ARTIFACT_TYPE,
+            default_context_key="tiv_lungspace_result",
+            description=(
+                "Functional lung-space mask, e.g. from eit.roi_tiv_lungspace, "
+                "eit.roi_amplitude_lungspace or eit.roi_watershed."
+            ),
+        ),
+        _SEQUENCE_FOR_WAVEFORM,
+        _SESSION_ARTIFACT,
+    ),
+    output_artifacts=(
+        StepArtifact(
+            name="functional_impedance",
+            artifact_type="eit_impedance_waveform",
+            description="Functional impedance: the sum of the pixels inside the functional lung space.",
+            compatibility_only=True,
+        ),
+        StepArtifact(
+            name="functional_impedance_signal",
+            artifact_type="signal",
+            description="Native Signal wrapping the functional impedance.",
+        ),
+    ),
+)
+def functional_impedance(
+    signal: Any,
+    *,
+    mask: Any,
+    eit_sequence: Any,
+    session: M3Session,
+) -> dict[str, Any]:
+    """Sum pixel impedance inside the functional lung space into one waveform.
+
+    This is the regional impedance waveform of the functional (ventilated)
+    lung space, commonly called the functional impedance. The calculation is
+    the same as ``eit.regional_impedance``.
+
+    Args:
+        signal: eitprocessing pixel data with time, row and column axes.
+        mask: Functional lung-space mask (m3resp or eitprocessing
+            ``PixelMask``, or a 2D grid with NaN outside the lung space).
+        eit_sequence: Sequence whose continuous-data collection receives the
+            waveform.
+        session: Session that stores the waveform and processing history.
+
+    Returns:
+        dict[str, Any]: ``functional_impedance``, the upstream waveform with its
+            time axis, in arbitrary units (AU), and ``functional_impedance_signal``, the
+            same waveform as a native ``Signal`` (also added to
+            ``session.signals``).
+    """
+
+    return _impedance_in_mask(
+        signal,
+        mask,
+        eit_sequence=eit_sequence,
+        session=session,
+        step="eit.functional_impedance",
+        output="functional_impedance",
+    )
 
 
 @register_step(
