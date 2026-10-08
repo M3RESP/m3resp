@@ -87,7 +87,7 @@ offset (`method="manual_offset"` is currently the only method either accepts).
   - `eit_to_emg_delay` (per breath, seconds, signed): the EMG breath anchor
     minus the EIT breath anchor. Read it as a check on detection and
     alignment, not as an outcome measure. With the default `anchor="start"`
-    the two sides are not the same kind of landmark: the EIT start is a
+    the two sides are different kinds of landmark: the EIT start is a
     detected breath start, while default EMG detection initially sets the
     start and end to the envelope peak time. In that case the delay compares
     EIT breath onset with peak EMG activity. `emg.onoffpeak_baseline_crossing`
@@ -110,9 +110,9 @@ offset (`method="manual_offset"` is currently the only method either accepts).
   alongside the per-modality parameters, so they export to the same
   `parameter_results.csv` - see [export-results.md](export-results.md).
 
-  A cross-modality measure that reads signal *values* rather than breath
-  times - an EMG-effort-to-EIT-pendelluft coupling index, say - is a
-  separate computation, not an extension of this one. See
+  A cross-modality measure computed from the signal *values* - an
+  EMG-effort-to-EIT-pendelluft coupling index, say - is a separate
+  computation. See
   [../concepts/parameters.md](../concepts/parameters.md).
 
 ```python

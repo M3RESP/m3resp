@@ -348,32 +348,41 @@ def pocc_intervals(
     baseline_step_seconds: float = 0.2,
     baseline_percentile: float = 33.0,
 ) -> dict[str, Any]:
-    """Find occluded-breath boundaries from airway-pressure baseline crossings.
+    """Find the start and end of each occluded breath from pressure crossings.
 
-    For each pressure minimum, use the preceding and following crossings of
-    a moving percentile baseline. Boundaries and their validity follow
-    `onoff_from_baseline_crossings`; all detections are kept with validity
-    recorded in each event's metadata.
-    Stores the breaths under ``session.events["pocc_breaths"]`` and records
-    the calculation settings in the session's processing history.
+    Boundaries are found from moving-baseline crossings around each pressure
+    minimum, using the signal edges when crossings are missing. Breaths are stored
+    in ``session.events['pocc_breaths']`` with ``metadata['event_type']`` set
+    to ``'pocc'``. Their times are in seconds from the first pressure sample,
+    and their extremum is the pressure minimum. Every detected minimum is
+    kept, with validity flags for its boundaries.
+    The processing settings are recorded in the session's history.
 
     Args:
-        session: Session providing the EMG adapter's moving-baseline calculation
-            and receiving the occluded-breath events and processing history.
-        ventilator_signals: Channel dictionary with ``pressure`` in cmH2O,
-            one value per sample, and ``fs`` in Hz.
-        pocc_indices: Sample positions of occlusion pressure minima, one per
-            manoeuvre.
-        baseline_window_seconds: Duration of each moving-baseline window in seconds.
-        baseline_step_seconds: Time between baseline windows in seconds.
-        baseline_percentile: Pressure percentile within each window, from 0 to 100.
+        session: Session whose EMG adapter computes the pressure baseline and
+            which stores the occluded breaths and processing history.
+        ventilator_signals: Dictionary containing the one-dimensional airway
+            ``pressure`` signal and its sampling rate ``fs`` in Hz. Baseline
+            values use the pressure signal's unit.
+        pocc_indices: Sample indices of the occlusion pressure minima, in
+            the pressure signal.
+        baseline_window_seconds: Moving-baseline window length in seconds.
+        baseline_step_seconds: Step between baseline windows in seconds.
+        baseline_percentile: Pressure percentile within each window, from
+            0 to 100.
 
     Returns:
-        dict[str, Any]: Start/end sample arrays, a boolean interval-validity array
-            and a BreathEvent list in pocc_indices order, plus the baseline
-            array in cmH2O. Each breath carries times in seconds from recording
-            start, start/end/extremum indices, and ``event_type="pocc"`` metadata.
-            The extremum is the pressure minimum.
+        dict[str, Any]: ``pocc_start_indices`` and ``pocc_end_indices`` in
+            samples, ``pocc_interval_validity`` as a boolean array, and
+            ``pocc_events`` as ``BreathEvent`` objects, all in
+            ``pocc_indices`` order. ``pressure_baseline`` has one value per
+            pressure sample.
+
+    Raises:
+        OptionalDependencyError: If ReSurfEMG is unavailable for baseline
+            estimation.
+        ValueError: If baseline inputs are invalid or a breath ends before
+            its start.
     """
 
     pressure = np.asarray(ventilator_signals["pressure"], dtype=float)
@@ -395,9 +404,8 @@ def pocc_intervals(
         pressure, baseline, peaks
     )
 
-    # A Pocc is an effort to breathe in against a closed airway. Its
-    # BreathEvent records the deepest pressure at extremum_index, with
-    # metadata["event_type"] marking it as a Pocc.
+    # An occluded breath is an effort to breathe in against a closed airway.
+    # Its turning point is the deepest pressure, at `extremum_index`.
     events: list[BreathEvent] = []
     for index, peak in enumerate(peaks):
         events.append(

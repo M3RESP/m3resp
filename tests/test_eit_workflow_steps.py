@@ -22,7 +22,14 @@ import pytest
 
 from m3resp.core.exceptions import PipelineSpecError
 from m3resp.core.session import M3Session
-from m3resp.data import BreathEvent, Event, IntervalData, PixelMap, PixelMask
+from m3resp.data import (
+    BreathEvent,
+    Event,
+    IntervalData,
+    PixelMap,
+    PixelMask,
+    pixel_breath_events,
+)
 from m3resp.workflows import available_steps, run_pipeline
 from m3resp.workflows.registry import get_step
 from m3resp.workflows.spec import load_spec
@@ -579,6 +586,27 @@ def test_pixel_breaths_step_converts_object_array_to_landmark_array():
     assert np.array_equal(value[1, 0, 0], [0.0, 0.5, 1.0])
     assert np.isnan(value[0]).all()  # unresolved pixel breaths stay NaN
     assert list(session.interval_data) == [timing]
+
+
+def test_pixel_breaths_step_output_gives_breath_events_per_pixel():
+    session = _session_with_fake_adapter()
+    raw = _FakeEITData(np.ones((3, 2, 2)), time=np.arange(3, dtype=float))
+
+    result = pixel_breaths(
+        eit_data=raw, timing_data=raw, eit_sequence=_FakeSequence(raw), session=session
+    )
+    timing = result["pixel_breath_timing_result"]
+
+    events = pixel_breath_events(timing, row=0, column=0)
+
+    # Pixel (0, 0) has a breath only in the second global breath; the
+    # others are NaN and give no entry.
+    grids = np.stack(timing.values)
+    assert np.isnan(grids[[0, 2], 0, 0]).all()
+    assert [(e.start_time, e.extremum_time, e.end_time) for e in events] == [
+        (0.0, 0.5, 1.0)
+    ]
+    assert events[0].metadata["global_breath_id"] == timing.intervals[1].id
 
 
 def test_pixel_breaths_refuses_breaths_that_do_not_match_pixelbreath():

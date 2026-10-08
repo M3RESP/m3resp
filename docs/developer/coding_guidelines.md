@@ -1,10 +1,8 @@
 # Coding guidelines
 
-This file collects small design-pattern decisions that came up during review
-and are meant to be reused rather than re-litigated per function. If you are
-about to introduce a new one-off convention, check here first, and if what
-you need isn't covered, add it here once it's settled instead of leaving the
-precedent buried in a PR discussion.
+This file collects small conventions for recurring design choices. If you
+are about to introduce a new convention, check here first, and add it here
+once it is settled.
 
 ## Optional secondary outputs: use `captures`, not a boolean return-shape toggle
 

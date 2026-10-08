@@ -13,10 +13,9 @@ from m3resp.data.signals import Signal
 def resample_signal(signal: Signal, target_frequency_hz: float) -> Signal:
     """Return a copy of ``signal`` resampled to ``target_frequency_hz``.
 
-    Uses linear interpolation (`numpy.interp`) rather than a
-    filtering-based resampler: this is a synchronization convenience for
-    putting two modalities on a common time base, not a signal-processing
-    step, so it deliberately does not apply anti-aliasing.
+    Uses linear interpolation (`numpy.interp`) with no anti-aliasing
+    filter, to put two modalities on a common time base. Low-pass filter the
+    signal first when lowering its sampling rate.
     """
 
     if target_frequency_hz <= 0:

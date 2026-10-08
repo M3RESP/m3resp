@@ -5,10 +5,9 @@ Sections 7.1-7.11 for the MVP entities (doc Sec 9) and Section 11 for
 ``QualityAnnotation``. Coded fields use ``Literal`` unions built from the
 vocabularies the doc already spells out (Sec 2.5, 7.4, 7.9-7.11, 11).
 
-Two fields go beyond the doc, both flagged here rather than hidden: they exist
-so the future Controller/Service layer (Session Manager, State Manager,
-Pipeline Manager, Error Handler, Task Runner) has somewhere to record
-execution/async state without a schema break.
+Two fields are additions to the doc. They give the future Controller/Service
+layer (Session Manager, State Manager, Pipeline Manager, Error Handler, Task
+Runner) somewhere to record execution/async state without a schema break.
 
 - ``ProcessingRun.status`` / ``ProcessingRun.error``: Task Runner needs to
   track jobs across pending/running/succeeded/failed, and the Error Handler
@@ -328,21 +327,31 @@ ProcessingStatus = Literal["pending", "running", "succeeded", "failed"]
 
 
 class ProcessingRun(Entity):
-    """One execution of a processing pipeline (doc Sec 7.10)."""
+    """One recorded execution of a processing workflow.
+
+    Attributes:
+        processing_run_id: Identifier of this run, generated automatically.
+        pipeline_name: Name of the workflow that ran.
+        pipeline_version: Optional workflow version.
+        code_commit_hash: Optional Git commit identifying the code used.
+        input_file_ids: Identifiers of the input file records.
+        parameter_file_ids: Identifiers of exported array-results files,
+            such as per-breath pixel maps and masks.
+        run_time: Run timestamp in Unix epoch seconds, UTC.
+        operator_ref: Optional name or identifier of the person running it.
+        status: ``'pending'``, ``'running'``, ``'succeeded'`` or ``'failed'``.
+        error: Optional description of a failure.
+        parameters: Settings used by the workflow.
+    """
 
     processing_run_id: str = Field(default_factory=lambda: new_id("run"))
     pipeline_name: str
     pipeline_version: str | None = None
     code_commit_hash: str | None = None
     input_file_ids: list[str] = Field(default_factory=list)
-    # The files holding this run's array results (role "parameter"), e.g.
-    # parameter_result_arrays.npz, interval_data_arrays.npz, pixel_masks.npz.
-    # A list, because one run can write several of them.
     parameter_file_ids: list[str] = Field(default_factory=list)
     run_time: float = Field(default_factory=_utc_now_ts)
     operator_ref: str | None = None
-    # Beyond the doc: forward-compat for the Task Runner / Error Handler
-    # components in the roadmap image (see module docstring).
     status: ProcessingStatus = "succeeded"
     error: str | None = None
     parameters: dict[str, Any] = Field(default_factory=dict)

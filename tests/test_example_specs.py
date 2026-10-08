@@ -2,10 +2,9 @@
 and where its fixture files are present, at readiness level too) without
 importing any optional package.
 
-This is deliberately independent of ``test_workflow_spec_baseline.py``'s
-frozen-snapshot tests: those guard *exact* parsed structure against
-regressions, this file guards the weaker but more directly useful property
-that every example is a valid, compilable, GUI-discoverable pipeline.
+``test_workflow_spec_baseline.py``'s frozen-snapshot tests check the
+*exact* parsed structure; this file checks that every example is a valid,
+compilable, GUI-discoverable pipeline.
 """
 
 from __future__ import annotations

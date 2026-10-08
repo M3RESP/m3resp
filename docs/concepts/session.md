@@ -96,8 +96,7 @@ ventilator path is already where Stage 3 is taking the other two.
 and low-passes each channel (20 Hz by default, clamped below Nyquist; pass
 `lowpass_hz=None` to disable). The unfiltered arrays stay available under
 `"raw"`, mirroring how the EMG bundle keeps `raw_channel` alongside `filtered`
-and `envelope`. The cutoff is a conservative anti-noise default rather than a
-clinical parameter: respiratory content sits below roughly 5 Hz, so 20 Hz
+and `envelope`. The cutoff removes noise: respiratory content sits below roughly 5 Hz, so 20 Hz
 leaves breath morphology - including the sharp pressure upstroke that Pocc
 quality assessment measures - untouched.
 
