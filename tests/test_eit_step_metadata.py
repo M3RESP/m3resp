@@ -21,6 +21,8 @@ _EIT_STEP_NAMES = [
     "eit.mdn_filter",
     "eit.butterworth_filter",
     "eit.global_impedance",
+    "eit.regional_impedance",
+    "eit.functional_impedance",
     "eit.detect_breaths",
     "eit.normalize_breaths",
     "eit.continuous_tiv",
@@ -34,7 +36,7 @@ _EIT_STEP_NAMES = [
 ]
 
 
-def test_all_seventeen_eit_steps_are_registered_and_described():
+def test_all_nineteen_eit_steps_are_registered_and_described():
     descriptions = describe_steps(prefix="eit.")
     assert {d.name for d in descriptions} == set(_EIT_STEP_NAMES)
 

@@ -7,7 +7,7 @@ impedance variation of each pixel in one breath, for example. A
 
 A :class:`PixelMask` is a grid that says which pixels belong to a region,
 such as the functional lung space. A pixel that is not part of the region is
-NaN; a pixel that is part of it is 1, or a weight between 0 and 1.
+NaN; a pixel that is part of it is 1, or a weight from 0 to 1.
 
 Both follow eitprocessing's ``PixelMap`` and ``PixelMask``, so values can be
 handed back to eitprocessing without being changed.
@@ -15,7 +15,8 @@ handed back to eitprocessing without being changed.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import warnings
+from dataclasses import InitVar, dataclass, field
 from typing import Any
 
 import numpy as np
@@ -117,13 +118,22 @@ class PixelMask:
     """Which pixels of an EIT image belong to a region.
 
     Each pixel holds NaN when it is outside the region, 1 when it is included,
-    or a weight greater than 0 and less than 1 when it counts partly. Applying
-    the mask multiplies each pixel by this number, so a NaN pixel drops out.
+    or a weight from 0 to 1 when it counts partly. Applying the mask
+    multiplies each pixel by this number, so a NaN pixel drops out and a
+    pixel with weight 0 adds nothing to a sum.
 
-    A grid of true/false values is accepted too: true becomes 1 and false
-    becomes NaN. A grid of numbers must already use NaN for the pixels left
-    out; a 0 is refused, because it is unclear whether it means "left out"
-    or "weight 0".
+    The checks follow eitprocessing's ``PixelMask``:
+
+    - A 0 becomes NaN, with a warning. Pass ``keep_zeros=True`` to keep it as
+      weight 0, or ``suppress_zero_conversion_warning=True`` to skip the
+      warning.
+    - A grid of true/false values is accepted: true becomes 1 and false
+      becomes 0, which then becomes NaN without a warning (or stays 0 with
+      ``keep_zeros=True``).
+    - A number below 0 or above 1 raises ``ValueError``, unless
+      ``suppress_value_range_error=True``.
+    - A grid that is NaN everywhere gives a warning, unless
+      ``suppress_all_nan_warning=True``.
 
     Attributes:
         name: What the mask is, e.g. ``'tiv_lungspace_mask'``.
@@ -134,8 +144,8 @@ class PixelMask:
         metadata: Optional extra information.
 
     Raises:
-        ValueError: If ``values`` is not a 2D grid, holds a number below 0
-            or above 1, or holds a 0.
+        ValueError: If ``values`` is not a 2D grid, or holds a number below 0
+            or above 1 while ``suppress_value_range_error`` is False.
         TypeError: If ``values`` cannot be stored as floats without changing
             them.
     """
@@ -145,13 +155,24 @@ class PixelMask:
     modality: str = "eit"
     method: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    keep_zeros: InitVar[bool] = field(default=False, kw_only=True)
+    suppress_value_range_error: InitVar[bool] = field(default=False, kw_only=True)
+    suppress_zero_conversion_warning: InitVar[bool] = field(default=False, kw_only=True)
+    suppress_all_nan_warning: InitVar[bool] = field(default=False, kw_only=True)
 
-    def __post_init__(self) -> None:
-        """Convert boolean masks and check grid shape and numeric weights."""
+    def __post_init__(
+        self,
+        keep_zeros: bool,
+        suppress_value_range_error: bool,
+        suppress_zero_conversion_warning: bool,
+        suppress_all_nan_warning: bool,
+    ) -> None:
+        """Check the grid, then turn zeros into NaN unless they are kept."""
 
         raw = np.asarray(self.values)
-        if raw.dtype == bool:
-            grid = np.where(raw, 1.0, np.nan)
+        is_boolean_mask = raw.dtype == bool
+        if is_boolean_mask:
+            grid = raw.astype(float)
             if grid.ndim != 2:
                 raise ValueError(
                     f"PixelMask.values must be a 2D grid (row, column), got "
@@ -159,16 +180,36 @@ class PixelMask:
                 )
         else:
             grid = _as_float_grid(raw, owner="PixelMask")
-            if np.any(grid == 0):
-                raise ValueError(
-                    "PixelMask.values holds 0. Use NaN for pixels that are not "
-                    "part of the region, or pass a true/false grid."
+
+        all_nan = bool(np.all(np.isnan(grid)))
+        if all_nan and not suppress_all_nan_warning:
+            warnings.warn(
+                f"PixelMask '{self.name}' is NaN everywhere, so applying it "
+                "gives NaN for every pixel.",
+                UserWarning,
+                stacklevel=3,
+            )
+        if (
+            not all_nan
+            and not suppress_value_range_error
+            and (np.nanmin(grid) < 0 or np.nanmax(grid) > 1)
+        ):
+            raise ValueError(
+                "PixelMask.values must be NaN, or a number from 0 to 1 "
+                f"(found values from {np.nanmin(grid)} to {np.nanmax(grid)}). "
+                "Pass suppress_value_range_error=True to allow other values."
+            )
+        if not keep_zeros and np.any(grid == 0):
+            if not is_boolean_mask and not suppress_zero_conversion_warning:
+                warnings.warn(
+                    f"PixelMask '{self.name}' holds 0 values, which are turned "
+                    "into NaN (outside the region). Pass keep_zeros=True to "
+                    "keep them as weight 0, or "
+                    "suppress_zero_conversion_warning=True to skip this warning.",
+                    UserWarning,
+                    stacklevel=3,
                 )
-            if np.any((grid < 0) | (grid > 1)):
-                raise ValueError(
-                    "PixelMask.values must be NaN, or a number from 0 to 1 "
-                    f"(found values from {np.nanmin(grid)} to {np.nanmax(grid)})."
-                )
+            grid[grid == 0] = np.nan
         self.values = grid
 
     @property
@@ -180,7 +221,7 @@ class PixelMask:
 
     @property
     def included_pixel_count(self) -> int:
-        """Return the count of included pixels, including partly weighted pixels."""
+        """Return the count of pixels that are not NaN, weight 0 included."""
 
         return int(np.count_nonzero(~np.isnan(self.values)))
 

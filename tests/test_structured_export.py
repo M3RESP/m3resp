@@ -403,7 +403,7 @@ def test_names_that_clean_up_to_the_same_key_do_not_overwrite_each_other():
 
     masks = [
         PixelMask(name="lung-space", values=[[1.0]]),
-        PixelMask(name="lung space", values=[[np.nan]]),
+        PixelMask(name="lung space", values=[[np.nan]], suppress_all_nan_warning=True),
     ]
     _, mask_archive = pixel_masks_to_rows_and_archive(masks)
     assert sorted(mask_archive) == ["lung_space_0", "lung_space_1"]
