@@ -22,6 +22,8 @@ from typing import Any
 import numpy as np
 
 from m3resp.data.categories import normalize_category
+from m3resp.data.event_data import IntervalData
+from m3resp.data.events import BreathEvent
 from m3resp.data.units import normalize_unit
 
 
@@ -65,8 +67,7 @@ class PixelMap:
     def shape(self) -> tuple[int, int]:
         """Return the number of rows and columns, in that order."""
 
-        rows, columns = self.values.shape
-        return rows, columns
+        return self.values.shape
 
     def __array__(self, dtype: Any = None, copy: bool | None = None) -> np.ndarray:
         """Return the grid as a NumPy array with the requested dtype.
@@ -216,8 +217,7 @@ class PixelMask:
     def shape(self) -> tuple[int, int]:
         """Return the number of rows and columns, in that order."""
 
-        rows, columns = self.values.shape
-        return rows, columns
+        return self.values.shape
 
     @property
     def included_pixel_count(self) -> int:
@@ -264,6 +264,72 @@ class PixelMask:
             "method": self.method,
             "metadata": dict(self.metadata),
         }
+
+
+def pixel_breath_events(
+    pixel_breaths: IntervalData, row: int, column: int
+) -> list[BreathEvent]:
+    """Return the breaths of one pixel as ``BreathEvent`` objects.
+
+    ``eit.pixel_breaths`` stores, for each global breath, a grid of each
+    pixel's breath start, middle and end time. This function picks one pixel
+    from that grid and turns its breaths into ``BreathEvent`` objects, so
+    analyses written for global breaths (durations, timing checks, linking)
+    can run on one pixel too.
+
+    Args:
+        pixel_breaths: The ``IntervalData`` written by ``eit.pixel_breaths``
+            (name ``'pixel_breaths'`` by default): one (row, column, 3) grid
+            of start, middle and end times in seconds per global breath.
+        row: Row of the pixel, counted from 0.
+        column: Column of the pixel, counted from 0.
+
+    Returns:
+        list[BreathEvent]: One breath per global breath in which the pixel
+            has a breath, in time order. ``start_time`` and ``end_time`` are
+            the pixel's own breath start and end, ``peak_time`` is its middle
+            time (end of inspiration), all in seconds. A global breath where
+            the pixel has no breath (NaN) gives no entry. ``metadata`` holds
+            ``row``, ``column`` and ``global_breath_id``, the ``id`` of the
+            global breath it belongs to.
+
+    Raises:
+        ValueError: If the grids are not (row, column, 3), or ``row`` or
+            ``column`` is outside the grid.
+    """
+
+    values = pixel_breaths.values if pixel_breaths.values is not None else []
+    events: list[BreathEvent] = []
+    for interval, grid in zip(pixel_breaths.intervals, values, strict=True):
+        timings = np.asarray(grid, dtype=float)
+        if timings.ndim != 3 or timings.shape[-1] != 3:
+            raise ValueError(
+                f"'{pixel_breaths.name}' must hold (row, column, 3) grids of "
+                f"start, middle and end times, got shape {timings.shape}."
+            )
+        n_rows, n_columns, _ = timings.shape
+        if not (0 <= row < n_rows and 0 <= column < n_columns):
+            raise ValueError(
+                f"Pixel ({row}, {column}) is outside the {n_rows} x {n_columns} grid."
+            )
+        start, middle, end = timings[row, column]
+        if np.isnan([start, middle, end]).any():
+            continue
+        events.append(
+            BreathEvent(
+                pixel_breaths.modality,
+                float(start),
+                float(end),
+                peak_time=float(middle),
+                source=pixel_breaths.method,
+                metadata={
+                    "row": row,
+                    "column": column,
+                    "global_breath_id": interval.id,
+                },
+            )
+        )
+    return events
 
 
 def _as_float_grid(values: Any, *, owner: str) -> np.ndarray:

@@ -109,6 +109,23 @@ breath = pixel_tiv.intervals[3]   # the fourth breath
 tiv_map = pixel_tiv.values[3]     # its TIV map
 ```
 
+`pixel_breath_events` turns the breaths of one pixel into `BreathEvent`
+objects, the same type as the global breaths, so code written for global
+breaths runs on one pixel too:
+
+```python
+from m3resp import pixel_breath_events
+
+pixel_breaths = session.interval_data.for_name("pixel_breaths")[0]
+breaths = pixel_breath_events(pixel_breaths, row=16, column=12)
+durations = [b.end_time - b.start_time for b in breaths]
+```
+
+Each `BreathEvent` has the pixel's own start and end time, its middle time
+(end of inspiration) as `peak_time`, and `row`, `column` and
+`global_breath_id` in `metadata`. A global breath in which the pixel has no
+breath gives no entry.
+
 ## Export
 
 `session.export_summary(...)` writes the masks to `pixel_masks.csv` (one row

@@ -37,7 +37,7 @@ from m3resp.data.events import (
 )
 from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
-from m3resp.data.pixel_maps import PixelMap, PixelMask
+from m3resp.data.pixel_maps import PixelMap, PixelMask, pixel_breath_events
 from m3resp.data.processing import ProcessingHistory, ProcessingStep
 from m3resp.data.quality import QualityFlag
 from m3resp.data.signals import Signal
@@ -74,5 +74,6 @@ __all__ = [
     "event_to_dict",
     "load_category_aliases",
     "normalize_category",
+    "pixel_breath_events",
     "register_category_alias",
 ]
