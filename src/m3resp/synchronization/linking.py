@@ -1,6 +1,8 @@
-"""Link breaths across modalities by their nearest representative times.
+"""Nearest-neighbor breath linking across modalities.
 
-Align breath times to a shared time axis before linking them.
+Breaths are matched by how close their representative times are, greedily and
+one-to-one, with no clock-drift correction. Run `align_events_by_modality_offset` first if the
+modalities are not already on a common time axis.
 """
 
 from __future__ import annotations

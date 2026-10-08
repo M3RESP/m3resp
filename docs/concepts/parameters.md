@@ -21,8 +21,7 @@ all optional and can be combined:
   example "during the intervention").
 - If none of the above are set, the number applies to the whole recording.
 
-Results with one value per breath, such as EIT TIV and EELI, are not
-`ParameterResult`s: they are stored as
+Results with one value per breath, such as EIT TIV and EELI, are stored as
 [`IntervalData`](events-and-breaths.md#values-per-interval-or-event) in
 `session.interval_data`, so each value stays next to its breath. Masks that
 select EIT pixels are [`PixelMask`s](pixel-maps.md) in `session.pixel_masks`.
@@ -89,15 +88,13 @@ become lists) are the two helper members.
 - Cross-modality: `session.compute_multimodal_parameters()` computes timing
   delays, breath-duration differences, and event-agreement scores from
   `session.linked_breaths` - see [synchronization.md](synchronization.md).
-  These are deliberately timing-only metrics: they read breath start/end
-  times and nothing else. Both the delay and the event-agreement fraction are
-  checks on detection and synchronization rather than outcome measures: the
-  delay subtracts two breath anchors that are not the same kind of landmark
-  (a detected EIT breath start against an EMG start built from the envelope
-  peak by a fixed half-window), so nothing establishes that it measures a
-  physiological interval. A cross-modality index that
-  jointly analyzes signal *values* rather than breath timing (e.g. an
-  EMG-effort-to-EIT-pendelluft coupling index) is genuinely new science with
+  These metrics read breath start/end times only. The delay and the
+  event-agreement fraction check breath detection and synchronization. The
+  delay subtracts two different kinds of breath landmark (a detected EIT
+  breath start against an EMG start built from the envelope peak by a fixed
+  half-window), so nothing establishes that it measures a physiological
+  interval. A cross-modality index computed from the signal *values* (e.g.
+  an EMG-effort-to-EIT-pendelluft coupling index) is genuinely new science with
   no upstream equivalent, which is out of scope for Stage 2 - see
   ["A completely new algorithm with no upstream equivalent"](../developer/architecture.md)
   and the Stage 3 outlook there for where it belongs once Stage 3's native

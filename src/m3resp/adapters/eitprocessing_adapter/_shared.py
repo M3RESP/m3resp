@@ -223,10 +223,16 @@ def continuous_data_to_signal(
 
 
 def breath_intervals_to_breath_events(breath_intervals: Any) -> list[BreathEvent]:
-    """Convert eitprocessing's breaths (an ``IntervalData`` of ``Breath``
-    objects) into m3resp `BreathEvent` objects, in the same order. The
-    breath's middle time (the switch from inhalation to exhalation) becomes
-    the turning point."""
+    """Convert eitprocessing's detected breaths to m3resp ``BreathEvent`` objects.
+
+    Args:
+        breath_intervals: eitprocessing ``IntervalData`` containing breaths,
+            each with start, middle and end times in seconds.
+
+    Returns:
+        list[BreathEvent]: EIT breaths in input order. The middle time becomes
+            ``extremum_time`` and timing retains the input's time axis.
+    """
 
     return coerce_breath_events(
         _breath_intervals_to_dicts(breath_intervals),
@@ -244,18 +250,29 @@ def sparse_data_to_interval_data(
     metadata: dict[str, Any] | None = None,
     as_pixel_maps: bool = False,
 ) -> IntervalData:
-    """Convert an eitprocessing ``SparseData`` with one value per breath
-    (TIV, EELI, pixel TIV) into an `IntervalData` that keeps each value next
-    to its breath.
+    """Pair eitprocessing's per-breath values with their detected breaths.
 
-    eitprocessing keeps only one time per breath (its middle or its end) and
-    not the breath itself, so ``breaths`` must be the breaths the values were
-    computed over, in the same order. With ``as_pixel_maps=True`` each value
-    is a (row, column) grid and becomes a `PixelMap`.
+    Args:
+        obj: A result with ``values``, an optional ``unit`` and a ``label`` or
+            ``name``. Values have shape ``(breath, ...)`` and are converted
+            to floats, including NaNs.
+        breaths: Breaths used to compute the values, in the same order.
+            Their times supply the result's timing; ``obj.time`` is unused.
+        modality: Device or technique the values came from.
+        method: Name of the method that computed the values.
+        metadata: Additional result information, copied into the result.
+        as_pixel_maps: Wrap each row-column grid in ``PixelMap`` when true.
+            False retains the numeric array.
+
+    Returns:
+        IntervalData: One value per breath, with category ``'impedance'`` and
+            the input unit. Breath objects and missing NaN values are kept.
 
     Raises:
-        ValueError: If the number of values and breaths differ, which means
-            the breaths are not the ones the values belong to.
+        ValueError: If value and breath counts differ, numeric conversion
+            fails, or a pixel value has other than two dimensions.
+        TypeError: If values have an unsupported type or an item in ``breaths``
+            is other than an ``Interval``.
     """
 
     values = np.asarray(obj.values, dtype=float)

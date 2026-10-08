@@ -129,9 +129,8 @@ def evaluate_bell_curve_error(
         ],
     )
     # Array-valued (one fitted bell-curve parameter vector per breath), so
-    # this is its own ParameterResult rather than buried in metadata - it
-    # then reuses the shared parameter_result_arrays.npz exporter (plan
-    # Phase 6.3) instead of a competing EMG-specific array format.
+    # this is its own ParameterResult, which session.export_summary() writes
+    # to the shared parameter_result_arrays.npz file.
     results.extend(
         _per_breath_results(
             "evaluate_bell_curve_error_fitted_parameters",
@@ -251,9 +250,8 @@ def evaluate_event_timing(
 ) -> dict[str, Any]:
     fs = float(processed_emg["fs"])
     vent_fs = float(ventilator_signals["fs"])
-    # Keep the raw output's existing truncation behavior (Phase 5.1: "existing
-    # pipeline consumers do not break"), but report the truncation instead of
-    # silently dropping the unmatched events (Phase 5.4).
+    # The raw output keeps only the paired events (the shorter list); the
+    # number of unmatched events is reported.
     paired_count = min(len(peak_indices), len(ventilator_breath_indices))
     unmatched_count = abs(len(peak_indices) - len(ventilator_breath_indices))
     paired_emg_peaks = peak_indices[:paired_count]

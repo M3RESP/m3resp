@@ -8,7 +8,7 @@ a new data model.
 
 Two representations, one job each:
 
-- :class:`GraphNode` carries the *authoritative* ``in:``/``with:``/``out:``
+- :class:`GraphNode` carries the ``in:``/``with:``/``out:``
   bindings for its step, copied verbatim from :class:`StepSpec`. This is
   what makes the round trip correct: ``graph_to_spec(spec_to_graph(s))``
   reconstructs each step from its node's own bindings, never by trying to
@@ -33,7 +33,7 @@ node-based-UI outlook calls out: two steps writing the same context key at
 different points in the run must resolve to the correct producer, not
 "whichever step shares the name").
 
-``session`` is deliberately never drawn as a node with dozens of edges (the
+``session`` is never drawn as a node with dozens of edges (the
 "hairball" the outlook warns about): a read/write of the literal ``session``
 context key is suppressed entirely, and the genuinely meaningful hidden
 dependencies show up instead as ``kind="session"`` edges, built from each

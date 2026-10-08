@@ -31,9 +31,13 @@ def _validate_unit_threshold(value: float, *, step: str, param: str) -> None:
 def _to_pixel_mask(
     mask: Any, *, name: str, method: str, metadata: dict[str, Any]
 ) -> PixelMask:
-    """Convert an `eitprocessing.roi.PixelMask` into an m3resp `PixelMask`.
-    Pixels left out are already NaN in `mask.mask`, so the grid is kept as
-    it is, not cropped or flattened."""
+    """Convert an upstream mask to a row-column ``PixelMask`` with EIT metadata.
+
+    NaN marks excluded pixels. The values are copied unchanged, zeros and
+    out-of-range weights included, since the upstream mask has already run
+    the same checks. Metadata records the axes and the count and fraction of
+    included pixels.
+    """
 
     values = np.asarray(mask.mask, dtype=float)
     included = ~np.isnan(values)
@@ -51,6 +55,9 @@ def _to_pixel_mask(
         modality="eit",
         method=method,
         metadata=metadata,
+        keep_zeros=True,
+        suppress_value_range_error=True,
+        suppress_all_nan_warning=True,
     )
 
 
@@ -122,6 +129,28 @@ def roi_tiv_lungspace(
     session: M3Session,
     threshold: float = 0.15,
 ) -> dict[str, Any]:
+    """Select lung-space pixels by their mean tidal impedance variation (TIV).
+
+    The mask is added to ``session.pixel_masks`` and the processing settings
+    are recorded in the session's history.
+
+    Args:
+        eit_data: eitprocessing pixel data with time, row and column axes.
+        timing_data: Waveform used to detect breaths for mean pixel TIV.
+        session: Session that stores the mask and processing history.
+        threshold: Fraction of maximum mean pixel TIV required for inclusion,
+            strictly between 0 and 1.
+
+    Returns:
+        dict[str, Any]: ``tiv_lungspace_mask`` as the upstream mask,
+            ``tiv_lungspace_captures`` with intermediate results, and
+            ``tiv_lungspace_result`` as an m3resp ``PixelMask``. Grids have
+            row-column order, with 1 for included pixels and NaN elsewhere.
+
+    Raises:
+        ValueError: If the threshold is outside the open interval (0, 1).
+    """
+
     _validate_unit_threshold(threshold, step="eit.roi_tiv_lungspace", param="threshold")
 
     result = session.eit_adapter.compute_tiv_lungspace(
@@ -236,6 +265,25 @@ def roi_amplitude_lungspace(
     functional lung-space definition, as it potentially includes
     reconstruction artifacts. It is provided primarily for use by
     `eit.roi_watershed`.
+
+    The mask is added to ``session.pixel_masks`` and the processing settings
+    are recorded in the session's history.
+
+    Args:
+        eit_data: eitprocessing pixel data with time, row and column axes.
+        timing_data: Waveform used to detect breaths for mean pixel amplitude.
+        session: Session that stores the mask and processing history.
+        threshold: Fraction of maximum mean pixel amplitude required for
+            inclusion, strictly between 0 and 1.
+
+    Returns:
+        dict[str, Any]: ``amplitude_lungspace_mask`` as the upstream mask,
+            ``amplitude_lungspace_captures`` with intermediate results, and
+            ``amplitude_lungspace_result`` as an m3resp ``PixelMask``. Grids
+            have row-column order, with 1 for included pixels and NaN elsewhere.
+
+    Raises:
+        ValueError: If the threshold is outside the open interval (0, 1).
     """
 
     _validate_unit_threshold(
@@ -339,6 +387,29 @@ def roi_watershed(
     session: M3Session,
     threshold_fraction: float = 0.15,
 ) -> dict[str, Any]:
+    """Select lung-space pixels with eitprocessing's watershed method.
+
+    The method uses mean TIV and amplitude to select image regions. The
+    resulting mask is added to ``session.pixel_masks`` and the processing
+    settings are recorded in the session's history.
+
+    Args:
+        eit_data: eitprocessing pixel data with time, row and column axes.
+        timing_data: Waveform used to detect breaths for the pixel calculations.
+        session: Session that stores the mask and processing history.
+        threshold_fraction: Fraction of maximum mean pixel TIV used for the
+            initial mask, strictly between 0 and 1.
+
+    Returns:
+        dict[str, Any]: ``watershed_lungspace_mask`` as the upstream mask,
+            ``watershed_captures`` with intermediate results, and
+            ``watershed_lungspace_result`` as an m3resp ``PixelMask``. Grids
+            have row-column order, with 1 for included pixels and NaN elsewhere.
+
+    Raises:
+        ValueError: If the threshold is outside the open interval (0, 1).
+    """
+
     _validate_unit_threshold(
         threshold_fraction, step="eit.roi_watershed", param="threshold_fraction"
     )
@@ -429,6 +500,29 @@ def roi_filter_by_size(
     min_region_size: int = 10,
     connectivity: Literal[1, 2] = 1,
 ) -> dict[str, Any]:
+    """Remove mask regions smaller than the specified number of pixels.
+
+    The filtered mask is added to ``session.pixel_masks`` and the processing
+    settings are recorded in the session's history.
+
+    Args:
+        mask: An eitprocessing or m3resp ``PixelMask``, or a 2D numeric grid
+            with NaN for excluded pixels.
+        session: Session that stores the filtered mask and processing history.
+        min_region_size: Minimum number of connected pixels to retain; positive.
+        connectivity: ``1`` joins edge neighbours; ``2`` also joins diagonals.
+
+    Returns:
+        dict[str, Any]: ``size_filtered_roi_mask`` as the upstream mask and
+            ``size_filtered_roi_result`` as an m3resp ``PixelMask``, with
+            row-column order and NaN for excluded pixels.
+
+    Raises:
+        ValueError: If ``min_region_size`` is zero or negative.
+        UnsupportedWorkflowError: If the input cannot be converted to a
+            2D numeric mask.
+    """
+
     if min_region_size <= 0:
         raise ValueError(
             "eit.roi_filter_by_size 'min_region_size' must be positive, "

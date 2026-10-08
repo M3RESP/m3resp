@@ -107,8 +107,8 @@ def test_preprocess_envelope_defaults_to_rms_not_arv():
 
 
 def test_preprocess_bandpass_defaults_to_the_literature_range():
-    """20-500 Hz, capped by Nyquist. The high-pass deliberately does not sit
-    low enough to double as ECG suppression - `emg.ecg_gating` owns that."""
+    """20-500 Hz, capped by Nyquist. ECG removal is done by
+    `emg.ecg_gating`."""
 
     fs = 2000.0
     adapter = ReSurfEMGAdapter()

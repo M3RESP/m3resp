@@ -57,7 +57,7 @@ def estimated_ecg_subtraction(
     """Estimate and subtract repeating ECG artifacts from contaminated EMG.
 
     This is a deterministic interpretation of the EES algorithm described by
-    Jonkman et al. (2021). It does not need a separate ECG reference channel.
+    Jonkman et al. (2021). It needs only the contaminated EMG channel.
     The input should retain the ECG frequency content; an 80 Hz high-pass
     signal, for example, is not suitable for the paper's 4--50 Hz detection
     stage.

@@ -25,9 +25,11 @@ from m3resp.data import (
     coerce_breath_event,
     coerce_breath_events,
     coerce_event,
+    coerce_events,
     coerce_interval,
     coerce_intervals,
     event_to_dict,
+    pixel_breath_events,
 )
 from m3resp.datamodel import (
     Case,
@@ -111,6 +113,7 @@ __all__ = [
     "coerce_breath_event",
     "coerce_breath_events",
     "coerce_event",
+    "coerce_events",
     "coerce_interval",
     "coerce_intervals",
     "compute_offsets_from_timestamps",
@@ -120,6 +123,7 @@ __all__ = [
     "io",
     "link_breaths_by_time",
     "load_spec",
+    "pixel_breath_events",
     "register_pipeline",
     "register_step",
     "resample_signal",
