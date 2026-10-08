@@ -102,26 +102,26 @@ class TestAliasRegistry:
         register_channel_alias("Pmus_proximal", "airway_pressure")
         assert resolve_channel_name("pmus proximal") == "airway_pressure"
 
-    def test_the_old_airway_pressure_name_is_refused(self):
-        # An old alias file pointing at "pressure" must not quietly define a
-        # second channel apart from the airway pressure.
-        with pytest.raises(ValueError, match="airway_pressure"):
+    def test_the_old_airway_pressure_name_is_read_as_airway_pressure(self):
+        # An alias pointing at "pressure" goes to the airway pressure channel,
+        # with a warning, and defines no second channel called "pressure".
+        with pytest.warns(UserWarning, match="airway_pressure"):
             register_channel_alias("Ptrach", "pressure")
+        assert resolve_channel_name("ptrach") == "airway_pressure"
         assert "pressure" not in CHANNEL_CATEGORIES
 
-    def test_an_old_alias_file_changes_nothing(self, tmp_path):
-        # Every entry is checked before any is registered, so a file with one
-        # old entry leaves the active map as it was, even with replace=True.
+    def test_an_old_alias_file_is_read_with_a_warning(self, tmp_path):
         from m3resp.adapters.ventilator_adapter import load_channel_aliases
 
-        register_channel_alias("Pmus_proximal", "airway_pressure")
-        before = channel_aliases()
         path = tmp_path / "old_channels.yaml"
         path.write_text("a label: flow\nptrach: pressure\nz label: volume\n")
 
-        with pytest.raises(ValueError, match="airway_pressure"):
-            load_channel_aliases(path, replace=True)
-        assert channel_aliases() == before
+        with pytest.warns(UserWarning, match="airway_pressure"):
+            aliases = load_channel_aliases(path, replace=True)
+        assert aliases["a label"] == "flow"
+        assert aliases["ptrach"] == "airway_pressure"
+        assert aliases["z label"] == "volume"
+        assert "pressure" not in CHANNEL_CATEGORIES
 
     def test_registering_a_new_channel_defines_it(self):
         # A physical quantity not among the seven built-ins - a new

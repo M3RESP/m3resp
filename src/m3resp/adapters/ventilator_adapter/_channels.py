@@ -174,14 +174,22 @@ def resolve_channel_name(label: Any) -> str | None:
     return _CHANNEL_ALIASES.get(normalize_channel_label(label))
 
 
-def _check_alias_target(alias: str, channel: str) -> None:
-    """Raise ValueError for the obsolete target "pressure"; use "airway_pressure"."""
+def _current_channel_name(alias: str, channel: str) -> str:
+    """Return the channel name, reading the former name "pressure" as "airway_pressure".
+
+    Reading "pressure" gives a UserWarning naming the current channel.
+    """
 
     if channel == "pressure":
-        raise ValueError(
+        warnings.warn(
             f"Channel alias {alias!r} points to 'pressure'. The airway "
-            "pressure channel is now called 'airway_pressure'."
+            "pressure channel is now called 'airway_pressure'; the alias is "
+            "registered for 'airway_pressure'.",
+            UserWarning,
+            stacklevel=3,
         )
+        return "airway_pressure"
+    return channel
 
 
 def register_channel_alias(
@@ -205,11 +213,11 @@ def register_channel_alias(
     `save_channel_aliases` saves label mappings. Custom category and unit settings
     must be supplied again when reloading those mappings.
 
-    Raises:
-        ValueError: If channel is "pressure", the former name of airway_pressure.
+    The former channel name "pressure" is read as "airway_pressure", with a
+    UserWarning.
     """
 
-    _check_alias_target(alias, channel)
+    channel = _current_channel_name(alias, channel)
     if channel not in CHANNEL_CATEGORIES:
         CHANNEL_CATEGORIES[channel] = (
             normalize_category(category) or category or channel
@@ -287,10 +295,11 @@ def load_channel_aliases(path: str | Path, *, replace: bool = False) -> dict[str
     Returns:
         dict[str, str]: Copy of the active normalized-label-to-channel mapping.
 
+    An alias pointing to the former channel name "pressure" is registered for
+    "airway_pressure", with a UserWarning.
+
     Raises:
         TypeError: If the file's contents are a value other than a mapping.
-        ValueError: If any alias targets the former channel name "pressure".
-            All targets are checked before updating the active mappings.
     """
 
     resolved = Path(path).expanduser().resolve()
@@ -304,9 +313,6 @@ def load_channel_aliases(path: str | Path, *, replace: bool = False) -> dict[str
             "label -> channel name."
         )
 
-    # Validate all targets before changing the active mappings.
-    for alias, channel in raw.items():
-        _check_alias_target(str(alias), str(channel))
     if replace:
         reset_channel_aliases()
     for alias, channel in raw.items():
