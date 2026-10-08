@@ -97,9 +97,8 @@ other pressures next to it did (`esophageal_pressure`, ...). It is now
 Files are read as before: a column labelled `Pressure`, `Paw`, `Pvent` or
 `airway pressure` still becomes the airway pressure channel. Exported signals
 and the `channel` column carry the new name. `register_channel_alias` (and so
-`load_channel_aliases`) now refuses an alias pointing to `"pressure"` with a
-clear error, rather than quietly making a second channel by that name. An
-alias file with such an entry changes nothing, not even the entries before it.
+`load_channel_aliases`) still reads an alias pointing to `"pressure"`: it is
+registered for `"airway_pressure"`, with a warning naming the new channel.
 
 Found while doing the rename:
 
