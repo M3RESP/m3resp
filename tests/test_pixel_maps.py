@@ -7,7 +7,14 @@ import warnings
 import numpy as np
 import pytest
 
-from m3resp.data import PixelMap, PixelMask, PixelMaskCollection
+from m3resp.data import (
+    BreathEvent,
+    IntervalData,
+    PixelMap,
+    PixelMask,
+    PixelMaskCollection,
+    pixel_breath_events,
+)
 
 
 class TestPixelMap:
@@ -150,3 +157,64 @@ def test_pixel_mask_collection_keeps_order_and_skips_the_same_object():
 
     assert list(masks) == [first, second]
     assert masks.for_name("b") == [second]
+
+
+def _pixel_breaths() -> IntervalData:
+    """Two global breaths on a 1 x 2 image. Pixel (0, 1) has no breath in
+    the second global breath."""
+
+    global_breaths = [
+        BreathEvent("eit", 0.0, 4.0, peak_time=1.5),
+        BreathEvent("eit", 4.0, 8.0, peak_time=5.5),
+    ]
+    grids = [
+        np.array([[[0.1, 1.6, 4.1], [0.3, 1.8, 4.2]]]),
+        np.array([[[4.1, 5.6, 8.1], [np.nan, np.nan, np.nan]]]),
+    ]
+    return IntervalData(
+        name="pixel_breaths",
+        modality="eit",
+        intervals=global_breaths,
+        values=grids,
+        unit="s",
+        method="eitprocessing.PixelBreath",
+    )
+
+
+class TestPixelBreathEvents:
+    def test_one_breath_event_per_global_breath_with_the_pixel_timings(self):
+        pixel_breaths = _pixel_breaths()
+
+        events = pixel_breath_events(pixel_breaths, row=0, column=0)
+
+        assert [(e.start_time, e.peak_time, e.end_time) for e in events] == [
+            (0.1, 1.6, 4.1),
+            (4.1, 5.6, 8.1),
+        ]
+        assert all(isinstance(e, BreathEvent) for e in events)
+        assert all(e.modality == "eit" for e in events)
+        assert [e.metadata["global_breath_id"] for e in events] == [
+            b.id for b in pixel_breaths.intervals
+        ]
+        assert events[0].metadata["row"] == 0
+        assert events[0].metadata["column"] == 0
+
+    def test_a_global_breath_without_a_pixel_breath_gives_no_entry(self):
+        events = pixel_breath_events(_pixel_breaths(), row=0, column=1)
+
+        assert [(e.start_time, e.end_time) for e in events] == [(0.3, 4.2)]
+
+    def test_a_pixel_outside_the_grid_is_refused(self):
+        with pytest.raises(ValueError, match="outside the 1 x 2 grid"):
+            pixel_breath_events(_pixel_breaths(), row=1, column=0)
+
+    def test_grids_without_three_timings_are_refused(self):
+        not_timings = IntervalData(
+            name="pixel_tivs",
+            modality="eit",
+            intervals=[BreathEvent("eit", 0.0, 4.0)],
+            values=[np.ones((1, 2))],
+        )
+
+        with pytest.raises(ValueError, match="start, middle and end"):
+            pixel_breath_events(not_timings, row=0, column=0)
