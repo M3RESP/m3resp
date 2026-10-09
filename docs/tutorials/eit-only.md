@@ -5,7 +5,8 @@ a single EIT recording using `M3Session` directly - the same processing as
 the `"eit"` preset. For the full workflow expressed as a declarative YAML
 spec, including pixel-level and ROI operations (`eit.pixel_breaths`,
 `eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace`, `eit.roi_watershed`,
-`eit.roi_filter_by_size`) that have no `M3Session`-level equivalent yet, see
+`eit.roi_filter_by_size`, `eit.regional_impedance`,
+`eit.functional_impedance`) that have no `M3Session`-level equivalent yet, see
 `examples/eit_full_preprocessing/eit-full.workflow.yaml` and
 [../workflows.md](../workflows.md).
 

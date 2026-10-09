@@ -7,19 +7,17 @@ Usage::
     m3resp steps [--details] [--json]
     m3resp describe <operation>
 
-Exit codes (Phase 7.2 of the pipeline-structure plan), stable across
-releases:
+Exit codes:
 
 ======  ===================================================================
 Code    Meaning
 ======  ===================================================================
 0       Success.
-1       Usage error (bad arguments, unknown command).
+1       Usage error reported by the command dispatcher.
 2       Invalid/structurally invalid spec (``validate``, or ``run``
-        failing static validation before any step executes).
-3       Readiness failure: structurally valid but not runnable here
-        (missing optional dependency, missing input file).
-4       Execution failure: a step raised (``WorkflowExecutionError``).
+        failing static validation), unreadable spec, or argument-parser error.
+3       Readiness error, such as a missing input file.
+4       Execution failure (``WorkflowExecutionError``) or unexpected error.
 5       Cancelled (a ``cancellation_token`` stopped the run early).
 ======  ===================================================================
 
@@ -70,6 +68,8 @@ def main(argv: list[str] | None = None) -> None:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build command-line options for running, validating and describing workflows."""
+
     parser = argparse.ArgumentParser(
         prog="m3resp",
         description=__doc__,
@@ -129,6 +129,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _exit_code_for(exc: Exception) -> int:
+    """Return the exit code for a spec/input-file error or execution failure."""
+
     from m3resp.core.exceptions import UnknownStepError, WorkflowSpecError
     from m3resp.workflows.lifecycle import WorkflowExecutionError
 
@@ -143,6 +145,8 @@ def _exit_code_for(exc: Exception) -> int:
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
+    """Print a compiled workflow for dry-run, or execute the file with cancellation."""
+
     from m3resp.workflows.compiler import compile_workflow
     from m3resp.workflows.spec import load_spec
 
@@ -157,9 +161,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from m3resp.workflows.engine import run_spec
     from m3resp.workflows.lifecycle import CancellationToken
 
-    # Ctrl-C cooperatively cancels (finishes the current step, preserves
-    # completed work, exits EXIT_CANCELLED) instead of raising a raw
-    # KeyboardInterrupt mid-run (Phase 4.5/7.2).
+    # Ctrl-C cancels the run: the current step finishes, completed work is
+    # kept, and the CLI exits with EXIT_CANCELLED.
     token = CancellationToken()
     previous_handler = signal.getsignal(signal.SIGINT)
 
@@ -168,10 +171,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     signal.signal(signal.SIGINT, _handle_sigint)
     try:
-        # A step failure raises WorkflowExecutionError - deliberately not
-        # caught here, so it reaches main()'s single except block, which
-        # prints either a short message or (with --debug) the full
-        # traceback, uniformly for every subcommand.
+        # A step failure raises WorkflowExecutionError, which goes up to
+        # main()'s single except block. That block prints a short message,
+        # or the full traceback with --debug, for every subcommand.
         result = run_spec(args.spec, cancellation_token=token)
     finally:
         signal.signal(signal.SIGINT, previous_handler)
@@ -183,6 +185,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 
 def _cmd_validate(args: argparse.Namespace) -> int:
+    """Print structural and optional readiness findings and return their exit code."""
+
     from m3resp.workflows.compiler import validate_workflow
     from m3resp.workflows.spec import load_spec
 

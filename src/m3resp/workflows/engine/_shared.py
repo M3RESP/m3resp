@@ -42,7 +42,28 @@ def _ensure_steps_registered() -> None:
 
 @dataclass
 class WorkflowResult:
-    """Outcome of running a workflow."""
+    """Results, timing and execution records for one workflow run.
+
+    Attributes:
+        name: Workflow name.
+        context: Shared values and the session used by the steps.
+        outputs: Produced context values and externally supplied values,
+            excluding the session and keys named in spec.inputs.
+        processing_run_id: Stored ProcessingRun identifier when a data-model
+            recorder is attached, otherwise None.
+        run_id: Identifier used in execution records and progress events.
+        status: Run state; completed executions are succeeded or cancelled.
+        started_at: Run start time as an ISO 8601 UTC string, or None.
+        finished_at: Run finish time as an ISO 8601 UTC string, or None.
+        duration_seconds: Elapsed execution time in seconds, or None.
+        compiled_workflow: Ordered description of the steps and resolved settings.
+        step_records: Records of steps that executed, in execution order.
+        diagnostics: Structural diagnostics collected before execution.
+        warnings: Python warnings captured during executed steps, in order.
+        execution_context: Recorded software versions and seed information.
+        resolved_output_dir: Shared output directory, when supplied in context.
+        manifest_path: Run-manifest path when written by run_spec.
+    """
 
     name: str
     context: WorkflowContext
@@ -51,7 +72,6 @@ class WorkflowResult:
     #: when a `DataModelRecorder` is attached to the session. `None`
     #: otherwise (including for a session without a recorder).
     processing_run_id: str | None = None
-    #: All additive; existing fields above are unchanged.
     run_id: str | None = None
     status: WorkflowStatus = "pending"
     started_at: str | None = None
@@ -67,9 +87,14 @@ class WorkflowResult:
 
     @property
     def session(self) -> M3Session:
+        """Return the session used by this workflow's context."""
+
         return self.context.session
 
     def value(self, key: str) -> Any:
-        """Return a produced artifact by context key."""
+        """Return a context value by key.
+
+        Raises WorkflowSpecError if the key is unavailable.
+        """
 
         return self.context.get(key)

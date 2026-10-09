@@ -43,12 +43,18 @@ def parameters_to_rows(parameters: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def linked_breaths_to_rows(linked_breaths: list[LinkedBreath]) -> list[dict[str, Any]]:
-    """Flatten `LinkedBreath` objects into one row per link (Milestone 2.5/2.6).
+    """Convert linked breaths into one table row per link.
 
-    Each modality's breath fields are prefixed (``eit_start_time``,
-    ``emg_extremum_time``, ``emg_extremum_index``, ...) and left ``None`` when that modality has no
-    breath in the link, so the CSV has a stable column set regardless of
-    which modalities matched.
+    Args:
+        linked_breaths: Linked breath groups in the desired row order.
+
+    Returns:
+        list[dict[str, Any]]: Rows with modalities, confidence and time tolerance
+            (seconds). Each row includes start/end/extremum times in seconds
+            and the extremum sample index for each of ``eit``, ``emg`` and
+            ``ventilator``, prefixed by the modality name. Missing breaths or
+            turning points give None. Sample indices refer to each breath's
+            own signal. Other modality names appear in ``modalities``.
     """
 
     rows: list[dict[str, Any]] = []
@@ -77,15 +83,22 @@ def parameter_results_to_rows_and_archive(
     *,
     archive_filename: str = "parameter_result_arrays.npz",
 ) -> tuple[list[dict[str, Any]], dict[str, np.ndarray]]:
-    """Split `ParameterResult`s into CSV-ready rows and an array archive.
+    """Prepare parameter table rows and numeric arrays for export.
 
-    Scalar results are unchanged (`value` stays inline). An array-valued
-    result gets a deterministic, collision-safe archive key
-    (`<sanitized name>_<occurrence index>`); its row swaps the raw `value`
-    for `value_file`/`array_key`/`shape`/`dtype` columns instead of
-    serializing the array into a CSV cell. A non-scalar `metadata["time"]`
-    (e.g. per-breath/per-pixel timing) moves into the same archive under
-    `<array_key>_time`, leaving a short reference in the row's metadata.
+    Scalar values stay in their rows. Array values are indexed by unique
+    keys made from the result name and an occurrence count. Array-valued
+    ``metadata['time']`` is also added to the archive and referenced from
+    the row.
+
+    Args:
+        parameter_results: Results to export, in table order.
+        archive_filename: Filename used in rows that reference array values.
+
+    Returns:
+        tuple: Rows in input order and a dictionary of arrays for
+            ``numpy.savez_compressed``. Array rows contain ``value=None``,
+            ``value_file``, ``array_key``, ``shape`` and ``dtype``. Names,
+            units and other descriptive fields are retained.
     """
 
     rows: list[dict[str, Any]] = []
@@ -127,25 +140,27 @@ def interval_data_to_rows_and_archive(
     *,
     archive_filename: str = "interval_data_arrays.npz",
 ) -> tuple[list[dict[str, Any]], dict[str, np.ndarray], list[dict[str, Any]]]:
-    """Turn `IntervalData` results into CSV rows, one row per interval, an
-    archive for values that are arrays, and one description per result.
+    """Prepare one table row per interval, array values and result descriptions.
 
-    Each row gives the result (name, modality, unit, ...), the interval
-    (position, start and end time, ...) and its value. A number stays in the
-    ``value`` column. Values that are arrays (a pixel map per breath, for
-    example) are stacked into one array in the archive under ``array_key``;
-    the row's ``array_index`` says which slice belongs to its interval. A
-    missing value (``None``) next to array values gets a row with no value
-    and no slice.
+    Scalar values stay in the ``value`` column. Arrays and pixel maps of the
+    same shape are stacked per result; ``array_key`` and ``array_index`` link
+    each row to its slice. Missing scalar values remain in their rows.
 
-    The third list holds one entry per result with its metadata (the
-    settings it was made with, the axes of its arrays, ...), so this is
-    written once rather than on every row. Each row's ``result_index`` points
-    to its entry.
+    Args:
+        interval_data: Results with one value per interval, in result order.
+            Interval times are in seconds on the input's clock; array axes
+            follow each result's metadata.
+        archive_filename: Filename used in rows that reference array values.
+
+    Returns:
+        tuple: Table rows in result and interval order, a dictionary of
+            stacked arrays for ``numpy.savez_compressed``, and one metadata
+            description per result. Each row's ``result_index`` selects its
+            description. Units, interval names and start-end times are kept.
+            A ``None`` value has ``value=None`` and no array slice reference.
 
     Raises:
-        ValueError: If the array values of one result do not all have the
-            same shape, so they cannot be stacked.
+        ValueError: If array values within a result have different shapes.
     """
 
     rows: list[dict[str, Any]] = []
@@ -226,9 +241,19 @@ def pixel_masks_to_rows_and_archive(
     *,
     archive_filename: str = "pixel_masks.npz",
 ) -> tuple[list[dict[str, Any]], dict[str, np.ndarray]]:
-    """Turn `PixelMask` objects into CSV rows, one row per mask, and an
-    archive holding each mask's (row, column) grid under ``array_key``. The
-    ``metadata`` column keeps the settings the mask was made with."""
+    """Prepare pixel-mask table rows and grids for export.
+
+    Args:
+        masks: Masks to export, in table order. Grids have row-column axes,
+            positive weights for included pixels and NaN for excluded pixels.
+        archive_filename: Filename used in the rows to reference mask grids.
+
+    Returns:
+        tuple: One row per mask and a dictionary of grids for
+            ``numpy.savez_compressed``. Each row includes ``array_key``,
+            ``value_file``, dimensions, included-pixel count and metadata.
+            Grids retain their weights and NaNs.
+    """
 
     rows: list[dict[str, Any]] = []
     archive: dict[str, np.ndarray] = {}
@@ -255,12 +280,10 @@ def pixel_masks_to_rows_and_archive(
 
 
 def _next_array_key(name: str, occurrence: dict[str, int]) -> str:
-    """A new archive key for ``name``: the cleaned-up name plus a count.
+    """Return a cleaned name with an occurrence count and increment that count.
 
-    The count is kept per cleaned-up name, not per original name, because
-    two names can clean up to the same text (``"pixel-tiv"`` and
-    ``"pixel tiv"`` both give ``"pixel_tiv"``) and must still get different
-    keys, or one array would overwrite the other.
+    Counts are shared by names that clean to the same text, so each key in
+    an archive is unique.
     """
 
     base = _sanitize_array_key(name)

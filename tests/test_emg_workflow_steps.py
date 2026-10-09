@@ -138,5 +138,5 @@ class TestFullExampleEndToEnd:
         with np.load(archive_path) as archive:
             assert len(archive.files) > 0
             # A wavelet/gate-mask-shaped array from ECG removal should be
-            # in the shared archive, not a competing EMG-only format.
+            # in the shared archive.
             assert any(key.startswith("ecg_gate_mask") for key in archive.files)

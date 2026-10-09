@@ -21,6 +21,7 @@ from m3resp.data import (
     IntervalData,
     ParameterResult,
     PixelMap,
+    PixelMask,
     QualityFlag,
     Signal,
 )
@@ -153,6 +154,30 @@ def test_as_pixel_mask_names_the_wrong_type_clearly():
 
     with pytest.raises(UnsupportedWorkflowError, match="got ParameterResult"):
         adapter.as_pixel_mask(not_a_mask)
+
+
+def test_as_pixel_mask_passes_weight_zero_on_to_eitprocessing():
+    pytest.importorskip("eitprocessing")
+    adapter = EITProcessingAdapter()
+    mask = PixelMask(
+        name="weights", values=[[np.nan, 0.0], [1.0, 0.5]], keep_zeros=True
+    )
+
+    upstream = adapter.as_pixel_mask(mask)
+
+    np.testing.assert_array_equal(upstream.mask, [[np.nan, 0.0], [1.0, 0.5]])
+
+
+def test_roi_mask_from_eitprocessing_keeps_weight_zero():
+    roi = pytest.importorskip("eitprocessing.roi")
+    from m3resp.workflows.steps.eit.roi import _to_pixel_mask
+
+    upstream = roi.PixelMask([[np.nan, 0.0], [1.0, 0.5]], keep_zeros=True)
+
+    mask = _to_pixel_mask(upstream, name="weights", method="test", metadata={})
+
+    np.testing.assert_array_equal(mask.values, [[np.nan, 0.0], [1.0, 0.5]])
+    assert mask.metadata["included_pixel_count"] == 3
 
 
 class TestSparseDataToIntervalData:

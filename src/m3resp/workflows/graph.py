@@ -1,43 +1,10 @@
-"""Convert a :class:`WorkflowSpec` to and from a node-and-edge graph.
+"""Convert workflow specs to and from step-and-connection graphs.
 
-This is the backend piece a node-based workflow editor (see the "Node-based
-workflow design panel" section of ``docs/stage3.md``) needs before any
-front end can exist: a workflow spec is already a data-flow graph written
-in list form, so what's missing is a pure, JSON-safe conversion layer, not
-a new data model.
-
-Two representations, one job each:
-
-- :class:`GraphNode` carries the *authoritative* ``in:``/``with:``/``out:``
-  bindings for its step, copied verbatim from :class:`StepSpec`. This is
-  what makes the round trip correct: ``graph_to_spec(spec_to_graph(s))``
-  reconstructs each step from its node's own bindings, never by trying to
-  re-derive them from edges (which would lose information for an output
-  that is renamed but never consumed - a real, if rare, case).
-- :class:`GraphEdge` is a *derived* connections view for a canvas: which
-  node's which output feeds which node's which input, and through which
-  context key. It answers "may I draw a line here", not "what should I
-  write to the spec" - editing an edge alone does not change a node's
-  bindings; a future editor must write to ``GraphNode.inputs``/``outputs``
-  when the user rewires a connection, then the edges can be recomputed by
-  calling :func:`spec_to_graph` again (or an equivalent incremental update)
-  rather than hand-patched, so they can never drift from what
-  ``engine/diagnostics.py`` would itself compute.
-
-Edges are built with :func:`m3resp.workflows.session_deps.iter_context_key_producers`
-and :func:`m3resp.workflows.session_deps.most_recent_matching_session_writer`
-- the same "most recent preceding writer, positionally" rule
-``engine/diagnostics.py`` and ``session_deps.py`` already use - so the drawn
-graph can never disagree with validation (the trap ``docs/stage3.md``'s
-node-based-UI outlook calls out: two steps writing the same context key at
-different points in the run must resolve to the correct producer, not
-"whichever step shares the name").
-
-``session`` is deliberately never drawn as a node with dozens of edges (the
-"hairball" the outlook warns about): a read/write of the literal ``session``
-context key is suppressed entirely, and the genuinely meaningful hidden
-dependencies show up instead as ``kind="session"`` edges, built from each
-step's declared ``session_reads``/``session_writes`` metadata.
+Nodes store the raw step bindings and parameters used to reconstruct a spec.
+Edges describe connections from the most recent preceding output or matching
+session writer. Graph edits should update node bindings before recomputing
+edges. Session dependencies use dotted resource names. Layout settings are
+stored in metadata.ui.nodes.
 """
 
 from __future__ import annotations
@@ -112,19 +79,18 @@ class GraphNode:
 
 @dataclass(frozen=True)
 class GraphEdge:
-    """One connection: ``source_node``'s ``source_handle`` output feeds
-    ``target_node``'s ``target_handle`` input, through ``context_key``.
+    """A connection between workflow inputs and outputs.
 
-    For a ``"session"`` edge there is no real context key - ``context_key``
-    holds the matched dotted resource name instead (e.g.
-    ``"session.processed.emg"``), and ``source_handle``/``target_handle``
-    hold the writer's/reader's declared resource strings (which may differ
-    in granularity - see
-    :func:`m3resp.workflows.session_deps.resources_match`).
-
-    For a ``"spec_input"`` edge, ``source_node`` is a synthetic id
-    (``"spec_input:<name>"``), since a declared workflow input has no
-    ``GraphNode`` of its own.
+    Attributes:
+        source_node: Producing step's ID, or ``"spec_input:<name>"`` for a
+            declared workflow input.
+        source_handle: Producing output name, input name, or written session
+            resource for a session edge.
+        target_node: Consuming step's ID.
+        target_handle: Consuming parameter or read session resource.
+        context_key: Shared value name for artifact/spec-input edges, or the
+            read resource's dotted name for a session edge.
+        kind: artifact, session or spec_input.
     """
 
     source_node: str
@@ -147,10 +113,13 @@ class GraphEdge:
 
 @dataclass(frozen=True)
 class WorkflowGraph:
-    """A :class:`WorkflowSpec`'s node-and-edge form. Every field except
-    ``nodes``/``edges`` is a direct pass-through of the matching
-    ``WorkflowSpec`` field - see the module docstring for why nodes, not
-    edges, are what ``graph_to_spec`` trusts to reconstruct steps."""
+    """Workflow steps and their connections, with the spec's settings.
+
+    Nodes hold raw inputs, parameters and outputs; graph_to_spec rebuilds
+    steps from those fields in position order. Edges describe connections for
+    display. Per-node layout settings come from metadata.ui.nodes; remaining
+    metadata and workflow settings are retained.
+    """
 
     name: str
     schema_version: int | None
@@ -165,6 +134,12 @@ class WorkflowGraph:
     edges: tuple[GraphEdge, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
+        """Return workflow settings, nodes and edges as a dictionary.
+
+        Root and output-directory paths become strings. Input, metadata and
+        parameter values are retained as supplied.
+        """
+
         return {
             "name": self.name,
             "schema_version": self.schema_version,
@@ -203,11 +178,10 @@ class WorkflowGraph:
 def _resolve_steps_or_raise(
     spec: WorkflowSpec,
 ) -> list[tuple[int, StepSpec, StepDefinition]]:
-    """Like ``session_deps.resolve_step_definitions``, but raises on an
-    unregistered operation instead of skipping it - a graph silently missing
-    a node would be worse than an error, unlike diagnostics collection
-    (which wants to report every *other* problem too) or the session-
-    dependency checks (which are best-effort by nature)."""
+    """Pair each spec step with its position and registered definition.
+
+    Raises UnknownStepError when a step operation is unregistered.
+    """
 
     return [
         (position, step_spec, get_step(step_spec.uses))
@@ -216,13 +190,20 @@ def _resolve_steps_or_raise(
 
 
 def spec_to_graph(spec: WorkflowSpec) -> WorkflowGraph:
-    """Convert ``spec`` into its node-and-edge graph form.
+    """Describe workflow steps and their connections as a graph.
 
-    Raises whatever ``get_step`` raises (``UnknownStepError``) for a step
-    naming an unregistered operation - like ``compile_workflow``, this
-    assumes a spec worth graphing is already structurally resolvable;
-    call ``collect_diagnostics`` first to report every problem in a spec
-    that is not.
+    Args:
+        spec: Parsed workflow with registered operations and raw step bindings.
+
+    Returns:
+        WorkflowGraph: Nodes in spec order with their inputs, parameters,
+            outputs and layout settings. Edges link artifact values to the
+            latest preceding producer, declared workflow inputs to consumers,
+            and session resources to the latest matching writer. The shared
+            session context key is omitted from artifact edges.
+
+    Raises:
+        UnknownStepError: If a step names an unregistered operation.
     """
 
     ui_block = spec.metadata.get(_UI_METADATA_KEY)
@@ -267,11 +248,15 @@ def spec_to_graph(spec: WorkflowSpec) -> WorkflowGraph:
 
 
 def graph_to_spec(graph: WorkflowGraph) -> WorkflowSpec:
-    """The inverse of :func:`spec_to_graph`.
+    """Rebuild a workflow spec from its graph nodes and settings.
 
-    Rebuilds each step purely from its node's own ``inputs``/``parameters``/
-    ``outputs`` - never from ``graph.edges``, which are a derived rendering
-    aid, not load-bearing here. Nodes are ordered by ``position``.
+    Args:
+        graph: Graph whose node fields contain the desired step bindings.
+
+    Returns:
+        WorkflowSpec: Steps sorted by node position, reconstructed from each
+            node's inputs, parameters and outputs. Layout settings are copied
+            to metadata.ui.nodes. Changing edges alone does not change the spec.
     """
 
     ordered_nodes = sorted(graph.nodes, key=lambda node: node.position)
@@ -308,6 +293,8 @@ def graph_to_spec(graph: WorkflowGraph) -> WorkflowSpec:
 def _build_edges(
     spec: WorkflowSpec, steps: list[tuple[int, StepSpec, StepDefinition]]
 ) -> tuple[GraphEdge, ...]:
+    """Describe preceding output, declared input and session-resource connections."""
+
     edges: list[GraphEdge] = []
 
     for position, step_spec, definition, produced_at in iter_context_key_producers(

@@ -1,12 +1,4 @@
-"""Shared helpers for the registered ventilator workflow step modules.
-
-Mirrors `m3resp.workflows.steps.eit._shared`/`m3resp.workflows.steps.emg._shared`:
-each modality's step package keeps its own small copy of these helpers rather
-than importing another package's private module, so `_record_step` can
-hardcode the right modality string for its own steps without a cross-package
-dependency. Before this package existed, ventilator steps used the EMG copy of
-`_record_step`, which recorded their provenance under `modality="emg"`.
-"""
+"""Helpers for recording ventilator calculations and per-breath quality flags."""
 
 from __future__ import annotations
 

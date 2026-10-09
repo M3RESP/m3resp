@@ -64,9 +64,8 @@ def _upstream_metadata(
 def _record_step(
     session: M3Session, step_name: str, *, metadata: dict[str, Any]
 ) -> None:
-    """Record per-step EMG provenance through the existing
-    `M3Session._record()` seam, reusing the step's declared reads/writes
-    from the registry rather than a second EMG-only history mechanism."""
+    """Record per-step EMG provenance through `M3Session._record()`, using
+    the step's declared reads/writes from the registry."""
 
     from m3resp.workflows.registry import get_step
 

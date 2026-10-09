@@ -269,8 +269,8 @@ def test_graph_to_spec_orders_steps_by_node_position(_graph_test_steps):
         }
     )
     graph = spec_to_graph(spec)
-    # Reversing node order in the graph must not change the spec's order -
-    # position is authoritative, not list order.
+    # Reversing node order in the graph must not change the spec's order:
+    # each node's position sets the order.
     shuffled = graph.__class__(
         **{**graph.__dict__, "nodes": tuple(reversed(graph.nodes))}
     )

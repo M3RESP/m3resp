@@ -20,7 +20,7 @@ from m3resp import run_spec, run_workflow
 # Run a file end-to-end (handles outputs: section automatically)
 result = run_spec("path/to/workflow.yaml")
 
-# Run a spec dict or file with more control
+# Run the declared steps; use run_spec to also apply the outputs section
 result = run_workflow("path/to/workflow.yaml")
 print(result.value("cv"))     # read a produced artifact by context key
 print(result.outputs)         # dict of every artifact the spec produced
@@ -154,17 +154,22 @@ def my_thing(session, output_dir, **kwargs) -> dict:
 | Mode | Behavior |
 |---|---|
 | `automatic` | The engine calls `export_session_summary` itself once the run succeeds — the same behavior as omitting an explicit export step. Use this when the spec has no `export.*` step, e.g. `eit-full.workflow.yaml`/`emg-full.workflow.yaml`/`multimodal-full.workflow.yaml`. |
-| `explicit` | The engine writes nothing on its own; the spec's own `export.*` step(s) (already run during execution, e.g. `export.rotarc_result`) are entirely responsible for what lands in `outputs.dir`. Use this whenever the spec has its own export step, so output is never written twice. |
-| `none` | Nothing is written to `outputs.dir` at all (still useful for `outputs.figures` alone, or for a spec run purely for its in-memory result). |
+| `explicit` | Declared export steps write their files during execution. The runner also writes the run manifest and requested figures. |
+| `none` | The runner skips automatic exports, figures and the run manifest. Declared export steps still execute according to their own settings. |
 
-A versioned (`schema_version: 1`) spec must set `mode` explicitly whenever `dir` is set — this is enforced at parse time — precisely so a reader never has to guess which of the three behaviors above will happen. A legacy spec may omit it; the engine then infers `explicit` if any `export.*` step is present, `automatic` otherwise, and warns with a `FutureWarning` that this inference is deprecated. Regardless of mode, `outputs.figures` (when true) is written for a successful run before the mode branches, and *nothing* in `outputs:` is written for a failed or cancelled run except the run manifest below (Phase 6.4: no success summary after a failure).
+A versioned (`schema_version: 1`) spec must set `mode` whenever `dir` is set.
+An unversioned spec may omit it; `run_spec` infers `explicit` if any `export.*`
+step is present, or `automatic` otherwise, and emits a `FutureWarning`.
+Requested figures are saved after a successful run in automatic or explicit
+mode. Failed and cancelled runs preserve files written by completed steps;
+the runner skips automatic session exports and figures for those runs.
 
 ### Validation and readiness
 
 Two distinct checks are available before running anything, both without importing `eitprocessing`/`resurfemg` or touching the filesystem for anything but the readiness check itself:
 
 - **Structural** validation (`m3resp validate spec.yaml`, or `validate_workflow(spec)` from `m3resp.workflows.compiler`) checks that the spec parses, every `uses` name is a registered step, every step's inputs are bound to something produced earlier (or a declared default), every static parameter has the right value type, and no unknown/duplicate names exist. This is always safe to run and always cheap — it never imports an optional package or reads a data file.
-- **Readiness** validation (`m3resp validate --readiness spec.yaml`, or `validate_workflow(spec, readiness=True)`) additionally checks things that depend on *this* machine/environment: whether a step's declared optional package (`eitprocessing`/`resurfemg`) is actually importable, and whether a `path`-typed parameter's file actually exists on disk. A readiness diagnostic is expected and correct, not a bug, when it fires for the right reason — e.g. an `eit_file` that points to a recording stored only on another computer reports `missing_file`.
+- **Readiness** validation (`m3resp validate --readiness spec.yaml`, or `validate_workflow(spec, readiness=True)`) reports whether declared optional packages can be found on this machine and whether input-file paths exist. Missing packages give warnings and missing files give errors in the readiness section. `is_valid` reflects structural errors only; inspect readiness separately.
 
 Both return every independent problem found in one pass (a `ValidationReport` with separate `structural`/`readiness` diagnostic tuples, each JSON-safe via `.as_dict()`), rather than raising on the first one, so a GUI or CI job can show a complete list instead of a fix-one-rerun loop. `compile_workflow(spec)` raises on the first structural error instead of collecting them — it is meant for "give me the resolved plan or fail," not for validation reporting.
 
@@ -173,7 +178,7 @@ Both return every independent problem found in one pass (a `ValidationReport` wi
 A run is more than success/failure. `run_workflow`/`run_spec` accept an optional `event_sink` callback and `cancellation_token`, and every `WorkflowResult` carries a full accounting of what happened:
 
 - **Progress events** — if `event_sink` is supplied, it is called with a framework-neutral event for `workflow_started`, each step's `step_started`/`step_completed`/`step_failed`/`step_warning`, and the run's own `workflow_completed`/`workflow_failed`/`workflow_cancelled`. A GUI wires this straight to a progress bar without importing anything m3resp-internal beyond the event shape itself.
-- **Warnings** — every Python warning raised inside a step (including one raised immediately before that step's own exception — this ordering is deliberately preserved, not dropped) is captured and attached to that step's `StepExecutionRecord`, and also collected onto `WorkflowResult.warnings`, rather than only printing to stderr.
+- **Warnings** — Python warnings raised inside a step are captured on its `StepExecutionRecord` and re-emitted through Python's warning system. Completed results collect them in `WorkflowResult.warnings`; step failures carry the gathered records in `WorkflowExecutionError.step_records`.
 - **Cancellation** — a `CancellationToken` is checked before and after each step; calling `.cancel()` on it (the CLI does this from a `SIGINT` handler, Ctrl-C) lets the current step finish, then stops before the next one starts. The result's `status` becomes `"cancelled"`, not `"failed"` — completed work and its manifest are preserved, not discarded. This is cooperative, not preemptive: while a step is genuinely stuck (not just slow), the cancellation check between steps never runs, so repeated Ctrl-C is a no-op for the remainder of that step. The CLI installs no handler for `SIGQUIT`/`SIGTERM`, so Ctrl-\ or `kill`/`kill -9` from another terminal still forcibly kill the process at its default OS disposition, bypassing cooperative cancellation entirely - use one of those to recover from a hung step.
 - **Failure** — a step's own exception is wrapped in `WorkflowExecutionError` (carrying `step_id`/`position`/`operation_id`, the run's `run_id`/`started_at`, and every `step_record` up to the failure, with the original exception as `__cause__`), so a caller always gets structured context, not just a bare traceback.
 
@@ -391,7 +396,7 @@ ventilator.pocc_quality             (needs all of the above)
 
 - A quality step whose prerequisites are entirely missing (no ventilator input, no detected breaths) simply has nothing to iterate over - it produces no native results for that run rather than raising, so a workflow with a partial dataset still completes.
 - `emg.evaluate_event_timing` pairs EMG and ventilator events by position; if the two lists have different lengths, it still pairs as many as it can (keeping the existing raw-output truncation behavior for backward compatibility) but also reports `evaluate_event_timing_unmatched_count` and adds an `evaluate_event_timing_unmatched` warning `QualityFlag` - the unmatched events are never silently dropped without a trace.
-- Per-breath/per-manoeuvre native results use `breath_id=str(position)` (a stable event ID is future work) and record the source peak/pressure sample index in `metadata["extremum_sample_index"]`, so a GUI can always explain which detected event a given flag or measurement belongs to.
+- Per-breath/per-manoeuvre EMG and ventilator results use `breath_id=str(position)`, the zero-based position in the input breath list. Their metadata records the turning-point sample in `extremum_sample_index` and, when the sampling rate is supplied, its time in seconds from recording start in `extremum_time`. `emg.remove_invalid_breaths` matches quality flags by this sample position; it also reads the older `peak_sample_index` key with a `UserWarning` naming the current key.
 
 ### Array export
 

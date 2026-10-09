@@ -116,14 +116,13 @@ def set_ventilator_raw(raw: dict[str, Any], recording: Any) -> None:
 
 
 def _eit_event_key(variant: str | None) -> str:
-    """Where EIT breaths are stored in `session.events`: ``"eit_breaths"``,
-    or ``"eit_breaths:<variant>"`` for a named preprocessing variant."""
+    """Return ``eit_breaths`` or ``eit_breaths:<variant>`` for a named variant."""
 
     return "eit_breaths" if variant is None else f"eit_breaths:{variant}"
 
 
 class M3Session:
-    """Small, explicit session object for Stage 1 multimodal workflows."""
+    """Recordings, processing results and provenance for a multimodal study session."""
 
     def __init__(
         self,
@@ -133,6 +132,22 @@ class M3Session:
         allow_overwrite: bool = False,
         ventilator_adapter: Any | None = None,
     ):
+        """Create a session for recordings, processing results and their history.
+
+        Args:
+            eit_adapter: EIT loading and processing methods. ``None`` uses
+                ``EITProcessingAdapter``.
+            emg_adapter: EMG loading and processing methods. ``None`` uses
+                ``ReSurfEMGAdapter``.
+            metadata: Recording description as ``SessionMetadata`` or a
+                dictionary. ``None`` creates empty metadata.
+            allow_overwrite: Allow preprocessing calls to replace a result
+                stored under the same variant name.
+            ventilator_adapter: Ventilator loading and processing methods.
+                ``None`` creates an adapter using this session's EIT and EMG
+                loaders for files that contain ventilator channels.
+        """
+
         self.eit_adapter = eit_adapter or EITProcessingAdapter()
         self.emg_adapter = emg_adapter or ReSurfEMGAdapter()
         # Ventilator processing is native (`VentilatorAdapter` wraps no upstream
@@ -184,12 +199,7 @@ class M3Session:
         self.allow_overwrite = allow_overwrite
         self.events: dict[str, Any] = {}
         self.parameters: dict[str, Any] = {}
-        # Milestone 2.2 (plan/plan_stage2.md Sec 14): typed collections that
-        # let EIT and EMG data live in the same structure, populated from the
-        # default preprocess/postprocess paths via each adapter's
-        # to_signals/to_parameters/to_quality_flags. These are additive: the
-        # `raw`/`processed`/`parameters` dicts above keep their Stage 1 shape
-        # and behavior unchanged.
+        # Signals and results shared by EIT, EMG and ventilator processing.
         self.signals = SignalCollection()
         self.parameter_results = ParameterResultCollection()
         # Results with one value per breath (or other interval), e.g. EIT
@@ -198,22 +208,13 @@ class M3Session:
         self.interval_data = IntervalDataCollection()
         self.pixel_masks = PixelMaskCollection()
         self.quality = QualityReport()
-        # Milestone 2.5 (plan/plan_stage2.md Sec 20): breaths matched across
-        # modalities by `link_breaths`, once per-modality breath events exist.
+        # Breaths matched across modalities by `link_breaths`.
         self.linked_breaths: list[LinkedBreath] = []
         self.metadata = _coerce_metadata(metadata)
         self.provenance: list[ProvenanceRecord] = []
-        # Stage 2 pipeline-structure Phase 5.1: a universal, engine-populated
-        # log of every executed workflow step (name/bindings/parameters/
-        # timing), independent of whether any step function calls
-        # `self._record()` itself. Distinct from `provenance` (the older,
-        # session-method-level "action + modality" log) and from the
-        # datamodel's per-workflow `ProcessingRun` (see
-        # `m3resp.workflows.engine.run_workflow` and
-        # `DataModelRecorder.record_workflow_result`).
+        # The workflow engine records each step's settings and timing here.
         self.processing_history = ProcessingHistory()
-        # Stage 2 data model wrapper (opt-in, see m3resp.datamodel). ``None``
-        # leaves Stage 1 behavior completely unchanged.
+        # Attach a recorder to save processing history and results in the data model.
         self.datamodel: DataModelRecorder | None = None
 
     def load_eit(
@@ -361,36 +362,33 @@ class M3Session:
         overwrite: bool = False,
         **kwargs: Any,
     ) -> Any:
-        """Run a provided or upstream EIT preprocessing function.
+        """Preprocess the loaded EIT recording and store the results.
 
-        Every result is stored under `session.processed_variants["eit"][name]`,
-        `name` being `variant` if given, otherwise `"default"` - there is no
-        implicit, ambiguously-overwritten "current" result. Writing to a name
-        that's already populated raises `VariantAlreadyExistsError`, so a
-        reference like `processed_variants["eit"]["mdn"]` can't silently
-        change meaning underneath a caller that stashed it earlier.
-        `session.processed["eit"]` mirrors the `"default"` variant only, for
-        convenience/backwards compatibility with code that just wants "the"
-        EIT result.
-
-        `preprocess_eit(filter_mode="mdn", variant="mdn")` and
-        `preprocess_eit(filter_mode="lowpass", variant="lowpass")` can both
-        coexist. See `detect_eit_breaths(variant=...)` to detect breaths
-        against a specific variant.
+        Results are stored in ``session.processed_variants['eit']`` under the
+        variant name, or ``'default'`` when omitted. The default result is
+        also stored in ``session.processed['eit']``. Upstream preprocessing
+        adds signals, rate parameters, values per breath and quality flags
+        to the session's collections. Per-breath results reuse breaths
+        stored under the matching variant's event key.
 
         Args:
             variant (str | None): Name to store this result under. None
                 stores it as ``"default"``.
             overwrite (bool): Replace a result already stored under the same
-                name. `session.allow_overwrite = True` does the same for every
-                call, so notebook/exploratory code can opt in once.
+                name. ``session.allow_overwrite`` also permits replacement.
             **kwargs (Any): Passed on to `EITProcessingAdapter.preprocess`
                 (for example ``filter_mode``). ``preprocess=`` replaces the
-                whole step with a function of your own.
+                whole step with a function of your own; its output is stored
+                directly in the processed-result dictionaries.
 
         Returns:
             Any: The preprocessing result, also stored in
                 `session.processed_variants["eit"]`.
+
+        Raises:
+            MissingModalityDataError: If an EIT recording has yet to be loaded.
+            VariantAlreadyExistsError: If the variant already exists and
+                replacement is disabled.
         """
 
         recording = self._require_raw("eit")
@@ -935,21 +933,30 @@ class M3Session:
         return summary
 
     def detect_eit_breaths(self, *, variant: str | None = None, **kwargs: Any) -> Any:
-        """Detect EIT breaths and store normalized events.
+        """Detect EIT breaths and store them as ``BreathEvent`` objects.
+
+        Breaths matching an existing per-breath EIT result by modality and
+        exact start and end time reuse that result's breath object, including
+        its identifier. Detection is recorded in the session's history.
 
         Args:
             variant (str | None): Detect breaths in the
-                `preprocess_eit(..., variant=<name>)` result with this name
-                instead of the default `processed["eit"]`. The events are then
-                stored under `session.events["eit_breaths:<name>"]` instead of
-                `session.events["eit_breaths"]`, so multiple variants'
-                detections can coexist.
+                ``preprocess_eit(..., variant=<name>)`` result. Events are
+                stored under ``session.events['eit_breaths:<name>']``.
+                ``None`` uses the default processed result, falling back to
+                the raw recording, and stores events under ``'eit_breaths'``.
             **kwargs (Any): Passed on to `EITProcessingAdapter.detect_breaths`.
                 ``detector=`` replaces the detection with a function of your
                 own.
 
         Returns:
-            Any: The detected breaths, a list of `BreathEvent`.
+            list[BreathEvent]: Detected breaths in detector order, also stored
+                in ``session.events``. Times use the input recording's clock.
+
+        Raises:
+            MissingModalityDataError: If the named preprocessing variant is
+                unavailable, or default processed EIT data and a raw recording
+                are both unavailable.
         """
 
         if variant is not None:
@@ -1270,9 +1277,9 @@ class M3Session:
         For recordings that really did start at the same moment - for
         example when one trigger started every device. Each loaded recording
         that has not been synchronized is recorded as ``"none"`` in
-        `session.sync_methods`, so steps that compare recordings no longer
-        warn, while the choice stays visible in the provenance log and the
-        exported summary. Recordings already synchronized keep their record.
+        `session.sync_methods`, so steps that compare recordings skip their
+        missing-synchronization warning, while the choice stays visible in
+        the provenance log and the exported summary. Recordings already synchronized keep their record.
         Breath lists added directly with `add_events`, without a loaded
         recording, are covered too. Recordings loaded later are not.
 
@@ -1413,28 +1420,26 @@ class M3Session:
     def run_preset(
         self, name: str, *, config: Mapping[str, Mapping[str, Any]] | None = None
     ) -> M3Session:
-        """Run a named, built-in preset against this session.
+        """Run a registered preset on this session.
 
-        This is a different mechanism from the module-level
-        ``m3resp.run_workflow(spec, session=...)``, which executes a fully
-        custom declarative step-list spec (the Stage 1 workflow engine in
-        ``m3resp.workflows``). ``session.run_preset(name)`` instead runs one
-        of the small, built-in presets registered in ``m3resp.presets``
-        (``"eit"``, ``"emg"``, ``"multimodal"``), which simply call this
-        session's own already-instrumented methods in sequence - see
-        ``m3resp.presets.base`` for the rationale.
+        The built-in presets are eit, emg and multimodal. Each runs a fixed
+        sequence of session methods or registered steps using the supplied settings.
+        Load the required recordings first; the multimodal preset uses previously
+        detected breaths to store aligned events.
 
         Args:
-            name (str): The preset to run: ``"eit"``, ``"emg"`` or
-                ``"multimodal"``.
-            config (Mapping[str, Mapping[str, Any]] | None): Settings for each
-                step, keyed by step name, for example
-                ``{"preprocess": {"high_pass_hz": 20.0}}`` for the ``"emg"``
-                preset. None uses the
-                preset's defaults.
+            name: Registered preset name.
+            config: Keyword arguments grouped by the preset's configuration keys,
+                e.g. ``{"preprocess": {"high_pass_hz": 20.0}}`` for emg. None uses
+                the preset's defaults. See `m3resp.presets` for the supported groups.
 
         Returns:
-            M3Session: This session, with the results of every step stored.
+            M3Session: This session with results and provenance added by the preset's
+                operations. Changes made before an operation fails remain available.
+
+        Raises:
+            UnknownPresetError: If name is unregistered.
+            MissingModalityDataError: If an operation needs an unavailable recording.
         """
 
         from m3resp.presets import get_preset
@@ -1445,19 +1450,22 @@ class M3Session:
     def export_summary(
         self, output_dir: str | Path, *, processing_run_id: str | None = None
     ) -> Path:
-        """Export the session summary to disk.
+        """Write session tables, JSON summaries and array archives.
+
+        Creates the destination directory and records the export in the session's
+        provenance after writing. See `export_session_summary` for file contents.
 
         Args:
-            output_dir (str | Path): The folder to write the files to. It is
-                created if it does not exist.
-            processing_run_id (str | None): Typically
-                `WorkflowResult.processing_run_id`. Links a written
-                parameter-array archive to the `ProcessingRun` that produced
-                it when a `DataModelRecorder` is attached; omit it for a
-                manual export with no associated workflow run.
+            output_dir: Destination folder; existing export files are replaced.
+            processing_run_id: Optional ProcessingRun identifier, typically from
+                WorkflowResult.processing_run_id. When a data-model recorder is
+                attached, links written array archives to that run.
 
         Returns:
-            Path: The folder the files were written to.
+            Path: Directory containing the exported files.
+
+        Raises:
+            OSError: If the directory or an export file cannot be written.
         """
 
         output_path = export_session_summary(
@@ -1496,6 +1504,12 @@ class M3Session:
     def _extend_typed_collections_from_eit(
         self, preprocessed: dict[str, Any], *, event_key: str = "eit_breaths"
     ) -> None:
+        """Add EIT signals, rates, values per breath and quality flags to the session.
+
+        Per-breath values reuse matching breaths already stored under
+        ``event_key``.
+        """
+
         for signal in self.eit_adapter.to_signals(preprocessed):
             self.signals.add(signal)
         for parameter in self.eit_adapter.to_parameters(preprocessed):

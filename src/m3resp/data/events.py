@@ -18,17 +18,17 @@ class Event:
     """A timestamped event from one modality.
 
     Attributes:
-        name: What kind of event this is, e.g. ``'blood_gas_draw'`` or
-            ``'intervention'``.
+        name: What kind of event this is, e.g. ``'arterial_blood_gas_draw'``
+            or ``'baydur_maneuver'``.
         modality: The device or technique the event came from, e.g.
             ``'ventilator'`` or ``'eit'``.
-        time: Real-world time at which the event occurred.
-        id: Per-process, in-memory identifier (not persisted or globally
-            unique like Layer 2's ids) that lets other Layer 1 objects -
-            notably ``ParameterResult.event_id`` - reference this specific
-            event. Generated automatically, and excluded from equality
-            (``compare=False``) so two structurally identical events - the
-            common case in tests and deduplication - still compare equal.
+        time: Time at which the event occurred, in seconds on the recording's
+            time axis or the shared clock after alignment.
+        id: Random identifier, generated automatically. It stays the same
+            when the event is shifted onto a common clock and when it is
+            saved to a dictionary and read back. Results can use it to point
+            at this event through ``ParameterResult.event_id``. Two events
+            that differ only in ``id`` count as equal.
         sample_index: Position of this event in the signal it was detected
             in. Only meaningful together with ``signal_name`` and
             ``sample_frequency``, which say which signal and time axis it is
@@ -39,16 +39,12 @@ class Event:
             the event wasn't derived from indexing into a signal.
         sample_frequency: Sampling rate of that signal, in Hz. ``None`` when
             the event wasn't derived from indexing into a signal.
-        label: Optional name for this particular occurrence, as opposed to
-            ``name``, which says what kind of event it is: an intervention
-            event carries ``name='intervention'`` and, say,
-            ``label='baydur_maneuver'``. Nothing in the library reads it
-            today; it is carried through for downstream use.
+        label: Optional free-text note that tells this occurrence apart from
+            others of the same kind, e.g. ``name='arterial_blood_gas_draw'``
+            with ``label='before PEEP step 2'``.
         confidence: Optional measure of how sure the detector was.
         metadata: Optional extra information about the event.
 
-    The ``sample_index``/``signal_name``/``sample_frequency`` trio mirrors
-    the same fields on :class:`Interval`, for the same reason.
     """
 
     name: str
@@ -67,23 +63,23 @@ class Event:
 class Interval:
     """A stretch of time from one modality, with a start and an end.
 
-    Use it for anything that lasts rather than happens at one instant: an
-    occlusion, a period of noise, an expiratory hold, an intervention.
-    :class:`BreathEvent` is an ``Interval`` with one more point inside it, the
-    moment the signal turns from inhalation to exhalation.
+    Use it for an occlusion, a period of noise, an expiratory hold, or an
+    intervention. Times are in seconds on the recording's time axis or the
+    shared clock after alignment. Zero duration is allowed when only one
+    time point is known, as with EMG breaths detected from their peaks.
+    :class:`BreathEvent` is an ``Interval`` with one more point inside it,
+    the signal's turning point.
 
     Attributes:
         modality: The device or technique the interval came from, e.g.
             ``'ventilator'`` or ``'emg'``.
-        start_time: Real-world time at which the interval starts, in seconds.
-        end_time: Real-world time at which the interval ends, in seconds.
+        start_time: Start of the interval, in seconds on its time axis.
+        end_time: End of the interval, in seconds on the same time axis.
         name: What kind of interval this is, e.g. ``'occlusion'`` or
             ``'noise'``. Required, and given by keyword.
-        id: Per-process, in-memory identifier, generated automatically and
-            excluded from equality. See :class:`Event` for the full
-            explanation.
-        label: Optional name for this particular interval, as opposed to
-            ``name``, which says what kind of interval it is.
+        id: Random identifier that stays the same through time shifts and
+            saving. See :class:`Event` for the full explanation.
+        label: Optional name for this particular occurrence of the interval.
         start_index: Position of ``start_time`` in the signal this interval
             was found in. ``None`` when the interval wasn't derived from
             indexing into a signal.
@@ -102,9 +98,6 @@ class Interval:
 
     Raises:
         ValueError: If ``end_time`` is before ``start_time``.
-
-    ``start_time``/``end_time`` are always the authoritative, real-world
-    times - they don't need to be recomputed from an index.
     """
 
     modality: str
@@ -123,6 +116,8 @@ class Interval:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        """Check that the interval ends at or after its start."""
+
         if self.end_time < self.start_time:
             raise ValueError(
                 f"{type(self).__name__}.end_time ({self.end_time}) must not be "
@@ -131,31 +126,31 @@ class Interval:
 
     @property
     def duration(self) -> float:
-        """Length of the interval in the same time units as ``start_time``/``end_time``."""
+        """Return the interval duration in seconds."""
 
         return self.end_time - self.start_time
 
 
 @dataclass(kw_only=True)
 class BreathEvent(Interval):
-    """One breath from one modality: an :class:`Interval` with a turning point.
+    """One breath from one modality, with a signal turning point.
 
     EIT, EMG, and ventilator breath detectors all produce this one type, so
     breaths from different modalities can be compared and matched. It has
-    every field of :class:`Interval`, with ``name`` always ``'breath'`` (it
-    cannot be set to anything else), plus the two below.
+    every field of :class:`Interval`, with ``name`` set to ``'breath'``
+    automatically, plus the two below.
 
     Attributes:
-        extremum_time: Real-world time of the turning point between
-            inhalation and exhalation. It is called an extremum, not a peak,
-            because the signal can turn at a maximum (impedance, volume, EMG
-            envelope) or at a minimum (esophageal pressure, an occlusion's
-            deepest pressure). ``None`` when the detector didn't report one.
+        extremum_time: Time of the detected turning point, in seconds on the
+            same time axis as ``start_time`` and ``end_time``. This is the
+            inhalation-to-exhalation transition for EIT and ventilator volume,
+            the EMG peak, or the pressure minimum for an occluded breath.
+            ``None`` when the detector didn't report one.
         extremum_index: Position of ``extremum_time`` in the signal named by
             ``signal_name``, or ``None``.
 
-    Only ``modality``, ``start_time`` and ``end_time`` may be given by
-    position, e.g. ``BreathEvent("eit", 1.0, 2.0, extremum_time=1.5)``.
+    Give fields after ``end_time`` by keyword, e.g.
+    ``BreathEvent("eit", 1.0, 2.0, extremum_time=1.5)``.
     """
 
     name: str = field(default="breath", init=False)
@@ -170,7 +165,32 @@ def coerce_event(
     modality: str | None = None,
     label: str | None = None,
 ) -> Event:
-    """Normalize a generic timestamped event into an `Event`."""
+    """Convert one timestamped event into an :class:`Event`.
+
+    Args:
+        value: An ``Event``, a dictionary with ``time``, an object with a
+            ``time`` attribute, or a ``(name, modality, time)`` sequence with
+            an optional fourth entry, ``sample_index``. Time is in seconds.
+        name: Event name used when a dictionary or object omits it. For a
+            sequence, this overrides its name.
+        modality: Device or technique used when a dictionary or object omits
+            it. For a sequence, this overrides its modality.
+        label: Note used when a dictionary or object omits its label, or
+            assigned to an event created from a sequence.
+
+    Returns:
+        Event: The existing ``Event`` unchanged, or a new event with the
+            supplied fields. An input identifier is preserved; otherwise a
+            new identifier is generated.
+
+    Raises:
+        KeyError: If a dictionary omits ``time``.
+        ValueError: If the name or modality is missing, the sequence has
+            other than three or four entries, or a time or sampling rate
+            cannot be converted to a number.
+        TypeError: If the input has an unsupported form or a time or sampling
+            rate has an unsupported type.
+    """
 
     if isinstance(value, Event):
         return value
@@ -226,31 +246,66 @@ def coerce_event(
     )
 
 
+def coerce_events(
+    values: Iterable[Any],
+    *,
+    name: str | None = None,
+    modality: str | None = None,
+    label: str | None = None,
+) -> list[Event]:
+    """Convert an iterable of events into a list of :class:`Event` objects.
+
+    Args:
+        values: Events in any form accepted by :func:`coerce_event`.
+        name: Event name passed to ``coerce_event`` for each item.
+        modality: Device or technique passed to ``coerce_event`` for each item.
+        label: Note passed to ``coerce_event`` for each item.
+
+    Returns:
+        list[Event]: Events in input order. Each item is converted by
+            ``coerce_event``, with the same field handling and errors.
+    """
+
+    return [
+        coerce_event(value, name=name, modality=modality, label=label)
+        for value in values
+    ]
+
+
 def coerce_breath_event(
     value: Any,
     *,
     modality: str | None = None,
     source: str | None = None,
 ) -> BreathEvent:
-    """Turn one breath, written in any of the forms below, into a `BreathEvent`.
+    """Convert one detected breath into a :class:`BreathEvent`.
 
-    Accepts a `BreathEvent` (returned as it is), a dictionary, an object with
-    ``start_time``/``end_time`` attributes (such as eitprocessing's
-    ``Breath``, whose ``middle_time`` becomes ``extremum_time``), or a
-    ``(start_time, end_time)`` or ``(start_time, end_time, extremum_time)``
-    sequence. ``modality`` and ``source`` fill in whatever the input does
-    not carry.
+    The turning point is read from ``extremum_time`` and ``extremum_index``,
+    then from the older ``peak_time`` and ``peak_index``, then from
+    eitprocessing's ``middle_time``. The first pair with a value is used, and
+    both time and index come from that pair. Reading ``peak_time`` or
+    ``peak_index`` gives a ``UserWarning`` naming the current fields.
 
-    The turning point is read from the first of these that is given:
-    ``extremum_time``/``extremum_index``, then ``peak_time``/``peak_index``
-    (the names older m3resp versions and other detectors use; a warning
-    names the new keys), then eitprocessing's ``middle_time``. The time and
-    its position always come from the same pair, so they point at the same
-    moment.
+    Args:
+        value: A ``BreathEvent``, a dictionary or object with ``start_time``
+            and ``end_time``, or a ``(start_time, end_time)`` sequence with an
+            optional third entry, ``extremum_time``. All times are in seconds.
+        modality: Device or technique used when the input's modality is
+            missing or empty. Required for a sequence.
+        source: Method name used when the input's source is missing or empty.
+
+    Returns:
+        BreathEvent: The existing breath unchanged, or a new breath with the
+            input's timing, sample indices, label, identifier and metadata.
+            A new identifier is generated when the input omits one.
 
     Raises:
-        ValueError: If the input names itself as something other than a
-            breath, e.g. an ``Interval`` with ``name="occlusion"``.
+        ValueError: If the input has a name other than ``'breath'``, omits a
+            required modality or dictionary time, has other than two or
+            three sequence entries, or ends before it starts. Also raised
+            when a time or sampling rate cannot be converted to a number.
+        TypeError: If the input has an unsupported form or a time or sampling
+            rate has an unsupported type.
     """
 
     if isinstance(value, BreathEvent):
@@ -289,8 +344,18 @@ def coerce_breath_events(
     modality: str | None = None,
     source: str | None = None,
 ) -> list[BreathEvent]:
-    """Turn a list of breaths, in any form `coerce_breath_event` accepts, into
-    `BreathEvent` objects."""
+    """Convert an iterable of breaths into a list of :class:`BreathEvent` objects.
+
+    Args:
+        values: Breaths in any form accepted by :func:`coerce_breath_event`.
+        modality: Device or technique used for items with a missing or empty
+            modality.
+        source: Method name used for items with a missing or empty source.
+
+    Returns:
+        list[BreathEvent]: Breaths in input order. Each item is converted by
+            ``coerce_breath_event``, with the same field handling and errors.
+    """
 
     return [
         coerce_breath_event(value, modality=modality, source=source) for value in values
@@ -304,23 +369,33 @@ def coerce_interval(
     modality: str | None = None,
     source: str | None = None,
 ) -> Interval:
-    """Turn one interval, written in any of the forms below, into an `Interval`.
+    """Convert one timed interval into an :class:`Interval`.
 
-    Accepts an `Interval` (returned as it is), a dictionary, an object with
-    ``start_time``/``end_time`` attributes (such as eitprocessing's
-    ``Interval``), or a ``(start_time, end_time)`` pair. ``name``,
-    ``modality`` and ``source`` fill in whatever the input does not carry.
+    Args:
+        value: An ``Interval``, a dictionary or object with ``start_time``
+            and ``end_time`` (including eitprocessing's ``Interval``), or a
+            ``(start_time, end_time)`` pair. Times are in seconds.
+        name: Interval kind used when the input's name is missing or empty.
+            Required for a pair. ``'breath'`` selects ``BreathEvent``.
+        modality: Device or technique used when the input's modality is
+            missing or empty. Required for a pair.
+        source: Method name used when the input's source is missing or empty.
 
-    An input that is a breath (named ``'breath'``, or carrying a turning
-    point in ``extremum_time``, ``extremum_index``, ``peak_time``,
-    ``peak_index`` or ``middle_time``) comes back as
-    a `BreathEvent`, which is also an `Interval`, so the turning point is
-    kept.
+    Returns:
+        Interval: The existing interval unchanged, or a new interval with the
+            input's fields. A converted input named ``'breath'`` or carrying
+            a turning point becomes a ``BreathEvent``; the turning point is
+            read as in :func:`coerce_breath_event`. Input identifiers are
+            preserved; a new identifier is generated when omitted.
 
     Raises:
-        ValueError: If the input carries a turning point but is named
-            something other than ``'breath'``: a plain `Interval` has no
-            place to keep that point.
+        ValueError: If a required name, modality or dictionary time is
+            missing, a pair has other than two entries, or the end precedes
+            the start. Also raised when a time or sampling rate cannot be
+            converted to a number, or an input with a turning point has a
+            name other than ``'breath'``.
+        TypeError: If the input has an unsupported form or a time or sampling
+            rate has an unsupported type.
     """
 
     if isinstance(value, Interval):
@@ -370,8 +445,20 @@ def coerce_intervals(
     modality: str | None = None,
     source: str | None = None,
 ) -> list[Interval]:
-    """Turn a list of intervals, in any form `coerce_interval` accepts, into
-    `Interval` objects."""
+    """Convert an iterable of intervals into a list of :class:`Interval` objects.
+
+    Args:
+        values: Intervals in any form accepted by :func:`coerce_interval`.
+        name: Interval kind used for items with a missing or empty name.
+        modality: Device or technique used for items with a missing or empty
+            modality.
+        source: Method name used for items with a missing or empty source.
+
+    Returns:
+        list[Interval]: Intervals in input order, including ``BreathEvent``
+            objects for converted breaths. Each item is converted by
+            ``coerce_interval``, with the same field handling and errors.
+    """
 
     return [
         coerce_interval(value, name=name, modality=modality, source=source)
@@ -380,8 +467,7 @@ def coerce_intervals(
 
 
 def _read(value: Any, key: str) -> Any:
-    """Read ``key`` from a dictionary, or the attribute of that name from an
-    object. ``None`` when it is not there."""
+    """Read a dictionary entry or object attribute, returning ``None`` if absent."""
 
     if isinstance(value, Mapping):
         return value.get(key)
@@ -389,6 +475,8 @@ def _read(value: Any, key: str) -> Any:
 
 
 def _has_start_and_end(value: Any) -> bool:
+    """Return whether both interval time fields are present."""
+
     if isinstance(value, Mapping):
         return "start_time" in value and "end_time" in value
     return hasattr(value, "start_time") and hasattr(value, "end_time")
@@ -405,12 +493,13 @@ _TURNING_POINT_KEYS: tuple[tuple[str, str | None], ...] = (
 
 
 def _turning_point(value: Any, *, warn: bool = False) -> tuple[Any, Any, str | None]:
-    """The turning point of ``value`` as (time, index, key it was read from).
+    """Read the first available turning-point pair as (time, index, key).
 
-    The first pair in `_TURNING_POINT_KEYS` with a time or an index is used,
-    and both come from that pair, so they never describe different moments.
-    Returns (None, None, None) when there is no turning point. With
-    ``warn=True``, reading the old ``peak_*`` names gives a warning.
+    Pairs follow `_TURNING_POINT_KEYS` order. A pair is selected when either
+    value is non-None; both values come from that pair. The returned key is
+    the time key when its value is present, otherwise the index key.
+    Returns ``(None, None, None)`` when all values are None. With ``warn=True``,
+    selecting the older ``peak_*`` fields emits a UserWarning.
     """
 
     for time_key, index_key in _TURNING_POINT_KEYS:
@@ -432,11 +521,10 @@ def _turning_point(value: Any, *, warn: bool = False) -> tuple[Any, Any, str | N
 def _interval_fields(
     value: Any, *, modality: str | None, source: str | None
 ) -> dict[str, Any]:
-    """The fields every `Interval` has, read from a dictionary or an object.
+    """Read interval fields from a dictionary or object.
 
-    Shared by `coerce_interval` and `coerce_breath_event`, so both keep the
-    same fields. ``modality`` and ``source`` are used only when the input
-    does not carry its own.
+    ``modality`` and ``source`` fill missing or empty fields. Times and
+    sampling rate are converted to floats, and metadata is copied.
     """
 
     fields: dict[str, Any] = {
@@ -461,8 +549,21 @@ def _interval_fields(
 def event_to_dict(
     value: Event | Interval | Mapping[str, Any] | Any,
 ) -> dict[str, Any]:
-    """Turn an event, interval or breath into a plain dictionary of its fields,
-    ready to write to a table or a JSON file."""
+    """Return the fields of an event, interval or breath as a dictionary.
+
+    Args:
+        value: An ``Event``, ``Interval`` or ``BreathEvent``, another dataclass
+            instance, a dictionary, or an iterable of key-value pairs.
+
+    Returns:
+        dict[str, Any]: All fields, including timing, identifier and metadata.
+            Dataclass fields are copied recursively; dictionary inputs are
+            copied at the top level. Field values keep their existing types.
+
+    Raises:
+        TypeError: If the input cannot be read as a dictionary.
+        ValueError: If a key-value pair has an invalid length.
+    """
 
     if isinstance(value, Mapping):
         return dict(value)
@@ -472,16 +573,22 @@ def event_to_dict(
 
 
 def _is_dataclass_instance(value: Any) -> bool:
+    """Return whether the value is an instance of a dataclass."""
+
     return is_dataclass(value) and not isinstance(value, type)
 
 
 def _optional_float(value: Any) -> float | None:
+    """Convert a supplied value to a float, preserving ``None``."""
+
     if value is None:
         return None
     return float(value)
 
 
 def _required_str(value: Any, field_name: str) -> str:
+    """Convert a supplied field to text, raising ``ValueError`` for ``None``."""
+
     if value is None:
         raise ValueError(f"{field_name} is required")
     return str(value)
@@ -490,17 +597,12 @@ def _required_str(value: Any, field_name: str) -> str:
 def _coerce_positional_sequence(
     value: Any, *, min_length: int, max_length: int, target: str
 ) -> tuple[Any, ...]:
-    """Validate the positional fallback `coerce_event`/`coerce_breath_event` use
-    for a `detector=callable` that returns a bare sequence rather than a dict
-    or one of our own types.
+    """Check the number of sequence entries and return them as a tuple.
 
-    A string/bytes value or anything without a length is rejected outright -
-    without this, a short string would silently iterate character by
-    character. Anything else is checked against ``min_length``/``max_length``
-    before being unpacked, so a same-length-but-different-meaning sequence
-    (e.g. a ``(confidence, snr)`` pair reaching `coerce_breath_event`) raises
-    immediately naming what was expected, rather than silently becoming a
-    plausible but wrong `Event`/`BreathEvent`.
+    Strings, bytes and inputs without a length raise ``TypeError``. A length
+    outside ``min_length`` to ``max_length`` raises ``ValueError``, as does a
+    dictionary missing interval times. The conversion functions assign
+    meanings to the entries.
     """
 
     if isinstance(value, Mapping):
@@ -521,6 +623,8 @@ def _coerce_positional_sequence(
 
 
 def _raise_missing_times(value: Mapping[str, Any], target: str) -> NoReturn:
+    """Raise ``ValueError`` naming the missing interval time fields."""
+
     missing = [key for key in ("start_time", "end_time") if key not in value]
     raise ValueError(
         f"Cannot make {target} from this dictionary: it has no "
@@ -531,23 +635,22 @@ def _raise_missing_times(value: Mapping[str, Any], target: str) -> NoReturn:
 def reuse_matching_breaths(
     breaths: Sequence[BreathEvent], stored: Iterable[Any] | None
 ) -> list[BreathEvent]:
-    """Swap each breath for an already stored breath that is the same breath.
+    """Reuse stored breaths with the same modality, start time and end time.
 
-    A stored breath counts as the same breath when it is a `BreathEvent`
-    with the same modality and exactly the same start and end time. Results
-    computed over a breath (a TIV value, say) can then point to the breath
-    object that is already stored, instead of a copy of it. Breaths with no
-    match are kept as they are, and stored items that are not a
-    `BreathEvent` are ignored.
+    Matching uses exact equality of the modality and both times, in seconds
+    on the same time axis. A match uses the stored object's identifier, peak
+    timing and metadata. When several stored breaths match, the last one is
+    used. Only ``BreathEvent`` objects in ``stored`` are considered.
 
     Args:
-        breaths: The breaths a result was computed over.
+        breaths: Breaths to match, in the order required by the result.
         stored: Breaths already stored, e.g. ``session.events["eit_breaths"]``,
             or None.
 
     Returns:
-        The breaths, in the same order, with matches swapped for the stored
-        ones.
+        list[BreathEvent]: Stored matches and unmatched input breaths, in
+            input order. The list holds the original objects, so subsequent
+            changes to a matched breath also affect its stored result.
     """
 
     by_times = {

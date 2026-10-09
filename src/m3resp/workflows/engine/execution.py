@@ -53,23 +53,40 @@ def run_workflow(
     cancellation_token: CancellationToken | None = None,
     run_id: str | None = None,
 ) -> WorkflowResult:
-    """Run a declarative workflow spec and return its result.
+    """Run a workflow's ordered steps and return their results and records.
 
-    ``extra_context`` seeds context keys produced outside the spec (e.g. signals
-    already loaded onto the session), letting a processing-only spec begin from
-    mid-workflow artifacts. Those keys are treated as available during static
-    validation.
+    Captures and re-emits step warnings and records each executed step in the
+    session's processing history. A cancellation request is checked before
+    and after each step, preserving completed work. Workflow failures preserve
+    session changes made before the error.
 
-    ``event_sink``, if given, receives one JSON-safe progress event per call
-    (``workflow_started``, ``step_started``, ``step_warning``,
-    ``step_completed``, ``step_failed``, ``workflow_completed``,
-    ``workflow_failed``, ``workflow_cancelled``). ``cancellation_token`` is
-    checked before and after each step; cancellation preserves
-    already-completed work rather than rolling it back.
+    Args:
+        spec: A WorkflowSpec, dictionary, or YAML/JSON file path.
+        session: Session to process and update; None creates a new session.
+        eit_adapter: EIT adapter used when creating a new session.
+        emg_adapter: EMG adapter used when creating a new session.
+        extra_context: Values supplied under context keys before execution.
+            These keys are treated as available during structural validation.
+        event_sink: Optional callable receiving progress-event dictionaries
+            for workflow and step starts, warnings, completion, failure and
+            cancellation. It is called synchronously.
+        cancellation_token: Optional flag for stopping between steps.
+        run_id: Optional run identifier; a new identifier is generated when unset.
 
-    A step function's own exception is re-raised wrapped in
-    ``WorkflowExecutionError``, with the original exception
-    available as ``__cause__``.
+    Returns:
+        WorkflowResult: Live session, context values, resolved step descriptions,
+            execution records, timings in seconds and captured warnings. Status
+            is succeeded or cancelled. An attached data-model recorder stores
+            the run's outputs and supplies processing_run_id. Export operations
+            occur through declared steps; `run_spec` also applies outputs settings
+            and writes run manifests.
+
+    Raises:
+        WorkflowSpecError: If the spec or bindings are invalid, or a step
+            returns an invalid output dictionary or omits a declared output.
+        UnknownStepError: If the first structural error concerns an unknown step.
+        WorkflowExecutionError: If a step function raises; the original exception
+            is available through __cause__ and gathered step records are retained.
     """
 
     _ensure_steps_registered()
@@ -100,6 +117,8 @@ def run_workflow(
     start_monotonic = time.monotonic()
 
     def emit(event_type: Any, **fields: Any) -> None:
+        """Send a progress event to the caller's event sink when supplied."""
+
         if event_sink is not None:
             event_sink(make_event(event_type, run_id=run_id, **fields))
 
@@ -261,12 +280,7 @@ def _replay_captured_warnings(
 
 
 def _record_processing_step(ctx: WorkflowContext, record: StepExecutionRecord) -> None:
-    """log every executed step onto the session's universal
-    ``ProcessingHistory``, using exactly what the engine already knows
-    (bindings/parameters/timing/outcome) - no step function needs to call
-    anything itself. Distinct from the datamodel's per-*workflow*
-    ``ProcessingRun`` (see ``DataModelRecorder.record_workflow_result``), so
-    this never creates a duplicate/competing ``ProcessingRun``."""
+    """Add an executed step's settings, input/output keys and status to history."""
 
     ctx.session.processing_history.record(
         record.operation_id,
@@ -282,9 +296,11 @@ def _record_processing_step(ctx: WorkflowContext, record: StepExecutionRecord) -
 def _bind_compiled_arguments(
     compiled_step: CompiledStep, ctx: WorkflowContext
 ) -> dict[str, Any]:
-    """Build a step's call kwargs from an already-compiled step:
-    context reads resolve against the live context; static parameters were
-    already fully resolved (``@ref``s and paths) at compile time."""
+    """Build call arguments from context inputs and resolved static settings.
+
+    Missing optional context inputs use the step function's defaults.
+    Raises WorkflowSpecError for a missing required context key.
+    """
 
     kwargs: dict[str, Any] = {}
     for param, context_key in compiled_step.input_bindings.items():
@@ -299,6 +315,12 @@ def _bind_compiled_arguments(
 def _store_compiled_outputs(
     compiled_step: CompiledStep, ctx: WorkflowContext, result: Any
 ) -> None:
+    """Store each declared output under its compiled context key.
+
+    Raises WorkflowSpecError if result is not a dictionary or a declared
+    output is missing.
+    """
+
     if not isinstance(result, dict):
         raise WorkflowSpecError(
             f"Step #{compiled_step.position} '{compiled_step.operation_id}' must "

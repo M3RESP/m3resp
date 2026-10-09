@@ -13,8 +13,8 @@ whichever answers your question. The third you switch on when you need it.
    including by hand, outside any workflow. Read it to see what was asked
    for.
 
-2. `ProcessingStep`/`ProcessingHistory`, a step up in detail. Instead of
-   just "an action happened," it records exactly which `input_keys` and
+2. `ProcessingStep`/`ProcessingHistory`, a step up in detail. It records
+   exactly which `input_keys` and
    `output_keys` (the dictionary/context keys the step read from and wrote
    to) were touched, plus a `status` (`"succeeded"`, `"failed"`, or
    `"cancelled"`) and the installed version of each optional upstream
@@ -91,8 +91,8 @@ automatically for every step run through the declarative
 `m3resp.workflows` engine (see [../workflows.md](../workflows.md)) - the
 engine knows the exact operation, bindings, parameters, timing, and outcome
 of each step and records it after execution, so no step function has to
-remember to call anything itself. `ProvenanceRecord` is not replaced by
-this; both stay in use.
+remember to call anything itself. `ProvenanceRecord` stays in use
+alongside it.
 
 `name` (the registered operation id, e.g. `"eit.pixel_tiv"`) plus
 `parameters` plus `input_keys`/`output_keys` are enough to replay a
@@ -119,6 +119,12 @@ step inside a workflow.
 Each `SignalStream` also records how its recording was synchronized
 (`sync_method`, `time_offset_ms`), copied from the session; see
 [synchronization.md](synchronization.md).
+
+Each stored `ProcessingRun` has a `name` and a `kind`: `workflow` for an
+engine run, `step` for an explicitly recorded `ProcessingStep`, or
+`session_action` for a session method call. `version` can record the
+workflow or operation version. `run_time` is a Unix timestamp in seconds;
+`parameter_file_ids` links exported array archives to the run.
 
 ```python
 from m3resp.datamodel.recorder import DataModelRecorder

@@ -12,13 +12,16 @@ PRESET_REGISTRY: dict[str, type[Preset]] = {}
 
 
 def register_preset(name: str, preset_cls: type[Preset]) -> None:
-    """Register ``preset_cls`` under ``name``."""
+    """Store preset_cls under name, replacing any existing registration."""
 
     PRESET_REGISTRY[name] = preset_cls
 
 
 def get_preset(name: str) -> type[Preset]:
-    """Return the registered `Preset` class for ``name``."""
+    """Return the Preset class registered under name.
+
+    Raises UnknownPresetError if name is unregistered, listing available names.
+    """
 
     try:
         return PRESET_REGISTRY[name]

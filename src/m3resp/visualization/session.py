@@ -488,6 +488,12 @@ def _plot_events(
     color: str,
     label: str,
 ) -> None:
+    """Shade each breath interval and mark available extrema on each axis.
+
+    Times are in seconds. Adds artists to the supplied axes using color,
+    with label attached to each extremum line.
+    """
+
     for event in events:
         for ax in axes:
             ax.axvspan(event.start_time, event.end_time, color=color, alpha=0.08)
