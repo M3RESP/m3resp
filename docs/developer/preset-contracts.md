@@ -46,7 +46,7 @@ session.run_preset("multimodal")
 `emg.ecg_gating`, which update the session's signals and provenance.
 Its default processing order is:
 band-pass -> ECG peak detection -> gating -> envelope -> baseline -> breath
-detection -> postprocessing. The baseline is the quiet level of the envelope
+detection -> feature extraction. The baseline is the quiet level of the envelope
 that the breath-detection threshold is measured against, so it is computed
 before breaths are detected; set it with
 `config={"baseline": {"window_seconds": ..., "step_seconds": ..., "percentile": ...}}`
