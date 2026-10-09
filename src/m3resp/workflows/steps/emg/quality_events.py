@@ -119,7 +119,7 @@ def evaluate_bell_curve_error(
         "evaluate_bell_curve_error",
         percentage_bell_error,
         modality="emg",
-        peak_indices=peak_indices,
+        extremum_indices=peak_indices,
         unit="%",
         method="resurfemg.evaluate_bell_curve_error",
         fs=fs,
@@ -136,7 +136,7 @@ def evaluate_bell_curve_error(
             "evaluate_bell_curve_error_fitted_parameters",
             list(np.asarray(fitted_parameters)),
             modality="emg",
-            peak_indices=peak_indices,
+            extremum_indices=peak_indices,
             method="resurfemg.evaluate_bell_curve_error",
             fs=fs,
         )
@@ -145,7 +145,7 @@ def evaluate_bell_curve_error(
         "evaluate_bell_curve_error",
         valid_peak,
         modality="emg",
-        peak_indices=peak_indices,
+        extremum_indices=peak_indices,
         fs=fs,
     )
 
@@ -275,7 +275,7 @@ def evaluate_event_timing(
         "evaluate_event_timing_delta",
         delta_time,
         modality="emg",
-        peak_indices=paired_emg_peaks,
+        extremum_indices=paired_emg_peaks,
         unit="s",
         method="resurfemg.evaluate_event_timing",
         fs=fs,
@@ -293,7 +293,7 @@ def evaluate_event_timing(
         "evaluate_event_timing",
         correct_timing,
         modality="emg",
-        peak_indices=paired_emg_peaks,
+        extremum_indices=paired_emg_peaks,
         fs=fs,
     )
     if unmatched_count:
