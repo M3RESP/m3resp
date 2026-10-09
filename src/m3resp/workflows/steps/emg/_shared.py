@@ -172,7 +172,7 @@ def _per_breath_flags(
     *,
     modality: str,
     category: str | None = None,
-    peak_indices: Any,
+    extremum_indices: Any,
     severity: Severity = "info",
     fs: float | None = None,
     threshold: float | None = None,
@@ -180,7 +180,7 @@ def _per_breath_flags(
 ) -> list[QualityFlag]:
     """Return one QualityFlag per breath in input order.
 
-    Pair valid values with peak_indices and use ``breath_id=str(position)``
+    Pair valid values with extremum_indices and use ``breath_id=str(position)``
     for the zero-based input position. Metadata stores the turning-point
     sample as ``extremum_sample_index`` and, when fs is supplied in Hz,
     ``extremum_time`` in seconds from recording start. Extra metadata
@@ -188,10 +188,10 @@ def _per_breath_flags(
     in length.
     """
 
-    _require_equal_length(valid=valid, peak_indices=peak_indices)
+    _require_equal_length(valid=valid, extremum_indices=extremum_indices)
     flags = []
-    for position, (is_valid, peak_index) in enumerate(zip(valid, peak_indices)):
-        metadata = _breath_metadata(peak_index, fs=fs)
+    for position, (is_valid, extremum_index) in enumerate(zip(valid, extremum_indices)):
+        metadata = _breath_metadata(extremum_index, fs=fs)
         if extra_metadata:
             metadata.update(extra_metadata)
         flags.append(

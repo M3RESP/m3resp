@@ -1,9 +1,12 @@
-"""Helpers for steps that give one result per breath (EMG and ventilator).
+"""Helpers for EMG and ventilator steps that give one result per breath.
 
-Each per-breath result or quality flag records the sample of its breath's
-turning point in ``metadata["extremum_sample_index"]``, so it can be matched
-back to the breath it belongs to. These helpers write and read that key in one
-place.
+These steps store each per-breath value as its own ``ParameterResult`` or
+``QualityFlag``. Each one records the sample of its breath's turning point in
+``metadata["extremum_sample_index"]``, so it can be matched back to the breath
+it belongs to. These helpers write and read that key in one place.
+
+EIT per-breath values (TIV, EELI, pixel TIV) are stored as ``IntervalData``,
+which holds each value together with its ``BreathEvent``.
 """
 
 from __future__ import annotations
@@ -80,7 +83,7 @@ def _per_breath_results(
     *,
     modality: str,
     category: str | None = None,
-    peak_indices: Any,
+    extremum_indices: Any,
     unit: str | None = None,
     method: str | None = None,
     fs: float | None = None,
@@ -93,7 +96,7 @@ def _per_breath_results(
         values: Scalar or array values, one entry per breath.
         modality: Device or technique that produced the measurement.
         category: Optional measurement category.
-        peak_indices: Turning-point sample positions, paired with values.
+        extremum_indices: Turning-point sample positions, paired with values.
         unit: Optional measurement unit shared by all results.
         method: Optional method name shared by all results.
         fs: Optional signal sampling rate in Hz.
@@ -107,13 +110,13 @@ def _per_breath_results(
             start. Scalars become floats; array values are retained.
 
     Raises:
-        ValueError: If values and peak_indices have different lengths.
+        ValueError: If values and extremum_indices have different lengths.
         IndexError: If extra_metadata_per_item has fewer entries than values.
     """
 
-    _require_equal_length(values=values, peak_indices=peak_indices)
+    _require_equal_length(values=values, extremum_indices=extremum_indices)
     results = []
-    for position, (value, extremum_index) in enumerate(zip(values, peak_indices)):
+    for position, (value, extremum_index) in enumerate(zip(values, extremum_indices)):
         metadata = _breath_metadata(extremum_index, fs=fs)
         if extra_metadata_per_item is not None:
             metadata.update(extra_metadata_per_item[position])

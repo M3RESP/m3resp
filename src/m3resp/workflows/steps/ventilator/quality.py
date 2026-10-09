@@ -72,7 +72,7 @@ def detect_non_consecutive_manoeuvres(
         result,
         modality="ventilator",
         category="airway_pressure",
-        peak_indices=pocc_indices,
+        extremum_indices=pocc_indices,
     )
     for flag in flags:
         session.quality.add(flag)

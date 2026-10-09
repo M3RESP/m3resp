@@ -732,7 +732,7 @@ def pocc_quality(
         valid,
         modality="ventilator",
         category="airway_pressure",
-        peak_indices=pocc_indices,
+        extremum_indices=pocc_indices,
         extra_metadata={"pressure_sample_index_end": None},
     )
     # Link each flag to its Pocc end index too, not just its peak.
@@ -747,7 +747,7 @@ def pocc_quality(
                 row_values,
                 modality="ventilator",
                 category="airway_pressure",
-                peak_indices=pocc_indices,
+                extremum_indices=pocc_indices,
                 unit=pressure_unit,
                 method="resurfemg.pocc_quality",
                 extra_metadata_per_item=[

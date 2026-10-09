@@ -101,7 +101,7 @@ def snr_pseudo(
         "snr_pseudo",
         result,
         modality="emg",
-        peak_indices=peak_indices,
+        extremum_indices=peak_indices,
         method="resurfemg.snr_pseudo",
         fs=fs,
     )
@@ -113,7 +113,7 @@ def snr_pseudo(
             "snr_pseudo",
             result >= minimum_snr,
             modality="emg",
-            peak_indices=peak_indices,
+            extremum_indices=peak_indices,
             fs=fs,
             threshold=minimum_snr,
         )
@@ -264,7 +264,7 @@ def percentage_under_baseline(
         "percentage_under_baseline",
         percentages,
         modality="emg",
-        peak_indices=peak_indices,
+        extremum_indices=peak_indices,
         unit="%",
         method="resurfemg.percentage_under_baseline",
         fs=fs,
@@ -276,7 +276,7 @@ def percentage_under_baseline(
         "percentage_under_baseline",
         valid,
         modality="emg",
-        peak_indices=peak_indices,
+        extremum_indices=peak_indices,
         fs=fs,
         threshold=aub_threshold,
     )
@@ -398,7 +398,7 @@ def detect_local_high_aub(
         "detect_local_high_aub",
         result,
         modality="emg",
-        peak_indices=peak_indices,
+        extremum_indices=peak_indices,
         threshold=effective_threshold,
     )
     threshold_result = ParameterResult(
@@ -541,7 +541,7 @@ def detect_extreme_time_products(
         "detect_extreme_time_products",
         result,
         modality="emg",
-        peak_indices=peak_indices,
+        extremum_indices=peak_indices,
     )
     bounds_result = ParameterResult(
         name="detect_extreme_time_products_bounds",
