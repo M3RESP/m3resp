@@ -30,13 +30,14 @@ from m3resp.data.events import (
     coerce_breath_event,
     coerce_breath_events,
     coerce_event,
+    coerce_events,
     coerce_interval,
     coerce_intervals,
     event_to_dict,
 )
 from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
-from m3resp.data.pixel_maps import PixelMap, PixelMask
+from m3resp.data.pixel_maps import PixelMap, PixelMask, pixel_breath_events
 from m3resp.data.processing import ProcessingHistory, ProcessingStep
 from m3resp.data.quality import QualityFlag
 from m3resp.data.signals import Signal
@@ -67,10 +68,12 @@ __all__ = [
     "coerce_breath_event",
     "coerce_breath_events",
     "coerce_event",
+    "coerce_events",
     "coerce_interval",
     "coerce_intervals",
     "event_to_dict",
     "load_category_aliases",
     "normalize_category",
+    "pixel_breath_events",
     "register_category_alias",
 ]

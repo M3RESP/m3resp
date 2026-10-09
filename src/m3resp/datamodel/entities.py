@@ -330,7 +330,8 @@ class ProcessingRun(Entity):
         version: Optional workflow or operation version.
         code_commit_hash: Optional code revision used for the calculation.
         input_file_ids: Identifiers of recorded input files.
-        parameter_file_ids: Identifiers of exported result-array files.
+        parameter_file_ids: Identifiers of exported result-array files,
+            such as per-breath pixel maps and masks.
         run_time: Unix timestamp in seconds; defaults to the current time.
         operator_ref: Optional reference to the person running the analysis.
         status: pending, running, succeeded or failed; defaults to succeeded.
@@ -344,13 +345,9 @@ class ProcessingRun(Entity):
     version: str | None = None
     code_commit_hash: str | None = None
     input_file_ids: list[str] = Field(default_factory=list)
-    # The files holding this run's array results (role "parameter"), e.g.
-    # parameter_result_arrays.npz, interval_data_arrays.npz, pixel_masks.npz.
-    # A list, because one run can write several of them.
     parameter_file_ids: list[str] = Field(default_factory=list)
     run_time: float = Field(default_factory=_utc_now_ts)
     operator_ref: str | None = None
-    # Outcome of the recorded operation and its error message, when available.
     status: ProcessingStatus = "succeeded"
     error: str | None = None
     parameters: dict[str, Any] = Field(default_factory=dict)

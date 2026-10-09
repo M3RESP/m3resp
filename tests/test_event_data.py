@@ -5,7 +5,14 @@ import json
 import numpy as np
 import pytest
 
-from m3resp import BreathEvent, Event, EventData, Interval, IntervalData
+from m3resp import (
+    BreathEvent,
+    Event,
+    EventData,
+    Interval,
+    IntervalData,
+    ParameterResult,
+)
 
 
 def _breaths() -> list[BreathEvent]:
@@ -94,6 +101,24 @@ def test_interval_data_to_dict_is_json_ready():
     assert restored["values"] == [1.5, 1.7]
     assert restored["intervals"][0]["extremum_time"] == 1.2
     assert restored["intervals"][0]["name"] == "breath"
+
+
+def test_interval_data_writes_parameter_results_as_dictionaries():
+    results = [
+        ParameterResult(name="tidal_impedance_variation", value=1.5, modality="eit"),
+        ParameterResult(name="tidal_impedance_variation", value=1.7, modality="eit"),
+    ]
+    data = IntervalData(
+        name="tiv_per_breath",
+        modality="eit",
+        intervals=_breaths(),
+        values=results,
+    )
+
+    restored = json.loads(json.dumps(data.to_dict()))
+
+    assert [value["value"] for value in restored["values"]] == [1.5, 1.7]
+    assert restored["values"][0] == results[0].to_dict()
 
 
 def test_event_data_keeps_one_value_per_event():

@@ -1,7 +1,7 @@
 """Registered EIT filtering workflow steps.
 
 Rate detection lives in `rates.py`; the rates it produces are inputs to the
-MDN filter below, but estimating them is not a filtering operation.
+MDN filter below.
 """
 
 from __future__ import annotations

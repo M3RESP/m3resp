@@ -322,17 +322,29 @@ class DataModelRecorder:
     def record_interval_data(
         self, interval_data: IntervalData | EventData, *, processing_run_id: str
     ) -> list[DerivedFeature]:
-        """Materialize values per interval or event as ``DerivedFeature`` entries.
+        """Add values per interval or event to the store as derived features.
 
-        Numbers become one feature per interval (or event), with the
-        interval's start and end time as the feature's time window, so EIT
-        TIV and EELI keep one stored value per breath. A missing value (None
-        or NaN) is stored as no value, because the saved JSON files cannot
-        hold NaN. A value that is not a number is stored as no value too, with
-        a warning. Values that are arrays
-        (a pixel map per breath) become one feature for the whole result with
-        no value, like an array-valued ``ParameterResult``: the arrays
-        themselves live in the export archive.
+        Scalar values create one feature per item. Times are copied in
+        seconds on the input's clock; an event uses the same time for both
+        ends of its window. Missing ``None`` or NaN values are stored as
+        ``None``. Values that fail numeric conversion are stored as ``None``
+        with a logged warning.
+
+        A result containing any array values creates one feature for the
+        whole result, with ``value=None``. Array data is kept in the separate
+        export archive.
+
+        Args:
+            interval_data: ``IntervalData`` or ``EventData`` with values in
+                item order and their physical unit.
+            processing_run_id: Identifier of the run already in the store.
+
+        Returns:
+            list[DerivedFeature]: Stored features in item order for scalar
+                values, or one feature for a result containing arrays.
+
+        Raises:
+            DataModelStoreError: If the processing run is absent from the store.
         """
 
         signal_id = self._lookup_signal_id(
@@ -381,8 +393,20 @@ class DataModelRecorder:
     def record_pixel_grid(
         self, grid: PixelMap | PixelMask, *, processing_run_id: str
     ) -> DerivedFeature:
-        """Materialize a pixel map or mask as one ``DerivedFeature`` with no
-        value: the grid itself lives in the export archive."""
+        """Add a pixel map or mask to the store as a derived-feature record.
+
+        Args:
+            grid: ``PixelMap`` or ``PixelMask`` with its name and modality.
+                A pixel map also supplies the feature's unit.
+            processing_run_id: Identifier of the run already in the store.
+
+        Returns:
+            DerivedFeature: Stored record with ``value=None``. The numeric
+                grid is kept in a separate export archive.
+
+        Raises:
+            DataModelStoreError: If the processing run is absent from the store.
+        """
 
         signal_id = self._lookup_signal_id(grid.modality, None, None)
         return self.store.add_derived_feature(
@@ -654,12 +678,12 @@ class DataModelRecorder:
     def _record_output_item(
         self, name: str, value: Any, run: ProcessingRun
     ) -> dict[str, Any] | None:
-        """Record one recognized output and return its provenance when available.
+        """Record one workflow result and return its provenance description.
 
-        Native measurements, signals and grouped results return provenance entries.
-        Quality flags and bare numbers are stored with no returned entry. name is
-        used as the feature name for bare numbers; booleans and unsupported values
-        are skipped.
+        ``name`` supplies the feature name for a numeric result. Signals,
+        parameters, timed values and pixel grids return descriptive entries;
+        quality flags and numbers are stored and return ``None``. Unsupported
+        types and booleans return ``None``.
         """
 
         if isinstance(value, ParameterResult):
@@ -693,15 +717,24 @@ class DataModelRecorder:
     def record_parameter_file(
         self, path: str | Path, *, processing_run_id: str
     ) -> DataFile:
-        """Record an exported file of array results (e.g.
-        ``parameter_result_arrays.npz``, ``interval_data_arrays.npz`` or
-        ``pixel_masks.npz``) as a ``DataFile`` with role ``"parameter"``, and
-        add it to ``ProcessingRun.parameter_file_ids`` of the run that made
-        it.
+        """Record an exported array file and link it to its processing run.
 
         Exporting again to the same path replaces the earlier link to that
-        path, so a run never lists the same file twice. The earlier
-        ``DataFile`` stays in the store as a record of the earlier export.
+        path in the run's ``parameter_file_ids``. The earlier ``DataFile``
+        remains in the store as a record of the earlier export.
+
+        Args:
+            path: Existing array-results file, such as
+                ``interval_data_arrays.npz`` or ``pixel_masks.npz``.
+            processing_run_id: Identifier of the run already in the store.
+
+        Returns:
+            DataFile: Stored file record with role ``'parameter'``, a SHA-256
+                checksum and file size in bytes.
+
+        Raises:
+            OSError: If the file cannot be read or its size determined.
+            KeyError: If the processing run is absent from the store.
         """
 
         data_file = self.store.add_data_file(
@@ -737,9 +770,8 @@ _SIGNAL_TYPE_BY_MODALITY_CATEGORY: dict[tuple[str, str], SignalType] = {
 }
 
 #: Fallback ``modality -> SignalType`` for signals with no ``category`` set,
-#: used only where the modality alone is unambiguous. ``"ventilator"`` is
-#: deliberately absent: without a category there is no way to tell pressure
-#: from flow from volume, and guessing is what produced wrong audit records.
+#: used only where the modality alone is unambiguous. ``"ventilator"`` has no
+#: entry: without a category, pressure, flow and volume cannot be told apart.
 _SIGNAL_TYPE_BY_MODALITY: dict[str, SignalType] = {
     "eit": "eit_waveform",
 }
@@ -795,12 +827,10 @@ def _output_provenance_entry(value: ParameterResult | Signal) -> dict[str, Any]:
 
 
 def _feature_value(value: Any, name: str) -> float | None:
-    """The value of one ``DerivedFeature`` made from a value per interval.
+    """Convert a feature value to a float, using ``None`` for missing values.
 
-    A missing value (None or NaN) becomes None: the store is saved as JSON,
-    which has no NaN, and None is how it says "no value". A value that is not
-    a number cannot be stored at all; it also becomes None, with a warning, so
-    one odd value does not stop a finished workflow from being recorded.
+    ``None`` and NaN become ``None``. Failed numeric conversion also returns
+    ``None`` and logs a warning identifying the result by ``name``.
     """
 
     if value is None:
@@ -819,8 +849,11 @@ def _feature_value(value: Any, name: str) -> float | None:
 def _grouped_output_provenance_entry(
     value: IntervalData | EventData | PixelMap | PixelMask,
 ) -> dict[str, Any]:
-    """Build a JSON-safe provenance summary for one workflow output that
-    holds several values: values per interval or event, or a pixel grid."""
+    """Describe a timed result or pixel grid for the saved processing history.
+
+    The description includes names, units and metadata, plus the item count
+    for timed values or the row-column shape for a grid.
+    """
 
     entry: dict[str, Any] = {
         "type": type(value).__name__,

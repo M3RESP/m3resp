@@ -1,9 +1,8 @@
-"""``Signal``: the modality-tagged runtime signal type (plan_stage2.md Sec 9).
+"""``Signal``: the modality-tagged runtime signal type.
 
 Adapters convert whatever ``eitprocessing``/``resurfemg`` return into
-``Signal`` instances at the public boundary (Milestone 2.3); everything
-downstream - session storage, workflow steps, export - operates on this type
-instead of vendor-specific objects.
+``Signal`` instances; everything downstream - session storage, workflow
+steps, export - operates on this type.
 """
 
 from __future__ import annotations
@@ -36,14 +35,10 @@ KNOWN_MODALITIES = frozenset(get_args(_KNOWN_MODALITIES_LITERAL))
 #: - ``intermediate``: some pre-processing step has been applied (e.g.
 #:   noise/frequency filtering, segmentation, slicing) - work in progress,
 #:   not yet the final signal a downstream parameter computation should use.
-#:   (Named ``intermediate`` rather than ``filtered`` since not every
-#:   pre-processing step is a filter - see PR #23 discussion on
-#:   ``data/signals.py``.)
 #: - ``processed``: the final signal for this channel, ready to compute
 #:   parameters/results from.
-#: - ``derived``: computed from another signal (e.g. a difference between
-#:   two signals, or a transform), rather than a step in that signal's own
-#:   raw -> intermediate -> processed workflow. Use ``Signal.derived_from``
+#: - ``derived``: computed from other signals (e.g. a difference between
+#:   two signals, or a transform). Use ``Signal.derived_from``
 #:   to record which processing_state it was derived from (raw or
 #:   intermediate), since a channel can have derived signals from either.
 #:

@@ -274,9 +274,8 @@ def ecg_wavelet_denoising(
         metadata=dict(wavelet_parameters),
     )
     # All three are array-valued (decomposition/thresholds are 2D: level x
-    # sample), so they reuse the shared parameter_result_arrays.npz exporter
-    # (plan Phase 6.3) via session.export_summary() rather than a competing
-    # EMG-specific array format.
+    # sample), so session.export_summary() writes them to the shared
+    # parameter_result_arrays.npz file.
     for array_result in (decomposition_result, thresholds_result, gate_mask_result):
         session.parameter_results.add(array_result)
 

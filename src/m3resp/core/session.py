@@ -113,8 +113,7 @@ def set_ventilator_raw(raw: dict[str, Any], recording: Any) -> None:
 
 
 def _eit_event_key(variant: str | None) -> str:
-    """Where EIT breaths are stored in `session.events`: ``"eit_breaths"``,
-    or ``"eit_breaths:<variant>"`` for a named preprocessing variant."""
+    """Return ``eit_breaths`` or ``eit_breaths:<variant>`` for a named variant."""
 
     return "eit_breaths" if variant is None else f"eit_breaths:{variant}"
 
@@ -130,6 +129,22 @@ class M3Session:
         allow_overwrite: bool = False,
         ventilator_adapter: Any | None = None,
     ):
+        """Create a session for recordings, processing results and their history.
+
+        Args:
+            eit_adapter: EIT loading and processing methods. ``None`` uses
+                ``EITProcessingAdapter``.
+            emg_adapter: EMG loading and processing methods. ``None`` uses
+                ``ReSurfEMGAdapter``.
+            metadata: Recording description as ``SessionMetadata`` or a
+                dictionary. ``None`` creates empty metadata.
+            allow_overwrite: Allow preprocessing calls to replace a result
+                stored under the same variant name.
+            ventilator_adapter: Ventilator loading and processing methods.
+                ``None`` creates an adapter using this session's EIT and EMG
+                loaders for files that contain ventilator channels.
+        """
+
         self.eit_adapter = eit_adapter or EITProcessingAdapter()
         self.emg_adapter = emg_adapter or ReSurfEMGAdapter()
         # Ventilator processing is native (`VentilatorAdapter` wraps no upstream
@@ -181,12 +196,7 @@ class M3Session:
         self.allow_overwrite = allow_overwrite
         self.events: dict[str, Any] = {}
         self.parameters: dict[str, Any] = {}
-        # Milestone 2.2 (plan/plan_stage2.md Sec 14): typed collections that
-        # let EIT and EMG data live in the same structure, populated from the
-        # default preprocess/postprocess paths via each adapter's
-        # to_signals/to_parameters/to_quality_flags. These are additive: the
-        # `raw`/`processed`/`parameters` dicts above keep their Stage 1 shape
-        # and behavior unchanged.
+        # Signals and results shared by EIT, EMG and ventilator processing.
         self.signals = SignalCollection()
         self.parameter_results = ParameterResultCollection()
         # Results with one value per breath (or other interval), e.g. EIT
@@ -195,22 +205,13 @@ class M3Session:
         self.interval_data = IntervalDataCollection()
         self.pixel_masks = PixelMaskCollection()
         self.quality = QualityReport()
-        # Milestone 2.5 (plan/plan_stage2.md Sec 20): breaths matched across
-        # modalities by `link_breaths`, once per-modality breath events exist.
+        # Breaths matched across modalities by `link_breaths`.
         self.linked_breaths: list[LinkedBreath] = []
         self.metadata = _coerce_metadata(metadata)
         self.provenance: list[ProvenanceRecord] = []
-        # Stage 2 pipeline-structure Phase 5.1: a universal, engine-populated
-        # log of every executed workflow step (name/bindings/parameters/
-        # timing), independent of whether any step function calls
-        # `self._record()` itself. Distinct from `provenance` (the older,
-        # session-method-level "action + modality" log) and from the
-        # datamodel's per-workflow `ProcessingRun` (see
-        # `m3resp.workflows.engine.run_workflow` and
-        # `DataModelRecorder.record_workflow_result`).
+        # The workflow engine records each step's settings and timing here.
         self.processing_history = ProcessingHistory()
-        # Stage 2 data model wrapper (opt-in, see m3resp.datamodel). ``None``
-        # leaves Stage 1 behavior completely unchanged.
+        # Attach a recorder to save processing history and results in the data model.
         self.datamodel: DataModelRecorder | None = None
 
     def load_eit(
@@ -358,36 +359,33 @@ class M3Session:
         overwrite: bool = False,
         **kwargs: Any,
     ) -> Any:
-        """Run a provided or upstream EIT preprocessing function.
+        """Preprocess the loaded EIT recording and store the results.
 
-        Every result is stored under `session.processed_variants["eit"][name]`,
-        `name` being `variant` if given, otherwise `"default"` - there is no
-        implicit, ambiguously-overwritten "current" result. Writing to a name
-        that's already populated raises `VariantAlreadyExistsError`, so a
-        reference like `processed_variants["eit"]["mdn"]` can't silently
-        change meaning underneath a caller that stashed it earlier.
-        `session.processed["eit"]` mirrors the `"default"` variant only, for
-        convenience/backwards compatibility with code that just wants "the"
-        EIT result.
-
-        `preprocess_eit(filter_mode="mdn", variant="mdn")` and
-        `preprocess_eit(filter_mode="lowpass", variant="lowpass")` can both
-        coexist. See `detect_eit_breaths(variant=...)` to detect breaths
-        against a specific variant.
+        Results are stored in ``session.processed_variants['eit']`` under the
+        variant name, or ``'default'`` when omitted. The default result is
+        also stored in ``session.processed['eit']``. Upstream preprocessing
+        adds signals, rate parameters, values per breath and quality flags
+        to the session's collections. Per-breath results reuse breaths
+        stored under the matching variant's event key.
 
         Args:
             variant (str | None): Name to store this result under. None
                 stores it as ``"default"``.
             overwrite (bool): Replace a result already stored under the same
-                name. `session.allow_overwrite = True` does the same for every
-                call, so notebook/exploratory code can opt in once.
+                name. ``session.allow_overwrite`` also permits replacement.
             **kwargs (Any): Passed on to `EITProcessingAdapter.preprocess`
                 (for example ``filter_mode``). ``preprocess=`` replaces the
-                whole step with a function of your own.
+                whole step with a function of your own; its output is stored
+                directly in the processed-result dictionaries.
 
         Returns:
             Any: The preprocessing result, also stored in
                 `session.processed_variants["eit"]`.
+
+        Raises:
+            MissingModalityDataError: If an EIT recording has yet to be loaded.
+            VariantAlreadyExistsError: If the variant already exists and
+                replacement is disabled.
         """
 
         recording = self._require_raw("eit")
@@ -936,21 +934,30 @@ class M3Session:
         return summary
 
     def detect_eit_breaths(self, *, variant: str | None = None, **kwargs: Any) -> Any:
-        """Detect EIT breaths and store normalized events.
+        """Detect EIT breaths and store them as ``BreathEvent`` objects.
+
+        Breaths matching an existing per-breath EIT result by modality and
+        exact start and end time reuse that result's breath object, including
+        its identifier. Detection is recorded in the session's history.
 
         Args:
             variant (str | None): Detect breaths in the
-                `preprocess_eit(..., variant=<name>)` result with this name
-                instead of the default `processed["eit"]`. The events are then
-                stored under `session.events["eit_breaths:<name>"]` instead of
-                `session.events["eit_breaths"]`, so multiple variants'
-                detections can coexist.
+                ``preprocess_eit(..., variant=<name>)`` result. Events are
+                stored under ``session.events['eit_breaths:<name>']``.
+                ``None`` uses the default processed result, falling back to
+                the raw recording, and stores events under ``'eit_breaths'``.
             **kwargs (Any): Passed on to `EITProcessingAdapter.detect_breaths`.
                 ``detector=`` replaces the detection with a function of your
                 own.
 
         Returns:
-            Any: The detected breaths, a list of `BreathEvent`.
+            list[BreathEvent]: Detected breaths in detector order, also stored
+                in ``session.events``. Times use the input recording's clock.
+
+        Raises:
+            MissingModalityDataError: If the named preprocessing variant is
+                unavailable, or default processed EIT data and a raw recording
+                are both unavailable.
         """
 
         if variant is not None:
@@ -1271,9 +1278,9 @@ class M3Session:
         For recordings that really did start at the same moment - for
         example when one trigger started every device. Each loaded recording
         that has not been synchronized is recorded as ``"none"`` in
-        `session.sync_methods`, so steps that compare recordings no longer
-        warn, while the choice stays visible in the provenance log and the
-        exported summary. Recordings already synchronized keep their record.
+        `session.sync_methods`, so steps that compare recordings skip their
+        missing-synchronization warning, while the choice stays visible in
+        the provenance log and the exported summary. Recordings already synchronized keep their record.
         Breath lists added directly with `add_events`, without a loaded
         recording, are covered too. Recordings loaded later are not.
 
@@ -1356,29 +1363,38 @@ class M3Session:
         duration_pairs: Sequence[tuple[str, str]] | None = None,
         anchor: str = "start",
     ) -> list[ParameterResult]:
-        """Compute timing-delay/duration-difference/event-agreement
-        `ParameterResult`s from `self.linked_breaths` (plan_stage2.md Sec 21).
+        """Compute timing delays, duration differences and event agreement.
 
-        Call `link_breaths` first; an empty `self.linked_breaths` yields an
-        empty result rather than raising. Results are added to
-        `self.parameter_results` and also returned.
+        Call `link_breaths` first. Results are added to
+        `self.parameter_results` and returned, and the calculation is recorded
+        in the processing history. Missing breaths or extremum times are
+        skipped for the affected timing measurements. Agreement results use
+        all linked groups, including groups with missing modalities.
 
         Args:
             delay_pairs (Sequence[tuple[str, str]] | None): Modality pairs to
                 compute the per-breath timing delay for, for example
                 ``[("eit", "emg")]``. Positive means the second modality's
                 breath comes later. None uses every pair of modalities found
-                in the linked breaths.
+                in the linked breaths, in alphabetical order.
             duration_pairs (Sequence[tuple[str, str]] | None): Modality pairs
-                to compute the per-breath duration difference for. None uses
-                every pair of modalities found in the linked breaths.
+                to compute the per-breath duration difference for, as the
+                first modality's duration minus the second's. None uses every
+                pair found in the linked breaths, in alphabetical order.
             anchor (str): Which point of each breath the delay is measured
                 between: ``"start"``, ``"extremum"`` or ``"end"``.
+                Defaults to ``"start"``.
 
         Returns:
             list[ParameterResult]: The timing delays and duration differences
                 per breath (in seconds), and one event-agreement result per
-                delay pair.
+                delay pair as a fraction from 0 to 1. With no linked breaths,
+                default pairs give an empty list; explicit delay pairs give
+                agreement results of 0.
+
+        Raises:
+            ValueError: If anchor is unknown and a requested delay pair has
+                both breaths present.
         """
 
         results = compute_multimodal_parameters(
@@ -1482,6 +1498,12 @@ class M3Session:
     def _extend_typed_collections_from_eit(
         self, preprocessed: dict[str, Any], *, event_key: str = "eit_breaths"
     ) -> None:
+        """Add EIT signals, rates, values per breath and quality flags to the session.
+
+        Per-breath values reuse matching breaths already stored under
+        ``event_key``.
+        """
+
         for signal in self.eit_adapter.to_signals(preprocessed):
             self.signals.add(signal)
         for parameter in self.eit_adapter.to_parameters(preprocessed):

@@ -348,6 +348,43 @@ def pocc_intervals(
     baseline_step_seconds: float = 0.2,
     baseline_percentile: float = 33.0,
 ) -> dict[str, Any]:
+    """Find the start and end of each occluded breath from pressure crossings.
+
+    Boundaries are found from moving-baseline crossings around each pressure
+    minimum, using the signal edges when crossings are missing. Breaths are stored
+    in ``session.events['pocc_breaths']`` with ``metadata['event_type']`` set
+    to ``'pocc'``. Their times are in seconds from the first pressure sample,
+    and their extremum is the pressure minimum. Every detected minimum is
+    kept, with validity flags for its boundaries.
+    The processing settings are recorded in the session's history.
+
+    Args:
+        session: Session whose EMG adapter computes the pressure baseline and
+            which stores the occluded breaths and processing history.
+        ventilator_signals: Dictionary containing the one-dimensional airway
+            ``pressure`` signal and its sampling rate ``fs`` in Hz. Baseline
+            values use the pressure signal's unit.
+        pocc_indices: Sample indices of the occlusion pressure minima, in
+            the pressure signal.
+        baseline_window_seconds: Moving-baseline window length in seconds.
+        baseline_step_seconds: Step between baseline windows in seconds.
+        baseline_percentile: Pressure percentile within each window, from
+            0 to 100.
+
+    Returns:
+        dict[str, Any]: ``pocc_start_indices`` and ``pocc_end_indices`` in
+            samples, ``pocc_interval_validity`` as a boolean array, and
+            ``pocc_events`` as ``BreathEvent`` objects, all in
+            ``pocc_indices`` order. ``pressure_baseline`` has one value per
+            pressure sample.
+
+    Raises:
+        OptionalDependencyError: If ReSurfEMG is unavailable for baseline
+            estimation.
+        ValueError: If baseline inputs are invalid or a breath ends before
+            its start.
+    """
+
     pressure = np.asarray(ventilator_signals["pressure"], dtype=float)
     fs = float(ventilator_signals["fs"])
     peaks = np.asarray(pocc_indices, dtype=int)
@@ -367,10 +404,8 @@ def pocc_intervals(
         pressure, baseline, peaks
     )
 
-    # A Pocc is an occluded breath: an effort to breathe in against a closed
-    # airway. It is kept as a BreathEvent, not a plain Interval, because it
-    # has a turning point (the deepest pressure, `extremum_index`) that an
-    # Interval has no place for. `metadata["event_type"]` marks it as a Pocc.
+    # An occluded breath is an effort to breathe in against a closed airway.
+    # Its turning point is the deepest pressure, at `extremum_index`.
     events: list[BreathEvent] = []
     for index, peak in enumerate(peaks):
         events.append(
@@ -697,7 +732,7 @@ def pocc_quality(
         valid,
         modality="ventilator",
         category="airway_pressure",
-        peak_indices=pocc_indices,
+        extremum_indices=pocc_indices,
         extra_metadata={"pressure_sample_index_end": None},
     )
     # Link each flag to its Pocc end index too, not just its peak.
@@ -712,7 +747,7 @@ def pocc_quality(
                 row_values,
                 modality="ventilator",
                 category="airway_pressure",
-                peak_indices=pocc_indices,
+                extremum_indices=pocc_indices,
                 unit=pressure_unit,
                 method="resurfemg.pocc_quality",
                 extra_metadata_per_item=[

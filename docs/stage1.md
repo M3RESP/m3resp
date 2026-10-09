@@ -116,7 +116,7 @@ Tests cover the workflow engine, EIT and EMG session operations, adapters, synch
 
 ## Out of scope
 
-Stage 1 intentionally does not include:
+Stage 1 does not include:
 
 - A GUI or dashboard.
 - A merger of `eitprocessing` and `resurfemg`.
