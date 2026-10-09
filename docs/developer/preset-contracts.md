@@ -50,7 +50,7 @@ detection -> feature extraction. The baseline is the quiet level of the envelope
 that the breath-detection threshold is measured against, so it is computed
 before breaths are detected; set it with
 `config={"baseline": {"window_seconds": ..., "step_seconds": ..., "percentile": ...}}`
-(defaults: 30 s window, 1 s step, 33rd percentile).
+(defaults: 7.5 s window, 0.2 s step, 33rd percentile).
 `config={"ecg_removal": {"enabled": False}}` skips ECG removal; cardiac
 activity can then remain in the envelope and derived measurements. Pass
 `config={"ecg_detect_peaks": {"ecg_channel": n}}` when a dedicated reference

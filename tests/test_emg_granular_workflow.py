@@ -43,7 +43,7 @@ GRANULAR_SPEC = {
         },
         {
             "uses": "emg.moving_baseline",
-            "with": {"window_seconds": 30.0, "step_seconds": 1.0, "percentile": 33.0},
+            "with": {"window_seconds": 7.5, "step_seconds": 0.2, "percentile": 33.0},
         },
         {"uses": "ventilator.find_occluded_breaths"},
         {"uses": "ventilator.detect_breaths", "with": {"breath_width_seconds": 0.5}},

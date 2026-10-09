@@ -19,8 +19,8 @@ class EMGPreset(Preset):
 
     Config groups keyword arguments under ``preprocess``, ``ecg_detect_peaks``,
     ``ecg_gating``, ``baseline``, ``detect_breaths`` and ``postprocess``.
-    Baseline options are ``window_seconds`` (30 s by default), ``step_seconds``
-    (1 s) and additional moving-baseline options such as ``percentile``.
+    Baseline options are ``window_seconds`` (7.5 s by default), ``step_seconds``
+    (0.2 s) and additional moving-baseline options such as ``percentile``.
     ``ecg_detect_peaks.ecg_channel`` selects a reference ECG channel.
 
     ``ecg_removal.enabled=False`` skips gating; cardiac activity can then
@@ -83,8 +83,8 @@ class EMGPreset(Preset):
 
         kwargs = dict(self._kwargs_for(config, "baseline"))
         fs = float(processed["fs"])
-        window_seconds = float(kwargs.pop("window_seconds", 30.0))
-        step_seconds = float(kwargs.pop("step_seconds", 1.0))
+        window_seconds = float(kwargs.pop("window_seconds", 7.5))
+        step_seconds = float(kwargs.pop("step_seconds", 0.2))
         return session.emg_adapter.moving_baseline(
             np.asarray(envelope, dtype=float),
             window_samples=max(1, int(window_seconds * fs)),
