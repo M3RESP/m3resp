@@ -96,7 +96,7 @@ def remove_invalid_breaths(
     area_under_baseline: Any = None,
     flag_names: Any = ("start_end_validity",),
 ) -> dict[str, Any]:
-    """Keep EMG breaths that pass the selected quality checks.
+    """Remove EMG breaths that do not pass the selected quality checks.
 
     Checks are matched by turning-point sample position. For each check and
     sample, the latest flag in session.quality is used. A breath is removed
