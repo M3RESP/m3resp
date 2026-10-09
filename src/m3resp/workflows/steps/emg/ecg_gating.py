@@ -230,8 +230,8 @@ def ecg_gating(
         else original_window_seconds
     )
     # Default to whatever method preprocessing used, so the recomputed
-    # envelope is the same kind of envelope as the one it replaces; only fall
-    # back to the "rms" default for a bundle that predates the field.
+    # envelope is the same kind of envelope as the one it replaces; a bundle
+    # without that field falls back to "rms".
     effective_envelope_method = (
         envelope_method
         if envelope_method is not None
@@ -300,10 +300,8 @@ def ecg_gating(
         method="resurfemg.gating",
         metadata=dict(gating_parameters),
     )
-    # Array-valued, so this reuses the shared parameter_result_arrays.npz
-    # exporter (plan Phase 6.3) rather than a competing EMG-specific one -
-    # session.export_summary() already routes any array-valued
-    # ParameterResult there.
+    # Array-valued, so session.export_summary() writes it to the shared
+    # parameter_result_arrays.npz file.
     session.parameter_results.add(gate_mask_result)
 
     _record_step(

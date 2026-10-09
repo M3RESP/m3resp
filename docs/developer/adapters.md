@@ -76,8 +76,7 @@ hands each file to the adapter that already knows the format.
 each test drives the adapter's public API on synthetic data and asserts the
 result is identical to calling the underlying `eitprocessing`/`resurfemg`
 function directly with the same arguments. If one of these starts failing,
-the adapter has started transforming data instead of just passing it
-through - check the diff against the adapter method involved before assuming
+the adapter output now differs from the upstream output - check the diff against the adapter method involved before assuming
 the test is wrong. See [testing.md](testing.md).
 
 ## Adding a new upstream algorithm

@@ -66,6 +66,13 @@ def ventilator_signals(
 def peak_indices_from_events(
     events: Sequence[BreathEvent] | None, fs: float
 ) -> list[int]:
+    """Convert breath turning-point times in seconds to sample indices.
+
+    Multiply each available ``extremum_time`` by ``fs`` (Hz) and truncate
+    toward zero with ``int``. Events with a missing turning-point time are
+    skipped. Returns an empty list for None; preserves the input event order.
+    """
+
     if events is None:
         return []
     return [

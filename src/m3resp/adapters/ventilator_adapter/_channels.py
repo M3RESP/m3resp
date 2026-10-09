@@ -127,9 +127,9 @@ _DEFAULT_CHANNEL_ALIASES: dict[str, str] = {
 _CHANNEL_ALIASES: dict[str, str] = dict(_DEFAULT_CHANNEL_ALIASES)
 
 #: Parenthesised tags naming the *file's* origin rather than a distinct sensor,
-#: dropped before matching. ``(pod)`` is deliberately absent: it marks a
-#: physically separate transducer, so it must survive normalization and is what
-#: distinguishes a pod airway pressure from the ventilator's own.
+#: dropped before matching. ``(pod)`` marks a physically separate transducer,
+#: so it is kept: it distinguishes a pod airway pressure from the ventilator's
+#: own.
 _VENDOR_TAGS = frozenset({"raw", "timpel", "draeger", "dräger", "sentec"})
 
 _WHITESPACE = re.compile(r"\s+")
@@ -477,8 +477,8 @@ def primary_channel(bundle: Any, quantity: str) -> str | None:
     key = primary.get(category) if category else None
     if key is not None:
         return str(key)
-    # A bundle that predates `primary` (or a hand-built one) still answers to
-    # the plain channel name.
+    # A bundle without `primary` (an older or hand-built one) answers to the
+    # plain channel name.
     return quantity if quantity in bundle else None
 
 

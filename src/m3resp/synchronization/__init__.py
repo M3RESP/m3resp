@@ -1,8 +1,8 @@
 """Synchronization helpers for multimodal recordings."""
 
-# Turning ventilator detections into breaths is not synchronization; these two
-# live in `m3resp.adapters.ventilator_adapter` and are imported here only so
-# older code that imports them from `m3resp.synchronization` keeps working.
+# These two turn ventilator detections into breaths. They live in
+# `m3resp.adapters.ventilator_adapter` and are imported here so older code
+# that imports them from `m3resp.synchronization` keeps working.
 from m3resp.adapters.ventilator_adapter import (
     iter_ventilator_detections,
     normalize_ventilator_breath,

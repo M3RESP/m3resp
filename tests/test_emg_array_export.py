@@ -1,9 +1,7 @@
-"""Stage 2 ReSurfEMG gap migration, Phase 6.3 (plan/stage2/
-2_resurfemg_gap_migration_implementation_plan.md): EMG array-valued
-ParameterResults (gate masks, wavelet decomposition/thresholds, bell-curve
-fit parameters) reuse the shared `parameter_result_arrays.npz` exporter
-rather than a competing EMG-specific array format - this reloads every
-array and compares values, NaN pattern, shape, and dtype.
+"""EMG array-valued ParameterResults (gate masks, wavelet
+decomposition/thresholds, bell-curve fit parameters) are written to the
+shared `parameter_result_arrays.npz` file. This reloads every array and
+compares values, NaN pattern, shape, and dtype.
 """
 
 from __future__ import annotations

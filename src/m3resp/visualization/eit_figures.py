@@ -24,11 +24,24 @@ import numpy as np
 def save_eit_figures(
     context_values: Mapping[str, Any], output_dir: str | Path
 ) -> list[Path]:
-    """Write the available EIT workflow figures into ``output_dir/figures/``.
+    """Save available EIT workflow figures as PNG files.
 
-    Returns the list of files written (empty if the context carries none of
-    the required keys). Matplotlib is imported lazily so visualization stays
-    an optional dependency of the core package.
+    Args:
+        context_values: Workflow values such as rate_detector/rate_captures,
+            global_impedance, breath_intervals, eeli and pixel_tiv. Each figure
+            is attempted when its required values are available.
+        output_dir: Destination directory. A figures subdirectory is created
+            and existing figure files with the same names are replaced.
+
+    Returns:
+        list[Path]: Written paths in rate_detection, global_impedance, pixel_tiv
+            order. Missing figure inputs are skipped. An unavailable eitprocessing
+            plotting package skips the pixel-TIV figure. An empty list means
+            no figures were produced.
+
+    Raises:
+        ImportError: If Matplotlib is unavailable.
+        OSError: If a figure cannot be written.
     """
 
     try:

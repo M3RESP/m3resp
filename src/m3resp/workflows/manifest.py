@@ -1,11 +1,8 @@
-"""Deterministic, atomically-written run manifests (Phase 6.3/6.4 of the
-pipeline-structure plan).
+"""Build run manifests and replace each manifest file in one operation.
 
-A manifest is written as soon as a run starts (``status: "running"``) and
-updated in place once the run reaches a terminal state, so a crash mid-run
-leaves an honestly-incomplete manifest behind rather than nothing, and a
-reader can never observe a half-written file: every write goes to a
-temporary file in the same directory, then ``os.replace()``s it into place.
+The runner writes a running manifest before execution and a terminal state
+after execution. Writes use a temporary file in the same directory followed
+by os.replace.
 """
 
 from __future__ import annotations
@@ -56,9 +53,11 @@ def sha256_file(path: str | Path) -> str | None:
 
 
 def collect_input_checksums(result: WorkflowResult) -> dict[str, str]:
-    """Sha256 every existing file referenced by a path-typed step parameter
-    across the run's step records (Phase 6.3's "input ... checksums when
-    configured"). Skips values that are not existing regular files."""
+    """Return SHA-256 checksums keyed by file path from executed-step parameters.
+
+    Examines all string-valued parameters, retaining readable regular files.
+    Repeated paths yield one entry; missing or unreadable files are skipped.
+    """
 
     checksums: dict[str, str] = {}
     for record in result.step_records:
@@ -91,11 +90,28 @@ def build_manifest(
     error: dict[str, Any] | None = None,
     checksums: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Build the JSON-safe manifest document (Phase 6.3).
+    """Build a run manifest from workflow settings and execution records.
 
-    Called once with ``status="running"`` before execution starts, and once
-    more with the terminal ``status`` once the run finishes (succeeded,
-    failed, or cancelled) - both calls go through :func:`write_manifest_atomic`.
+    Args:
+        run_id: Execution identifier.
+        status: Run state, such as running, succeeded, failed or cancelled.
+        workflow_name: Name of the executed workflow.
+        spec: Parsed workflow providing root, description, version and inputs.
+        started_at: ISO 8601 UTC run start time, or None.
+        finished_at: ISO 8601 UTC run finish time, or None.
+        duration_seconds: Elapsed execution time in seconds, or None.
+        output_dir: Resolved output directory, or None.
+        step_records: Records exposing as_dict, in execution order.
+        diagnostics: Diagnostics exposing as_dict.
+        warnings: Captured warnings exposing as_dict.
+        execution_context: Optional version/seed context exposing as_dict.
+        error: Optional error details.
+        checksums: Optional file paths mapped to SHA-256 checksums.
+
+    Returns:
+        dict[str, Any]: Manifest with string paths and dictionaries for the
+            supplied records. Sensitive-looking top-level input keys have
+            their values replaced with a redaction marker.
     """
 
     return {

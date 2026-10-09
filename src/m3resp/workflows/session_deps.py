@@ -1,29 +1,9 @@
-"""Session-resource dependency tracking.
+"""Track dependencies through workflow values and shared session resources.
 
-Most workflow steps communicate through declared context keys (``reads``/
-``writes``, bound via ``in:``/``out:``), and ``engine/diagnostics.py``
-already tracks that positionally: each read binds to the most recent
-preceding writer of the same context key. But a large share of steps also
-read or mutate the shared ``M3Session`` object directly - e.g.
-``emg.detect_breaths`` calls ``session.detect_emg_breaths()``, which reads
-whatever ``session.processed["emg"]`` currently holds, not a declared
-context key. That dependency is invisible to ``collect_diagnostics()``
-unless a step declares it via ``register_step(..., session_reads=...,
-session_writes=...)`` (see ``StepDefinition`` in ``registry.py``).
-
-This module answers two questions from that declared metadata, using the
-same "most recent preceding writer, positionally" rule as the context-key
-tracking, so a spec's step order can never silently disagree with it:
-
-- :func:`find_session_dependency_conflicts` - did this spec's step order
-  put a session-resource read before the step that (later in the same
-  spec) writes it?
-- :func:`downstream_step_positions` - which steps, transitively, depend on
-  a given step, through either an explicit context-key edge or a declared
-  session-resource edge? Used to answer "what does re-running/editing this
-  step invalidate" - e.g. for a future results-review "rerun from here"
-  action, which needs to know exactly which downstream steps a session
-  mutation invalidates instead of re-running everything.
+Declared inputs use the most recent preceding output with the same context
+key. Declared session reads use the most recent preceding matching resource
+writer. These relationships identify possible ordering conflicts and steps
+that depend on a changed result.
 """
 
 from __future__ import annotations
@@ -58,10 +38,9 @@ def resources_match(write: str, read: str) -> bool:
 def resolve_step_definitions(
     spec: WorkflowSpec,
 ) -> list[tuple[int, StepSpec, StepDefinition]]:
-    """Every step in ``spec`` paired with its registered definition, in
-    order. Steps naming an unregistered operation are skipped - that is
-    already reported elsewhere (``collect_diagnostics``'s ``unknown_step``
-    diagnostic), and this module only reasons about steps it can resolve.
+    """Return (position, spec step, registered definition) in workflow order.
+
+    Unregistered operations are skipped; structural diagnostics report them.
     """
 
     resolved: list[tuple[int, StepSpec, StepDefinition]] = []
@@ -134,14 +113,16 @@ class SessionDependencyConflict:
 def find_session_dependency_conflicts(
     spec: WorkflowSpec,
 ) -> list[SessionDependencyConflict]:
-    """Find every session-resource read that a later step in ``spec``
-    writes, but no earlier step does.
+    """Find reads satisfied by a later session writer but no earlier writer.
 
-    A read resource satisfied by nothing anywhere in the spec is not
-    flagged: it may come from state the caller pre-populated on the
-    session before running the workflow (e.g. a fixture, or a prior
-    workflow run against the same session), which is legitimate and
-    outside the spec's view.
+    Args:
+        spec: Ordered workflow with declared session reads and writes.
+
+    Returns:
+        list[SessionDependencyConflict]: Reader and first later matching writer
+            for each potentially reordered dependency. Resources with no writer
+            anywhere in the workflow are skipped because they may be supplied
+            on the session by the caller.
     """
 
     steps = resolve_step_definitions(spec)
@@ -200,15 +181,16 @@ def _first_matching_writer_after(
 
 
 def downstream_step_positions(spec: WorkflowSpec, start_position: int) -> set[int]:
-    """Positions of every step that depends on the step at ``start_position``,
-    transitively, through either an explicit context-key binding or a
-    declared session-resource dependency.
+    """Find all steps that depend on a given step's outputs or session changes.
 
-    Built from the same "most recent preceding writer" rule used by
-    ``collect_diagnostics()`` for context keys, extended with the session
-    resources declared via ``session_reads``/``session_writes``, so the two
-    never disagree. Used to answer "what would re-running this step
-    invalidate downstream" for a results-review rerun-from flow.
+    Args:
+        spec: Ordered workflow with registered input/output and session metadata.
+        start_position: Zero-based position of the step being changed or rerun.
+
+    Returns:
+        set[int]: Zero-based positions of direct and indirect consumers. Reads
+            use the most recent preceding output or matching session writer.
+            Unregistered operations are skipped.
     """
 
     steps = resolve_step_definitions(spec)

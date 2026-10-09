@@ -2,12 +2,12 @@
 
 ## Plain-language overview
 
-`m3resp.data.events` defines three types for things that happen in time.
+`m3resp.data.events` defines three types for things that happen in time, outside of continuous signals.
 All modalities share them.
 
 | Type | What it is | Example |
 |---|---|---|
-| `Event` | Something that happens at one instant: one `time` | a heartbeat, a blood-gas draw |
+| `Event` | Something that happens at one instant: one `time` | the peak of an R-wave, a blood-gas draw |
 | `Interval` | Something that lasts: a `start_time` and an `end_time` | an occlusion, a period of noise, an intervention |
 | `BreathEvent` | One breath: an `Interval` with a turning point (`extremum_time`) inside it | a breath found in EIT, EMG or ventilator data |
 
@@ -21,7 +21,7 @@ When a result has **one value per breath, interval or event**, keep the
 value next to the time it belongs to with `IntervalData` or `EventData`; see
 [Values per interval or event](#values-per-interval-or-event).
 
-Breaths are not kept in a container class of their own. They live inside
+Breaths live inside
 `session.events`, a plain dictionary, under keys like `"eit_breaths"`; see
 [Where breath/event lists live](#where-breathevent-lists-live).
 
@@ -44,8 +44,7 @@ class Event:
     metadata: dict[str, Any] = field(default_factory=dict)
 ```
 
-`name` says what kind of event it is (`"blood_gas_draw"`); `label` names one
-particular occurrence (`"baydur_maneuver"`).
+`name` says what kind of event it is (`"arterial_blood_gas_draw"`); `label` is an optional free-text note that tells one occurrence apart from others of the same kind (`"before PEEP step 2"`). Nothing in m3resp reads `label`; it is kept for your own use.
 
 `sample_index` is only meaningful together with `signal_name`/
 `sample_frequency`, which say which signal and time axis it's relative to -
@@ -56,11 +55,7 @@ derived from indexing into a specific signal.
 
 ### `id`
 
-`id` is generated automatically (an in-memory identifier, not persisted or
-globally unique like Layer 2's ids) so other Layer 1 objects can reference
-this exact event, e.g. `ParameterResult.event_id`. It's excluded from
-equality so two structurally identical events still compare equal.
-`Interval.id` and `BreathEvent.id` work the same way.
+Every event, interval and breath gets a random `id` when it is created. The `id` stays the same when the event is shifted onto a common clock and when it is saved to a dictionary and read back. Python's built-in `id(obj)` changes in both cases. The `id` is therefore a reliable way for a result to point at one particular breath or event, for example through `ParameterResult.event_id`. Nothing in m3resp sets these links yet: per-breath results still refer to a breath by its position in the list, and they will move to `id`. Two events that differ only in `id` count as equal.
 
 ## `Interval`
 
@@ -94,12 +89,11 @@ occlusion = Interval("ventilator", 10.0, 12.5, name="occlusion")
 occlusion.duration  # 2.5
 ```
 
-Only `modality`, `start_time` and `end_time` may be given by position;
-everything else is given by name. An interval whose `end_time` is before its
-`start_time` raises `ValueError`.
+Only `modality`, `start_time` and `end_time` may be given by position; everything else is given by name. An interval whose `end_time` is before its `start_time` raises `ValueError`.
 
-`start_time`/`end_time` are always the authoritative, real-world times, in
-seconds - they don't need to be recomputed from an index. The `*_index`
+An interval with `end_time` equal to `start_time` (zero duration) is allowed. It means only one time point is known so far. EMG breath detection is the main case: ReSurfEMG finds the peak of each breath, so the breath is stored with `start_time` and `end_time` both at the peak and `metadata["boundaries_measured"]` set to `False`. Onset and offset are measured separately by `emg.onoffpeak_baseline_crossing` and kept in that step's own output; the stored breaths keep zero duration.
+
+`start_time`/`end_time` are real-world times, in seconds. The `*_index`
 fields are optional sample positions in the signal the interval was found
 in; `sample_frequency` and `signal_name` say which time axis those positions
 are relative to, since different signals have different start times,
@@ -132,16 +126,20 @@ breath = BreathEvent("eit", 1.0, 2.0, extremum_time=1.5)
 isinstance(breath, Interval)  # True
 ```
 
-`extremum_time` is the moment the signal turns from inhalation to exhalation;
-`extremum_index` is its sample position. Both are `None` when the detector
-didn't report one. It is called an extremum, not a peak, because the signal
-can turn at a maximum (impedance, volume, EMG envelope) or at a minimum
-(esophageal pressure, the deepest pressure of an occlusion).
-`coerce_breath_event` reads the turning point from the first of
-`extremum_time`/`extremum_index`, `peak_time`/`peak_index` (older m3resp
-versions and other detectors; a warning names the new keys) and
-`middle_time` (eitprocessing). The time and its position always come from
-the same pair.
+`extremum_time` is the signal's turning-point time in seconds, on the same
+time axis as the breath's start and end. `extremum_index` is its sample
+position in `signal_name`, whose sampling rate is `sample_frequency`.
+Each field is `None` when unavailable. An extremum can be a maximum
+(impedance, volume, EMG envelope) or a minimum (esophageal pressure, the
+deepest pressure of an occlusion). Its physiological meaning depends on
+the signal and detector: for example, the EMG envelope peak marks peak
+activity, while the EIT impedance maximum marks the end of inspiration.
+
+`coerce_breath_event` checks `extremum_time`/`extremum_index` first, then
+`peak_time`/`peak_index`, then eitprocessing's `middle_time`. It selects
+the first pair with either value set and reads both values from that
+pair, even if one is `None`. Selecting the older `peak_*` fields emits a
+`UserWarning` naming the current fields.
 
 A `BreathEvent` and an `Interval` with the same times are not equal: one
 says "this was a breath", the other does not. `coerce_breath_event` refuses
@@ -180,14 +178,14 @@ tiv = IntervalData(
 | `name` | What the values are |
 | `modality` | Which device the values were measured with. This can differ from the device the intervals came from: EIT values can be computed over breaths found in ventilator data. |
 | `intervals` (`IntervalData`) / `events` (`EventData`) | The intervals or events, in order. A list of breaths works as intervals. |
-| `values` | One value per interval or event, in the same order: a list, a tuple, or an array whose first axis runs over the intervals. A value can be a number or an array, such as a pixel map. `None` when the intervals themselves are the result. A dictionary or a single number is refused. |
+| `values` | One value per interval or event, in the same order: a list, a tuple, or an array whose first axis runs over the intervals. A value can be a number, an array such as a pixel map, or an m3resp object such as a `ParameterResult`. `None` when the intervals themselves are the result. A dictionary or a single number is refused. |
 | `category`, `unit` | Physical quantity and unit, tidied the same way as on `ParameterResult` |
 | `method`, `metadata` | Which method produced the values, and any extra information |
 
 A `values` list that does not have exactly one entry per interval or event
 raises `ValueError`, so a value can never end up next to the wrong breath.
 `to_dict()` gives the same content as plain lists and dictionaries, ready to
-write to a JSON file.
+write to a JSON file. A value that is an m3resp object is written with its own `to_dict()`. Note that a `ParameterResult` also carries its own timing (`breath_id`, `start_time`/`end_time`); keep it consistent with the interval it is stored next to.
 
 Steps store their `IntervalData` in `session.interval_data`. The EIT steps
 that do this:
@@ -212,15 +210,24 @@ breath; it is not dropped.
 
 ## Where breath/event lists live
 
-There is deliberately no `BreathCollection` type: breaths live in
-`session.events`, a `dict[str, list[BreathEvent]]` populated by
-`session.detect_eit_breaths()` (`"eit_breaths"`),
-`session.detect_emg_breaths()` (`"emg_breaths"`), and any ventilator breaths
-normalized during `postprocess_emg` (`"ventilator_breaths"`). Use
-`session.add_events(name, events)`/`session.get_events(name)` for direct
-access. This predates the typed-collection work and is depended on
-throughout Stage 1 - introducing a second container would fork that API
-rather than reconcile with it.
+Breaths are stored in `session.events`, a dictionary that maps a name to a
+list of `BreathEvent`s. Each detection step fills its own key:
+
+| Key | Filled by |
+|---|---|
+| `"eit_breaths"` | `session.detect_eit_breaths()` |
+| `"emg_breaths"` | `session.detect_emg_breaths()` |
+| `"ventilator_breaths"` | `session.postprocess_emg()` or the `ventilator.normalize_breaths` step, when ventilator data is present |
+| `"pocc_breaths"` | the `ventilator.pocc_intervals` step: occluded breaths (Pocc), marked `metadata["event_type"] == "pocc"` |
+
+Use `session.add_events(name, events)` to store a list and
+`session.get_events(name)` to read it back.
+
+Occluded breaths are kept in their own list. `ventilator.detect_breaths` finds
+breaths as peaks in the volume signal; an occluded breath moves no air, so it
+never appears in `"ventilator_breaths"`. `ventilator.detect_pressure_breaths`
+finds breaths as dips in the airway pressure, and an occlusion also lowers the
+airway pressure, so with that step an occluded breath can appear in both lists.
 
 Moving breaths, intervals and events onto a common clock is done by
 `align_events_by_modality_offset`, which shifts all three types.

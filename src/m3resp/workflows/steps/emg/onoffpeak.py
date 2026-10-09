@@ -249,7 +249,7 @@ def onoffpeak_baseline_crossing(
         "start_end_validity",
         start_end_validity,
         modality="emg",
-        peak_indices=peak_indices,
+        extremum_indices=peak_indices,
         fs=fs,
     )
     for index, flag in enumerate(flags):

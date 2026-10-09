@@ -33,12 +33,30 @@ def normalize_ventilator_breath(
     width_seconds: float,
     duration_seconds: float | None = None,
 ) -> BreathEvent:
-    """Turn one ventilator breath detection into a `BreathEvent`.
+    """Convert one ventilator detection into a `BreathEvent`.
 
-    A detection given as a sample index becomes a window of `width_seconds`
-    centred on that sample. `duration_seconds` is the length of the ventilator
-    recording: when it is known, a breath detected near the end of the
-    recording has its window trimmed so it does not run past the data.
+    A sample index becomes a window centred on its turning-point time.
+    The start is clipped at zero; the end is clipped at the recording duration
+    when supplied. The turning-point time remains the detected sample time.
+
+    Args:
+        detection: A sample index, BreathEvent, or mapping or object with
+            start/end times in seconds. Mappings and objects are read by
+            `coerce_breath_event`, including its turning-point field precedence
+            and warnings for older field names.
+        fs: Sampling rate in Hz, required for a sample-index detection.
+        width_seconds: Total window width in seconds for a sample index.
+        duration_seconds: Recording duration in seconds, or None.
+
+    Returns:
+        BreathEvent: A new breath with modality ``"ventilator"``. For an index,
+            ``extremum_time`` is index/fs and metadata records the index,
+            sampling rate and window width. For an existing breath, its other
+            fields are retained, including its identifier and metadata.
+
+    Raises:
+        ValueError: If an index detection has no sampling rate, or a mapping
+            or object cannot be converted to a breath.
     """
 
     if isinstance(detection, BreathEvent):

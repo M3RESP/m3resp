@@ -49,10 +49,12 @@ def validate_store(
 
 
 def _check_references(store: DataModelStore) -> list[str]:
-    # Every SignalStream must belong to a recording session and a device that
-    # the store actually holds; every processing run must name files that
-    # exist; every derived feature must name a processing run (and, when
-    # given, a source signal) that exists.
+    """List missing session, device, file, run, signal and annotation references.
+
+    File checks concern records in the store. An empty list means all checked
+    references resolve to stored records.
+    """
+
     problems = []
     for stream in store.signal_streams.values():
         if stream.session_id not in store.sessions:

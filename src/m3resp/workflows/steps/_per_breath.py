@@ -1,9 +1,12 @@
-"""Helpers for steps that give one result per breath (EMG and ventilator).
+"""Helpers for EMG and ventilator steps that give one result per breath.
 
-Each per-breath result or quality flag records the sample of its breath's
-turning point in ``metadata["extremum_sample_index"]``, so it can be matched
-back to the breath it belongs to. These helpers write and read that key in one
-place.
+These steps store each per-breath value as its own ``ParameterResult`` or
+``QualityFlag``. Each one records the sample of its breath's turning point in
+``metadata["extremum_sample_index"]``, so it can be matched back to the breath
+it belongs to. These helpers write and read that key in one place.
+
+EIT per-breath values (TIV, EELI, pixel TIV) are stored as ``IntervalData``,
+which holds each value together with its ``BreathEvent``.
 """
 
 from __future__ import annotations
@@ -19,13 +22,12 @@ from m3resp.data.quality import Severity
 
 #: Metadata key holding the sample of the breath's turning point.
 EXTREMUM_SAMPLE_INDEX = "extremum_sample_index"
-#: The name this key had before it was renamed (#93).
+#: Older metadata key accepted when the current key has no value.
 _OLD_EXTREMUM_SAMPLE_INDEX = "peak_sample_index"
 
 
 def _require_equal_length(**named_arrays: Any) -> None:
-    """Raise a clear error instead of silently cutting paired arrays to the
-    shortest length when they disagree in length."""
+    """Raise ValueError if the named arrays have different lengths."""
 
     lengths = {name: len(array) for name, array in named_arrays.items()}
     if len(set(lengths.values())) > 1:
@@ -33,8 +35,12 @@ def _require_equal_length(**named_arrays: Any) -> None:
 
 
 def _breath_metadata(extremum_index: Any, *, fs: float | None = None) -> dict[str, Any]:
-    """Metadata tying a per-breath result to its breath: the sample of the
-    breath's turning point and, when the sampling rate is known, its time."""
+    """Return turning-point metadata for one breath.
+
+    Store extremum_index as an integer under ``extremum_sample_index``.
+    When fs is supplied in Hz, also store ``extremum_time`` in seconds from
+    recording start as extremum_index/fs.
+    """
 
     metadata: dict[str, Any] = {EXTREMUM_SAMPLE_INDEX: int(extremum_index)}
     if fs is not None:
@@ -43,11 +49,21 @@ def _breath_metadata(extremum_index: Any, *, fs: float | None = None) -> dict[st
 
 
 def extremum_sample_index(metadata: Mapping[str, Any]) -> int | None:
-    """The turning-point sample a per-breath result or flag was made for, or
-    None when it is not tied to one breath.
+    """Read a breath's turning-point sample position from result metadata.
 
-    A flag made before the rename still carries ``peak_sample_index``; that
-    key is read too, with a warning naming the new key.
+    Args:
+        metadata: Result or quality-flag metadata. ``extremum_sample_index``
+            takes precedence when its value is non-None. Otherwise the older
+            ``peak_sample_index`` is read with a UserWarning naming the
+            current key.
+
+    Returns:
+        int | None: The value converted to an integer, or None when neither
+            key has a value.
+
+    Raises:
+        TypeError: If the selected value has an incompatible type.
+        ValueError: If the selected value cannot be converted to an integer.
     """
 
     value = metadata.get(EXTREMUM_SAMPLE_INDEX)
@@ -68,18 +84,40 @@ def _per_breath_results(
     *,
     modality: str,
     category: str | None = None,
-    peak_indices: Any,
+    extremum_indices: Any,
     unit: str | None = None,
     method: str | None = None,
     fs: float | None = None,
     extra_metadata_per_item: list[dict[str, Any]] | None = None,
 ) -> list[ParameterResult]:
-    """One `ParameterResult` per breath, each tied to its breath by the
-    sample of the breath's turning point (``peak_indices``)."""
+    """Build one `ParameterResult` per breath in input order.
 
-    _require_equal_length(values=values, peak_indices=peak_indices)
+    Args:
+        name: Measurement name shared by all results.
+        values: Scalar or array values, one entry per breath.
+        modality: Device or technique that produced the measurement.
+        category: Optional measurement category.
+        extremum_indices: Turning-point sample positions, paired with values.
+        unit: Optional measurement unit shared by all results.
+        method: Optional method name shared by all results.
+        fs: Optional signal sampling rate in Hz.
+        extra_metadata_per_item: Optional metadata dictionaries in breath order,
+            one per value. Their entries override generated metadata.
+
+    Returns:
+        list[ParameterResult]: Results with ``breath_id=str(position)`` using
+            zero-based input positions. Metadata records ``extremum_sample_index``
+            and, when fs is supplied, ``extremum_time`` in seconds from recording
+            start. Scalars become floats; array values are retained.
+
+    Raises:
+        ValueError: If values and extremum_indices have different lengths.
+        IndexError: If extra_metadata_per_item has fewer entries than values.
+    """
+
+    _require_equal_length(values=values, extremum_indices=extremum_indices)
     results = []
-    for position, (value, extremum_index) in enumerate(zip(values, peak_indices)):
+    for position, (value, extremum_index) in enumerate(zip(values, extremum_indices)):
         metadata = _breath_metadata(extremum_index, fs=fs)
         if extra_metadata_per_item is not None:
             metadata.update(extra_metadata_per_item[position])
@@ -104,7 +142,7 @@ def _per_breath_flags(
     *,
     modality: str,
     category: str | None = None,
-    peak_indices: Any,
+    extremum_indices: Any,
     severity: Severity = "info",
     fs: float | None = None,
     threshold: float | None = None,
@@ -114,10 +152,10 @@ def _per_breath_flags(
 
     Args:
         name (str): Quality check name.
-        valid (Any): Pass/fail values in the same order as peak_indices.
+        valid (Any): Pass/fail values in the same order as extremum_indices.
         modality (str): Recording modality for each flag.
         category (str | None): Physical quantity assessed.
-        peak_indices (Any): Zero-based samples of each breath's turning point.
+        extremum_indices (Any): Zero-based samples of each breath's turning point.
         severity (Severity): Severity of a failed check. Defaults to "info".
         fs (float | None): Sampling rate in Hz. When supplied, metadata also
             records extremum_time in seconds from the recording's first sample.
@@ -130,13 +168,13 @@ def _per_breath_flags(
             string-valued position, and extremum_sample_index in metadata.
 
     Raises:
-        ValueError: If valid and peak_indices differ in length.
+        ValueError: If valid and extremum_indices differ in length.
     """
 
-    _require_equal_length(valid=valid, peak_indices=peak_indices)
+    _require_equal_length(valid=valid, extremum_indices=extremum_indices)
     flags = []
-    for position, (is_valid, peak_index) in enumerate(zip(valid, peak_indices)):
-        metadata = _breath_metadata(peak_index, fs=fs)
+    for position, (is_valid, extremum_index) in enumerate(zip(valid, extremum_indices)):
+        metadata = _breath_metadata(extremum_index, fs=fs)
         if extra_metadata:
             metadata.update(extra_metadata)
         flags.append(

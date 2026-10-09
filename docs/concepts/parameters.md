@@ -21,8 +21,7 @@ all optional and can be combined:
   example "during the intervention").
 - If none of the above are set, the number applies to the whole recording.
 
-Results with one value per breath, such as EIT TIV and EELI, are not
-`ParameterResult`s: they are stored as
+Results with one value per breath, such as EIT TIV and EELI, are stored as
 [`IntervalData`](events-and-breaths.md#values-per-interval-or-event) in
 `session.interval_data`, so each value stays next to its breath. Masks that
 select EIT pixels are [`PixelMask`s](pixel-maps.md) in `session.pixel_masks`.

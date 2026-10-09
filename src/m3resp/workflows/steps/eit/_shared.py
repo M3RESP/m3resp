@@ -35,20 +35,22 @@ _BREATHS_FOUND: weakref.WeakKeyDictionary[
 def _breaths_used_by(
     breath_detector: Any, signal: Any, session: M3Session
 ) -> list[BreathEvent]:
-    """The breaths eitprocessing's TIV and EELI compute their values over.
+    """Return the breaths used for TIV and EELI on this detector-signal pair.
 
-    Both run ``breath_detector.find_breaths(signal)`` inside and keep only
-    one time per breath, not the breath itself. Running the same detector on
-    the same signal again gives the same breaths, so each value can be
-    stored with its breath.
+    Detection runs once per detector and signal object in each session.
+    This assumes repeated detection with unchanged settings and data gives
+    the same breaths. Matching breaths in ``session.events['eit_breaths']``
+    are reused on the first call; later calls use the remembered list.
 
-    This is done once per detector and signal in a session: the TIV, EELI
-    and pixel TIV steps then share the very same breath objects. A breath
-    that is also in ``session.events["eit_breaths"]`` (same start and end
-    time) is that stored breath, so a value can be traced to it directly.
-    The breaths are remembered from the first time they are found, so
-    breaths stored in ``session.events`` after that are not picked up by
-    later steps.
+    Args:
+        breath_detector: eitprocessing detector with ``find_breaths``.
+        signal: Waveform used by the per-breath calculations.
+        session: Session that remembers detected breaths and supplies stored
+            breaths for matching.
+
+    Returns:
+        list[BreathEvent]: Breaths in detector order, shared by per-breath
+            results using this detector and signal.
     """
 
     found = _BREATHS_FOUND.setdefault(session, [])
@@ -67,9 +69,7 @@ def _breaths_used_by(
 def _use_stored_eit_breaths(
     breaths: list[BreathEvent], session: M3Session
 ) -> list[BreathEvent]:
-    """Swap each breath for the breath in ``session.events["eit_breaths"]``
-    with exactly the same start and end time, when there is one (see
-    `reuse_matching_breaths`)."""
+    """Reuse stored EIT breaths with exactly matching modality and start-end times."""
 
     return reuse_matching_breaths(breaths, session.get_events("eit_breaths", None))
 
@@ -106,11 +106,8 @@ def _eitprocessing_version() -> str | None:
 def _record_step(
     session: M3Session, step_name: str, *, metadata: dict[str, Any]
 ) -> None:
-    """Record per-step EIT provenance through the existing
-    `M3Session._record()` seam (see `plan/stage2/
-    1_eit_gap_migration_implementation_plan.md` Phase 5.2), reusing the
-    step's declared reads/writes from the registry rather than a second
-    EIT-only history mechanism."""
+    """Record per-step EIT provenance through `M3Session._record()`, using
+    the step's declared reads/writes from the registry."""
 
     from m3resp.workflows.registry import get_step
 

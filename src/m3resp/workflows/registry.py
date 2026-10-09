@@ -204,7 +204,7 @@ STEP_REGISTRY: dict[str, StepDefinition] = {}
 #: Retired step name -> the canonical name it now resolves to. Populated by
 #: ``register_step(..., aliases=...)``.
 #:
-#: Aliases resolve silently and are deliberately kept out of `available_steps`,
+#: Aliases resolve silently and are left out of `available_steps`,
 #: `describe_steps` and the "available steps" text of `UnknownStepError`: an
 #: existing spec keeps running unchanged, while discovery and any GUI built on
 #: it only ever offer the current name.
@@ -236,34 +236,49 @@ def register_step(
     deprecated_since: str | None = None,
     aliases: tuple[str, ...] = (),
 ) -> Callable[[StepCallable], StepCallable]:
-    """Register ``func`` under ``name`` as a workflow step.
+    """Register a function and its workflow inputs, outputs and descriptions.
 
-    ``reads`` maps each function parameter to the default context key it is
-    bound from; a spec can override the binding per step via ``in:``. ``writes``
-    lists the natural output names returned by the function; a spec can rename
-    them into other context keys via ``out:``.
+    Args:
+        name: Operation name in lowercase prefix.operation form.
+        reads: Function arguments mapped to default context keys. None values
+            require explicit input bindings in the spec.
+        optional_reads: Names from reads that may be absent at execution time.
+        writes: Output names returned by the step, renameable through ``out:``.
+        requires: Additional context keys required before execution.
+        summary: Short description; defaults to the function docstring's first line.
+        description: Longer description for step discovery.
+        parameters: Static parameter descriptions, including units and limits.
+        parameters_reviewed: Whether an empty parameter list is confirmed complete.
+            Set to True automatically when parameter descriptions are supplied.
+        mutually_exclusive_parameters: Groups with at most one setting per invocation.
+        input_artifacts: Descriptions of values read by the step.
+        output_artifacts: Descriptions of values returned by the step.
+        session_reads: Dotted names of session resources read directly.
+        session_writes: Dotted names of session resources changed directly.
+        modality: Device or technique associated with the step.
+        category: Processing or measurement category.
+        alternatives: Names of related operations.
+        optional_packages: Package names used to report availability.
+        resource_profile: Optional description of processing resources needed.
+        version: Optional operation version.
+        deprecated_since: Version from which this operation is deprecated.
+        aliases: Former operation names that resolve to this registration and
+            are omitted from step discovery.
 
-    ``parameters``/``input_artifacts``/``output_artifacts`` are optional,
-    additive GUI/discovery metadata (Phase 1 of the pipeline-structure plan).
-    A step with none of them declared is still fully valid and executable;
-    they are being backfilled module by module.
+    Returns:
+        Callable: Decorator that validates metadata, adds the definition and
+            aliases to the registries, and returns the supplied function.
 
-    ``parameters_reviewed`` records whether an empty ``parameters`` tuple has
-    been confirmed complete rather than simply never audited; it is set to
-    ``True`` automatically whenever ``parameters`` is non-empty, since
-    declaring real parameter metadata is itself evidence of review.
-
-    ``session_reads``/``session_writes`` name dotted resources this step
-    reads/writes on the shared ``M3Session`` directly, outside its declared
-    ``reads``/``writes`` context-key bindings - see the field docstrings on
-    :class:`StepDefinition` and ``m3resp.workflows.session_deps``.
-
-    ``aliases`` lists former names this step was registered under, so specs
-    written against them keep compiling. They resolve silently and are hidden
-    from discovery - see :data:`STEP_ALIASES`.
+    Raises:
+        ValueError: When applying the decorator, if a name or alias conflicts
+            with a registration, or optional_reads names an undeclared input.
+        StepMetadataError: When applying the decorator, if names, parameters,
+            input/output descriptions or their JSON representation are invalid.
     """
 
     def decorator(func: StepCallable) -> StepCallable:
+        """Validate and register the step definition and aliases, returning func."""
+
         if name in STEP_REGISTRY:
             raise ValueError(f"Workflow step '{name}' is already registered.")
         for alias in aliases:
@@ -464,10 +479,9 @@ def _validate_json_safe(definition: StepDefinition) -> None:
 
 
 def get_step(name: str) -> StepDefinition:
-    """Return the registered step definition for ``name``.
+    """Return a registered step definition, resolving former names through aliases.
 
-    A retired name registered as an alias resolves silently to its current
-    step, so specs written against the old name keep working.
+    Raises UnknownStepError if the name is unregistered, listing current names.
     """
 
     definition = STEP_REGISTRY.get(name)

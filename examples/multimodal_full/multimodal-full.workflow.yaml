@@ -145,7 +145,7 @@ steps:
   # and the detection threshold is taken from the envelope above that level.
   - id: slopesum_baseline
     uses: emg.slopesum_baseline
-    with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
+    with: { window_seconds: 7.5, step_seconds: 0.2, percentile: 33.0 }
 
   # Default detection settings. On channel 1 this finds 13 of the 14 breath
   # efforts in the recording's muscle pressure (p_mus); the missed one is the
