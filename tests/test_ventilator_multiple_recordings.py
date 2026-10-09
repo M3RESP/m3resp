@@ -12,6 +12,8 @@ ventilator columns by position independently of it.
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pytest
 
@@ -87,17 +89,59 @@ class _Sequence:
 
 class TestPositionalProducersNowResolveByName:
     def test_emg_postprocessing_finds_channels_by_label(self):
-        # Columns deliberately out of the historical pressure/flow/volume
-        # order: only name resolution gets these right.
+        # Columns out of the historical pressure/flow/volume order: only
+        # name resolution gets these right.
         signals = ventilator_signals(_payload(["Volume", "Paw", "Flow"]))
         assert signals is not None
-        assert signals["channel_indices"] == {"pressure": 1, "flow": 2, "volume": 0}
+        assert signals["channel_indices"] == {
+            "airway_pressure": 1,
+            "flow": 2,
+            "volume": 0,
+        }
+
+    def test_emg_postprocessing_lets_labels_beat_column_order(self):
+        # Postprocessing used to pass columns 0/1/2 itself, which overrode the
+        # labels. The same recording with its columns shuffled (and labelled)
+        # must now give the same ventilator breaths and Poccs.
+        pytest.importorskip("resurfemg")
+        data = os.path.join(os.path.dirname(__file__), "data")
+        session = M3Session()
+        session.load_emg(
+            os.path.join(data, "emg_data_synth_quiet_breathing.Poly5"), verbose=False
+        )
+        processed = session.preprocess_emg(channel=0)
+        events = session.detect_emg_breaths()
+        loaded = session.emg_adapter.load(
+            os.path.join(data, "vent_data_synth_quiet_breathing.Poly5"), verbose=False
+        )
+        rows = np.asarray(loaded["array"], dtype=float)
+        metadata = {**loaded["metadata"], "labels": ["Paw", "Flow", "Volume"]}
+        in_order = {"array": rows, "metadata": metadata}
+        shuffled = {
+            "array": rows[[2, 0, 1]],
+            "metadata": {**metadata, "labels": ["Volume", "Paw", "Flow"]},
+        }
+
+        def detections(ventilator):
+            computed = session.emg_adapter.postprocess(
+                processed, events, ventilator=ventilator
+            )["computed"]["event_detection"]
+            return [
+                np.asarray(computed[name]).tolist()
+                for name in ("detect_ventilator_breath", "find_occluded_breaths")
+            ]
+
+        assert detections(shuffled) == detections(in_order)
 
     def test_an_unlabelled_recording_still_uses_the_old_positions(self):
         payload = {"array": np.vstack([_wave(i + 1) for i in range(3)])}
         signals = ventilator_signals(payload, fs=FS)
         assert signals is not None
-        assert signals["channel_indices"] == {"pressure": 0, "flow": 1, "volume": 2}
+        assert signals["channel_indices"] == {
+            "airway_pressure": 0,
+            "flow": 1,
+            "volume": 2,
+        }
 
     def test_explicit_indices_still_win(self):
         signals = ventilator_signals(
@@ -117,17 +161,17 @@ class TestPositionalProducersNowResolveByName:
         with pytest.raises(TypeError, match="needs a sampling rate"):
             ventilator_signals({"array": np.vstack([_wave()] * 3), "metadata": {}})
 
-    def test_the_pipeline_step_can_select_channels(self):
+    def test_the_workflow_step_can_select_channels(self):
         from m3resp.workflows.steps.ventilator.loading import (
             channels as ventilator_channels,
         )
 
         result = ventilator_channels(
             _payload(["Paw", "Flow", "Volume", "esophageal pressure (pod)"]),
-            channels=("pressure", "esophageal_pressure"),
+            channels=("airway_pressure", "esophageal_pressure"),
         )
         assert set(result["ventilator_signals"]["channels"]) == {
-            "pressure",
+            "airway_pressure",
             "esophageal_pressure",
         }
 
@@ -148,7 +192,7 @@ class TestOneRecordingIsUnchanged:
         session.preprocess_ventilator()
 
         assert {signal.channel for signal in session.signals} == {
-            "pressure",
+            "airway_pressure",
             "flow",
             "volume",
         }
@@ -159,7 +203,7 @@ class TestOneRecordingIsUnchanged:
         session.preprocess_ventilator()
 
         assert session.ventilator is not None
-        assert session.ventilator.pressure is not None
+        assert session.ventilator.airway_pressure is not None
         assert session.ventilator.fs == FS
 
 
@@ -208,8 +252,8 @@ class TestTwoRecordings:
         session.preprocess_ventilator(name="eit")
 
         channels = {signal.channel for signal in session.signals}
-        assert {"pressure", "flow", "volume"} <= channels
-        assert {"pressure__eit", "flow__eit", "volume__eit"} <= channels
+        assert {"airway_pressure", "flow", "volume"} <= channels
+        assert {"airway_pressure__eit", "flow__eit", "volume__eit"} <= channels
 
     def test_both_airway_pressures_survive_as_the_same_quantity(self):
         session = self._session()
@@ -217,7 +261,10 @@ class TestTwoRecordings:
         session.preprocess_ventilator(name="eit")
 
         airway = session.signals.for_category("airway_pressure")
-        assert {signal.channel for signal in airway} == {"pressure", "pressure__eit"}
+        assert {signal.channel for signal in airway} == {
+            "airway_pressure",
+            "airway_pressure__eit",
+        }
 
     def test_each_pressure_keeps_the_unit_its_device_reported(self):
         session = self._session()
@@ -244,10 +291,10 @@ class TestTwoRecordings:
         session.preprocess_ventilator(name="eit")
 
         recording = session.get_ventilator("eit")
-        assert recording.pressure is not None
+        assert recording.airway_pressure is not None
         assert recording.volume is not None
         # The primary recording was not touched by preprocessing the other one.
-        assert session.ventilators["default"].pressure is None
+        assert session.ventilators["default"].airway_pressure is None
 
     def test_the_two_pressures_hold_different_data(self):
         session = _session(
@@ -267,7 +314,8 @@ class TestTwoRecordings:
             if signal.processing_state == "raw"
         }
         assert not np.allclose(
-            by_channel["pressure"].values, by_channel["pressure__second"].values
+            by_channel["airway_pressure"].values,
+            by_channel["airway_pressure__second"].values,
         )
 
 

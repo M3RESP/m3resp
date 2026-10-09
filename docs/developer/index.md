@@ -10,8 +10,9 @@ before opening a pull request.
 
 architecture
 adapters
-pipeline-contracts
+preset-contracts
 testing
 coding_guidelines
 offset-estimation
+processing-defaults
 ```

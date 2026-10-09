@@ -14,7 +14,7 @@ from __future__ import annotations
 VENTILATOR = "ventilator"
 
 #: Accepted spellings that normalize to :data:`VENTILATOR`. ``"vent"`` is kept
-#: indefinitely: it shipped as a ``session.raw`` key and as a pipeline-spec
+#: indefinitely: it shipped as a ``session.raw`` key and as a workflow-spec
 #: parameter value, so specs and user code still pass it.
 _VENTILATOR_ALIASES = frozenset({"vent", "ventilator", "ventilation"})
 

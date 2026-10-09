@@ -1,6 +1,6 @@
 """Every synchronization step is a `sync.*` step, registered from
 `m3resp.workflows.steps.sync`. `sync.raw_modalities` keeps its old name
-`session.sync_raw` as a silent alias, so existing pipeline specs run
+`session.sync_raw` as a silent alias, so existing workflow specs run
 unchanged.
 """
 
@@ -21,7 +21,7 @@ class TestOldNamesStillWork:
         assert get_step(old).name == new
 
     def test_a_spec_with_the_old_names_compiles_to_the_new_ones(self):
-        from m3resp.workflows.compiler import compile_pipeline
+        from m3resp.workflows.compiler import compile_workflow
         from m3resp.workflows.spec import load_spec
 
         spec = {
@@ -29,7 +29,7 @@ class TestOldNamesStillWork:
             "steps": [{"uses": "session.sync_raw"}, {"uses": "sync.skip"}],
         }
 
-        compiled = compile_pipeline(load_spec(spec))
+        compiled = compile_workflow(load_spec(spec))
 
         assert [step.operation_id for step in compiled.steps] == [
             "sync.raw_modalities",

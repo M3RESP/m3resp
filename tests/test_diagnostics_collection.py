@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from m3resp.core.exceptions import PipelineSpecError, UnknownStepError
+from m3resp.core.exceptions import UnknownStepError, WorkflowSpecError
 from m3resp.workflows.engine import collect_diagnostics, validate_spec
 from m3resp.workflows.registry import (
     ANY_ARTIFACT_TYPE,
@@ -219,9 +219,9 @@ def test_validate_spec_raises_unknown_step_error_for_unknown_step():
         validate_spec(spec)
 
 
-def test_validate_spec_raises_pipeline_spec_error_with_first_message(_diag_steps):
+def test_validate_spec_raises_workflow_spec_error_with_first_message(_diag_steps):
     spec = load_spec({"name": "p", "steps": [{"uses": "diag_test.make"}]})
-    with pytest.raises(PipelineSpecError, match="missing required parameter"):
+    with pytest.raises(WorkflowSpecError, match="missing required parameter"):
         validate_spec(spec)
 
 

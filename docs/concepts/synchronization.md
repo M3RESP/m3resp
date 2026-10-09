@@ -1,4 +1,4 @@
-# Synchronization and multimodal parameters
+# Synchronization and breath timing parameters
 
 For a one-page summary in tables, see
 [Synchronization at a glance](synchronization-overview.md).
@@ -26,12 +26,10 @@ compared on one shared time axis. Key pieces:
   signals on one shared sample grid (e.g. a sample-by-sample comparison).
   It uses linear interpolation between the original samples and applies no
   anti-aliasing filter, so low-pass filter the signal before lowering its
-  sampling rate. It's not part of the alignment pipeline above and isn't called
-  automatically: breath linking and the multimodal parameter calculations
-  below work on real-world timestamps (`BreathEvent.start_time`/`end_time`/
-  `peak_time`), not sample indices, so most analysis stays at each
-  modality's original sample rate and resampling is only needed when you
-  explicitly ask for it.
+  sampling rate. You call it yourself when you need it. Breath linking and
+  the breath timing parameters below work on real-world timestamps
+  (`BreathEvent.start_time`/`end_time`/`extremum_time`), so most analysis
+  stays at each modality's original sample rate.
 
 `LinkedBreath` is the object that represents "the same physical breath, as
 seen by different modalities." It is a dictionary-like structure
@@ -46,18 +44,17 @@ explicitly out of scope). If a breath from one modality has no match in
 the others, it still produces a `LinkedBreath` with only its own slot
 filled in, so nothing gets silently dropped.
 
-Once you have linked breaths, `session.compute_multimodal_parameters()`
+Once you have linked breaths, `session.compute_breath_timing_parameters()`
 turns them into cross-modality `ParameterResult`s using three underlying
 calculations: timing delay (how many seconds apart two modalities' breath
 timings are), breath duration difference (how much longer/shorter one
-modality's breath looks compared to another's), and event agreement (what
-fraction of breaths were detected consistently across all requested
-modalities, a rough "did every sensor agree a breath happened here" score).
+modality's breath looks compared to another's), and event agreement (of the
+breaths any of the requested modalities found, what fraction all of them
+found, a rough "did every sensor agree a breath happened here" score).
 
-`m3resp.synchronization` (Milestone 2.5) aligns and links data across
-modalities, deliberately kept modest: manual offset, timestamp alignment,
-resampling, and nearest-neighbor breath linking. Clock-drift correction is
-intentionally out of scope.
+`m3resp.synchronization` provides manual offsets, timestamp alignment,
+resampling, and nearest-neighbor breath linking. The alignment assumes a
+constant offset between recordings throughout the measurement.
 
 ## Start times
 
@@ -132,7 +129,7 @@ Steps that compare recordings on different clocks warn
 `session.sync_methods`. They still
 run: the warning says their times are compared as if all recordings started
 at the same moment. The steps that check are `link_breaths` (and so the
-multimodal parameters computed from linked breaths) and
+breath timing parameters computed from linked breaths) and
 `emg.evaluate_event_timing`. Nothing is warned when the data all comes from
 one clock, such as EMG with the airway pressure recorded in the same file.
 
@@ -172,7 +169,7 @@ or reload is reflected in streams recorded earlier.
 `m3resp.link_breaths_by_time(breaths_by_modality, time_tolerance=0.5)` (or
 `session.link_breaths(time_tolerance=0.5)`) matches `BreathEvent`s across
 any number of modalities by how close their representative times are
-(`peak_time`, falling back to the start/end midpoint) - greedily and
+(`extremum_time`, falling back to the start/end midpoint) - greedily and
 one-to-one, no clock-drift correction. A breath with no match in the other
 modalities still produces a result with only its own slot filled, so no
 input breath is silently dropped.
@@ -196,43 +193,55 @@ or anything else) to that modality's matched breath. Run
 common time axis - `session.link_breaths()` prefers the aligned event lists
 over the raw ones when both exist.
 
-## Multimodal parameters
+## Breath timing parameters
 
-`session.compute_multimodal_parameters(...)` (`m3resp.synchronization.multimodal_parameters`)
-turns `session.linked_breaths` into cross-modality [`ParameterResult`](parameters.md)s
-(plan Sec 21):
+`session.compute_breath_timing_parameters(...)` (`m3resp.synchronization.breath_timing_parameters`)
+turns `session.linked_breaths` into cross-modality [`ParameterResult`](parameters.md)s:
 
 ```python
 session.link_breaths(time_tolerance=0.5)
-results = session.compute_multimodal_parameters()
+results = session.compute_breath_timing_parameters()
 ```
 
 Three primitives, usable standalone on any `LinkedBreath`/`list[LinkedBreath]`:
 
 - `compute_timing_delay(linked, from_modality, to_modality, anchor="start")` -
   signed delay in seconds between two modalities' breath anchors
-  (`anchor` is `"start"`, `"peak"`, or `"end"`); `None` if either modality
-  is missing from the link. Positive means `to_modality` occurs later.
+  (`anchor` is `"start"`, `"extremum"`, or `"end"`); `None` if either modality
+  is missing from the link or the selected extremum time is missing. Positive
+  means `to_modality` occurs later.
 - `compute_breath_duration_difference(linked, modality_a, modality_b)` -
   `duration(modality_a) - duration(modality_b)` in seconds; `None` if either
   modality is missing.
-- `compute_event_agreement(linked_breaths, modalities)` - fraction of
-  `linked_breaths` where every requested modality contributed a breath, a
-  coarse breath-to-breath timing agreement score.
+- `compute_event_agreement(linked_breaths, modalities)` - of the linked
+  breaths that hold a breath from at least one requested modality, the
+  fraction that hold one from every requested modality, a coarse
+  breath-to-breath timing agreement score. For EIT and EMG, the denominator
+  includes EIT-only, EMG-only and EIT-with-EMG links. The standalone function
+  returns `0.0` when this count is zero or the requested modalities are empty.
 
-`compute_multimodal_parameters(linked_breaths, delay_pairs=None, duration_pairs=None, anchor="start")`
+`compute_breath_timing_parameters(linked_breaths, delay_pairs=None, duration_pairs=None, anchor="start")`
 combines all three into `ParameterResult`s (`modality="multimodal"`, one
 result per breath per pair, plus one aggregate event-agreement result per
 delay pair). `delay_pairs`/`duration_pairs` default to every unordered pair
-of modalities actually observed across `linked_breaths`, so a session that
-only linked EIT and EMG never gets a meaningless ventilator pairing. A
-breath missing either side of a pair is skipped for that pair rather than
-raising, so a partially-linked recording still yields parameters for the
-breaths that do have both modalities.
+of observed modalities in alphabetical order. An explicit pair preserves
+the supplied order: delays are second minus first, and duration differences
+are first minus second. An empty pair list disables that type of calculation.
+Per-breath results require both modalities; delays also require both selected
+anchors. Each `breath_id` is the string-valued position in `linked_breaths`.
+The event-agreement result is omitted when its denominator is zero. Empty
+linked breaths produce an empty result list. An unknown `anchor` always raises
+`ValueError`, including for empty linked breaths.
 
-`session.compute_multimodal_parameters()` adds its results to
+`session.compute_breath_timing_parameters()` adds its results to
 `session.parameter_results` (so they export to `parameter_results.csv`
-alongside per-modality parameters) and records a provenance entry.
+alongside per-modality parameters) and records a provenance entry with the
+requested `anchor`, `delay_pairs` and `duration_pairs`. `None` in the recorded
+pair settings means pairs were inferred from the linked breaths. Each
+successful call replaces all earlier multimodal breath-timing results,
+including those computed with other pairs or anchors. Empty linked breaths
+clear the earlier timing results. Other parameter results are retained, and
+an invalid anchor leaves existing results unchanged.
 
 See [tutorials/multimodal-eit-emg.md](../tutorials/multimodal-eit-emg.md)
 for an end-to-end walkthrough.

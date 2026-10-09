@@ -1,4 +1,4 @@
-"""Registered export pipeline steps."""
+"""Registered export workflow steps."""
 
 from __future__ import annotations
 
@@ -108,6 +108,8 @@ def json_file(payload: dict[str, Any], *, path: str) -> dict[str, Any]:
     category="export",
     session_reads=(
         "session.parameter_results",
+        "session.interval_data",
+        "session.pixel_masks",
         "session.quality",
         "session.signals",
         "session.events",
@@ -179,6 +181,28 @@ def session_summary(
     postprocessing: bool = True,
     structured_export: bool = True,
 ) -> dict[str, Any]:
+    """Export session summaries and scientific results to a directory.
+
+    Args:
+        session: Session containing the results to export.
+        output_dir: Directory to create and write into. Existing export files
+            with the same names are overwritten.
+        summary_json: Write ``summary.json``.
+        event_csvs: Write a CSV for each populated event list.
+        parameters_csv: Write the parameter-group table.
+        postprocessing: Include EMG postprocessing in the summary and
+            parameter-group table.
+        structured_export: Write the scientific collection tables and their
+            array archives; see ``export_session_summary``.
+
+    Returns:
+        dict[str, Any]: ``output_dir`` as the path used for the export.
+
+    Raises:
+        ValueError: If per-interval array values have different shapes.
+        OSError: If the directory or files cannot be written.
+    """
+
     target = Path(output_dir)
     target.mkdir(parents=True, exist_ok=True)
     export_session_summary(
@@ -213,6 +237,8 @@ def session_summary(
     category="export",
     session_reads=(
         "session.parameter_results",
+        "session.interval_data",
+        "session.pixel_masks",
         "session.quality",
         "session.signals",
         "session.events",
@@ -281,12 +307,30 @@ def rotarc_result(
     *,
     precision: int = 8,
 ) -> dict[str, Any]:
-    """Derives the output path from the spec's ``experiment:`` and ``outputs:`` sections.
+    """Write a ROTARC breath-duration CV and the accompanying session results.
 
-    Output path: ``<outputs.dir>/[<timestamp>/]subject_results/<run_identifier>/<subject>-<mode>-<tp>-<selection>.txt``.
-    The optional timestamp segment is included when ``outputs.timestamped`` is
-    set - see ``_resolved_output_dir`` in ``run_spec`` for how it's computed
-    once per run and shared across every export step.
+    Files are placed under the shared run output directory in
+    ``subject_results/<run_identifier>``. The result filename combines the
+    subject, mode, optional timepoint and selection labels.
+
+    Args:
+        value: Breath-duration coefficient of variation, as a fraction.
+        _spec_outputs: Export settings supplied by run_spec.
+        _spec_experiment: Study labels supplied by run_spec.
+        _resolved_output_dir: Shared run output directory, including its timestamp
+            subdirectory when configured.
+        session: Session supplying the accompanying summary and result tables.
+        precision: Decimal places used in the scalar text file.
+
+    Returns:
+        dict[str, Any]: result_path as a string. Also writes rotarc_summary.json
+            and session files selected by _spec_outputs. Existing files with
+            the same names are replaced.
+
+    Raises:
+        ValueError: If the output directory, subject_id or run_identifier is
+            missing, or per-interval arrays have different shapes.
+        OSError: If an output directory or file cannot be written.
     """
 
     from m3resp.workflows.utils import subject_result_filename
@@ -296,7 +340,7 @@ def rotarc_result(
 
     if _resolved_output_dir is None:
         raise ValueError(
-            "export.rotarc_result requires 'outputs.dir' to be set in the pipeline spec."
+            "export.rotarc_result requires 'outputs.dir' to be set in the workflow spec."
         )
     for field_name, field_val in [
         ("experiment.subject_id", exp.subject_id),
@@ -304,7 +348,7 @@ def rotarc_result(
     ]:
         if not field_val:
             raise ValueError(
-                f"export.rotarc_result requires '{field_name}' in the pipeline spec."
+                f"export.rotarc_result requires '{field_name}' in the workflow spec."
             )
 
     output_dir = (

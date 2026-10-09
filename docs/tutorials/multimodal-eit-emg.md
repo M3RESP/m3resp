@@ -4,9 +4,9 @@ This walks through loading EIT and EMG (and, optionally, ventilator) data
 into one session, synchronizing them, processing each modality, linking
 their breaths, and computing cross-modality timing parameters. For the same
 processing (plus ventilator) expressed as a declarative YAML spec, see
-`examples/multimodal_full/multimodal-full.pipeline.yaml`
-or `examples/multimodal_example/multimodal.pipeline.yaml`, and
-[../pipelines.md](../pipelines.md).
+`examples/multimodal_full/multimodal-full.workflow.yaml`
+or `examples/multimodal_example/multimodal.workflow.yaml`, and
+[../workflows.md](../workflows.md).
 
 ## Step by step
 
@@ -55,7 +55,7 @@ linked = session.link_breaths(time_tolerance=0.5)
 
 # Measure breath timing across modalities. These read only the breath
 # start/end times, never the signal values inside a breath.
-multimodal_parameters = session.compute_multimodal_parameters()
+timing_parameters = session.compute_breath_timing_parameters()
 
 session.export_summary("results/multimodal/")
 ```
@@ -81,25 +81,27 @@ offset (`method="manual_offset"` is currently the only method either accepts).
   ventilator breaths that occurred close together in time. A breath with no
   match in another modality still appears, with only its own slot filled.
   See [../concepts/synchronization.md](../concepts/synchronization.md).
-- `session.compute_multimodal_parameters()` turns those links into
+- `session.compute_breath_timing_parameters()` turns those links into
   `ParameterResult`s. All three are measures of breath *timing* - they use
   only breath start/end times, never the signal values within a breath:
   - `eit_to_emg_delay` (per breath, seconds, signed): the EMG breath anchor
     minus the EIT breath anchor. Read it as a check on detection and
     alignment, not as an outcome measure. With the default `anchor="start"`
-    the two sides are not the same kind of landmark: the EIT start is a
-    detected breath start, while the EMG start is built from the envelope
-    peak by subtracting a fixed half-window (`half_window_seconds`, 0.5 s by
-    default), so changing that setting shifts the delay by the same amount.
-    With `anchor="peak"` it compares the EIT breath middle against the EMG
+    the two sides are different kinds of landmark: the EIT start is a
+    detected breath start, while default EMG detection initially sets the
+    start and end to the envelope peak time. In that case the delay compares
+    EIT breath onset with peak EMG activity. `emg.onoffpeak_baseline_crossing`
+    returns separate onset/offset arrays and validity flags; these boundaries
+    must be used to construct breath events before comparing measured onsets.
+    With `anchor="extremum"` it compares the EIT breath middle against the EMG
     envelope peak. Calling this electromechanical coupling time would need
     the EMG anchor to be diaphragm activation onset and the EIT anchor the
     start of volume change, defined consistently and validated against each
     other; that is separate work.
   - `eit_emg_duration_difference` (per breath, seconds): how much longer one
-    modality's breath is than the other's.
-  - `eit_emg_event_agreement` (aggregate, fraction): how often both
-    modalities found a breath at all. A quality check on detection and
+    EIT breath is than its matched EMG breath: EIT duration minus EMG duration.
+  - `eit_emg_event_agreement` (aggregate, fraction): of the breaths EIT or
+    EMG found, how many both found. A quality check on detection and
     synchronization, not an outcome measure.
 
   If a ventilator breath list was also linked, the same three are produced
@@ -108,40 +110,47 @@ offset (`method="manual_offset"` is currently the only method either accepts).
   alongside the per-modality parameters, so they export to the same
   `parameter_results.csv` - see [export-results.md](export-results.md).
 
-  A cross-modality measure that reads signal *values* rather than breath
-  times - an EMG-effort-to-EIT-pendelluft coupling index, say - is a
-  separate computation, not an extension of this one. See
+  A cross-modality measure computed from the signal *values* - an
+  EMG-effort-to-EIT-pendelluft coupling index, say - is a separate
+  computation. See
   [../concepts/parameters.md](../concepts/parameters.md).
 
 ```python
-for p in multimodal_parameters:
+for p in timing_parameters:
     if p.name == "eit_to_emg_delay":
         print(p.breath_id, p.value, "s")  # signed delay, EMG relative to EIT
 ```
 
-To compare a specific anchor point instead of breath-start (e.g. peak
-inspiration), pass `anchor="peak"`:
+To compare the turning point of each breath, pass
+`anchor="extremum"`. For EIT this is the breath middle (the impedance
+maximum, end of inspiration); for EMG it is the envelope peak (peak
+activity). These signals mark different physiological moments, so this
+delay measures the time between impedance maximum and peak EMG activity:
 
 ```python
-session.compute_multimodal_parameters(anchor="peak")
+session.compute_breath_timing_parameters(anchor="extremum")
 ```
 
 To restrict which modality pairs get computed (skipping a pairing you don't
 care about), pass `delay_pairs`/`duration_pairs` explicitly:
 
 ```python
-session.compute_multimodal_parameters(delay_pairs=[("emg", "eit")], duration_pairs=[])
+session.compute_breath_timing_parameters(delay_pairs=[("emg", "eit")], duration_pairs=[])
 ```
+
+This call stores EMG-to-EIT delays and agreement. `duration_pairs=[]` disables
+duration differences. Each successful call replaces the previous timing
+results, including those from another anchor or pair selection.
 
 ## The one-call preset for the synchronization half
 
 ```python
-session.run_pipeline("multimodal")
+session.run_preset("multimodal")
 ```
 
 Calls `synchronize_raw_modalities()` then `synchronize_multimodal_breaths()` - run this
 after the per-modality `"eit"`/`"emg"` presets so their breath events
 already exist, then call `session.link_breaths()` and
-`session.compute_multimodal_parameters()` directly (there is no preset for
+`session.compute_breath_timing_parameters()` directly (there is no preset for
 those two yet since they're commonly parameterized per study). See
-[../developer/pipeline-contracts.md](../developer/pipeline-contracts.md).
+[../developer/preset-contracts.md](../developer/preset-contracts.md).

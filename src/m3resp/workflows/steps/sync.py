@@ -1,13 +1,13 @@
-"""Registered synchronization pipeline steps.
+"""Registered synchronization workflow steps.
 
 ``sync.raw_modalities`` sets each loaded recording's start time on a shared
 clock from a manual offset, and ``sync.skip`` uses the recordings as they are,
 for recordings that really did start together. ``sync.raw_modalities`` used
-to be named ``session.sync_raw``; the old name still works in pipeline
+to be named ``session.sync_raw``; the old name still works in workflow
 specs.
 
 ``sync.estimate_offset`` returns a manually supplied constant time offset and
-writes it into the pipeline context. Downstream, ``sync.apply_estimated_offset``
+writes it into the workflow context. Downstream, ``sync.apply_estimated_offset``
 consumes that value and sets the modalities' start times, keeping estimation and
 application as separate, declarative steps.
 

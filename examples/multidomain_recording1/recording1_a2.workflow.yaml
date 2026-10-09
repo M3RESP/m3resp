@@ -1,6 +1,6 @@
 # Diaphragm sEMG breath detection for Recording1, window A2, as in the multidomain
 # results. The settings are those of the multidomain results notebook
-# (tools/visualization_tools/paper_results_v2.py, "_canonical_pipeline"),
+# (tools/visualization_tools/paper_results_v2.py, "_canonical_workflow"),
 # with its adaptive harmonic subtraction (RLS) stage left out: A2 is recorded
 # with EIT off, so the only periodic interference left is mains hum, which the
 # fixed 50 Hz notch removes. Its "Baseline offset correction" is also left
@@ -24,7 +24,7 @@
 # EMG breath because its burst starts before the window.
 #
 # Run from the repo root with:
-#   python -m m3resp run examples/multidomain_recording1/recording1_a2.pipeline.yaml
+#   python -m m3resp run examples/multidomain_recording1/recording1_a2.workflow.yaml
 # Paths below are relative to this file's own folder.
 
 name: multidomain_recording1_a2

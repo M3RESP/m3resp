@@ -110,9 +110,9 @@ class TestVentilatorStreams:
             reference_modality="eit",
         )
 
-        primary = session.datamodel.record_signal(_pressure("pressure"))
+        primary = session.datamodel.record_signal(_pressure("airway_pressure"))
         monitor = session.datamodel.record_signal(
-            _pressure("pressure__monitor", recording="monitor")
+            _pressure("airway_pressure__monitor", recording="monitor")
         )
 
         assert (primary.sync_method, primary.time_offset_ms) == ("manual", 1000.0)
@@ -127,7 +127,7 @@ class TestVentilatorStreams:
             offset_seconds={"ventilator": 1.0}, reference_modality="eit"
         )
 
-        pod = session.datamodel.record_signal(_pressure("pressure__pod"))
+        pod = session.datamodel.record_signal(_pressure("airway_pressure__pod"))
 
         assert (pod.sync_method, pod.time_offset_ms) == ("manual", 1000.0)
 
@@ -139,7 +139,7 @@ class TestVentilatorStreams:
             offset_seconds={"emg": -2.0, "ventilator": 7.0}, reference_modality="eit"
         )
 
-        stream = session.datamodel.record_signal(_pressure("pressure"))
+        stream = session.datamodel.record_signal(_pressure("airway_pressure"))
 
         assert (stream.sync_method, stream.time_offset_ms) == ("manual", -2000.0)
 
@@ -156,5 +156,5 @@ class TestVentilatorStreams:
             for signal in session.signals
             if signal.modality == "ventilator"
         }
-        assert recordings["pressure"] == "default"
-        assert recordings["pressure__monitor"] == "monitor"
+        assert recordings["airway_pressure"] == "default"
+        assert recordings["airway_pressure__monitor"] == "monitor"

@@ -16,11 +16,11 @@ import pytest
 import yaml
 
 from m3resp import M3Session
-from m3resp.workflows import load_spec, run_pipeline
+from m3resp.workflows import load_spec, run_workflow
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPEC = os.path.join(
-    REPO_ROOT, "examples", "multidomain_recording1", "recording1_a2.pipeline.yaml"
+    REPO_ROOT, "examples", "multidomain_recording1", "recording1_a2.workflow.yaml"
 )
 DATA = os.path.join(REPO_ROOT, "tests", "data", "TestPS3.txt")
 
@@ -38,7 +38,7 @@ def test_recording1_a2_gives_the_multidomain_numbers():
     spec.pop("outputs", None)  # do not write result files from a test
 
     with contextlib.redirect_stdout(io.StringIO()):
-        result = run_pipeline(
+        result = run_workflow(
             load_spec(spec, root=os.path.dirname(SPEC)), session=M3Session()
         )
 

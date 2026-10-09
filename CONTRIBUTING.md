@@ -5,12 +5,17 @@ modality-specific processing in the upstream packages whenever possible:
 
 - EIT-specific changes belong in `eitprocessing`.
 - EMG-specific changes belong in `ReSurfEMG` / `resurfemg`.
-- Cross-modality API, synchronization, export, session state, and the pipeline
+- Cross-modality API, synchronization, export, session state, and the workflow
   engine belong here.
 
 Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Making changes
+
+The data files in `tests/data` are stored with [Git LFS](https://git-lfs.com).
+Install `git-lfs` and run `git lfs install` once, before cloning. If you cloned
+without it, run `git lfs pull` afterwards. Without it, those files are small text
+placeholders and the tests that read them fail.
 
 Before opening a pull request, make sure the tests pass:
 

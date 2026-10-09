@@ -1,7 +1,7 @@
 """Retired step names keep resolving after the ventilator re-namespace.
 
 Ten ventilator steps moved out of the `emg.*` namespace into `ventilator.*`.
-Their former ids stay registered as silent aliases so existing pipeline specs
+Their former ids stay registered as silent aliases so existing workflow specs
 keep compiling unchanged, while discovery only ever offers the current names.
 """
 
@@ -126,10 +126,10 @@ class TestAliasRegistrationGuards:
 
 class TestExistingSpecsKeepRunning:
     def test_a_spec_using_retired_ids_still_compiles(self):
-        from m3resp.workflows.compiler import compile_pipeline
+        from m3resp.workflows.compiler import compile_workflow
         from m3resp.workflows.spec import load_spec
 
-        compiled = compile_pipeline(load_spec(_LEGACY_SPEC))
+        compiled = compile_workflow(load_spec(_LEGACY_SPEC))
 
         # It compiles, and to the *current* operation ids - so provenance and
         # the execution plan never carry a retired name forward.

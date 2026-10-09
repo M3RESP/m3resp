@@ -10,17 +10,17 @@ from typing import Any
 
 import pytest
 
-from m3resp.core.exceptions import PipelineSpecError
-from m3resp.workflows.context import PipelineContext
-from m3resp.workflows.engine import run_pipeline, validate_spec
+from m3resp.core.exceptions import WorkflowSpecError
+from m3resp.workflows.context import WorkflowContext
+from m3resp.workflows.engine import run_workflow, validate_spec
 from m3resp.workflows.registry import STEP_REGISTRY, StepParameter, register_step
 from m3resp.workflows.spec import load_spec
 
 
-def _ctx(**inputs: Any) -> PipelineContext:
+def _ctx(**inputs: Any) -> WorkflowContext:
     from m3resp.core.session import M3Session
 
-    return PipelineContext(session=M3Session(), inputs=inputs)
+    return WorkflowContext(session=M3Session(), inputs=inputs)
 
 
 # --------------------------------------------------------------------------- #
@@ -56,13 +56,13 @@ def test_escaped_literal_inside_a_list_is_not_resolved():
 
 def test_resolve_input_still_rejects_unknown_top_level_reference():
     ctx = _ctx()
-    with pytest.raises(PipelineSpecError, match="unknown input"):
+    with pytest.raises(WorkflowSpecError, match="unknown input"):
         ctx.resolve_input("@missing")
 
 
 def test_resolve_input_rejects_unknown_reference_nested_in_a_mapping():
     ctx = _ctx()
-    with pytest.raises(PipelineSpecError, match="unknown input"):
+    with pytest.raises(WorkflowSpecError, match="unknown input"):
         ctx.resolve_input({"nested": ["@missing"]})
 
 
@@ -97,11 +97,11 @@ def test_validate_spec_rejects_unknown_reference_nested_in_with_block(
             ],
         }
     )
-    with pytest.raises(PipelineSpecError, match="unknown input '@missing'"):
+    with pytest.raises(WorkflowSpecError, match="unknown input '@missing'"):
         validate_spec(spec)
 
 
-def test_run_pipeline_resolves_nested_references_end_to_end(_nested_ref_step):
+def test_run_workflow_resolves_nested_references_end_to_end(_nested_ref_step):
     spec = {
         "name": "p",
         "inputs": {"a": 1, "b": 2},
@@ -112,7 +112,7 @@ def test_run_pipeline_resolves_nested_references_end_to_end(_nested_ref_step):
             }
         ],
     }
-    result = run_pipeline(spec)
+    result = run_workflow(spec)
     assert result.value("value") == {"x": 1, "y": [2, "@a"]}
 
 
@@ -149,7 +149,7 @@ def test_relative_path_parameter_resolves_against_spec_root(_path_echo_step, tmp
         "steps": [{"uses": "path_test.echo", "with": {"p": "sub/file.txt"}}],
     }
     spec = load_spec(raw, root=tmp_path)
-    result = run_pipeline(spec)
+    result = run_workflow(spec)
     assert result.value("resolved_path") == str(
         (tmp_path / "sub" / "file.txt").resolve()
     )
@@ -162,7 +162,7 @@ def test_absolute_path_parameter_is_left_absolute(_path_echo_step, tmp_path):
         "steps": [{"uses": "path_test.echo", "with": {"p": absolute}}],
     }
     spec = load_spec(raw, root=tmp_path / "unrelated" / "dir")
-    result = run_pipeline(spec)
+    result = run_workflow(spec)
     assert result.value("resolved_path") == str(Path(absolute).resolve())
 
 
@@ -175,7 +175,7 @@ def test_at_referenced_relative_path_input_also_resolves_against_spec_root(
         "steps": [{"uses": "path_test.echo", "with": {"p": "@my_file"}}],
     }
     spec = load_spec(raw, root=tmp_path)
-    result = run_pipeline(spec)
+    result = run_workflow(spec)
     assert result.value("resolved_path") == str(
         (tmp_path / "data" / "thing.bin").resolve()
     )
@@ -189,5 +189,5 @@ def test_path_resolution_defaults_to_cwd_for_dict_specs_without_root(
         "steps": [{"uses": "path_test.echo", "with": {"p": "relative.txt"}}],
     }
     spec = load_spec(raw)
-    result = run_pipeline(spec)
+    result = run_workflow(spec)
     assert result.value("resolved_path") == str((Path.cwd() / "relative.txt").resolve())

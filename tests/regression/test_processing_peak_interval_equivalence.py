@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from m3resp.core.events import BreathEvent
+from m3resp.data.events import BreathEvent
 from m3resp.processing.intervals import (
     baseline_crossings,
     onoff_from_baseline_crossings,
@@ -222,7 +222,7 @@ def test_resurfemg_interval_and_linking_primitives_match_upstream():
 def test_sample_intervals_to_breath_events_sets_indices_and_times():
     events = sample_intervals_to_breath_events(
         start_indices=[10, 30],
-        peak_indices=[20, 40],
+        extremum_indices=[20, 40],
         end_indices=[25, 45],
         sample_frequency=10.0,
         modality="emg",
@@ -234,9 +234,9 @@ def test_sample_intervals_to_breath_events_sets_indices_and_times():
             modality="emg",
             start_time=1.0,
             end_time=2.5,
-            peak_time=2.0,
+            extremum_time=2.0,
             start_index=10,
-            peak_index=20,
+            extremum_index=20,
             end_index=25,
             source="test",
         ),
@@ -244,9 +244,9 @@ def test_sample_intervals_to_breath_events_sets_indices_and_times():
             modality="emg",
             start_time=3.0,
             end_time=4.5,
-            peak_time=4.0,
+            extremum_time=4.0,
             start_index=30,
-            peak_index=40,
+            extremum_index=40,
             end_index=45,
             source="test",
         ),

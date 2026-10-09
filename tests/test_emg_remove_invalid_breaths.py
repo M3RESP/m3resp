@@ -15,7 +15,7 @@ import yaml
 
 from m3resp.core.session import M3Session
 from m3resp.data import QualityFlag
-from m3resp.workflows import run_pipeline
+from m3resp.workflows import run_workflow
 from m3resp.workflows.steps.emg import (
     area_under_baseline,
     onoffpeak_baseline_crossing,
@@ -68,7 +68,7 @@ def _emg_flag(name: str, peak: int, passed: bool) -> QualityFlag:
         passed=passed,
         severity="info",
         modality="emg",
-        metadata={"peak_sample_index": peak},
+        metadata={"extremum_sample_index": peak},
     )
 
 
@@ -96,7 +96,7 @@ def test_breath_with_invalid_window_is_removed_and_all_outputs_stay_aligned():
     assert kept["removed"] == [
         {
             "breath_number": 0,
-            "peak_sample_index": 800,
+            "extremum_sample_index": 800,
             "failed_flags": ["start_end_validity"],
         }
     ]
@@ -165,11 +165,11 @@ def test_feature_with_wrong_number_of_values_raises():
 
 
 def _example_emg_spec() -> dict[str, Any]:
-    """The example EMG pipeline, with input paths made absolute and its
+    """The example EMG workflow, with input paths made absolute and its
     file export left out."""
 
     example_dir = os.path.join(REPO_ROOT, "examples", "emg_full_preprocessing")
-    with open(os.path.join(example_dir, "emg-full.pipeline.yaml")) as handle:
+    with open(os.path.join(example_dir, "emg-full.workflow.yaml")) as handle:
         spec = yaml.safe_load(handle)
     spec.pop("outputs", None)
     spec["inputs"] = {
@@ -179,7 +179,7 @@ def _example_emg_spec() -> dict[str, Any]:
     return spec
 
 
-def test_runs_at_the_end_of_the_example_emg_pipeline():
+def test_runs_at_the_end_of_the_example_emg_workflow():
     pytest.importorskip("resurfemg")
     spec = _example_emg_spec()
     spec["steps"].append(
@@ -190,7 +190,7 @@ def test_runs_at_the_end_of_the_example_emg_pipeline():
         }
     )
 
-    result = run_pipeline(spec, session=M3Session())
+    result = run_workflow(spec, session=M3Session())
 
     kept = result.value("valid_breaths")
     peaks = result.value("peak_indices")
@@ -209,10 +209,10 @@ def test_changes_nothing_that_other_steps_read():
     Other steps (e.g. linking EMG with EIT and ventilator breaths, which
     uses session.events) read these, and EMG flags and parameter results
     number breaths by their position in 'peak_indices'. As long as this
-    holds, it does not matter where the step sits in a pipeline."""
+    holds, it does not matter where the step sits in a workflow."""
 
     pytest.importorskip("resurfemg")
-    result = run_pipeline(_example_emg_spec(), session=M3Session())
+    result = run_workflow(_example_emg_spec(), session=M3Session())
     session = result.session
     inputs = {
         key: result.value(key)
@@ -266,3 +266,26 @@ def _assert_same(value: Any, expected: Any, name: str) -> None:
             _assert_same(part, expected_part, name)
         return
     np.testing.assert_array_equal(np.asarray(value), expected, err_msg=name)
+
+
+def test_a_flag_with_the_old_peak_sample_key_still_counts_with_a_warning():
+    """A per-breath flag made before the rename carries 'peak_sample_index';
+    it is still matched to its breath, and a warning names the new key."""
+
+    session, outputs = _session_with_three_breaths()
+    session.quality.add(
+        QualityFlag(
+            name="old_check",
+            passed=False,
+            severity="info",
+            modality="emg",
+            metadata={"peak_sample_index": 2250},
+        )
+    )
+
+    with pytest.warns(UserWarning, match="extremum_sample_index"):
+        kept = remove_invalid_breaths(session, flag_names=["old_check"], **outputs)[
+            "valid_breaths"
+        ]
+
+    assert 2250 not in kept["peak_indices"].tolist()

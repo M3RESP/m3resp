@@ -1,6 +1,6 @@
 """Regression coverage for the granular `emg.*` postprocessing steps.
 
-Confirms the per-function `emg.*` pipeline steps (src/m3resp/workflows/steps/emg.py)
+Confirms the per-function `emg.*` workflow steps (src/m3resp/workflows/steps/emg/)
 are a faithful factoring of `ReSurfEMGAdapter._postprocess_default`, not a
 behavioral rewrite, by running both against the same committed sample data
 and comparing numeric output.
@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from m3resp.core.session import M3Session
-from m3resp.workflows import run_pipeline
+from m3resp.workflows import run_workflow
 
 pytest.importorskip("resurfemg")
 np = pytest.importorskip("numpy")
@@ -39,11 +39,15 @@ GRANULAR_SPEC = {
         {"uses": "emg.peak_indices"},
         {
             "uses": "ventilator.channels",
-            "with": {"pressure_channel": 0, "flow_channel": 1, "volume_channel": 2},
+            "with": {
+                "airway_pressure_channel": 0,
+                "flow_channel": 1,
+                "volume_channel": 2,
+            },
         },
         {
             "uses": "emg.moving_baseline",
-            "with": {"window_seconds": 30.0, "step_seconds": 1.0, "percentile": 33.0},
+            "with": {"window_seconds": 7.5, "step_seconds": 0.2, "percentile": 33.0},
         },
         {"uses": "ventilator.find_occluded_breaths"},
         {"uses": "ventilator.detect_breaths", "with": {"breath_width_seconds": 0.5}},
@@ -56,8 +60,8 @@ GRANULAR_SPEC = {
 }
 
 
-def test_granular_emg_pipeline_matches_monolithic_postprocess():
-    result = run_pipeline(GRANULAR_SPEC)
+def test_granular_emg_workflow_matches_monolithic_postprocess():
+    result = run_workflow(GRANULAR_SPEC)
 
     reference_session = M3Session()
     reference_session.load_emg(str(EMG_PATH), verbose=False)

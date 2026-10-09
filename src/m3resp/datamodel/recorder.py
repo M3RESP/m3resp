@@ -1,34 +1,14 @@
-"""Wraps an ``M3Session`` / pipeline run, turning Stage 1 activity into
-data model entities in a ``DataModelStore``.
+"""Record session activity and workflow results in a DataModelStore.
 
-This is the "merge" point between Stage 1 (``M3Session``, adapters, the
-pipeline engine) and the Stage 2 data model: it does not change what Stage 1
-does, it only observes the two seams that already exist and existed before
-this module:
-
-- ``M3Session._record`` (``core/session.py``) is the single provenance choke
-  point every session method already calls through. Attaching a recorder adds
-  one call from ``_record`` into ``record_provenance`` here; no other method
-  on ``M3Session`` changes.
-- ``run_pipeline`` (``pipeline/engine.py``) calls ``record_pipeline_result``
-  once, after a run finishes, turning named context artifacts into store
-  entities.
-
-Attaching a recorder is opt-in (``session.datamodel = DataModelRecorder(...)``)
-so Stage 1 behavior is unchanged for sessions that never attach one.
-
-Per ``plan/stage2_consolidation.md``, this recorder prefers Layer 1 runtime
-objects (``m3resp.data.Signal``/``ParameterResult``/``QualityFlag``/
-``ProcessingStep``) when adapters or pipeline steps already produce them
-(Milestone 2.3), and falls back to inferring from ``ProvenanceRecord``/raw
-dicts for anything not yet migrated (Milestone 2.1/1). Both paths converge on
-the same store rows, keyed by modality, so it does not matter which path ran
-first.
+An attached recorder stores session provenance, signal and result records,
+and completed workflow outputs. Native result objects are recorded through
+their corresponding methods; numeric workflow outputs become derived features.
 """
 
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 from collections.abc import Mapping
 from datetime import datetime
@@ -38,7 +18,9 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from loguru import logger
 
+from m3resp.data.event_data import EventData, IntervalData
 from m3resp.data.parameters import ParameterResult
+from m3resp.data.pixel_maps import PixelMap, PixelMask
 from m3resp.data.processing import ProcessingStep
 from m3resp.data.quality import QualityFlag
 from m3resp.data.signals import Signal
@@ -65,7 +47,7 @@ from m3resp.synchronization.sync_methods import clock_key
 if TYPE_CHECKING:
     from m3resp.core.provenance import ProvenanceRecord
     from m3resp.core.session import M3Session
-    from m3resp.workflows.engine import PipelineResult
+    from m3resp.workflows.engine import WorkflowResult
 
 #: Provenance actions that correspond to loading a modality's raw data.
 _LOAD_ACTIONS = {"load_eit": "eit", "load_emg": "emg"}
@@ -120,14 +102,10 @@ def _stream_key(
 
 
 def _instrument_of(signal: Signal) -> str | None:
-    """Which instrument recorded this signal, when more than one did.
+    """Return the instrument qualifier after __ in a signal's channel key.
 
-    When a study records the same quantity on two instruments, the
-    non-primary recording's channels are qualified with its name
-    (``pressure__pod`` rather than ``pressure``, see
-    ``M3Session.preprocess_ventilator``). That qualifier is the instrument,
-    and it still decides the ``Device`` record. The stream keys themselves
-    are qualified by the full channel, which already tells the two apart.
+    For example, airway_pressure__pod yields "pod" for the Device record. A
+    channel key without a qualifier returns None.
     """
 
     channel = signal.channel
@@ -156,7 +134,18 @@ _FILE_FORMAT_BY_SUFFIX: dict[str, FileFormat] = {
 
 
 class DataModelRecorder:
-    """Mirrors ``M3Session``/pipeline activity into a ``DataModelStore``."""
+    """Store a session's recordings, results and processing provenance.
+
+    Construction creates or registers a case and a recording session in the
+    store. Assign the recorder to session.datamodel to record session actions
+    and workflow results automatically.
+
+    Attributes:
+        session: Runtime session being recorded.
+        store: DataModelStore receiving records.
+        case: Case associated with the session.
+        recording_session: Stored session record.
+    """
 
     def __init__(
         self,
@@ -326,6 +315,106 @@ class DataModelRecorder:
             )
         )
 
+    def record_interval_data(
+        self, interval_data: IntervalData | EventData, *, processing_run_id: str
+    ) -> list[DerivedFeature]:
+        """Add values per interval or event to the store as derived features.
+
+        Scalar values create one feature per item. Times are copied in
+        seconds on the input's clock; an event uses the same time for both
+        ends of its window. Missing ``None`` or NaN values are stored as
+        ``None``. Values that fail numeric conversion are stored as ``None``
+        with a logged warning.
+
+        A result containing any array values creates one feature for the
+        whole result, with ``value=None``. Array data is kept in the separate
+        export archive.
+
+        Args:
+            interval_data: ``IntervalData`` or ``EventData`` with values in
+                item order and their physical unit.
+            processing_run_id: Identifier of the run already in the store.
+
+        Returns:
+            list[DerivedFeature]: Stored features in item order for scalar
+                values, or one feature for a result containing arrays.
+
+        Raises:
+            DataModelStoreError: If the processing run is absent from the store.
+        """
+
+        signal_id = self._lookup_signal_id(
+            interval_data.modality, interval_data.category, None
+        )
+        source_signal_ids = [signal_id] if signal_id is not None else []
+        values = interval_data.values
+        items = (
+            interval_data.intervals
+            if isinstance(interval_data, IntervalData)
+            else interval_data.events
+        )
+        if values is not None and any(np.ndim(value) > 0 for value in values):
+            return [
+                self.store.add_derived_feature(
+                    DerivedFeature(
+                        source_signal_ids=source_signal_ids,
+                        processing_run_id=processing_run_id,
+                        feature_name=interval_data.name,
+                        value=None,
+                        unit=interval_data.unit,
+                    )
+                )
+            ]
+
+        features = []
+        for position, item in enumerate(items):
+            value = None if values is None else values[position]
+            start = getattr(item, "start_time", getattr(item, "time", None))
+            end = getattr(item, "end_time", start)
+            features.append(
+                self.store.add_derived_feature(
+                    DerivedFeature(
+                        source_signal_ids=source_signal_ids,
+                        processing_run_id=processing_run_id,
+                        feature_name=interval_data.name,
+                        time_window_start=start,
+                        time_window_end=end,
+                        value=_feature_value(value, interval_data.name),
+                        unit=interval_data.unit,
+                    )
+                )
+            )
+        return features
+
+    def record_pixel_grid(
+        self, grid: PixelMap | PixelMask, *, processing_run_id: str
+    ) -> DerivedFeature:
+        """Add a pixel map or mask to the store as a derived-feature record.
+
+        Args:
+            grid: ``PixelMap`` or ``PixelMask`` with its name and modality.
+                A pixel map also supplies the feature's unit.
+            processing_run_id: Identifier of the run already in the store.
+
+        Returns:
+            DerivedFeature: Stored record with ``value=None``. The numeric
+                grid is kept in a separate export archive.
+
+        Raises:
+            DataModelStoreError: If the processing run is absent from the store.
+        """
+
+        signal_id = self._lookup_signal_id(grid.modality, None, None)
+        return self.store.add_derived_feature(
+            DerivedFeature(
+                source_signal_ids=[signal_id] if signal_id is not None else [],
+                processing_run_id=processing_run_id,
+                feature_name=grid.name,
+                value=None,
+                unit=getattr(grid, "unit", None),
+            )
+        )
+
     def record_quality_flag(
         self,
         flag: QualityFlag,
@@ -359,26 +448,44 @@ class DataModelRecorder:
         )
 
     def record_processing_step(self, step: ProcessingStep) -> ProcessingRun:
-        """Materialize a ``ProcessingStep`` as a ``ProcessingRun``."""
+        """Store one processing step as a ProcessingRun with kind=step.
+
+        Args:
+            step: ProcessingStep with a name, timestamp, input keys and settings.
+
+        Returns:
+            ProcessingRun: Record added to the store with the step's name, parsed
+                timestamp and JSON-compatible settings. Known input-file keys are
+                linked. Other run fields use ProcessingRun defaults.
+        """
 
         input_file_ids = [
             self._files[key] for key in step.input_keys if key in self._files
         ]
         run = ProcessingRun(
-            pipeline_name=step.name,
+            name=step.name,
+            kind="step",
             run_time=_parse_timestamp(step.timestamp),
             input_file_ids=input_file_ids,
             parameters=_json_safe_parameters(step.parameters),
         )
         return self.store.add_processing_run(run)
 
-    # -- provenance -> ProcessingRun (Milestone 1 fallback) -------------------
+    # -- Session actions -> ProcessingRun ------------------------------------
 
     def record_provenance(self, provenance: ProvenanceRecord) -> ProcessingRun:
-        """Mirror one ``ProvenanceRecord`` into the store as a ``ProcessingRun``.
+        """Store one session action as a ProcessingRun with kind=session_action.
 
-        Used for session actions that have not been migrated to emit a
-        ``ProcessingStep`` yet.
+        Loading actions first record the raw signal and source file when available.
+        The session's current synchronization settings are also copied to recorded
+        streams.
+
+        Args:
+            provenance: Session action with a timestamp, modality and settings.
+
+        Returns:
+            ProcessingRun: Stored action record with converted settings and any
+                known source-file link for its modality.
         """
 
         input_file_ids: list[str] = []
@@ -391,7 +498,8 @@ class DataModelRecorder:
                 input_file_ids = [file_id]
 
         run = ProcessingRun(
-            pipeline_name=provenance.action,
+            name=provenance.action,
+            kind="session_action",
             run_time=_parse_timestamp(provenance.timestamp),
             input_file_ids=input_file_ids,
             parameters=_json_safe_parameters(provenance.parameters),
@@ -508,38 +616,31 @@ class DataModelRecorder:
                 )
                 self._files[modality] = data_file.file_id
 
-    # -- pipeline outputs -> DerivedFeature/QualityAnnotation/SignalStream ---
+    # -- workflow outputs -> DerivedFeature/QualityAnnotation/SignalStream ---
 
-    def record_pipeline_result(self, result: PipelineResult) -> ProcessingRun:
-        """Turn a finished pipeline run's outputs into store entities.
+    def record_workflow_result(self, result: WorkflowResult) -> ProcessingRun:
+        """Store a workflow run and its recognized output values.
 
-        Named context artifacts that are already ``ParameterResult``/
-        ``QualityFlag``/``Signal`` objects are materialized directly; bare
-        numeric outputs (Milestone 1 pipelines that have not adopted Layer 1
-        objects yet) still become a ``DerivedFeature`` with just a value. The
-        run's ``parameters["outputs"]`` also records a JSON-safe provenance
-        summary (method/unit/metadata) for every native result, keyed by its
-        context name, so the run's full output provenance survives even for
-        array-valued results whose ``DerivedFeature.value`` stays ``None``.
+        Nested lists, tuples and dictionaries are visited recursively. Signals,
+        measurements, per-event/per-interval results, pixel grids and quality flags
+        use their corresponding recorder methods. Bare numeric outputs become
+        derived features named by context key; booleans and unsupported objects
+        are skipped.
 
-        A ``list``/``tuple``/``dict`` of native results, at any nesting depth
-        (e.g. one ``ParameterResult`` per breath - see ``plan/stage2/
-        2_resurfemg_gap_migration_implementation_plan.md`` Phase 6.1 - or a
-        mapping of named sub-results), is recorded as one store entity per
-        leaf item, keeping each item's breath/sample identity, rather than
-        being skipped or collapsed into a single annotation (Phase 5.2 of
-        ``plan/stage2/3_pipeline_structure_implementation_plan.md``).
+        Args:
+            result: Completed WorkflowResult containing named outputs.
 
-        Every ``DataFile`` this recorder has resolved so far (from earlier
-        ``record_signal``/``record_provenance`` calls, and from any raw
-        ``Signal`` this same run produces) is linked onto
-        ``run.input_file_ids`` (Phase 5.3) - precise for the common one
-        pipeline per session case; a session that runs more than one
-        pipeline will over-attribute earlier files to a later run's inputs.
+        Returns:
+            ProcessingRun: Stored record with kind=workflow and the workflow name.
+                Native measurement, signal and grouped-result provenance is kept in
+                parameters["outputs"]. Array values remain in exported archives.
+                All input files known to this recorder are linked, including files
+                from earlier runs on the same session. Status and run_time use
+                ProcessingRun defaults.
         """
 
         run = self.store.add_processing_run(
-            ProcessingRun(pipeline_name=result.name, parameters={})
+            ProcessingRun(name=result.name, kind="workflow", parameters={})
         )
         output_provenance: dict[str, Any] = {}
         for name, value in result.outputs.items():
@@ -551,9 +652,11 @@ class DataModelRecorder:
         return run
 
     def _record_output_value(self, name: str, value: Any, run: ProcessingRun) -> Any:
-        """Recursively record one pipeline-output value, at any nesting
-        depth of list/tuple/dict, returning a provenance entry mirroring
-        the input's shape (or ``None`` if it had none)."""
+        """Record recognized leaves within nested lists, tuples and dictionaries.
+
+        Return collected provenance entries, or None when none are available.
+        Lists and tuples become lists; entries without provenance are omitted.
+        """
 
         if isinstance(value, list | tuple):
             entries = [self._record_output_value(name, item, run) for item in value]
@@ -571,11 +674,13 @@ class DataModelRecorder:
     def _record_output_item(
         self, name: str, value: Any, run: ProcessingRun
     ) -> dict[str, Any] | None:
-        """Record one pipeline-output value (not a list/tuple/dict of them)
-        and return its provenance entry, or ``None`` for a value that has no
-        provenance entry of its own (a `QualityFlag`, or an unrecognized
-        type). `name` is the output's context key, used as the
-        `DerivedFeature.feature_name` for a bare numeric output."""
+        """Record one workflow result and return its provenance description.
+
+        ``name`` supplies the feature name for a numeric result. Signals,
+        parameters, timed values and pixel grids return descriptive entries;
+        quality flags and numbers are stored and return ``None``. Unsupported
+        types and booleans return ``None``.
+        """
 
         if isinstance(value, ParameterResult):
             self.record_parameter(value, processing_run_id=run.processing_run_id)
@@ -586,6 +691,12 @@ class DataModelRecorder:
         if isinstance(value, Signal):
             self.record_signal(value)
             return _output_provenance_entry(value)
+        if isinstance(value, (IntervalData, EventData)):
+            self.record_interval_data(value, processing_run_id=run.processing_run_id)
+            return _grouped_output_provenance_entry(value)
+        if isinstance(value, (PixelMap, PixelMask)):
+            self.record_pixel_grid(value, processing_run_id=run.processing_run_id)
+            return _grouped_output_provenance_entry(value)
         if isinstance(value, bool):
             return None
         if isinstance(value, (int, float, np.integer, np.floating)):
@@ -602,14 +713,24 @@ class DataModelRecorder:
     def record_parameter_file(
         self, path: str | Path, *, processing_run_id: str
     ) -> DataFile:
-        """Record a structured-export parameter artifact (e.g. the
-        ``parameter_result_arrays.npz`` archive) as a ``DataFile`` with role
-        ``"parameter"``, and link it onto the ``ProcessingRun`` that produced
-        it via ``ProcessingRun.parameter_file_id``.
+        """Record an exported array file and link it to its processing run.
 
-        Does not create a new entity type for array-valued results (per
-        ``plan/stage2/1_eit_gap_migration_implementation_plan.md`` Phase 5.3):
-        the existing ``DataFile``/``ProcessingRun`` link is reused.
+        Exporting again to the same path replaces the earlier link to that
+        path in the run's ``parameter_file_ids``. The earlier ``DataFile``
+        remains in the store as a record of the earlier export.
+
+        Args:
+            path: Existing array-results file, such as
+                ``interval_data_arrays.npz`` or ``pixel_masks.npz``.
+            processing_run_id: Identifier of the run already in the store.
+
+        Returns:
+            DataFile: Stored file record with role ``'parameter'``, a SHA-256
+                checksum and file size in bytes.
+
+        Raises:
+            OSError: If the file cannot be read or its size determined.
+            KeyError: If the processing run is absent from the store.
         """
 
         data_file = self.store.add_data_file(
@@ -623,7 +744,11 @@ class DataModelRecorder:
             )
         )
         run = self.store.processing_runs[processing_run_id]
-        run.parameter_file_id = data_file.file_id
+        run.parameter_file_ids = [
+            file_id
+            for file_id in run.parameter_file_ids
+            if self.store.data_files[file_id].file_path != str(path)
+        ] + [data_file.file_id]
         return data_file
 
 
@@ -641,9 +766,8 @@ _SIGNAL_TYPE_BY_MODALITY_CATEGORY: dict[tuple[str, str], SignalType] = {
 }
 
 #: Fallback ``modality -> SignalType`` for signals with no ``category`` set,
-#: used only where the modality alone is unambiguous. ``"ventilator"`` is
-#: deliberately absent: without a category there is no way to tell pressure
-#: from flow from volume, and guessing is what produced wrong audit records.
+#: used only where the modality alone is unambiguous. ``"ventilator"`` has no
+#: entry: without a category, pressure, flow and volume cannot be told apart.
 _SIGNAL_TYPE_BY_MODALITY: dict[str, SignalType] = {
     "eit": "eit_waveform",
 }
@@ -675,8 +799,11 @@ def _signal_type_for(signal: Signal) -> SignalType | None:
 
 
 def _output_provenance_entry(value: ParameterResult | Signal) -> dict[str, Any]:
-    """Build a JSON-safe provenance summary for one pipeline-output result,
-    for ``ProcessingRun.parameters["outputs"]``."""
+    """Summarize a signal or parameter's method, units, channel and metadata.
+
+    Parameter summaries include breath identity and scalar status; signal
+    summaries include processing state. Metadata is converted for JSON storage.
+    """
 
     entry: dict[str, Any] = {
         "type": type(value).__name__,
@@ -692,6 +819,50 @@ def _output_provenance_entry(value: ParameterResult | Signal) -> dict[str, Any]:
     else:
         entry["channel"] = value.channel
         entry["processing_state"] = value.processing_state
+    return entry
+
+
+def _feature_value(value: Any, name: str) -> float | None:
+    """Convert a feature value to a float, using ``None`` for missing values.
+
+    ``None`` and NaN become ``None``. Failed numeric conversion also returns
+    ``None`` and logs a warning identifying the result by ``name``.
+    """
+
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        logger.warning(
+            f"Values of {name!r} are not numbers (got {value!r}); stored "
+            "without a value in the data model."
+        )
+        return None
+    return None if math.isnan(number) else number
+
+
+def _grouped_output_provenance_entry(
+    value: IntervalData | EventData | PixelMap | PixelMask,
+) -> dict[str, Any]:
+    """Describe a timed result or pixel grid for the saved processing history.
+
+    The description includes names, units and metadata, plus the item count
+    for timed values or the row-column shape for a grid.
+    """
+
+    entry: dict[str, Any] = {
+        "type": type(value).__name__,
+        "name": value.name,
+        "method": value.method,
+        "modality": value.modality,
+        "unit": getattr(value, "unit", None),
+        "metadata": _json_safe_parameters(value.metadata),
+    }
+    if isinstance(value, (IntervalData, EventData)):
+        entry["count"] = len(value)
+    else:
+        entry["shape"] = list(value.shape)
     return entry
 
 

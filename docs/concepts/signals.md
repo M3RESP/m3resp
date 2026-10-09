@@ -42,11 +42,10 @@ by adding:
   you can still tell which one came from which device).
 - `processing_state`, where this signal sits in its journey from raw to
   usable: `"raw"` means straight off the device, untouched; `"intermediate"`
-  means some pre-processing step has run (not necessarily filtering - e.g.
-  segmentation, slicing) but this isn't the final version; `"processed"`
-  means the final, ready-to-use version; `"derived"` means computed from
-  another signal (like a difference between two signals), rather than being
-  a cleanup step of its own raw data.
+  means one or more pre-processing steps have run (e.g. filtering,
+  segmentation, slicing) and more steps follow; `"processed"` means the
+  final, ready-to-use version; `"derived"` means computed from other signals
+  (like a difference between two signals).
 - `channel`, which specific physical/logical channel this is (e.g. an EMG
   lead name, `"global_impedance"` for EIT).
 - `source`, where the data originally came from - the upstream tool/loader
@@ -105,13 +104,13 @@ class Signal(TimeSeries):
 `"<library>.<function_or_class_name>"` (e.g. `"resurfemg.moving_baseline"`,
 `"eitprocessing.RateDetection"`). The prefix disambiguates functions that
 share a name across libraries; it is convention only - a plain string with no
-runtime validation - so it's up to each adapter/step to follow it rather than
-passing through an upstream library's own unqualified names.
+runtime validation - so each adapter/step adds the library prefix itself,
+also to names that come from an upstream library.
 
 ### `modality` vs `category`: two independent axes
 
 `modality` is the **device/technique**; `category` is the **physical
-quantity**. They are deliberately separate fields because they do not nest:
+quantity**. They are separate fields because they do not nest:
 
 - one device emits several quantities (a ventilator produces pressure *and*
   flow *and* volume);
@@ -137,7 +136,7 @@ returns this channel alongside any airway pressure recorded by a ventilator
 or a standalone monitor, regardless of device.
 
 `modality`'s vocabulary lines up 1:1 with Layer 2's `Device.device_type`.
-`category`'s vocabulary is deliberately *modality-agnostic*, following the same
+`category`'s vocabulary is *modality-agnostic*, following the same
 principle as `eitprocessing`'s shared category catalogue: a taxonomy of
 physical quantities with no notion of which device measured them.
 
@@ -169,10 +168,8 @@ YAML/JSON file.
   signal a downstream parameter computation should use.
 - `"processed"` - the final signal for this channel, ready to compute
   parameters/results from.
-- `"derived"` - computed from another signal (e.g. a difference between two
-  signals), rather than a step in that signal's own raw -> intermediate ->
-  processed pipeline; `derived_from` records which state it was derived
-  from.
+- `"derived"` - computed from other signals (e.g. a difference between two
+  signals); `derived_from` records which state it was derived from.
 
 Multiple differently produced signals can share the same `channel` and
 `processing_state` (e.g. two "intermediate" variants using different filter
@@ -183,8 +180,8 @@ methods) - use `method` to tell them apart, not a new state.
 Adapters (`EITProcessingAdapter.to_signals`/`ReSurfEMGAdapter.to_signals`,
 see [../developer/adapters.md](../developer/adapters.md)) convert whatever
 `eitprocessing`/`resurfemg` return into `Signal` instances at the public
-boundary - everything downstream (session storage, pipeline steps, export)
-operates on this type instead of vendor-specific objects.
+boundary - everything downstream (session storage, workflow steps, export)
+operates on this type.
 `session.preprocess_eit()`/`session.preprocess_emg()` call this conversion
 by default and add the results to `session.signals`
 (`m3resp.data.collections.SignalCollection`).

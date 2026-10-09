@@ -1,4 +1,4 @@
-"""Registered ventilator per-breath feature pipeline steps."""
+"""Registered ventilator per-breath feature workflow steps."""
 
 from __future__ import annotations
 

@@ -32,24 +32,24 @@ class UnresolvedChannelError(M3RespError, LookupError):
     """
 
 
-class PipelineError(M3RespError):
-    """Base exception for declarative pipeline errors."""
+class WorkflowError(M3RespError):
+    """Base exception for declarative workflow errors."""
 
 
-class UnknownStepError(PipelineError):
+class UnknownStepError(WorkflowError):
     """Raised when a spec references a step name that is not registered."""
 
 
-class PipelineSpecError(PipelineError):
-    """Raised when a pipeline spec is malformed or fails static validation."""
+class WorkflowSpecError(WorkflowError):
+    """Raised when a workflow spec is malformed or fails static validation."""
 
 
-class StepMetadataError(PipelineError):
+class StepMetadataError(WorkflowError):
     """Raised when a step's registered GUI/discovery metadata is inconsistent."""
 
 
-class UnknownPipelineError(PipelineError):
-    """Raised when ``M3Session.run_pipeline`` references an unregistered name."""
+class UnknownPresetError(WorkflowError):
+    """Raised when ``M3Session.run_preset`` references an unregistered name."""
 
 
 class DataModelValidationError(M3RespError):
