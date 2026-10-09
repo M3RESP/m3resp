@@ -129,6 +129,34 @@ def pixel_tiv(
     tiv_timing: Literal["pixel", "continuous"] = "continuous",
     result_label: str = "pixel_tivs",
 ) -> dict[str, Any]:
+    """Compute one pixel map of tidal impedance variation (TIV) per breath.
+
+    The per-breath maps are added to ``session.interval_data`` and the step
+    is recorded in the session's history. NaNs remain in the maps, including
+    maps whose pixels are all missing.
+
+    Args:
+        eit_data: eitprocessing EIT pixel data to measure, with time, row and
+            column axes.
+        signal: Global or regional waveform used to find the enclosing breaths.
+        eit_sequence: Sequence that stores the upstream result.
+        breath_detector: Detector used to identify breaths on ``signal``.
+        session: Session that stores the per-breath maps and history.
+        tiv_timing: ``'continuous'`` uses waveform breath timing; ``'pixel'``
+            uses individual pixel breath timing.
+        result_label: Name used for the upstream and per-breath results.
+
+    Returns:
+        dict[str, Any]: ``pixel_tiv`` as the upstream result and
+            ``pixel_tiv_result`` as ``IntervalData`` containing a row-column
+            ``PixelMap`` per breath. Maps retain the upstream impedance unit
+            and breath order. Metadata lists breaths with any measured pixels.
+
+    Raises:
+        ValueError: If value and breath counts differ or a pixel map has other
+            than two dimensions.
+    """
+
     result = session.eit_adapter.compute_pixel_tiv(
         eit_data,
         signal,
@@ -218,13 +246,11 @@ def _pixel_breaths_to_landmark_array(values: Any) -> np.ndarray:
 def _pixel_breath_intervals(
     intervals: Any, breath_intervals: Any, session: M3Session
 ) -> list[BreathEvent]:
-    """The breaths PixelBreath looked inside, with their turning points.
+    """Match pixel-breath intervals to detected breaths with turning points.
 
-    PixelBreath finds the breaths on the impedance waveform first and then each
-    pixel's breath inside them, but it hands back only the start and end of
-    those breaths. ``breath_intervals`` are the same breaths found again with
-    the same settings; they add the middle time, so these breaths are stored
-    the same way as the breaths of TIV and EELI.
+    ``intervals`` gives start-end pairs in seconds; ``breath_intervals``
+    supplies the corresponding middle times. Matching checks exact start and
+    end times in the same order and reuses matching stored EIT breaths.
 
     Raises:
         ValueError: If the breaths found again do not have the same start
@@ -338,6 +364,35 @@ def pixel_breaths(
     minimum_duration_seconds: float = 2 / 3,
     result_label: str = "pixel_breaths",
 ) -> dict[str, Any]:
+    """Measure start, middle and end times for each pixel's breath.
+
+    Timing grids are added to ``session.interval_data`` and the step is
+    recorded in the session's history. Each grid belongs to the enclosing
+    breath detected on ``timing_data``.
+
+    Args:
+        eit_data: eitprocessing pixel data with time, row and column axes.
+        timing_data: Global or regional waveform used to find enclosing breaths.
+        eit_sequence: Sequence that stores the upstream result.
+        session: Session that stores the per-breath timing grids and history.
+        phase_correction_mode: ``'negative amplitude'``, ``'phase shift'``,
+            ``'none'`` or ``None``. ``None`` selects no phase correction.
+        minimum_duration_seconds: Minimum duration used for breath detection,
+            in seconds.
+        result_label: Name used for the upstream and per-breath results.
+
+    Returns:
+        dict[str, Any]: ``pixel_breaths`` as the upstream result and
+            ``pixel_breath_timing_result`` as ``IntervalData``. Each breath has
+            a grid of shape ``(row, column, 3)`` with start, middle and end
+            times in seconds on the input's clock. Missing timings are NaN;
+            validity counts require all three times to be present.
+
+    Raises:
+        ValueError: If the phase correction mode is unknown, or the detected
+            breath start-end times differ from the pixel result's intervals.
+    """
+
     if phase_correction_mode not in _ALLOWED_PIXEL_BREATH_PHASE_MODES:
         named = ", ".join(
             repr(mode) for mode in _ALLOWED_PIXEL_BREATH_PHASE_MODES if mode is not None

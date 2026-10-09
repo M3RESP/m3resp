@@ -1,4 +1,12 @@
-"""Processing settings, input/output names and outcomes recorded per step."""
+"""Processing settings, input/output names and outcomes recorded per step.
+
+``ProcessingStep`` is used alongside ``ProvenanceRecord``
+(``m3resp.core.provenance``), Stage 1's "action + modality + parameters" log
+entry. ``ProcessingStep`` also names the inputs a step read and the outputs it
+wrote, so the saved ``ProcessingRun.input_file_ids`` can be filled in
+precisely. Both are in use until every workflow step records a
+``ProcessingStep``.
+"""
 
 from __future__ import annotations
 

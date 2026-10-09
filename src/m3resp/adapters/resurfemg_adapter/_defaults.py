@@ -60,9 +60,19 @@ class _DefaultsMixin:
     ) -> dict[str, Any]:
         """Band-pass an EMG channel and optionally notch-filter and envelope it.
 
-        ECG gating can be applied to the filtered signal as a subsequent operation.
+        The 20-500 Hz band-pass is the range used in respiratory-sEMG
+        literature. The ECG stays in the band-passed signal: a high-pass steep
+        enough to attenuate the QRS complex still leaves its higher-frequency
+        content in the pass band. ECG gating (``emg.ecg_gating``, run by the
+        ``"emg"`` preset) removes it from the filtered signal afterwards.
         When compute_envelope is False, the envelope settings remain in the output
         so gating can use them when calculating a new envelope.
+
+        RMS is the envelope used in the literature. ARV is an opt-in choice and
+        gives different values from RMS on real sEMG. The median envelope (median
+        of the absolute signal) ignores short spikes such as heartbeat leftovers.
+        The notch filter removes mains hum (e.g. 50 Hz) or the harmonic comb a
+        co-recorded EIT device adds at its frame rate and multiples of it.
 
         Args:
             recording: Loaded dictionary with a channel-major array
@@ -192,26 +202,36 @@ class _DefaultsMixin:
         merge_close_peaks_within_width: bool = False,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
-        """Run ReSurfEMG EMG breath detection and return common rows.
+        """Detect EMG envelope peaks and return one breath row per peak.
 
-        A breath is a rise above the *local* quiet level, not above zero. The
-        detection threshold is taken from the envelope above ``baseline``, so
-        electrode drift is removed before the threshold is set. Without a
-        baseline the threshold is set against zero and the drift inflates it,
-        which drops genuine breaths wherever the quiet level has risen; that
-        case warns, as it does in ReSurfEMG. Compute the baseline first, with
-        ``emg.moving_baseline`` or ``emg.slopesum_baseline``.
+        The threshold is measured above the supplied baseline, which accounts
+        for changes in the quiet level. With baseline=None, detection uses zero
+        and emits a UserWarning; drift in the quiet level can then affect which
+        breaths are detected. Compute a baseline with ``emg.moving_baseline`` or
+        ``emg.slopesum_baseline``.
 
-        ReSurfEMG detects breath *peaks* only. Onset and offset are a separate
-        measurement, made either by baseline crossing or by slope
-        extrapolation - never as a window around the peak - and they can fail
-        to be found, which is why they carry their own validity flag. Run
-        ``emg.onoffpeak_baseline_crossing`` to obtain them.
+        Each row has ``start_time == end_time == extremum_time`` in seconds and
+        matching sample indices. ``metadata["boundaries_measured"]`` is False:
+        these rows locate peaks before onset and offset have been measured.
+        Use ``emg.onoffpeak_baseline_crossing`` to obtain those boundaries.
 
-        `BreathEvent` currently requires an interval, so each event is emitted
-        with ``start_time == end_time == extremum_time``: a zero-length breath at
-        the peak, marked ``boundaries_measured: False``. That is a placeholder
-        for a measurement not yet made, not a claim about the breath's extent.
+        Args:
+            processed_emg: Processed EMG dictionary with ``envelope``, ``fs``
+                (Hz) and ``channel``. Baseline values share the envelope's units.
+            min_breath_width_seconds: Minimum detected peak width in seconds,
+                converted to at least one sample.
+            baseline: Local quiet level, one value per envelope sample, or None.
+            merge_close_peaks_within_width: Keep the higher peak when peaks lie
+                closer than the minimum breath width.
+            **kwargs: Additional options passed to `detect_emg_breath_peaks`.
+
+        Returns:
+            list[dict[str, Any]]: Breath rows with times, sample indices, sampling
+                rate, channel, detection source and boundary status.
+
+        Raises:
+            UnsupportedWorkflowError: If processed_emg is not a dictionary with
+                an envelope.
         """
 
         if not isinstance(processed_emg, dict) or "envelope" not in processed_emg:
@@ -604,14 +624,9 @@ class _DefaultsMixin:
                     "Needs ventilator breath timing."
                 )
 
-            # Deliberately independent of 'evaluate_event_timing' above: its
-            # only real prerequisite is that 'ventilator_respiratory_rate' was
-            # computed (near the top of this function), which does not
-            # require 'evaluate_event_timing' to be selected. Nesting this
-            # under that block previously meant selecting
-            # 'evaluate_respiratory_rates' alone (without also selecting
-            # 'evaluate_event_timing') silently produced nothing - no result,
-            # no skip reason.
+            # Runs whenever 'ventilator_respiratory_rate' was computed (near
+            # the top of this function), whether or not
+            # 'evaluate_event_timing' is selected.
             if (
                 enabled(("quality_assessment", "evaluate_respiratory_rates"))
                 and "ventilator_respiratory_rate" in computed["quality_assessment"]

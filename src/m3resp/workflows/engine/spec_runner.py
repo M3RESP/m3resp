@@ -28,6 +28,8 @@ def _resolve_output_mode(spec: WorkflowSpec) -> tuple[str, bool]:
 
     Use the stated mode when supplied. Otherwise choose explicit when any
     step name starts with ``"export."``, and automatic for other workflows.
+    Specs with ``schema_version`` always state the mode when ``outputs.dir``
+    is set, so only older specs without it have their mode inferred.
     """
 
     if spec.outputs.mode is not None:

@@ -161,9 +161,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from m3resp.workflows.engine import run_spec
     from m3resp.workflows.lifecycle import CancellationToken
 
-    # Ctrl-C cooperatively cancels (finishes the current step, preserves
-    # completed work, exits EXIT_CANCELLED) instead of raising a raw
-    # KeyboardInterrupt mid-run (Phase 4.5/7.2).
+    # Ctrl-C cancels the run: the current step finishes, completed work is
+    # kept, and the CLI exits with EXIT_CANCELLED.
     token = CancellationToken()
     previous_handler = signal.getsignal(signal.SIGINT)
 
@@ -172,10 +171,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     signal.signal(signal.SIGINT, _handle_sigint)
     try:
-        # A step failure raises WorkflowExecutionError - deliberately not
-        # caught here, so it reaches main()'s single except block, which
-        # prints either a short message or (with --debug) the full
-        # traceback, uniformly for every subcommand.
+        # A step failure raises WorkflowExecutionError, which goes up to
+        # main()'s single except block. That block prints a short message,
+        # or the full traceback with --debug, for every subcommand.
         result = run_spec(args.spec, cancellation_token=token)
     finally:
         signal.signal(signal.SIGINT, previous_handler)

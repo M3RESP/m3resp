@@ -204,7 +204,7 @@ STEP_REGISTRY: dict[str, StepDefinition] = {}
 #: Retired step name -> the canonical name it now resolves to. Populated by
 #: ``register_step(..., aliases=...)``.
 #:
-#: Aliases resolve silently and are deliberately kept out of `available_steps`,
+#: Aliases resolve silently and are left out of `available_steps`,
 #: `describe_steps` and the "available steps" text of `UnknownStepError`: an
 #: existing spec keeps running unchanged, while discovery and any GUI built on
 #: it only ever offer the current name.

@@ -37,31 +37,37 @@ def export_session_summary(
 ) -> Path:
     """Write session summaries, result tables and array archives.
 
-    Creates the output directory and replaces existing export files. Structured
-    exports include session metadata, signal descriptions, parameters, values
-    per interval, pixel masks, quality flags, linked breaths and processing
-    history. Array values and associated timing arrays are stored in NPZ files,
-    with references in the CSV rows.
+    Structured export writes session metadata and processing history, plus
+    tables for populated signal, parameter, interval, mask, quality and
+    linked-breath collections. Per-interval metadata is written to
+    ``interval_data_metadata.json``. Array values go to
+    ``parameter_result_arrays.npz``, ``interval_data_arrays.npz`` and
+    ``pixel_masks.npz`` as needed, with references in their table rows.
+    Exported times and units retain the values used by the session.
 
     Args:
-        session: Session supplying metadata, events, parameters, quality,
-            provenance and typed result collections.
-        output_dir: Destination directory.
-        summary_json: Write summary.json, including synchronization settings.
-        event_csvs: Write one CSV for each nonempty event list.
-        parameters_csv: Write parameters.csv when grouped parameters are present.
-        postprocessing: Include emg_postprocessing in the legacy parameter export.
-        structured_export: Write typed result tables, metadata files and NPZ
-            archives for parameter arrays, interval arrays and pixel masks.
-        processing_run_id: Optional stored run identifier, typically from
-            WorkflowResult.processing_run_id. When a data-model recorder is
-            attached, links written NPZ archives to this ProcessingRun.
+        session: Session containing metadata, results, events and history.
+        output_dir: Directory to create and write into. Existing files with
+            the same export names are overwritten.
+        summary_json: Write ``summary.json`` with metadata, quality, parameters,
+            provenance and synchronization information.
+        event_csvs: Write one CSV for each populated event list.
+        parameters_csv: Write ``parameters.csv`` for populated parameter groups.
+        postprocessing: Include ``emg_postprocessing`` in the summary and
+            parameter-group table.
+        structured_export: Write separate files for the scientific collections.
+        processing_run_id: Run to link exported array files to when the
+            session has a data-model recorder, typically
+            ``WorkflowResult.processing_run_id``. ``None`` leaves archives
+            without a run link.
 
     Returns:
-        Path: Destination directory containing the requested export files.
+        Path: The output directory used for the export.
 
     Raises:
-        OSError: If a directory or export file cannot be written.
+        ValueError: If array values within an interval result have different shapes.
+        OSError: If the output directory or files cannot be written.
+        KeyError: If a supplied processing run is absent from the attached store.
     """
 
     output_path = Path(output_dir)
@@ -115,9 +121,15 @@ def export_session_summary(
 def _export_structured_collections(
     session: Any, output_path: Path, *, processing_run_id: str | None = None
 ) -> None:
-    """Write the Milestone 2.6 per-entity files (see ``export_session_summary``)."""
+    """Write session metadata, history and populated scientific collections.
+
+    Array files are linked to ``processing_run_id`` when the session has
+    an attached data-model recorder.
+    """
 
     def path_to(filename: str) -> Path:
+        """Return the export path for a filename."""
+
         return Path(os.path.join(str(output_path), filename))
 
     # Convert the values per breath and the masks before writing anything, so
@@ -174,8 +186,7 @@ def _export_structured_collections(
 def _link_to_run(
     session: Any, archive_path: Path, processing_run_id: str | None
 ) -> None:
-    """Record an exported array file in the data model and link it to the
-    run that made it, when a data model is attached and the run is known."""
+    """Link an array file to the supplied run when a recorder and run ID are given."""
 
     if session.datamodel is not None and processing_run_id is not None:
         session.datamodel.record_parameter_file(

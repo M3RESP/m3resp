@@ -181,6 +181,28 @@ def session_summary(
     postprocessing: bool = True,
     structured_export: bool = True,
 ) -> dict[str, Any]:
+    """Export session summaries and scientific results to a directory.
+
+    Args:
+        session: Session containing the results to export.
+        output_dir: Directory to create and write into. Existing export files
+            with the same names are overwritten.
+        summary_json: Write ``summary.json``.
+        event_csvs: Write a CSV for each populated event list.
+        parameters_csv: Write the parameter-group table.
+        postprocessing: Include EMG postprocessing in the summary and
+            parameter-group table.
+        structured_export: Write the scientific collection tables and their
+            array archives; see ``export_session_summary``.
+
+    Returns:
+        dict[str, Any]: ``output_dir`` as the path used for the export.
+
+    Raises:
+        ValueError: If per-interval array values have different shapes.
+        OSError: If the directory or files cannot be written.
+    """
+
     target = Path(output_dir)
     target.mkdir(parents=True, exist_ok=True)
     export_session_summary(
@@ -306,7 +328,8 @@ def rotarc_result(
             the same names are replaced.
 
     Raises:
-        ValueError: If the output directory, subject_id or run_identifier is missing.
+        ValueError: If the output directory, subject_id or run_identifier is
+            missing, or per-interval arrays have different shapes.
         OSError: If an output directory or file cannot be written.
     """
 

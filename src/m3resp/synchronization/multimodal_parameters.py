@@ -1,12 +1,7 @@
-"""Multimodal timing/agreement metrics computed from `LinkedBreath` objects.
+"""Timing delays, duration differences and agreement between linked breaths.
 
-Deliberately narrow, initial metrics rather than the full "coupling metric"
-list: a signed timing delay between two modalities' breath anchors, a breath
-duration difference, and a breath-to-breath event-agreement fraction. All
-three are pure functions over `LinkedBreath`/`list[LinkedBreath]`;
-`compute_multimodal_parameters` is the convenience entry point that turns
-them into `ParameterResult`s, and is what `M3Session.compute_multimodal_parameters`
- calls.
+`compute_multimodal_parameters` collects these measurements into
+ParameterResult objects for `M3Session.compute_multimodal_parameters`.
 """
 
 from __future__ import annotations
@@ -26,13 +21,12 @@ def compute_timing_delay(
     *,
     anchor: str = "start",
 ) -> float | None:
-    """Signed delay in seconds from `from_modality` to `to_modality`.
+    """Return the signed delay in seconds from one modality to another.
 
-    Positive means `to_modality`'s breath anchor occurs after
-    `from_modality`'s. `anchor` selects which point on each breath to
-    compare (``"start"``, ``"extremum"``, or ``"end"``). Returns `None` when
-    either modality did not contribute a breath to this link, or when
-    ``anchor="extremum"`` and either breath has no `extremum_time`.
+    Positive values mean to_modality occurs later. The anchor is ``"start"``,
+    ``"extremum"`` or ``"end"``. Returns None if either modality is missing,
+    or if an extremum anchor is requested and either extremum time is None.
+    Raises ValueError for an unknown anchor when both breaths are present.
     """
 
     from_breath = linked.breaths.get(from_modality)
@@ -166,6 +160,11 @@ def compute_multimodal_parameters(
 
 
 def _anchor_time(breath: BreathEvent, anchor: str) -> float | None:
+    """Return a breath's start, extremum or end time in seconds.
+
+    An unavailable extremum gives None. An unknown anchor raises ValueError.
+    """
+
     if anchor == "start":
         return breath.start_time
     if anchor == "end":
