@@ -215,7 +215,7 @@ def sample_intervals_to_breath_events(
     *,
     start_indices: Sequence[int],
     end_indices: Sequence[int],
-    peak_indices: Sequence[int] | None = None,
+    extremum_indices: Sequence[int] | None = None,
     sample_frequency: float | None = None,
     time: Sequence[float] | None = None,
     modality: str,
@@ -229,7 +229,7 @@ def sample_intervals_to_breath_events(
     Args:
         start_indices: One start sample position per breath.
         end_indices: One end sample position per breath, paired with starts.
-        peak_indices: Optional turning-point positions, one per breath. These
+        extremum_indices: Optional turning-point positions, one per breath. These
             become ``extremum_index`` and ``extremum_time`` on each breath.
         sample_frequency: Signal sampling rate in Hz, required when time is None.
         time: Optional signal time vector in seconds, indexed by sample position.
@@ -239,19 +239,21 @@ def sample_intervals_to_breath_events(
     Returns:
         list[BreathEvent]: Breaths in input order, with times in seconds and
             original start/end/extremum sample indices. Turning-point fields
-            are None when peak_indices is None.
+            are None when extremum_indices is None.
 
     Raises:
         ValueError: If start/end arrays differ in length, a converted interval
             ends before it starts, or a nonempty input has neither time nor
             sample_frequency.
         IndexError: If a sample position is outside the time vector or
-            peak_indices has fewer entries than the breath intervals.
+            extremum_indices has fewer entries than the breath intervals.
     """
 
     starts = np.asarray(start_indices, dtype=int)
     ends = np.asarray(end_indices, dtype=int)
-    peaks = None if peak_indices is None else np.asarray(peak_indices, dtype=int)
+    extrema = (
+        None if extremum_indices is None else np.asarray(extremum_indices, dtype=int)
+    )
     return [
         BreathEvent(
             modality=modality,
@@ -261,13 +263,13 @@ def sample_intervals_to_breath_events(
             end_time=_sample_to_time(end, sample_frequency=sample_frequency, time=time),
             extremum_time=(
                 None
-                if peaks is None
+                if extrema is None
                 else _sample_to_time(
-                    peaks[index], sample_frequency=sample_frequency, time=time
+                    extrema[index], sample_frequency=sample_frequency, time=time
                 )
             ),
             start_index=int(start),
-            extremum_index=None if peaks is None else int(peaks[index]),
+            extremum_index=None if extrema is None else int(extrema[index]),
             end_index=int(end),
             source=source,
         )

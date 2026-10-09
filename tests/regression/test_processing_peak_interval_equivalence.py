@@ -222,7 +222,7 @@ def test_resurfemg_interval_and_linking_primitives_match_upstream():
 def test_sample_intervals_to_breath_events_sets_indices_and_times():
     events = sample_intervals_to_breath_events(
         start_indices=[10, 30],
-        peak_indices=[20, 40],
+        extremum_indices=[20, 40],
         end_indices=[25, 45],
         sample_frequency=10.0,
         modality="emg",
