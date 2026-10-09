@@ -2,7 +2,7 @@
 counterparts of the EIT/EMG loading path.
 
 Ventilator data used to reach a session only as a keyword argument to
-`postprocess_emg` or via the `emg.load_ventilator` pipeline step, which stashed
+`postprocess_emg` or via the `emg.load_ventilator` workflow step, which stashed
 a bare payload dict in `session.raw["vent"]`. It is now loaded like any other
 modality, and `session.raw["ventilator"]` holds a recording object exactly as
 `raw["eit"]`/`raw["emg"]` do.
@@ -180,7 +180,7 @@ class TestCuttingALoadedRecording:
         assert payload["array"].shape[1] == 90
 
 
-class TestPipelineStepDelegates:
+class TestWorkflowStepDelegates:
     def test_load_ventilator_step_populates_the_session_recording(self):
         import m3resp.workflows.steps  # noqa: F401 - registers built-in steps
         from m3resp.workflows.registry import get_step

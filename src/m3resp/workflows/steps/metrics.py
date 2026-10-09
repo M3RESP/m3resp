@@ -1,4 +1,4 @@
-"""Registered reducer/metric pipeline steps."""
+"""Registered reducer/metric workflow steps."""
 
 from __future__ import annotations
 

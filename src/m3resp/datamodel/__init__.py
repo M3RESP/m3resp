@@ -1,4 +1,4 @@
-"""Stage 2 data model: typed entities wrapping Stage 1 session/pipeline activity.
+"""Stage 2 data model: typed entities wrapping Stage 1 session/workflow activity.
 
 See ``plan/data_model_stage2.md`` and ``main_v0.3.tex`` (data model design doc)
 for the conceptual model this package implements.

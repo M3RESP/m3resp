@@ -38,7 +38,8 @@ m3resp Signal / BreathEvent / ParameterResult / QualityFlag
 | `detect_breaths(data, **kwargs)` | Returns `list[BreathEvent]` directly - already converted. |
 | `compute_tiv(sequence, **kwargs)` | Runs TIV computation on a loaded sequence. |
 | `to_signals(preprocessed)` | **Conversion boundary.** Turns a `preprocess()` result into `list[Signal]`. |
-| `to_parameters(preprocessed)` | **Conversion boundary.** Turns a `preprocess()` result into `list[ParameterResult]` (TIV, EELI, rate, ...). |
+| `to_parameters(preprocessed)` | **Conversion boundary.** Turns a `preprocess()` result into `list[ParameterResult]` (respiratory and heart rate). |
+| `to_interval_data(preprocessed)` | **Conversion boundary.** Turns the per-breath TIV, EELI and pixel TIV of a `preprocess()` result into `list[IntervalData]`, each value next to the breath it was computed over. |
 | `to_quality_flags(preprocessed)` | **Conversion boundary.** Turns a `preprocess()` result into `list[QualityFlag]`. |
 
 ## `ReSurfEMGAdapter` (`src/m3resp/adapters/resurfemg_adapter/`)
@@ -53,7 +54,7 @@ m3resp Signal / BreathEvent / ParameterResult / QualityFlag
 | `to_parameters(postprocessed)` | **Conversion boundary.** Turns a `postprocess()` result into `list[ParameterResult]`. |
 | `to_quality_flags(postprocessed)` | **Conversion boundary.** Turns a `postprocess()` result into `list[QualityFlag]` (native `resurfemg` clinical quality checks). |
 | `available_postprocessing()` / `postprocess(...)` / `run_postprocessing_function(category, function_name, ...)` | Discover and call `resurfemg.postprocessing` functions not covered by a named wrapper above, without leaving the adapter boundary. |
-| `detect_ecg_peaks`, `gate_ecg`, `wavelet_denoise_ecg`, `moving_baseline`, `slopesum_baseline`, `snr_pseudo`, `pocc_quality`, `interpeak_distance`, `percentage_under_baseline`, `detect_local_high_aub`, `detect_extreme_time_products`, `detect_non_consecutive_manoeuvres`, `evaluate_bell_curve_error`, `evaluate_event_timing`, `evaluate_respiratory_rates` | Individual ECG-removal, baseline, and clinical quality operations, exposed one-to-one for the declarative pipeline engine (`workflows/steps/emg/` and `workflows/steps/ventilator/`) and custom composition. |
+| `detect_ecg_peaks`, `gate_ecg`, `wavelet_denoise_ecg`, `moving_baseline`, `slopesum_baseline`, `snr_pseudo`, `pocc_quality`, `interpeak_distance`, `percentage_under_baseline`, `detect_local_high_aub`, `detect_extreme_time_products`, `detect_non_consecutive_manoeuvres`, `evaluate_bell_curve_error`, `evaluate_event_timing`, `evaluate_respiratory_rates` | Individual ECG-removal, baseline, and clinical quality operations, exposed one-to-one for the declarative workflow engine (`workflows/steps/emg/` and `workflows/steps/ventilator/`) and custom composition. |
 
 ## `VentilatorAdapter` (`src/m3resp/adapters/ventilator_adapter/`)
 
@@ -75,8 +76,7 @@ hands each file to the adapter that already knows the format.
 each test drives the adapter's public API on synthetic data and asserts the
 result is identical to calling the underlying `eitprocessing`/`resurfemg`
 function directly with the same arguments. If one of these starts failing,
-the adapter has started transforming data instead of just passing it
-through - check the diff against the adapter method involved before assuming
+the adapter output now differs from the upstream output - check the diff against the adapter method involved before assuming
 the test is wrong. See [testing.md](testing.md).
 
 ## Adding a new upstream algorithm
@@ -89,5 +89,5 @@ the test is wrong. See [testing.md](testing.md).
 3. Add a regression test asserting your wrapper's output matches calling the
    upstream function directly.
 4. Optionally register a step under `workflows/steps/` so the operation is also
-   reachable from a declarative YAML/JSON pipeline (see
-   [pipeline-contracts.md](pipeline-contracts.md)).
+   reachable from a declarative YAML/JSON workflow (see
+   [preset-contracts.md](preset-contracts.md)).

@@ -1,10 +1,10 @@
-# Smaller, introductory multimodal (EIT + EMG + ventilator) pipeline - a
+# Smaller, introductory multimodal (EIT + EMG + ventilator) workflow - a
 # shorter chain than the full example, easier to read end-to-end. For the
 # complete EIT+EMG+ventilator chain (every operation, `schema_version: 1`,
 # stable step ids), see
-# `examples/multimodal_full/multimodal-full.pipeline.yaml`.
+# `examples/multimodal_full/multimodal-full.workflow.yaml`.
 #
-# Run with: m3resp run examples/multimodal_example/multimodal.pipeline.yaml
+# Run with: m3resp run examples/multimodal_example/multimodal.workflow.yaml
 # from the repository root - path-typed `with:`/`inputs:` values (like the
 # *_file entries below) resolve relative to this spec file's own directory,
 # same as `outputs.dir`, not the process working directory.
@@ -92,7 +92,7 @@ steps:
   # The baseline comes first: a breath is a rise above the local quiet level,
   # and the detection threshold is taken from the envelope above that level.
   - uses: emg.slopesum_baseline
-    with: { window_seconds: 30.0, step_seconds: 1.0, percentile: 33.0 }
+    with: { window_seconds: 7.5, step_seconds: 0.2, percentile: 33.0 }
 
   # Default detection settings. On channel 1 this finds 13 of the 14 breath
   # efforts in the recording's muscle pressure (p_mus); the missed one is the
@@ -104,7 +104,7 @@ steps:
 
   - uses: ventilator.channels
     with:
-      pressure_channel: 0
+      airway_pressure_channel: 0
       flow_channel: 1
       volume_channel: 2
 

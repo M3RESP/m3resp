@@ -63,7 +63,7 @@ lung_template:
   min_template_value: 0.0
 
 medibus:
-  pressure_channel: 0
+  airway_pressure_channel: 0
   flow_channel: 1
   volume_channel: 2
   respiratory_rate_channel: 36

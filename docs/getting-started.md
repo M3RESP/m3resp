@@ -18,15 +18,15 @@ python -m pip install -e ".[all]"       # Both integrations
 ```
 
 The base installation remains useful without either optional integration. It
-provides the shared data model, pipeline specification and validation tools,
+provides the shared data model, workflow specification and validation tools,
 synchronization helpers, synthetic EIT generation, and export utilities.
 
-## Run a pipeline
+## Run a workflow
 
-Pipeline workflows are described in YAML or JSON:
+Workflows are described in YAML or JSON:
 
 ```bash
-m3resp run examples/multimodal_example/multimodal.pipeline.yaml
+m3resp run examples/multimodal_example/multimodal.workflow.yaml
 ```
 
 List the registered processing steps:
@@ -35,16 +35,16 @@ List the registered processing steps:
 m3resp steps
 ```
 
-The example pipeline references recording files that are not distributed with
+The example workflow references recording files that are not distributed with
 the source repository. Update its input paths before running it with local
-measurements. Paths inside a pipeline file are resolved relative to that file.
+measurements. Paths inside a workflow file are resolved relative to that file.
 
 ## Use the Python API
 
 ```python
 from m3resp import load_spec, run_spec
 
-spec = load_spec("path/to/pipeline.yaml")
+spec = load_spec("path/to/workflow.yaml")
 result = run_spec(spec)
 print(result.outputs)
 ```
@@ -60,5 +60,5 @@ session = M3Session()
 session.load_eit(os.path.join("path", "to", "recording.bin"), vendor="draeger")
 ```
 
-Continue with the [pipeline reference](pipelines.md), or choose an
+Continue with the [workflow reference](workflows.md), or choose an
 [end-to-end tutorial](tutorials/index.md).

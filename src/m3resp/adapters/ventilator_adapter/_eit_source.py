@@ -10,7 +10,7 @@ Ventilator data reaches m3resp from two independent sources, not one:
   exposes them as ``ContinuousData`` on the loaded ``Sequence``.
 
 This module covers the second source. It resolves the vendor's channel labels
-onto m3resp's canonical ``pressure``/``flow``/``volume`` names (plus the
+onto m3resp's canonical ``airway_pressure``/``flow``/``volume`` names (plus the
 esophageal/transpulmonary/gastric channels a Draeger pressure pod adds) and
 packs them into the same ``{"array", "metadata"}`` payload the EMG-file path
 produces, so everything downstream of loading - `split_channels`, the
@@ -28,7 +28,7 @@ from m3resp.core.exceptions import UnsupportedWorkflowError
 from ._channels import CHANNEL_CATEGORIES, ChannelSpec, resolve_channels
 
 #: The channels loaded unless the caller asks for others.
-DEFAULT_EIT_CHANNELS: tuple[str, ...] = ("pressure", "flow", "volume")
+DEFAULT_EIT_CHANNELS: tuple[str, ...] = ("airway_pressure", "flow", "volume")
 
 #: What `Signal.source` records for a channel read out of an EIT recording.
 EIT_ORIGIN = "eit"
@@ -85,25 +85,21 @@ def _sequence_channel_specs(
 
 
 def available_ventilator_channels(sequence: Any) -> dict[str, str]:
-    """Map each resolvable channel key to the upstream label carrying it.
+    """List ventilator channel keys and vendor labels in an EIT sequence.
 
-    Useful on its own to see which keys a given recording resolves to before
-    asking for them. A file carrying both the ventilator's airway pressure and
-    a pod's reports them as two keys (``pressure`` and ``pressure__pod``)
-    rather than dropping one.
+    Args:
+        sequence (Any): eitprocessing Sequence containing continuous_data.
 
-    A listed channel is not a measured channel. A Draeger recording exposes its
-    channels whether or not the corresponding sensor was connected: an
-    unmeasured one is written as a large negative sentinel standing in for NaN,
-    not omitted. So a pod pressure appears here even when no pod was attached.
-    This function reports what the recording carries and does not read the
-    values; reading a channel replaces the sentinel with NaN, and a channel
-    with nothing but sentinel in it is refused as unmeasured.
+    Returns:
+        dict[str, str]: Resolvable channel key to vendor label. Multiple airway
+            pressures have distinct keys, such as airway_pressure and
+            airway_pressure__pod. The list describes channel labels, including
+            channels whose sensors were disconnected. Reading their values through
+            the adapter converts missing-measurement sentinels to NaN and rejects
+            channels containing only missing measurements.
 
-    Which channels a ``*.bin`` holds cannot be read from the file itself. Two
-    Draeger layouts are supported (SW1.2 and SW1.3) and they can only be told apart
-    by inferring the frame size from the file size, or by reading an
-    accompanying ``*.asc`` file if one was saved.
+    Raises:
+        TypeError: If the sequence lacks continuous_data.
     """
 
     specs, _, _ = _sequence_channel_specs(sequence)

@@ -1,4 +1,4 @@
-"""Registered EMG signal-quality pipeline steps (SNR/AUB/time-product based)."""
+"""Registered EMG signal-quality workflow steps (SNR/AUB/time-product based)."""
 
 from __future__ import annotations
 
@@ -9,12 +9,11 @@ import numpy as np
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
+from m3resp.workflows.steps._per_breath import _per_breath_flags, _per_breath_results
 
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _per_breath_flags,
-    _per_breath_results,
     _record_step,
     _upstream_metadata,
 )
@@ -101,7 +100,7 @@ def snr_pseudo(
         "snr_pseudo",
         result,
         modality="emg",
-        peak_indices=peak_indices,
+        extremum_indices=peak_indices,
         method="resurfemg.snr_pseudo",
         fs=fs,
     )
@@ -113,7 +112,7 @@ def snr_pseudo(
             "snr_pseudo",
             result >= minimum_snr,
             modality="emg",
-            peak_indices=peak_indices,
+            extremum_indices=peak_indices,
             fs=fs,
             threshold=minimum_snr,
         )
@@ -264,7 +263,7 @@ def percentage_under_baseline(
         "percentage_under_baseline",
         percentages,
         modality="emg",
-        peak_indices=peak_indices,
+        extremum_indices=peak_indices,
         unit="%",
         method="resurfemg.percentage_under_baseline",
         fs=fs,
@@ -276,7 +275,7 @@ def percentage_under_baseline(
         "percentage_under_baseline",
         valid,
         modality="emg",
-        peak_indices=peak_indices,
+        extremum_indices=peak_indices,
         fs=fs,
         threshold=aub_threshold,
     )
@@ -398,7 +397,7 @@ def detect_local_high_aub(
         "detect_local_high_aub",
         result,
         modality="emg",
-        peak_indices=peak_indices,
+        extremum_indices=peak_indices,
         threshold=effective_threshold,
     )
     threshold_result = ParameterResult(
@@ -541,7 +540,7 @@ def detect_extreme_time_products(
         "detect_extreme_time_products",
         result,
         modality="emg",
-        peak_indices=peak_indices,
+        extremum_indices=peak_indices,
     )
     bounds_result = ParameterResult(
         name="detect_extreme_time_products_bounds",

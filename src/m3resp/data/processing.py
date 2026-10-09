@@ -1,13 +1,11 @@
-"""``ProcessingStep``/``ProcessingHistory``: what produced a result (plan_stage2.md Sec 13).
+"""Processing settings, input/output names and outcomes recorded per step.
 
-This is the runtime counterpart of ``ProvenanceRecord``
-(``m3resp.core.provenance``): where ``ProvenanceRecord`` is Stage 1's minimal
-"action + modality + parameters" log entry, ``ProcessingStep`` additionally
-names the context keys a step read and wrote, which is what lets the
-persisted ``ProcessingRun.input_file_ids`` (see
-``plan/stage2_consolidation.md``) be filled in precisely instead of guessed.
-``ProvenanceRecord`` is not replaced by this - both stay in use until pipeline
-steps are migrated to emit ``ProcessingStep`` (Milestone 2.3+).
+``ProcessingStep`` is used alongside ``ProvenanceRecord``
+(``m3resp.core.provenance``), Stage 1's "action + modality + parameters" log
+entry. ``ProcessingStep`` also names the inputs a step read and the outputs it
+wrote, so the saved ``ProcessingRun.input_file_ids`` can be filled in
+precisely. Both are in use until every workflow step records a
+``ProcessingStep``.
 """
 
 from __future__ import annotations
@@ -20,7 +18,20 @@ from typing import Any
 
 @dataclass
 class ProcessingStep:
-    """One step of a processing pipeline."""
+    """A record of one executed processing operation.
+
+    Attributes:
+        name: Operation name.
+        input_keys: Names of values read by the step.
+        output_keys: Names of values written by the step.
+        parameters: Settings used for the operation.
+        software: Software name; defaults to m3resp.
+        version: Optional software version.
+        optional_package_versions: Installed versions of declared optional
+            packages, or None when a version is unavailable.
+        timestamp: ISO 8601 UTC timestamp; defaults to the current time.
+        status: Outcome of the step, such as succeeded, failed or cancelled.
+    """
 
     name: str
     input_keys: list[str] = field(default_factory=list)
@@ -37,9 +48,7 @@ class ProcessingStep:
     #: operation name and parameters.
     optional_package_versions: dict[str, str | None] = field(default_factory=dict)
     timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
-    #: Stage 2 pipeline-structure Phase 5.1: the step's outcome
-    #: ("succeeded"/"failed"/"cancelled"), so a universal per-step log entry
-    #: also carries what happened, not just what was configured.
+    #: Step outcome, such as succeeded, failed or cancelled.
     status: str = "succeeded"
 
     def to_dict(self) -> dict[str, Any]:

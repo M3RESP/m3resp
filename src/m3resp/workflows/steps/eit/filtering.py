@@ -1,13 +1,13 @@
-"""Registered EIT filtering pipeline steps.
+"""Registered EIT filtering workflow steps.
 
 Rate detection lives in `rates.py`; the rates it produces are inputs to the
-MDN filter below, but estimating them is not a filtering operation.
+MDN filter below.
 """
 
 from __future__ import annotations
 
 import copy
-from typing import Any, Literal, cast
+from typing import Any, cast, get_args
 
 from m3resp.adapters.eitprocessing_adapter import (
     add_to_collection,
@@ -15,6 +15,7 @@ from m3resp.adapters.eitprocessing_adapter import (
 )
 from m3resp.core.session import M3Session
 from m3resp.data import Signal
+from m3resp.processing.filters import ButterworthFilterType
 from m3resp.workflows.registry import (
     StepArtifact,
     StepParameter,
@@ -187,7 +188,7 @@ def mdn_filter(
             name="mode",
             value_type="choice",
             default="lowpass",
-            choices=("lowpass", "highpass", "bandpass", "bandstop"),
+            choices=get_args(ButterworthFilterType),
             description=(
                 "Filter type. 'lowpass' uses 'lowpass_hz', 'highpass' uses "
                 "'highpass_hz', and 'bandpass'/'bandstop' use both as the "
@@ -248,12 +249,39 @@ def butterworth_filter(
     *,
     eit_sequence: Any,
     session: M3Session,
-    mode: Literal["lowpass", "highpass", "bandpass", "bandstop"] = "lowpass",
+    mode: ButterworthFilterType = "lowpass",
     lowpass_hz: float = 1.0,
     highpass_hz: float = 0.05,
     order: int = 4,
     label: str = "filtered",
 ) -> dict[str, Any]:
+    """Apply a zero-phase Butterworth filter to EIT pixel signals.
+
+    Args:
+        signal (Any): Upstream EIT data with pixel_impedance, sample_frequency
+            in Hz, and time along the first axis.
+        eit_sequence (Any): Sequence receiving the filtered EIT data.
+        session (M3Session): Session receiving the filtered Signal and provenance.
+        mode (ButterworthFilterType): "lowpass", "highpass", "bandpass", or
+            "bandstop". Defaults to "lowpass".
+        lowpass_hz (float): Upper cutoff in Hz. Defaults to 1.0; used for lowpass,
+            bandpass and bandstop modes.
+        highpass_hz (float): Lower cutoff in Hz. Defaults to 0.05; used for
+            highpass, bandpass and bandstop modes. Both band cutoffs must be
+            positive, ordered and below half the sampling rate.
+        order (int): Positive Butterworth order. Defaults to 4.
+        label (str): Label for the filtered copy. Defaults to "filtered".
+
+    Returns:
+        dict[str, Any]: filtered_eit upstream data, filter_captures diagnostics,
+            and filtered_eit_signal. Values retain their shape, units and time
+            coordinates. Pixels with only missing samples remain missing.
+
+    Raises:
+        ValueError: If a pixel has gaps among otherwise present samples, or the
+            filter parameters are invalid.
+    """
+
     from eitprocessing.filters.butterworth_filters import ButterworthFilter
 
     # One edge for the single-sided modes, both edges for the two-sided ones.

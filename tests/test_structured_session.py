@@ -19,7 +19,7 @@ import pytest
 from m3resp import M3Session
 from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
 from m3resp.core.exceptions import VariantAlreadyExistsError
-from m3resp.data import ParameterResult, QualityFlag, Signal
+from m3resp.data import BreathEvent, ParameterResult, QualityFlag, Signal
 
 
 def _fake_eit_preprocessed() -> dict[str, Any]:
@@ -194,7 +194,7 @@ def test_preprocess_eit_overwrite_true_replaces_existing_variant():
 def test_session_allow_overwrite_lets_repeated_preprocess_calls_through():
     """`allow_overwrite` lets notebook code opt in once instead of passing
     `overwrite=True` on every call, without weakening the default guard for
-    code that doesn't set it (e.g. once copied into a reusable pipeline)."""
+    code that doesn't set it (e.g. once copied into a reusable workflow)."""
 
     eit_adapter = EITProcessingAdapter()
     eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
@@ -248,3 +248,44 @@ def test_preprocess_emg_raises_on_duplicate_variant():
 
     with pytest.raises(VariantAlreadyExistsError):
         session.preprocess_emg(variant="mdn")
+
+
+def _fake_eit_preprocessed_with_tiv() -> dict[str, Any]:
+    preprocessed = _fake_eit_preprocessed()
+    preprocessed["breath_intervals"] = SimpleNamespace(
+        values=[
+            SimpleNamespace(start_time=0.0, middle_time=0.5, end_time=1.0),
+            SimpleNamespace(start_time=1.0, middle_time=1.5, end_time=2.0),
+        ]
+    )
+    preprocessed["continuous_tiv"] = SimpleNamespace(
+        values=[1.0, 2.0], time=[0.5, 1.5], unit="a.u.", label="continuous_tivs"
+    )
+    return preprocessed
+
+
+def test_breaths_detected_after_preprocessing_are_the_breaths_of_the_tiv_values():
+    eit_adapter = EITProcessingAdapter()
+    eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed_with_tiv()  # type: ignore[method-assign]
+    session = M3Session(eit_adapter=eit_adapter)
+    session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
+
+    session.preprocess_eit()
+    [tiv] = session.interval_data
+    breaths = session.detect_eit_breaths()
+
+    assert all(stored is used for stored, used in zip(breaths, tiv.intervals))
+
+
+def test_tiv_values_computed_after_breath_detection_use_the_stored_breaths():
+    eit_adapter = EITProcessingAdapter()
+    eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed_with_tiv()  # type: ignore[method-assign]
+    session = M3Session(eit_adapter=eit_adapter)
+    session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
+    stored = BreathEvent("eit", 0.0, 1.0, extremum_time=0.5)
+    session.add_events("eit_breaths", [stored])
+
+    session.preprocess_eit()
+    [tiv] = session.interval_data
+
+    assert tiv.intervals[0] is stored

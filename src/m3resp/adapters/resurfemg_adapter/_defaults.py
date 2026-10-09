@@ -6,8 +6,8 @@ import warnings
 from collections.abc import Sequence
 from typing import Any
 
-from m3resp.core.events import BreathEvent
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
+from m3resp.data.events import BreathEvent
 from m3resp.processing.filters import harmonic_notch_filter
 from m3resp.processing.intervals import (
     onoff_from_baseline_crossings,
@@ -58,49 +58,51 @@ class _DefaultsMixin:
         notch_quality_factor: float = 30.0,
         notch_before_bandpass: bool = False,
     ) -> dict[str, Any]:
-        """Run the Stage 1 EMG preprocessing pipeline through ReSurfEMG.
+        """Band-pass an EMG channel and optionally notch-filter and envelope it.
 
-        ``channel`` is the number of the EMG channel to analyse. When it is
-        left out, the channel is picked from the channel names: a channel
-        named ECG/EKG is never picked, and if more than one channel could be
-        the breathing muscle, an `UnresolvedChannelError` asks for
-        ``channel=`` rather than guessing.
+        The 20-500 Hz band-pass is the range used in respiratory-sEMG
+        literature. The ECG stays in the band-passed signal: a high-pass steep
+        enough to attenuate the QRS complex still leaves its higher-frequency
+        content in the pass band. ECG gating (``emg.ecg_gating``, run by the
+        ``"emg"`` preset) removes it from the filtered signal afterwards.
+        When compute_envelope is False, the envelope settings remain in the output
+        so gating can use them when calculating a new envelope.
 
-        The band-pass defaults to 20-500 Hz, the range respiratory-sEMG
-        literature specifies. The high-pass is deliberately *not* set low
-        enough to double as ECG suppression: removing ECG is the job of a
-        dedicated gating step (``emg.ecg_gating``, which the ``"emg"`` preset
-        runs by default), because a high-pass steep enough to attenuate the
-        QRS complex still leaves its higher-frequency content inside the pass
-        band.
+        RMS is the envelope used in the literature. ARV is an opt-in choice and
+        gives different values from RMS on real sEMG. The median envelope (median
+        of the absolute signal) ignores short spikes such as heartbeat leftovers.
+        The notch filter removes mains hum (e.g. 50 Hz) or the harmonic comb a
+        co-recorded EIT device adds at its frame rate and multiples of it.
 
-        ``envelope_method`` selects the envelope computed on the band-passed
-        signal - ``"rms"`` (default), ``"arv"`` or ``"median"`` (median of the
-        absolute signal, which ignores short spikes such as heartbeat
-        leftovers; used for the multidomain results). RMS is what the literature
-        specifies; ARV is kept as an explicit opt-in because it is not an RMS
-        equivalent on real bursty sEMG. The choice is recorded in the returned
-        ``"filter"`` mapping so a later envelope recomputation (e.g. after ECG
-        gating) reuses the same method rather than silently switching.
+        Args:
+            recording: Loaded dictionary with a channel-major array
+                (n_channels, n_samples) and metadata containing fs in Hz.
+            channel: Zero-based EMG channel index. When None, channel labels select
+                a breathing-muscle channel, excluding ECG/EKG labels.
+            high_pass_hz: Band-pass lower cutoff in Hz; defaults to 20 Hz.
+            low_pass_hz: Band-pass upper cutoff in Hz. None uses the smaller of
+                500 Hz and 95 percent of the Nyquist frequency.
+            envelope_window_seconds: Envelope window duration in seconds,
+                converted to at least one sample.
+            envelope_method: rms, arv or median absolute-signal envelope.
+            compute_envelope: Calculate the envelope when True.
+            notch_base_frequency: Optional fundamental notch frequency in Hz.
+            notch_max_frequency: Upper harmonic notch frequency in Hz; an unset
+                or zero value uses Nyquist.
+            notch_quality_factor: Quality factor for harmonic notch filters.
+            notch_before_bandpass: Apply the notch to raw data before band-pass
+                filtering when True; otherwise notch the band-passed data.
 
-        ``compute_envelope=False`` skips the envelope. Use it when ECG gating
-        follows: gating replaces the band-passed signal and recomputes the
-        envelope from the gated trace, so one computed here would be thrown
-        away. The window and method are still recorded, so the gating step
-        reuses the settings requested here.
+        Returns:
+            dict[str, Any]: Recording fields plus channel, fs, raw_channel,
+                filtered signal, optional envelope and filter settings. Signals have
+                one value per sample and retain the selected channel's units.
 
-        ``notch_base_frequency`` opts into harmonic notch filtering (e.g.
-        ``50.0`` for mains hum, or a co-recorded EIT device's frame rate, which
-        injects a harmonic comb into the sEMG whenever the EIT device is
-        running simultaneously). It is applied to the band-passed signal, after
-        ``emg_bandpass_butter`` and before the envelope is computed, so a
-        narrow high-pass alone (which only removes the fundamental) doesn't
-        leave higher harmonics inside the pass band untouched.
-
-        ``notch_before_bandpass=True`` applies the notch to the raw signal
-        first and band-passes afterwards (the order used for the multidomain
-        results). Both filters are zero-phase, so the two orders differ only
-        slightly, mostly near the start and end of the signal.
+        Raises:
+            OptionalDependencyError: If ReSurfEMG is unavailable.
+            TypeError: If recording lacks the required array or metadata.
+            UnresolvedChannelError: If channel labels do not select an unambiguous
+                EMG channel and channel is None.
         """
 
         try:
@@ -200,26 +202,36 @@ class _DefaultsMixin:
         merge_close_peaks_within_width: bool = False,
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
-        """Run ReSurfEMG EMG breath detection and return common rows.
+        """Detect EMG envelope peaks and return one breath row per peak.
 
-        A breath is a rise above the *local* quiet level, not above zero. The
-        detection threshold is taken from the envelope above ``baseline``, so
-        electrode drift is removed before the threshold is set. Without a
-        baseline the threshold is set against zero and the drift inflates it,
-        which drops genuine breaths wherever the quiet level has risen; that
-        case warns, as it does in ReSurfEMG. Compute the baseline first, with
-        ``emg.moving_baseline`` or ``emg.slopesum_baseline``.
+        The threshold is measured above the supplied baseline, which accounts
+        for changes in the quiet level. With baseline=None, detection uses zero
+        and emits a UserWarning; drift in the quiet level can then affect which
+        breaths are detected. Compute a baseline with ``emg.moving_baseline`` or
+        ``emg.slopesum_baseline``.
 
-        ReSurfEMG detects breath *peaks* only. Onset and offset are a separate
-        measurement, made either by baseline crossing or by slope
-        extrapolation - never as a window around the peak - and they can fail
-        to be found, which is why they carry their own validity flag. Run
-        ``emg.onoffpeak_baseline_crossing`` to obtain them.
+        Each row has ``start_time == end_time == extremum_time`` in seconds and
+        matching sample indices. ``metadata["boundaries_measured"]`` is False:
+        these rows locate peaks before onset and offset have been measured.
+        Use ``emg.onoffpeak_baseline_crossing`` to obtain those boundaries.
 
-        `BreathEvent` currently requires an interval, so each event is emitted
-        with ``start_time == end_time == peak_time``: a zero-length breath at
-        the peak, marked ``boundaries_measured: False``. That is a placeholder
-        for a measurement not yet made, not a claim about the breath's extent.
+        Args:
+            processed_emg: Processed EMG dictionary with ``envelope``, ``fs``
+                (Hz) and ``channel``. Baseline values share the envelope's units.
+            min_breath_width_seconds: Minimum detected peak width in seconds,
+                converted to at least one sample.
+            baseline: Local quiet level, one value per envelope sample, or None.
+            merge_close_peaks_within_width: Keep the higher peak when peaks lie
+                closer than the minimum breath width.
+            **kwargs: Additional options passed to `detect_emg_breath_peaks`.
+
+        Returns:
+            list[dict[str, Any]]: Breath rows with times, sample indices, sampling
+                rate, channel, detection source and boundary status.
+
+        Raises:
+            UnsupportedWorkflowError: If processed_emg is not a dictionary with
+                an envelope.
         """
 
         if not isinstance(processed_emg, dict) or "envelope" not in processed_emg:
@@ -264,9 +276,9 @@ class _DefaultsMixin:
                 {
                     "start_time": peak_time,
                     "end_time": peak_time,
-                    "peak_time": peak_time,
+                    "extremum_time": peak_time,
                     "start_index": int(peak_index),
-                    "peak_index": int(peak_index),
+                    "extremum_index": int(peak_index),
                     "end_index": int(peak_index),
                     "sample_frequency": fs,
                     "signal_name": processed_emg["channel"],
@@ -283,19 +295,66 @@ class _DefaultsMixin:
         events: Sequence[BreathEvent] | None = None,
         *,
         ventilator: Any | None = None,
-        ventilator_pressure_channel: int = 0,
-        ventilator_flow_channel: int = 1,
-        ventilator_volume_channel: int = 2,
+        ventilator_airway_pressure_channel: int | None = None,
+        ventilator_flow_channel: int | None = None,
+        ventilator_volume_channel: int | None = None,
         ventilator_fs: float | None = None,
         ventilator_breath_width_seconds: float = 0.5,
         peep: float | None = None,
-        baseline_window_seconds: float = 30.0,
-        baseline_step_seconds: float = 1.0,
+        baseline_window_seconds: float = 7.5,
+        baseline_step_seconds: float = 0.2,
         baseline_percentile: float = 33.0,
         slope_window_seconds: float = 0.5,
         aub_window_seconds: float = 5.0,
         selected_functions: dict[str, dict[str, bool]] | None = None,
     ) -> dict[str, Any]:
+        """Compute selected EMG breath features and quality measurements.
+
+        Uses breath extrema from events and the envelope's own sampling rate. Results
+        are grouped under baseline, event_detection, features and quality_assessment.
+        Computations lacking required inputs are listed in skipped with a reason.
+        Missing upstream postprocessing support returns an unavailable result.
+
+        Args:
+            processed_emg (Any): Preprocessing dict with a one-dimensional envelope
+                and fs in Hz. Features retain the envelope's amplitude units.
+            events (Sequence[BreathEvent] | None): Detected EMG breaths. Extrema in
+                seconds are converted to EMG sample indices.
+            ventilator (Any | None): Optional recording dict or array of channels by
+                samples. Channel resolution follows `ventilator_signals`.
+            ventilator_airway_pressure_channel (int | None): Explicit zero-based
+                airway-pressure index, overriding label resolution.
+            ventilator_flow_channel (int | None): Explicit zero-based flow index.
+            ventilator_volume_channel (int | None): Explicit zero-based volume index.
+            ventilator_fs (float | None): Ventilator sampling rate in Hz, overriding
+                the recording metadata.
+            ventilator_breath_width_seconds (float): Minimum volume-peak width in
+                seconds for ventilator breath detection. Defaults to 0.5.
+            peep (float | None): PEEP in the airway-pressure channel's units. None
+                estimates it from pressure at end-expiratory volume minima.
+            baseline_window_seconds (float): Moving-baseline window in seconds.
+                Defaults to 30.0.
+            baseline_step_seconds (float): Baseline calculation step in seconds.
+                Defaults to 1.0.
+            baseline_percentile (float): Baseline percentile from 0 to 100.
+                Defaults to 33.0.
+            slope_window_seconds (float): Window in seconds for estimating breath
+                boundaries from slopes. Defaults to 0.5.
+            aub_window_seconds (float): Window in seconds for the area-under-baseline
+                calculation. Defaults to 5.0.
+            selected_functions (dict[str, dict[str, bool]] | None): Computations to
+                enable within each group. None uses the adapter's default selection.
+
+        Returns:
+            dict[str, Any]: Available computations, computed values, skip reasons,
+                EMG peak_indices and settings.
+
+        Raises:
+            UnsupportedWorkflowError: If processed_emg lacks an envelope dictionary.
+            TypeError: If supplied ventilator data lacks an array or sampling rate.
+            UnresolvedChannelError: If a requested ventilator channel cannot be found.
+        """
+
         try:
             import numpy as np
         except ImportError as exc:
@@ -373,7 +432,7 @@ class _DefaultsMixin:
 
         vent_signals = ventilator_signals(
             ventilator,
-            pressure_channel=ventilator_pressure_channel,
+            airway_pressure_channel=ventilator_airway_pressure_channel,
             flow_channel=ventilator_flow_channel,
             volume_channel=ventilator_volume_channel,
             fs=ventilator_fs,
@@ -382,7 +441,7 @@ class _DefaultsMixin:
         ventilator_breath_indices = np.asarray([], dtype=int)
         if vent_signals is not None:
             v_vent = vent_signals["volume"]
-            p_vent = vent_signals["pressure"]
+            p_vent = vent_signals["airway_pressure"]
             vent_fs = float(vent_signals["fs"])
             vent_width_samples = max(1, int(ventilator_breath_width_seconds * vent_fs))
             if enabled(("event_detection", "detect_ventilator_breath")):
@@ -612,14 +671,9 @@ class _DefaultsMixin:
                     "Needs ventilator breath timing."
                 )
 
-            # Deliberately independent of 'evaluate_event_timing' above: its
-            # only real prerequisite is that 'ventilator_respiratory_rate' was
-            # computed (near the top of this function), which does not
-            # require 'evaluate_event_timing' to be selected. Nesting this
-            # under that block previously meant selecting
-            # 'evaluate_respiratory_rates' alone (without also selecting
-            # 'evaluate_event_timing') silently produced nothing - no result,
-            # no skip reason.
+            # Runs whenever 'ventilator_respiratory_rate' was computed (near
+            # the top of this function), whether or not
+            # 'evaluate_event_timing' is selected.
             if (
                 enabled(("quality_assessment", "evaluate_respiratory_rates"))
                 and "ventilator_respiratory_rate" in computed["quality_assessment"]

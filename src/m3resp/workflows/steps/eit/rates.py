@@ -1,4 +1,4 @@
-"""Registered EIT rate-detection pipeline steps."""
+"""Registered EIT rate-detection workflow steps."""
 
 from __future__ import annotations
 

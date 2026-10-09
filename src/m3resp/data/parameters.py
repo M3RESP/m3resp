@@ -1,7 +1,7 @@
 """``ParameterResult``: a computed respiratory metric (plan_stage2.md Sec 11).
 
 Covers both scalar metrics (EIT TIV, EMG amplitude, respiratory rate) and
-array-valued ones (regional ventilation maps), computed by a pipeline step
+array-valued ones (regional ventilation maps), computed by a workflow step
 from one or more source signals/breaths.
 """
 
@@ -32,7 +32,7 @@ class ParameterResult:
     - a time period, e.g. during an intervention or one 30-second window
       (``start_time`` and ``end_time`` both set) - these are single values on
       one instance, not a list, so repeated windows are one instance each;
-    - a specific ``m3resp.core.events.Event`` (``event_id``), e.g. a
+    - a specific ``m3resp.data.events.Event`` (``event_id``), e.g. a
       blood-gas draw used for a P/F ratio, or a labeled intervention like a
       Baydur maneuver;
     - the whole signal, when none of the above are set.

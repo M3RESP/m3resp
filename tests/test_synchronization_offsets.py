@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import pytest
 
-from m3resp.core.events import BreathEvent
 from m3resp.core.session import M3Session
+from m3resp.data.events import BreathEvent
 from m3resp.modalities.names import normalize_modality
 from m3resp.synchronization.alignment import (
     breath_reference_modality,

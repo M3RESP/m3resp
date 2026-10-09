@@ -1,4 +1,4 @@
-"""Options added so a pipeline can reproduce the multidomain results chain:
+"""Options added so a workflow can reproduce the multidomain results chain:
 median envelope, merging close peaks, notch before band-pass, and the wavelet
 step keeping the preprocessing envelope method."""
 

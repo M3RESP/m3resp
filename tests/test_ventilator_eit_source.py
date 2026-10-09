@@ -76,7 +76,7 @@ def _timpel() -> _Sequence:
 class TestChannelResolution:
     def test_resolves_draeger_medibus_names(self):
         assert available_ventilator_channels(_draeger()) == {
-            "pressure": "airway pressure",
+            "airway_pressure": "airway pressure",
             "flow": "flow",
             "volume": "volume",
         }
@@ -85,7 +85,7 @@ class TestChannelResolution:
         # Timpel suffixes every label with `_(timpel)`; the same three
         # quantities must land on the same canonical names as Draeger's.
         assert available_ventilator_channels(_timpel()) == {
-            "pressure": "airway_pressure_(timpel)",
+            "airway_pressure": "airway_pressure_(timpel)",
             "flow": "flow_(timpel)",
             "volume": "volume_(timpel)",
         }
@@ -98,7 +98,7 @@ class TestChannelResolution:
 
     def test_resolves_the_pressure_pod_channels(self):
         # A Draeger pressure pod records five distinct pressures. Each must
-        # stay separable rather than collapsing onto "pressure".
+        # stay separable rather than collapsing onto "airway_pressure".
         sequence = _draeger(
             **{
                 "esophageal pressure (pod)": _ContinuousData(
@@ -120,7 +120,7 @@ class TestChannelResolution:
         )
         # `(pod)` marks a separate transducer, so it is not stripped the way a
         # vendor tag is: airway pressure stays the un-podded channel.
-        assert available["pressure"] == "airway pressure"
+        assert available["airway_pressure"] == "airway pressure"
 
     def test_a_recording_without_ventilator_data_resolves_nothing(self):
         sequence = _Sequence(
@@ -166,7 +166,7 @@ class TestPayload:
         )
         metadata = ventilator_payload_from_sequence(sequence)["metadata"]
         assert "esophageal_pressure" in metadata["available_channels"]
-        assert metadata["channels"] == ["pressure", "flow", "volume"]
+        assert metadata["channels"] == ["airway_pressure", "flow", "volume"]
 
     def test_extra_channels_can_be_requested(self):
         sequence = _draeger(
@@ -177,7 +177,8 @@ class TestPayload:
             }
         )
         payload = ventilator_payload_from_sequence(
-            sequence, channels=("pressure", "flow", "volume", "esophageal_pressure")
+            sequence,
+            channels=("airway_pressure", "flow", "volume", "esophageal_pressure"),
         )
         assert payload["array"].shape == (4, N)
         assert np.allclose(payload["array"][3], _wave(8.0))
@@ -198,7 +199,11 @@ class TestPayload:
         sequence = _draeger()
         sequence.continuous_data["flow"].values[:10] = np.nan
         metadata = ventilator_payload_from_sequence(sequence)["metadata"]
-        assert metadata["nan_samples"] == {"pressure": 0, "flow": 10, "volume": 0}
+        assert metadata["nan_samples"] == {
+            "airway_pressure": 0,
+            "flow": 10,
+            "volume": 0,
+        }
 
 
 class TestPayloadErrors:
@@ -237,7 +242,7 @@ class TestPayloadFeedsTheExistingVentilatorPath:
         bundle = split_channels(ventilator_payload_from_sequence(_draeger()))
         assert bundle["fs"] == FS
         assert bundle["units"] == {
-            "pressure": "mbar",
+            "airway_pressure": "mbar",
             "flow": "L/min",
             "volume": "mL",
         }
@@ -248,7 +253,7 @@ class TestPayloadFeedsTheExistingVentilatorPath:
             ventilator_payload_from_sequence(_draeger()),
             lowpass_hz=SUGGESTED_LOWPASS_HZ,
         )
-        assert processed["pressure"].shape == (N,)
+        assert processed["airway_pressure"].shape == (N,)
         # The requested cutoff is clamped below Nyquist for this 20 Hz
         # recording, so check that a filter ran rather than the exact value.
         assert processed["filter"]["lowpass_hz"] is not None
@@ -323,10 +328,10 @@ class TestLoadDispatch:
         adapter = VentilatorAdapter(eit_loader=lambda path, **kwargs: sequence)
         payload = adapter.load(
             "recording.bin",
-            ventilator_channels=("pressure", "flow", "esophageal_pressure"),
+            ventilator_channels=("airway_pressure", "flow", "esophageal_pressure"),
         )
         assert payload["metadata"]["channels"] == [
-            "pressure",
+            "airway_pressure",
             "flow",
             "esophageal_pressure",
         ]
@@ -364,7 +369,7 @@ class TestSessionLoadsVentilatorFromBin:
 
         assert processed["volume"].shape == (N,)
         assert {signal.channel for signal in session.signals} == {
-            "pressure",
+            "airway_pressure",
             "flow",
             "volume",
         }

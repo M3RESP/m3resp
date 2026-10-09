@@ -10,11 +10,11 @@ from typing import Any
 
 import pytest
 
-from m3resp.core.events import Event
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult, Signal
+from m3resp.data.events import Event
 from m3resp.processing.windows import rolling_envelope
-from m3resp.workflows import run_pipeline
+from m3resp.workflows import run_workflow
 from m3resp.workflows.steps.emg import (
     ecg_detect_peaks,
     ecg_gating,
@@ -52,7 +52,7 @@ def _fake_processed_emg(
 
 class TestEcgDetectPeaks:
     def test_writes_events_and_count_result_from_real_data(self):
-        result = run_pipeline(
+        result = run_workflow(
             {
                 "name": "ecg-detect",
                 "inputs": {"emg_file": str(EMG_PATH)},
@@ -79,7 +79,7 @@ class TestEcgDetectPeaks:
 
     def test_ecg_channel_overrides_source_and_reads_the_raw_recording(self):
         session = M3Session()
-        result = run_pipeline(
+        result = run_workflow(
             {
                 "name": "ecg-detect-channel",
                 "inputs": {"emg_file": str(EMG_PATH)},

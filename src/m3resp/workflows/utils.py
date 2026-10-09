@@ -1,4 +1,4 @@
-"""Utility helpers used by pipeline steps and the engine."""
+"""Utility helpers used by workflow steps and the engine."""
 
 from __future__ import annotations
 
@@ -22,21 +22,17 @@ from m3resp.processing.slicing import (  # noqa: F401
 def resolve_output_dir(
     base_dir: str | Path, *, timestamped: bool, timestamp: str | None = None
 ) -> Path:
-    """Resolve ``outputs.dir`` into a concrete directory, honoring ``timestamped``.
+    """Return the shared output path, optionally with a timestamp subdirectory.
 
-    This is the one place a "run's output directory" should be computed.
-    ``run_spec`` calls it once per run and seeds the result into the pipeline
-    context under the ``_resolved_output_dir`` key (with the raw stamp under
-    ``_run_timestamp``), so every export step in that run - built-in or
-    custom - lands in the same folder instead of each one minting its own
-    ``datetime.now()`` a few steps apart. A custom export step can opt into
-    this by reading ``_resolved_output_dir`` from context, e.g.::
+    Args:
+        base_dir: Base output path.
+        timestamped: Append a timestamp subdirectory when True.
+        timestamp: Subdirectory name; an unset or empty value uses the current
+            local time in YYYYMMDD_HHMMSS format when timestamped is True.
 
-        @register_step(
-            "export.my_thing",
-            reads={"output_dir": "_resolved_output_dir", ...},
-            ...,
-        )
+    Returns:
+        Path: Base path with the optional timestamp appended. run_spec supplies
+            this path as ``_resolved_output_dir`` for export steps to share.
     """
 
     output_dir = Path(base_dir)

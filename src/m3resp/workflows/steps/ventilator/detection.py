@@ -1,4 +1,4 @@
-"""Registered ventilator breath and Pocc event-detection pipeline steps."""
+"""Registered ventilator breath and Pocc event-detection workflow steps."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.core.events import BreathEvent
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult
+from m3resp.data.events import BreathEvent
 from m3resp.processing.intervals import (
     onoff_from_baseline_crossings,
 )
@@ -24,12 +24,12 @@ from m3resp.processing.peaks import (
 )
 from m3resp.processing.ventilator import estimate_peep
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
+from m3resp.workflows.steps._per_breath import _per_breath_flags, _per_breath_results
 
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _per_breath_flags,
-    _per_breath_results,
+    _airway_pressure,
     _record_step,
     _upstream_metadata,
 )
@@ -141,7 +141,7 @@ def detect_breaths(
         StepArtifact(
             name="ventilator_signals",
             artifact_type="ventilator_channel_bundle",
-            description="Ventilator channel bundle from 'ventilator.channels' with a 'pressure' channel.",
+            description="Ventilator channel bundle from 'ventilator.channels' with an 'airway_pressure' channel.",
         ),
     ),
     parameters=(
@@ -184,12 +184,31 @@ def detect_pressure_breaths(
     min_depth: float = 0.15,
     min_interval_seconds: float = 2.0,
 ) -> dict[str, Any]:
-    pressure = ventilator_signals.get("pressure")
-    if pressure is None:
-        raise MissingModalityDataError(
-            "ventilator.detect_pressure_breaths needs a 'pressure' channel; ask "
-            "ventilator.channels for it (e.g. pressure_channel=0)."
-        )
+    """Find spontaneous breaths as dips in airway pressure.
+
+    Args:
+        ventilator_signals (Any): Channel bundle containing the main airway
+            pressure and fs in Hz. Qualified primary channel keys are supported.
+        smoothing_seconds (float): Moving-average window in seconds. Defaults
+            to 0.2.
+        min_depth (float): Minimum dip prominence in the pressure's recorded unit.
+            Defaults to 0.15.
+        min_interval_seconds (float): Minimum separation between detections in
+            seconds. Defaults to 2.0.
+
+    Returns:
+        dict[str, Any]: ventilator_breath_indices, an integer array of pressure
+            minima on the smoothed signal. Missing samples are bridged for
+            smoothing with a warning; detections on missing samples are excluded.
+
+    Raises:
+        MissingModalityDataError: If airway pressure is unavailable.
+        ValueError: If every pressure sample is missing.
+    """
+
+    pressure, _ = _airway_pressure(
+        ventilator_signals, "ventilator.detect_pressure_breaths"
+    )
     indices = detect_pressure_dip_breaths(
         pressure,
         sample_frequency=float(ventilator_signals["fs"]),
@@ -223,7 +242,7 @@ def detect_pressure_breaths(
             required=False,
             default=None,
             unit="cmH2O",
-            description="PEEP baseline. Defaults to the median pressure when unset.",
+            description="PEEP baseline. When unset, PEEP is estimated from the airway pressure at the end of each breath out, found from the volume channel (Warnaar et al. 2024), so the volume channel is then needed.",
         ),
     ),
     output_artifacts=(
@@ -237,9 +256,28 @@ def detect_pressure_breaths(
 def find_occluded_breaths(
     ventilator_signals: Any, *, peep: float | None = None
 ) -> dict[str, Any]:
+    """Detect occluded inspiratory efforts from airway-pressure dips.
+
+    Args:
+        ventilator_signals (Any): Channel bundle containing airway pressure and
+            fs in Hz. Volume is also required when peep is None.
+        peep (float | None): PEEP in the pressure's recorded unit. None estimates
+            PEEP from airway pressure at end-expiratory volume minima.
+
+    Returns:
+        dict[str, Any]: pocc_indices, an integer array with one pressure-minimum
+            sample index per detected occlusion manoeuvre.
+
+    Raises:
+        MissingModalityDataError: If airway pressure is missing, or volume is
+            missing when PEEP must be estimated.
+    """
+
     import numpy as np
 
-    pressure = ventilator_signals["pressure"]
+    pressure, _ = _airway_pressure(
+        ventilator_signals, "ventilator.find_occluded_breaths"
+    )
     fs = float(ventilator_signals["fs"])
     peep = _resolve_peep(ventilator_signals, pressure, peep)
     indices = detect_occluded_breath_peaks(
@@ -348,7 +386,48 @@ def pocc_intervals(
     baseline_step_seconds: float = 0.2,
     baseline_percentile: float = 33.0,
 ) -> dict[str, Any]:
-    pressure = np.asarray(ventilator_signals["pressure"], dtype=float)
+    """Find the start and end of each occluded breath from airway-pressure crossings.
+
+    Boundaries are found from moving-baseline crossings around each pressure
+    minimum, using the signal edges when crossings are missing. Breaths are stored
+    in ``session.events['pocc_breaths']`` with ``metadata['event_type']`` set
+    to ``'pocc'``. Their times are in seconds from the first pressure sample,
+    and their extremum is the pressure minimum. Every detected minimum is
+    kept, with validity flags for its boundaries.
+    The processing settings are recorded in the session's history.
+
+    Args:
+        session (M3Session): Session whose EMG adapter computes the pressure
+            baseline and which stores the occluded breaths and processing
+            history.
+        ventilator_signals (Any): Channel bundle containing the airway pressure
+            and its sampling rate ``fs`` in Hz. Baseline values use the
+            pressure unit.
+        pocc_indices (Any): One-dimensional sample indices of the occlusion
+            pressure minima, in the pressure signal.
+        baseline_window_seconds (float): Moving-baseline window length in
+            seconds. Defaults to 7.5.
+        baseline_step_seconds (float): Step between baseline windows in
+            seconds. Defaults to 0.2.
+        baseline_percentile (float): Pressure percentile within each window,
+            from 0 to 100. Defaults to 33.0.
+
+    Returns:
+        dict[str, Any]: ``pocc_start_indices`` and ``pocc_end_indices`` in
+            samples, ``pocc_interval_validity`` as a boolean array, and
+            ``pocc_events`` as ``BreathEvent`` objects, all in
+            ``pocc_indices`` order. ``pressure_baseline`` has one value per
+            pressure sample.
+
+    Raises:
+        MissingModalityDataError: If airway pressure is unavailable.
+        OptionalDependencyError: If ReSurfEMG is unavailable for baseline
+            estimation.
+        ValueError: If baseline inputs are invalid or a breath ends before
+            its start.
+    """
+
+    pressure, _ = _airway_pressure(ventilator_signals, "ventilator.pocc_intervals")
     fs = float(ventilator_signals["fs"])
     peaks = np.asarray(pocc_indices, dtype=int)
 
@@ -367,6 +446,8 @@ def pocc_intervals(
         pressure, baseline, peaks
     )
 
+    # An occluded breath is an effort to breathe in against a closed airway.
+    # Its turning point is the deepest pressure, at `extremum_index`.
     events: list[BreathEvent] = []
     for index, peak in enumerate(peaks):
         events.append(
@@ -374,12 +455,12 @@ def pocc_intervals(
                 modality="ventilator",
                 start_time=float(starts[index]) / fs,
                 end_time=float(ends[index]) / fs,
-                peak_time=float(peak) / fs,
+                extremum_time=float(peak) / fs,
                 start_index=int(starts[index]),
-                peak_index=int(peak),
+                extremum_index=int(peak),
                 end_index=int(ends[index]),
                 sample_frequency=fs,
-                signal_name="pressure",
+                signal_name="airway_pressure",
                 source="m3resp.processing.intervals.onoff_from_baseline_crossings",
                 metadata={
                     "event_type": "pocc",
@@ -502,7 +583,42 @@ def pocc_time_product(
     include_aub: bool = True,
     aub_window_seconds: float = 5.0,
 ) -> dict[str, Any]:
-    pressure = np.asarray(ventilator_signals["pressure"], dtype=float)
+    """Compute the pressure-time product for each occlusion window.
+
+    Takes the absolute integral of airway pressure minus the supplied baseline,
+    including both boundary samples, and optionally adds the area under that
+    baseline, following ReSurfEMG's PTPocc calculation.
+    Every supplied window is evaluated, including windows marked invalid by
+    pocc_intervals. Review pocc_interval_validity when selecting results.
+
+    Args:
+        session (M3Session): Session receiving step provenance.
+        ventilator_signals (Any): Channel bundle containing airway pressure and
+            fs in Hz.
+        pocc_start_indices (Any): Start sample indices, one per manoeuvre.
+        pocc_end_indices (Any): End sample indices in the same order.
+        pressure_baseline (Any): Baseline array aligned with pressure samples,
+            in the same pressure unit.
+        pocc_indices (Any): Pressure-minimum sample indices, required when
+            include_aub is True.
+        include_aub (bool): Add the area under the baseline. Defaults to True.
+        aub_window_seconds (float): Half-width in seconds around each pressure
+            minimum for finding the highest baseline reference. Defaults to 5.0.
+
+    Returns:
+        dict[str, Any]: pocc_time_products array and its array-valued
+            pocc_time_product_result. The result unit is the recorded pressure
+            unit times seconds, such as "cmH2O*s". The returned ParameterResult
+            includes window indices and the area-under-baseline contribution.
+
+    Raises:
+        MissingModalityDataError: If airway pressure is unavailable.
+        ValueError: If include_aub is True and pocc_indices is missing.
+    """
+
+    pressure, pressure_unit = _airway_pressure(
+        ventilator_signals, "ventilator.pocc_time_product"
+    )
     fs = float(ventilator_signals["fs"])
     baseline = np.asarray(pressure_baseline, dtype=float)
 
@@ -532,7 +648,6 @@ def pocc_time_product(
         )
         time_products = time_products + aub
 
-    pressure_unit = ventilator_signals.get("unit") or "cmH2O"
     parameters = {
         "include_aub": include_aub,
         "aub_window_seconds": aub_window_seconds,
@@ -619,13 +734,13 @@ _POCC_CRITERIA_ROW_NAMES = ("dp_up_10", "dp_up_90", "dp_up_90_norm")
             name="dp_up_10_threshold",
             value_type="number",
             default=0.0,
-            description="Minimum acceptable dP at 10% of the upslope.",
+            description="Minimum acceptable dP at 10% of the upslope, in the pressure's own unit (the default is for cmH2O).",
         ),
         StepParameter(
             name="dp_up_90_threshold",
             value_type="number",
             default=2.0,
-            description="Minimum acceptable dP at 90% of the upslope.",
+            description="Minimum acceptable dP at 90% of the upslope, in the pressure's own unit (the default is for cmH2O).",
         ),
         StepParameter(
             name="dp_up_90_norm_threshold",
@@ -670,8 +785,40 @@ def pocc_quality(
     dp_up_90_threshold: float = 2.0,
     dp_up_90_norm_threshold: float = 0.8,
 ) -> dict[str, Any]:
-    pressure = np.asarray(ventilator_signals["pressure"], dtype=float)
-    pressure_unit = ventilator_signals.get("unit") or "cmH2O"
+    """Assess occlusion quality from airway-pressure recovery after each dip.
+
+    Uses the ReSurfEMG implementation of the Warnaar et al. (2024) criteria.
+    Adds criterion results, quality flags and step provenance to the session.
+
+    Args:
+        session (M3Session): Supplies the quality calculation and stores results.
+        ventilator_signals (Any): Channel bundle with the main airway pressure
+            and its recorded unit.
+        pocc_indices (Any): Pressure-minimum sample indices, one per manoeuvre.
+        pocc_end_indices (Any): Corresponding manoeuvre end sample indices.
+        pocc_time_products (Any): Corresponding pressure-time products.
+        dp_up_10_threshold (float): Threshold at 10% of the pressure upslope, in
+            the pressure's unit. Defaults to 0.0.
+        dp_up_90_threshold (float): Threshold at 90% of the pressure upslope, in
+            the pressure's unit. Defaults to 2.0, chosen for cmH2O recordings.
+        dp_up_90_norm_threshold (float): Normalized upslope threshold.
+            Defaults to 0.8. Set pressure thresholds for the recorded unit.
+
+    Returns:
+        dict[str, Any]: pocc_quality pass/fail array, pocc_quality_criteria matrix
+            shaped (3, manoeuvres), pocc_quality_results with three measurements
+            per manoeuvre, and pocc_quality_flags with one flag per manoeuvre.
+            Each result and flag records its pressure-minimum sample index.
+
+    Raises:
+        MissingModalityDataError: If airway pressure is unavailable.
+        ValueError: If per-breath validity or criterion values differ in length
+            from pocc_indices.
+    """
+
+    pressure, pressure_unit = _airway_pressure(
+        ventilator_signals, "ventilator.pocc_quality"
+    )
 
     valid, criteria = session.emg_adapter.pocc_quality(
         pressure,
@@ -693,7 +840,7 @@ def pocc_quality(
         valid,
         modality="ventilator",
         category="airway_pressure",
-        peak_indices=pocc_indices,
+        extremum_indices=pocc_indices,
         extra_metadata={"pressure_sample_index_end": None},
     )
     # Link each flag to its Pocc end index too, not just its peak.
@@ -708,7 +855,7 @@ def pocc_quality(
                 row_values,
                 modality="ventilator",
                 category="airway_pressure",
-                peak_indices=pocc_indices,
+                extremum_indices=pocc_indices,
                 unit=pressure_unit,
                 method="resurfemg.pocc_quality",
                 extra_metadata_per_item=[

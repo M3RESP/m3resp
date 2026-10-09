@@ -9,7 +9,8 @@ from typing import Any
 import numpy as np
 
 from m3resp.core.exceptions import OptionalDependencyError
-from m3resp.data import ParameterResult, Signal
+from m3resp.data import IntervalData, PixelMap, Signal
+from m3resp.data.events import BreathEvent, coerce_breath_events
 from m3resp.data.signals import Modality, ProcessingState
 
 
@@ -145,11 +146,18 @@ def filter_pixels_preserving_gaps(
 
 
 def _breath_intervals_to_dicts(breath_intervals: Any) -> list[dict[str, Any]]:
+    """Return one row per EIT breath, preserving times in seconds.
+
+    Read ``breath_intervals.values`` in order and map each breath's
+    ``middle_time`` to ``extremum_time``, using None when it is unavailable.
+    Rows also carry the source ``"eitprocessing.BreathDetection"``.
+    """
+
     return [
         {
             "start_time": breath.start_time,
             "end_time": breath.end_time,
-            "peak_time": getattr(breath, "middle_time", None),
+            "extremum_time": getattr(breath, "middle_time", None),
             "source": "eitprocessing.BreathDetection",
         }
         for breath in breath_intervals.values
@@ -214,44 +222,87 @@ def continuous_data_to_signal(
     )
 
 
-def _sparse_data_to_parameters(
-    obj: Any, *, modality: str, method: str
-) -> list[ParameterResult]:
-    """Convert an `eitprocessing.SparseData`-shaped object (one value per
-    breath) into one `ParameterResult` per non-NaN sample.
+def breath_intervals_to_breath_events(breath_intervals: Any) -> list[BreathEvent]:
+    """Convert eitprocessing's detected breaths to m3resp ``BreathEvent`` objects.
 
-    Per-breath timing is usually a scalar, but pixel-resolved results (e.g.
-    pixel TIV) carry a full array (row, column, ...) per breath. Both shapes
-    are preserved; the array case is never truncated to a single float.
+    Args:
+        breath_intervals: eitprocessing ``IntervalData`` containing breaths,
+            each with start, middle and end times in seconds.
+
+    Returns:
+        list[BreathEvent]: EIT breaths in input order. The middle time becomes
+            ``extremum_time`` and timing retains the input's time axis.
     """
 
-    values = np.asarray(obj.values)
-    times = np.asarray(obj.time, dtype=object)
-    name = getattr(obj, "name", None) or getattr(obj, "label", None) or "parameter"
-    unit = getattr(obj, "unit", None)
+    return coerce_breath_events(
+        _breath_intervals_to_dicts(breath_intervals),
+        modality="eit",
+        source="eitprocessing.BreathDetection",
+    )
 
-    results: list[ParameterResult] = []
-    for index, value in enumerate(values):
-        if np.ndim(value) == 0 and np.isnan(value):
-            continue
-        metadata: dict[str, Any] = {}
-        if index < len(times):
-            time_entry = np.asarray(times[index])
-            if time_entry.ndim == 0:
-                metadata["time"] = float(time_entry)
-            else:
-                metadata["time"] = time_entry.tolist()
-                metadata["time_shape"] = list(time_entry.shape)
-                metadata["time_axes"] = ["row", "column"][: time_entry.ndim]
-        results.append(
-            ParameterResult(
-                name=name,
-                value=value,
-                modality=modality,
-                unit=unit,
-                breath_id=str(index),
-                method=method,
-                metadata=metadata,
-            )
+
+def sparse_data_to_interval_data(
+    obj: Any,
+    breaths: list[BreathEvent],
+    *,
+    modality: str,
+    method: str,
+    metadata: dict[str, Any] | None = None,
+    as_pixel_maps: bool = False,
+) -> IntervalData:
+    """Pair eitprocessing's per-breath values with their detected breaths.
+
+    Args:
+        obj: A result with ``values``, an optional ``unit`` and a ``label`` or
+            ``name``. Values have shape ``(breath, ...)`` and are converted
+            to floats, including NaNs.
+        breaths: Breaths used to compute the values, in the same order.
+            Their times supply the result's timing; ``obj.time`` is unused.
+        modality: Device or technique the values came from.
+        method: Name of the method that computed the values.
+        metadata: Additional result information, copied into the result.
+        as_pixel_maps: Wrap each row-column grid in ``PixelMap`` when true.
+            False retains the numeric array.
+
+    Returns:
+        IntervalData: One value per breath, with category ``'impedance'`` and
+            the input unit. Breath objects and missing NaN values are kept.
+
+    Raises:
+        ValueError: If value and breath counts differ, numeric conversion
+            fails, or a pixel value has other than two dimensions.
+        TypeError: If values have an unsupported type or an item in ``breaths``
+            is other than an ``Interval``.
+    """
+
+    values = np.asarray(obj.values, dtype=float)
+    if len(values) != len(breaths):
+        raise ValueError(
+            f"Got {len(values)} per-breath values but {len(breaths)} breaths; "
+            "the breaths must be the ones the values were computed over."
         )
-    return results
+    name = getattr(obj, "label", None) or getattr(obj, "name", None) or "parameter"
+    unit = getattr(obj, "unit", None)
+    per_breath: list[Any] | np.ndarray = values
+    if as_pixel_maps:
+        per_breath = [
+            PixelMap(
+                name=name,
+                values=grid,
+                modality=modality,
+                category="impedance",
+                unit=unit,
+                method=method,
+            )
+            for grid in values
+        ]
+    return IntervalData(
+        name=name,
+        modality=modality,
+        intervals=list(breaths),
+        values=per_breath,
+        category="impedance",
+        unit=unit,
+        method=method,
+        metadata=dict(metadata or {}),
+    )

@@ -1,10 +1,10 @@
-"""Registered EIT pipeline steps.
+"""Registered EIT workflow steps.
 
 Each step wraps a single ``eitprocessing`` operation. Upstream imports are
 deferred to call time so the package installs without the optional
 ``eitprocessing`` dependency.
 
-This package mirrors the former single ``eit.py`` module, split by pipeline
+This package mirrors the former single ``eit.py`` module, split by workflow
 stage for readability. Importing it registers every step below (each
 submodule's ``@register_step`` decorators run on import), and every public
 step function is re-exported here so ``from m3resp.workflows.steps.eit

@@ -2,7 +2,7 @@
 working as a legacy alias.
 
 Stage 1 shipped `"vent"` as the internal spelling (a `session.raw` key, a
-`BreathEvent.modality` value, a pipeline-spec parameter value) while the docs,
+`BreathEvent.modality` value, a workflow-spec parameter value) while the docs,
 `M3Session.link_breaths`, and `Signal.modality` all used `"ventilator"` - so a
 breath could carry `modality="vent"` while the `LinkedBreath` holding it was
 keyed `"ventilator"`. These tests pin the canonical spelling and, just as
@@ -14,8 +14,8 @@ from __future__ import annotations
 import numpy as np
 
 from m3resp.adapters.ventilator_adapter import normalize_ventilator_breath
-from m3resp.core.events import BreathEvent
 from m3resp.core.session import M3Session, set_ventilator_raw
+from m3resp.data.events import BreathEvent
 from m3resp.modalities.names import VENTILATOR, normalize_modality
 from m3resp.modalities.ventilator import keep_samples, ventilator_raw
 from m3resp.synchronization.alignment import (

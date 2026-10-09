@@ -1,10 +1,7 @@
-"""Nearest-neighbor breath linking across modalities (plan_stage2.md Sec 20,
-Milestone 2.5).
+"""Nearest-neighbor breath linking across modalities.
 
-Deliberately simple: breaths are matched by how close their representative
-times are, greedily and one-to-one, with no clock-drift correction - matching
-plan_stage2.md's own guidance ("avoid overbuilding clock-drift correction in
-Stage 2 unless needed"). Run `align_events_by_modality_offset` first if the
+Breaths are matched by how close their representative times are, greedily and
+one-to-one, with no clock-drift correction. Run `align_events_by_modality_offset` first if the
 modalities are not already on a common time axis.
 """
 
@@ -12,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from m3resp.core.events import BreathEvent
+from m3resp.data.events import BreathEvent
 from m3resp.data.linked_breath import LinkedBreath
 
 
@@ -21,17 +18,30 @@ def link_breaths_by_time(
     *,
     time_tolerance: float = 0.5,
 ) -> list[LinkedBreath]:
-    """Link breaths from any number of modalities into `LinkedBreath` groups.
+    """Group breaths across modalities by their timing in seconds.
 
-    `breaths_by_modality` maps an arbitrary modality name (`"eit"`, `"emg"`,
-    `"ventilator"`, or anything else - e.g. `"pressure"`, `"ultrasound"`) to
-    that modality's breath list. Each breath is assigned to at most one link.
-    Two breaths from different modalities are linked when their
-    representative times (`peak_time`, falling back to the start/end
-    midpoint) are within `time_tolerance` seconds of each other; the closest
-    available match wins. A breath with no match in the other modalities
-    still produces a `LinkedBreath` with only its own slot filled, so no
-    input breath is silently dropped.
+    Each breath is used once. Its representative time is ``extremum_time``
+    when available, otherwise the midpoint of start/end. Modalities are
+    visited in mapping order, with each modality's breaths sorted by this
+    time. For each unassigned breath, the closest unused breath from each
+    other modality is added if it falls within time_tolerance of that
+    breath. For equal distances, the first match in sorted order is used.
+
+    Args:
+        breaths_by_modality: Modality names mapped to breath sequences or None.
+            Breath times must share a time axis. None gives an empty result.
+        time_tolerance: Maximum time difference in seconds from the breath
+            that starts a group; must be at least zero.
+
+    Returns:
+        list[LinkedBreath]: Groups ordered by the representative time of their
+            first breath, containing the original breath objects. Unmatched
+            breaths form single-modality groups with confidence=None. Matched
+            groups have confidence ``1 - largest_time_difference/tolerance``;
+            exact matches with zero tolerance have confidence=1.
+
+    Raises:
+        ValueError: If time_tolerance is negative.
     """
 
     if time_tolerance < 0:
@@ -87,8 +97,10 @@ def link_breaths_by_time(
 
 
 def _anchor_time(breath: BreathEvent) -> float:
-    if breath.peak_time is not None:
-        return breath.peak_time
+    """Return the extremum time, or the start/end midpoint, in seconds."""
+
+    if breath.extremum_time is not None:
+        return breath.extremum_time
     return (breath.start_time + breath.end_time) / 2.0
 
 

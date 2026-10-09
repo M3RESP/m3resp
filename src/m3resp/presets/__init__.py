@@ -1,31 +1,30 @@
-"""Named, built-in `Pipeline` presets (plan_stage2.md Sec 18-19, Milestone 2.4).
+"""Named EIT, EMG and multimodal presets for loaded sessions.
 
-Distinct from ``m3resp.workflows``, the declarative step-registry engine used
-for fully custom YAML/JSON workflows. See ``base.py``'s module docstring and
-``plan/stage2_consolidation.md`` for how the two relate.
+Presets run fixed operation sequences with configurable settings. Use
+m3resp.workflows for custom YAML/JSON workflow descriptions.
 """
 
 from __future__ import annotations
 
-from m3resp.presets.base import Pipeline, PipelineConfig
-from m3resp.presets.eit import EITPipeline
-from m3resp.presets.emg import EMGPipeline
-from m3resp.presets.multimodal import MultimodalPipeline
+from m3resp.presets.base import Preset, PresetConfig
+from m3resp.presets.eit import EITPreset
+from m3resp.presets.emg import EMGPreset
+from m3resp.presets.multimodal import MultimodalPreset
 from m3resp.presets.registry import (
-    PIPELINE_REGISTRY,
-    available_pipelines,
-    get_pipeline,
-    register_pipeline,
+    PRESET_REGISTRY,
+    available_presets,
+    get_preset,
+    register_preset,
 )
 
 __all__ = [
-    "PIPELINE_REGISTRY",
-    "EITPipeline",
-    "EMGPipeline",
-    "MultimodalPipeline",
-    "Pipeline",
-    "PipelineConfig",
-    "available_pipelines",
-    "get_pipeline",
-    "register_pipeline",
+    "PRESET_REGISTRY",
+    "EITPreset",
+    "EMGPreset",
+    "MultimodalPreset",
+    "Preset",
+    "PresetConfig",
+    "available_presets",
+    "get_preset",
+    "register_preset",
 ]

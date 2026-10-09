@@ -7,9 +7,9 @@ from typing import Any, cast
 
 import numpy as np
 
-from m3resp.core.events import BreathEvent
 from m3resp.core.exceptions import UnsupportedWorkflowError
 from m3resp.data import ParameterResult, QualityFlag, Signal
+from m3resp.data.events import BreathEvent
 from m3resp.data.signals import ProcessingState
 
 from ._breaths import iter_ventilator_detections, normalize_ventilator_breath

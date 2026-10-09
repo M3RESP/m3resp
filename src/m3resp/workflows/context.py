@@ -1,9 +1,4 @@
-"""Shared blackboard for declarative pipeline execution.
-
-``PipelineContext`` holds the named artifacts produced and consumed by steps,
-the spec-level ``inputs``, and the backing :class:`~m3resp.core.session.M3Session`
-(so loading, event normalization, and export keep flowing through the session).
-"""
+"""Named workflow values, input-reference resolution and the backing session."""
 
 from __future__ import annotations
 
@@ -12,19 +7,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from m3resp.core.exceptions import PipelineSpecError
+from m3resp.core.exceptions import WorkflowSpecError
 from m3resp.core.session import M3Session
 
 #: Context key under which the backing session is always available.
 SESSION_KEY = "session"
 
-#: Context key under which ``run_spec()`` seeds the one resolved,
-#: possibly-timestamped output directory shared by every export path in a
-#: run (Phase 6.1 of the pipeline-structure plan). A custom export step
-#: should bind its output-directory parameter to this documented constant
-#: (``reads={"output_dir": RESOLVED_OUTPUT_DIR_KEY}``) rather than
-#: hand-typing the string, e.g. ``export.rotarc_result``/
-#: ``export.session_summary`` already do.
+#: Shared output directory supplied by run_spec, including a timestamp
+#: subdirectory when configured. Export steps can read it with
+#: ``reads={"output_dir": RESOLVED_OUTPUT_DIR_KEY}``.
 RESOLVED_OUTPUT_DIR_KEY = "_resolved_output_dir"
 
 _REF_PREFIX = "@"
@@ -48,11 +39,10 @@ def is_input_reference(value: Any) -> bool:
 
 
 def iter_input_references(value: Any) -> Iterator[str]:
-    """Recursively yield every ``@name`` reference inside ``value``.
+    """Yield input names from ``@name`` strings in lists and dictionary values.
 
-    Walks into lists and mapping values (Phase 2.4); an ``@@``-escaped
-    literal is not a reference. Used both by :meth:`PipelineContext.resolve_input`
-    and by pre-execution spec validation.
+    ``@@text`` represents a literal string. References are yielded in traversal
+    order, including repeated names.
     """
 
     if is_input_reference(value):
@@ -66,12 +56,19 @@ def iter_input_references(value: Any) -> Iterator[str]:
 
 
 def resolve_value(value: Any, inputs: dict[str, Any]) -> Any:
-    """Resolve a ``with:`` value against a plain ``inputs`` mapping.
+    """Resolve workflow input references within a parameter value.
 
-    This is the session-free core of :meth:`PipelineContext.resolve_input`,
-    reusable at compile/validation time (Phase 3.1) when no
-    :class:`PipelineContext` exists yet - resolution only ever depends on the
-    spec's declared ``inputs``, never on anything a step produces.
+    Args:
+        value: Parameter value, optionally containing ``@name`` references
+            within lists or dictionary values. ``@@text`` becomes ``"@text"``.
+        inputs: Declared workflow inputs keyed by name.
+
+    Returns:
+        Any: The resolved value. Lists and dictionaries are rebuilt; referenced
+            input objects are returned as stored in inputs.
+
+    Raises:
+        WorkflowSpecError: If a reference names an undeclared input.
     """
 
     if is_escaped_literal(value):
@@ -80,8 +77,8 @@ def resolve_value(value: Any, inputs: dict[str, Any]) -> Any:
         ref = value[1:]
         if ref not in inputs:
             available = ", ".join(sorted(inputs)) or "(none)"
-            raise PipelineSpecError(
-                f"Pipeline references unknown input '@{ref}'. "
+            raise WorkflowSpecError(
+                f"Workflow references unknown input '@{ref}'. "
                 f"Declared inputs: {available}."
             )
         return inputs[ref]
@@ -93,19 +90,29 @@ def resolve_value(value: Any, inputs: dict[str, Any]) -> Any:
 
 
 @dataclass
-class PipelineContext:
-    """Named-artifact blackboard wrapping an ``M3Session``."""
+class WorkflowContext:
+    """Named values shared by workflow steps, together with a session.
+
+    Attributes:
+        session: Session holding recordings, processing results and provenance.
+        inputs: Declared inputs used to resolve ``@name`` parameter references.
+        values: Available step inputs and outputs keyed by context name. The
+            session is added under ``"session"`` when that key is absent.
+        root: Base directory for relative path settings; defaults to the
+            current working directory.
+    """
 
     session: M3Session
     inputs: dict[str, Any] = field(default_factory=dict)
     values: dict[str, Any] = field(default_factory=dict)
-    #: Base directory ``path``-typed static parameters resolve against
-    #: (Phase 2.5). Defaults to the current working directory when unset.
+    #: Base directory for path settings; defaults to the current directory.
     root: Path = field(default_factory=Path.cwd)
 
     def __post_init__(self) -> None:
         # Make the session reachable as a normal context value so steps can
         # read it through the same binding mechanism as everything else.
+        """Add the session to values when the session key is absent."""
+
         self.values.setdefault(SESSION_KEY, self.session)
 
     def has(self, key: str) -> bool:
@@ -114,28 +121,30 @@ class PipelineContext:
         return key in self.values
 
     def get(self, key: str) -> Any:
-        """Return the artifact stored under ``key``."""
+        """Return the value stored under key.
+
+        Raises WorkflowSpecError if the key is missing, listing available keys.
+        """
 
         try:
             return self.values[key]
         except KeyError as exc:
             available = ", ".join(sorted(self.values)) or "(empty)"
-            raise PipelineSpecError(
-                f"Pipeline step requested missing context key '{key}'. "
+            raise WorkflowSpecError(
+                f"Workflow step requested missing context key '{key}'. "
                 f"Available keys: {available}."
             ) from exc
 
     def set(self, key: str, value: Any) -> None:
-        """Store ``value`` under context key ``key``."""
+        """Store value under key, replacing any existing value."""
 
         self.values[key] = value
 
     def resolve_input(self, value: Any) -> Any:
-        """Resolve a ``with:`` value, expanding ``@name`` input references.
+        """Resolve parameter references using this context's declared inputs.
 
-        Applies recursively inside lists and mapping values (Phase 2.4); a
-        literal string beginning with ``@`` is written ``@@text`` to escape
-        it (``@@foo`` resolves to the literal string ``"@foo"``).
+        Calls `resolve_value` for nested lists and dictionary values, including
+        ``@@text`` literals. Raises WorkflowSpecError for an unknown input name.
         """
 
         return resolve_value(value, self.inputs)

@@ -7,8 +7,8 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.core.events import BreathEvent
 from m3resp.core.session import M3Session
+from m3resp.data.events import BreathEvent
 from m3resp.synchronization.alignment import align_events_by_modality_offset
 from m3resp.synchronization.start_times import shared_clock_shifts
 
@@ -488,12 +488,22 @@ def _plot_events(
     color: str,
     label: str,
 ) -> None:
+    """Shade each breath interval and mark available extrema on each axis.
+
+    Times are in seconds. Adds artists to the supplied axes using color,
+    with label attached to each extremum line.
+    """
+
     for event in events:
         for ax in axes:
             ax.axvspan(event.start_time, event.end_time, color=color, alpha=0.08)
-            if event.peak_time is not None:
+            if event.extremum_time is not None:
                 ax.axvline(
-                    event.peak_time, color=color, alpha=0.45, linewidth=1, label=label
+                    event.extremum_time,
+                    color=color,
+                    alpha=0.45,
+                    linewidth=1,
+                    label=label,
                 )
 
 

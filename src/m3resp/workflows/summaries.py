@@ -1,4 +1,4 @@
-"""Compact session summaries for logging after a pipeline run."""
+"""Compact session summaries for logging after a workflow run."""
 
 from __future__ import annotations
 

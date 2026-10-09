@@ -67,7 +67,10 @@ def test_missing_samples_warn_and_never_hold_a_breath():
 
 def test_step_writes_ventilator_breath_indices():
     dip_times = np.arange(3.0, 60.0, 5.0)
-    signals = {"pressure": _pressure(dip_times, np.ones(dip_times.size)), "fs": FS}
+    signals = {
+        "airway_pressure": _pressure(dip_times, np.ones(dip_times.size)),
+        "fs": FS,
+    }
 
     result = detect_pressure_breaths(signals)
 
@@ -75,5 +78,5 @@ def test_step_writes_ventilator_breath_indices():
 
 
 def test_step_needs_a_pressure_channel():
-    with pytest.raises(MissingModalityDataError, match="pressure"):
+    with pytest.raises(MissingModalityDataError, match="airway_pressure"):
         detect_pressure_breaths({"fs": FS})

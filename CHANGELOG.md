@@ -2,6 +2,306 @@
 
 ## Unreleased
 
+### `FilterType` renamed to `ButterworthFilterType` (#90)
+
+`m3resp.processing.filters` holds more than Butterworth filters, so the
+list of allowed `filter_type` values (`"lowpass"`, `"highpass"`,
+`"bandpass"`, `"bandstop"`) now says which filter it belongs to. The values
+themselves do not change. **The old name is removed.**
+
+| Before | Now |
+|---|---|
+| `from m3resp.processing.filters import FilterType` | `from m3resp.processing.filters import ButterworthFilterType` |
+
+The `mode` choices of the `eit.butterworth_filter` step now come from the
+same list, so the two cannot drift apart.
+
+Found while doing the rename, all in `butterworth_filter`:
+
+- **Fixes** infinite samples getting through the check for bad samples. One
+  `inf` in the signal turned every filtered sample into NaN, with no error.
+  Now NaN and infinite samples are both refused.
+- An unknown `filter_type` (such as `"low"` or `"notch"`) is now refused with
+  a clear message. It used to give a wrong message about `cutoff_frequency`,
+  or an error from inside SciPy.
+- numpy numbers (`np.float32`, `np.int64`, ...) are now accepted for
+  `cutoff_frequency`, `sample_frequency` and `order`, so values read from
+  data files work as they are.
+- `True` is no longer taken as a filter `order` or a `sample_frequency`. It
+  used to run quietly as order 1 or as 1 Hz.
+
+### `compute_multimodal_parameters` renamed to `compute_breath_timing_parameters` (#116)
+
+The old name could be read as "all results that use more than one
+modality". What it computes is breath timing: the delay between two
+modalities' breaths, the difference in breath duration, and how often the
+modalities agree that a breath happened. **The old names are removed.**
+
+| Before | Now |
+|---|---|
+| `session.compute_multimodal_parameters()` | `session.compute_breath_timing_parameters()` |
+| `m3resp.synchronization.compute_multimodal_parameters` | `m3resp.synchronization.compute_breath_timing_parameters` |
+| Module `m3resp.synchronization.multimodal_parameters` | `m3resp.synchronization.breath_timing_parameters` |
+| Provenance action `"compute_multimodal_parameters"` | `"compute_breath_timing_parameters"` |
+
+The results keep their names, units and `modality="multimodal"`.
+
+Found while doing the rename:
+
+- **Fixes** the event-agreement score counting linked breaths that hold
+  neither modality of the pair. With a ventilator breath linked on its own,
+  `eit_emg_event_agreement` dropped although EIT and EMG agreed on every
+  breath they saw. Now only linked breaths holding a breath from at least
+  one of the two count, so the score can be higher than before when a third
+  modality was linked.
+- **Fixes** a second call to `session.compute_breath_timing_parameters()`
+  adding a second copy of every result, which then counted twice in
+  `parameter_results.csv`. A second call now replaces the earlier results.
+- With no linked breath holding either modality of a pair (for example
+  when `link_breaths()` was not called), the event-agreement result is left
+  out instead of being stored as 0.0.
+- An unknown `anchor` (such as the old `"peak"`) is now always an error. It
+  used to pass when no linked breath held both modalities.
+- The provenance record now keeps `delay_pairs` and `duration_pairs`, so the
+  call can be repeated from it.
+
+### A labelled ventilator file no longer hands on an unnamed column
+
+- **Fixes** ventilator channels being taken from columns 0, 1 and 2 when the
+  file has labels but none for that channel. A file with `Paw, EMGdi, EMGsc`
+  (airway pressure recorded next to the sEMG) used to give EMGdi as flow and
+  EMGsc as volume, with no warning, and those then went into PEEP estimation
+  and ventilator breath detection. Now, once one label names a known
+  channel, a channel not named among the labels is reported as missing.
+  Read such a file with `channels=("airway_pressure",)`.
+- A file whose labels name no known channel at all (such as ReSurfEMG's
+  synthetic `P, F, V`) is still read as columns 0, 1 and 2, but now with a
+  warning. A file without labels is read the same way, without a warning.
+
+### The ventilator's `pressure` channel is now `airway_pressure` (#117)
+
+The channel only ever held the airway pressure, never an esophageal,
+transpulmonary or gastric pressure, but its name did not say so, while the
+other pressures next to it did (`esophageal_pressure`, ...). It is now
+`airway_pressure`, the same as its category. **The old names are removed.**
+
+| Before | Now |
+|---|---|
+| `session.ventilator.pressure` (`VentilatorRecording.pressure`) | `session.ventilator.airway_pressure` |
+| Channel key `"pressure"`: `bundle["pressure"]`, `channels=("pressure", "flow", "volume")`, `Signal.channel == "pressure"` | `"airway_pressure"` |
+| A second airway pressure `"pressure__pod"`, `"pressure__<recording>"` | `"airway_pressure__pod"`, `"airway_pressure__<recording>"` |
+| `pressure_channel=` on `split_channels`, `VentilatorAdapter.preprocess` and the `ventilator.channels` step (`with: {pressure_channel: 0}` in a workflow file) | `airway_pressure_channel=` |
+| `ventilator_pressure_channel=` on EMG postprocessing | `ventilator_airway_pressure_channel=` |
+| `medibus.pressure_channel` in the synthetic data generator config | `medibus.airway_pressure_channel` |
+
+Files are read as before: a column labelled `Pressure`, `Paw`, `Pvent` or
+`airway pressure` still becomes the airway pressure channel. Exported signals
+and the `channel` column carry the new name. `register_channel_alias` (and so
+`load_channel_aliases`) still reads an alias pointing to `"pressure"`: it is
+registered for `"airway_pressure"`, with a warning naming the new channel.
+
+Found while doing the rename:
+
+- **Fixes** EMG postprocessing reading the ventilator columns by position.
+  It always asked for columns 0, 1 and 2 as airway pressure, flow and volume,
+  which overrode the column labels. Labels now decide, as they already did in
+  `ventilator.channels`; a recording without recognised labels still uses
+  columns 0, 1 and 2.
+- **Fixes** the unit on `pocc_time_product` and `pocc_quality` results. It was
+  always cmH2O; it is now the unit the recording reports for its airway
+  pressure. The `pocc_quality` thresholds are in that same unit, and their
+  defaults are meant for cmH2O.
+- **Fixes** `ventilator.normalize_breaths` letting the last breath run past
+  the end of the recording when the airway pressure was not loaded.
+- A column index given for a channel that is not being read (for example
+  `channel_indices={"pressure": 2}`, or `flow_channel=` when flow is not
+  asked for) is now an error. It used to be ignored.
+- The Pocc steps now say they need an `airway_pressure` channel when it is
+  missing, instead of failing with a bare `KeyError`. They also find the
+  airway pressure of a second ventilator recording.
+
+### "Pipeline" renamed to "workflow" everywhere; built-in pipelines are now presets (#112)
+
+The engine module was already `m3resp.workflows`, but most names, files and
+docs still said "pipeline", so one thing had two names. Everything now says
+**workflow**. The small built-in shortcuts (`"eit"`, `"emg"`, `"multimodal"`)
+are a different thing from a YAML workflow, so they are now called
+**presets**, like the package they live in. **The old names are removed.**
+
+| Before | Now |
+|---|---|
+| `run_pipeline(spec, session=...)`, `compile_pipeline`, `validate_pipeline` | `run_workflow`, `compile_workflow`, `validate_workflow` |
+| `PipelineSpec`, `PipelineResult`, `PipelineContext`, `PipelineService`, `PipelineGraph`, `CompiledPipeline`, `PipelineStatus` | `WorkflowSpec`, `WorkflowResult`, `WorkflowContext`, `WorkflowService`, `WorkflowGraph`, `CompiledWorkflow`, `WorkflowStatus` |
+| `PipelineError`, `PipelineSpecError`, `PipelineExecutionError` | `WorkflowError`, `WorkflowSpecError`, `WorkflowExecutionError` |
+| `summarize_pipeline_result`, `DataModelRecorder.record_pipeline_result` | `summarize_workflow_result`, `record_workflow_result` |
+| Events `pipeline_started`, `pipeline_completed`, `pipeline_failed`, `pipeline_cancelled` | `workflow_started`, `workflow_completed`, `workflow_failed`, `workflow_cancelled` |
+| `ProcessingRun.pipeline_name`, `ProcessingRun.pipeline_version` | `ProcessingRun.name`, `ProcessingRun.version`, plus a new `ProcessingRun.kind`: `"workflow"`, `"step"` or `"session_action"` |
+| Key `pipeline_name` in `run_manifest.json` | `workflow_name` (a manifest with `pipeline_name` was written by an older version) |
+| `session.run_pipeline("eit")` | `session.run_preset("eit")` |
+| `Pipeline`, `EITPipeline`, `EMGPipeline`, `MultimodalPipeline`, `PipelineConfig` | `Preset`, `EITPreset`, `EMGPreset`, `MultimodalPreset`, `PresetConfig` |
+| `available_pipelines`, `get_pipeline`, `register_pipeline`, `PIPELINE_REGISTRY`, `UnknownPipelineError` | `available_presets`, `get_preset`, `register_preset`, `PRESET_REGISTRY`, `UnknownPresetError` |
+| `examples/*/*.pipeline.yaml` | `examples/*/*.workflow.yaml` |
+| `docs/pipelines.md`, `docs/developer/pipeline-contracts.md` | `docs/workflows.md`, `docs/developer/preset-contracts.md` (the old pages forward to the new ones) |
+
+A `ProcessingRun` records a whole workflow, one step, or one session method
+call such as `postprocess_emg`, so its name field is now plain `name`, and
+`kind` says which of the three it is.
+
+The old import path `m3resp.pipeline`, kept with a warning since v0.2.0, is
+removed; import from `m3resp.workflows`. Its warning promised it would stay
+until at least 0.3.0, so **the next release must be 0.3.0 or later**. A workflow file without a `name`
+is now called `"workflow"` instead of `"pipeline"`. Error messages say
+"Workflow" too.
+
+### `peak_time` and `peak_index` renamed to `extremum_time` and `extremum_index` (#93)
+
+"Peak" says the signal turns at a maximum. That holds for impedance, volume
+and the EMG envelope, but not for esophageal pressure or the deepest pressure
+of an occlusion, which turn at a minimum. "Extremum" covers both. **The old
+names are removed:**
+
+| Before | Now |
+|---|---|
+| `BreathEvent.peak_time`, `BreathEvent.peak_index` | `BreathEvent.extremum_time`, `BreathEvent.extremum_index` |
+| Breath and linked-breath export columns `peak_time`, `peak_index`, `eit_peak_time`, `emg_peak_time`, `ventilator_peak_time` | `extremum_time`, `extremum_index`, `eit_extremum_time`, `emg_extremum_time`, `ventilator_extremum_time`; linked breaths also gain `eit_extremum_index`, `emg_extremum_index`, `ventilator_extremum_index` |
+| `compute_breath_timing_parameters(anchor="peak")`, `compute_timing_delay(anchor="peak")` | `anchor="extremum"` (the first is called `compute_multimodal_parameters` before #116, see above) |
+| Metadata `peak_sample_index`, `peak_time` on EMG and ventilator results and quality flags | `extremum_sample_index`, `extremum_time` |
+
+`coerce_breath_event` still reads `peak_time`/`peak_index` from
+dictionaries and objects made by other detectors, with a warning naming the
+new keys. It tries `extremum_time`/`extremum_index` first, then
+`peak_time`/`peak_index`, then eitprocessing's `middle_time`. It selects
+the first pair with either value set and reads both from that pair,
+even if one is `None`. Likewise
+`emg.remove_invalid_breaths` still matches a quality flag carrying the old
+`peak_sample_index`, with a warning.
+
+### EIT results per breath, pixel maps and masks get their own types; global and regional impedance (#120, #107)
+
+`ParameterResult` held real results (respiratory rate) next to in-between
+EIT data: TIV and EELI as bare arrays with no breaths, per-pixel breath
+timing, and lung-space masks. It was hard to tell what a `ParameterResult`
+was. TIV, EELI, pixel TIV and pixel breath timing now keep each value next to
+its breath, and masks have their own type.
+
+| Step | Before | Now |
+|---|---|---|
+| `eit.continuous_tiv` | upstream `SparseData` only | also `continuous_tiv_result`: `IntervalData`, one TIV per breath |
+| `eit.eeli` | `eeli_result`: array `ParameterResult` | `IntervalData`, one EELI per breath |
+| `eit.pixel_tiv` | `pixel_tiv_result`: (breath, row, column) `ParameterResult` | `IntervalData`, one `PixelMap` per breath |
+| `eit.pixel_breaths` | `pixel_breath_timing_result`: (breath, row, column, 3) `ParameterResult` | `IntervalData`, one (row, column, 3) grid per breath |
+| `eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace`, `eit.roi_watershed`, `eit.roi_filter_by_size` | `*_result`: 2D `ParameterResult` | `PixelMask` |
+
+New:
+
+| Name | What it is |
+|---|---|
+| `PixelMap` | One number per EIT pixel, a 2D (row, column) grid |
+| `PixelMask` | Which pixels belong to a region: NaN (left out), 1, or a weight between 0 and 1. A 0, or a number outside 0 to 1, raises `ValueError`. |
+| `session.interval_data` | `IntervalDataCollection` holding the `IntervalData` results |
+| `session.pixel_masks` | `PixelMaskCollection` holding the masks |
+| `EITProcessingAdapter.to_interval_data` | Converts the TIV, EELI and pixel TIV of `preprocess_eit()` into `IntervalData` |
+
+What changes for existing code:
+
+- These results are no longer in `session.parameter_results` or in
+  `parameter_results.csv`/`parameter_result_arrays.npz`. The export writes
+  them to `interval_data.csv`, `interval_data_metadata.json` and
+  `interval_data_arrays.npz` (values per breath) and `pixel_masks.csv` and
+  `pixel_masks.npz` (masks). With a `DataModelRecorder` attached, numbers
+  per breath are stored as one `DerivedFeature` per breath, with the breath's
+  start and end as its time window. A missing value (NaN) is stored as no
+  value, so the saved store stays valid JSON; a value that is not a number is
+  stored as no value with a warning.
+- Steps that use the same breath detector and signal share the same breath
+  objects, and reuse the breath in `session.events["eit_breaths"]` with the
+  same start and end time. The same holds for `preprocess_eit()` and
+  `detect_eit_breaths()`, in either order: each TIV or EELI value points to
+  the stored breath object. Stored items that are not a `BreathEvent` are
+  ignored. `eit.pixel_breaths` stores its breaths with their
+  turning point (`extremum_time`), like TIV and EELI.
+- `preprocess_eit()` used to store TIV and EELI as one `ParameterResult` per
+  breath and **dropped breaths whose value was NaN**. They are now
+  `IntervalData` in `session.interval_data`, with every breath kept.
+- Pixel TIV no longer keeps the per-pixel breath times in its metadata. With
+  `tiv_timing="pixel"` these times are the result of `eit.pixel_breaths`.
+- `EITProcessingAdapter.to_parameters` returns only the respiratory and heart
+  rate. `_sparse_data_to_parameters` is removed; use
+  `sparse_data_to_interval_data` from `m3resp.adapters.eitprocessing_adapter`.
+- `eit.roi_filter_by_size` accepts a `PixelMask` or the eitprocessing mask,
+  no longer a `ParameterResult`.
+- The workflow input/output type `eit_global_impedance` is renamed
+  `eit_impedance_waveform`, because these steps accept a global *or* a
+  regional impedance waveform. The words follow the chest EIT consensus
+  (Physiol. Meas. 2026, doi:10.1088/1361-6579/ae8b55): **global** is the
+  whole image plane (all pixels), **regional** is a region of interest such
+  as a lung mask. The step `eit.global_impedance` and the `global_impedance`
+  output keep their names, so workflow files do not change.
+
+`ProcessingRun.parameter_file_id` (one file) is replaced by
+`ProcessingRun.parameter_file_ids` (a list), because one run can now write
+three array files: `parameter_result_arrays.npz`, `interval_data_arrays.npz`
+and `pixel_masks.npz`. The export links all three to the run. Exporting again
+to the same path replaces the earlier link, and `validate_store` reports a run
+that names a file missing from the store. **The old field is removed**, so
+code reading `run.parameter_file_id` must read `run.parameter_file_ids`.
+
+Also fixed: two array results whose names clean up to the same archive key
+(for example `"a-b"` and `"a b"`) no longer overwrite each other in
+`parameter_result_arrays.npz`.
+
+See [Pixel maps and masks](docs/concepts/pixel-maps.md).
+
+### New `Interval`, `IntervalData` and `EventData` types; `BreathEvent` is now an `Interval` (#103)
+
+Only breaths could be stored with a start and an end. Other things that last,
+such as an occlusion or a period of noise, had no type, and results with one
+value per breath were kept as bare arrays that lost which breath each value
+belonged to.
+
+| New | What it is |
+|---|---|
+| `Interval` | Something that lasts: `modality`, `start_time`, `end_time`, and a required `name` such as `"occlusion"` |
+| `IntervalData` | One value (a number or an array, such as a pixel map) per interval, in the same order |
+| `EventData` | One value per `Event`, in the same order |
+| `coerce_interval`, `coerce_intervals` | Turn a dictionary, a `(start, end)` pair or eitprocessing's `Interval` into an m3resp `Interval` |
+
+`BreathEvent` is now an `Interval` whose `name` is always `"breath"`, plus
+`extremum_time` and `extremum_index` (named `peak_time` and `peak_index` before #93). What changes for existing code:
+
+- Only `modality`, `start_time` and `end_time` can be given by position.
+  Every other field must be given by name, e.g.
+  `BreathEvent("eit", 1.0, 2.0, extremum_time=1.5)`.
+- Exported breath tables have two new columns, `name` (always `"breath"`)
+  and `label`, and `extremum_time`/`extremum_index` are now the last two columns.
+- `align_events_by_modality_offset` and `align_events_manual_offset` shift
+  intervals as well as events and breaths.
+- `coerce_breath_event` refuses an interval named anything other than
+  `"breath"` (for example an occlusion), and now keeps `label` when it reads
+  a dictionary or an object. A dictionary without `start_time` or `end_time`
+  raises a `ValueError` that names the missing entry.
+
+All new names can be imported from `m3resp` and `m3resp.data`. See
+[Events, intervals and breaths](docs/concepts/events-and-breaths.md).
+
+### `Event` and `BreathEvent` moved to `m3resp.data` (#96)
+
+The event types sat in `m3resp.core` only because they were written before
+the `m3resp.data` package existed. They now live with the other data types.
+**The old path is removed**, so imports from it need updating:
+
+| Before | Now |
+|---|---|
+| `from m3resp.core.events import BreathEvent` | `from m3resp.data.events import BreathEvent` |
+| `from m3resp.core import BreathEvent` (also `Event`, `coerce_*`, `event_to_dict`) | `from m3resp.data import ...` |
+| `from m3resp.data import Breath` | `from m3resp.data import BreathEvent` |
+
+`from m3resp import BreathEvent` still works. `m3resp.data` now also offers
+`coerce_event`, `coerce_breath_event`, `coerce_breath_events` and
+`event_to_dict`. `m3resp.core` now only holds `M3Session`. The second name
+`Breath` is gone, because `m3resp.datamodel.Breath` (the saved breath record)
+and eitprocessing's `Breath` are different classes with that same name.
+
 ### `export_store` checks the data model store before writing it (#75)
 
 `validate_store` had to be called separately, and it only returned a list of

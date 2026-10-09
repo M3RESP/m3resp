@@ -11,7 +11,7 @@ import pytest
 import yaml
 
 import m3resp.workflows.steps  # noqa: F401 - ensure built-in steps are registered
-from m3resp.workflows.compiler import compile_pipeline
+from m3resp.workflows.compiler import compile_workflow
 from m3resp.workflows.spec import (
     SpecExecutionConfig,
     SpecExperimentConfig,
@@ -21,7 +21,7 @@ from m3resp.workflows.spec import (
     spec_to_dict,
 )
 
-EXAMPLE_SPECS = sorted(Path("examples").glob("**/*.pipeline.yaml"))
+EXAMPLE_SPECS = sorted(Path("examples").glob("**/*.workflow.yaml"))
 
 
 # --------------------------------------------------------------------------- #
@@ -34,7 +34,7 @@ def test_round_trip_compiles_identically_for_every_example_spec(spec_path: Path)
     original = load_spec(spec_path)
     rebuilt = load_spec(spec_to_dict(original), root=original.root)
 
-    assert compile_pipeline(rebuilt).as_dict() == compile_pipeline(original).as_dict()
+    assert compile_workflow(rebuilt).as_dict() == compile_workflow(original).as_dict()
 
 
 def test_at_least_one_example_spec_was_found():
@@ -55,10 +55,10 @@ def test_dump_spec_round_trips_through_an_actual_yaml_file(
     given, which is what this test checks."""
 
     original = load_spec(spec_path)
-    written = dump_spec(original, tmp_path / "saved.pipeline.yaml")
+    written = dump_spec(original, tmp_path / "saved.workflow.yaml")
     reloaded = load_spec(written, root=original.root)
 
-    assert compile_pipeline(reloaded).as_dict() == compile_pipeline(original).as_dict()
+    assert compile_workflow(reloaded).as_dict() == compile_workflow(original).as_dict()
 
 
 # --------------------------------------------------------------------------- #
@@ -173,8 +173,8 @@ def test_spec_to_dict_writes_outputs_dir_absolute_when_outside_root(tmp_path: Pa
 
 def test_dump_spec_writes_yaml_by_default(tmp_path: Path):
     spec = load_spec({"name": "p", "steps": [{"uses": "eit.slice"}]})
-    written = dump_spec(spec, tmp_path / "out.pipeline.yaml")
-    assert written == tmp_path / "out.pipeline.yaml"
+    written = dump_spec(spec, tmp_path / "out.workflow.yaml")
+    assert written == tmp_path / "out.workflow.yaml"
     parsed = yaml.safe_load(written.read_text(encoding="utf-8"))
     assert parsed["name"] == "p"
 
@@ -188,6 +188,6 @@ def test_dump_spec_writes_json_for_json_suffix(tmp_path: Path):
 
 def test_dump_spec_honors_explicit_format_over_suffix(tmp_path: Path):
     spec = load_spec({"name": "p", "steps": [{"uses": "eit.slice"}]})
-    written = dump_spec(spec, tmp_path / "out.pipeline.yaml", format="json")
+    written = dump_spec(spec, tmp_path / "out.workflow.yaml", format="json")
     parsed = json.loads(written.read_text(encoding="utf-8"))
     assert parsed["name"] == "p"

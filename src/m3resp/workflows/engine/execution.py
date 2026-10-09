@@ -1,4 +1,4 @@
-"""Compiled-pipeline execution loop (`run_pipeline`)."""
+"""Compiled-workflow execution loop (`run_workflow`)."""
 
 from __future__ import annotations
 
@@ -7,20 +7,20 @@ import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from m3resp.core.exceptions import PipelineSpecError
+from m3resp.core.exceptions import WorkflowSpecError
 from m3resp.core.session import M3Session
 from m3resp.workflows.context import (
     RESOLVED_OUTPUT_DIR_KEY,
     SESSION_KEY,
-    PipelineContext,
+    WorkflowContext,
 )
 from m3resp.workflows.lifecycle import (
     CancellationToken,
     CapturedWarning,
     EventSink,
-    PipelineExecutionError,
-    PipelineStatus,
     StepExecutionRecord,
+    WorkflowExecutionError,
+    WorkflowStatus,
     build_execution_context,
     make_event,
     new_run_id,
@@ -31,19 +31,19 @@ from m3resp.workflows.lifecycle import (
 from m3resp.workflows.registry import (
     get_step,
 )
-from m3resp.workflows.spec import PipelineSpec, load_spec
+from m3resp.workflows.spec import WorkflowSpec, load_spec
 
 if TYPE_CHECKING:
     # Deferred at runtime: compiler.py imports collect_diagnostics from this
     # package, so importing it back at module scope here would be circular.
     from m3resp.workflows.compiler import CompiledStep
 
-from ._shared import PipelineResult, _ensure_steps_registered
+from ._shared import WorkflowResult, _ensure_steps_registered
 from .diagnostics import collect_diagnostics
 
 
-def run_pipeline(
-    spec: str | Path | dict[str, Any] | PipelineSpec,
+def run_workflow(
+    spec: str | Path | dict[str, Any] | WorkflowSpec,
     *,
     session: M3Session | None = None,
     eit_adapter: Any = None,
@@ -52,29 +52,46 @@ def run_pipeline(
     event_sink: EventSink | None = None,
     cancellation_token: CancellationToken | None = None,
     run_id: str | None = None,
-) -> PipelineResult:
-    """Run a declarative pipeline spec and return its result.
+) -> WorkflowResult:
+    """Run a workflow's ordered steps and return their results and records.
 
-    ``extra_context`` seeds context keys produced outside the spec (e.g. signals
-    already loaded onto the session), letting a processing-only spec begin from
-    mid-pipeline artifacts. Those keys are treated as available during static
-    validation.
+    Captures and re-emits step warnings and records each executed step in the
+    session's processing history. A cancellation request is checked before
+    and after each step, preserving completed work. Workflow failures preserve
+    session changes made before the error.
 
-    ``event_sink``, if given, receives one JSON-safe progress event per call
-    (``pipeline_started``, ``step_started``, ``step_warning``,
-    ``step_completed``, ``step_failed``, ``pipeline_completed``,
-    ``pipeline_failed``, ``pipeline_cancelled``). ``cancellation_token`` is
-    checked before and after each step; cancellation preserves
-    already-completed work rather than rolling it back.
+    Args:
+        spec: A WorkflowSpec, dictionary, or YAML/JSON file path.
+        session: Session to process and update; None creates a new session.
+        eit_adapter: EIT adapter used when creating a new session.
+        emg_adapter: EMG adapter used when creating a new session.
+        extra_context: Values supplied under context keys before execution.
+            These keys are treated as available during structural validation.
+        event_sink: Optional callable receiving progress-event dictionaries
+            for workflow and step starts, warnings, completion, failure and
+            cancellation. It is called synchronously.
+        cancellation_token: Optional flag for stopping between steps.
+        run_id: Optional run identifier; a new identifier is generated when unset.
 
-    A step function's own exception is re-raised wrapped in
-    ``PipelineExecutionError``, with the original exception
-    available as ``__cause__``.
+    Returns:
+        WorkflowResult: Live session, context values, resolved step descriptions,
+            execution records, timings in seconds and captured warnings. Status
+            is succeeded or cancelled. An attached data-model recorder stores
+            the run's outputs and supplies processing_run_id. Export operations
+            occur through declared steps; `run_spec` also applies outputs settings
+            and writes run manifests.
+
+    Raises:
+        WorkflowSpecError: If the spec or bindings are invalid, or a step
+            returns an invalid output dictionary or omits a declared output.
+        UnknownStepError: If the first structural error concerns an unknown step.
+        WorkflowExecutionError: If a step function raises; the original exception
+            is available through __cause__ and gathered step records are retained.
     """
 
     _ensure_steps_registered()
     parsed = load_spec(spec)
-    ctx = PipelineContext(
+    ctx = WorkflowContext(
         session=session or M3Session(eit_adapter=eit_adapter, emg_adapter=emg_adapter),
         inputs=dict(parsed.inputs),
         root=parsed.root,
@@ -87,9 +104,9 @@ def run_pipeline(
 
     # Deferred import: compiler.py imports collect_diagnostics from this
     # module, so importing it at module scope here would be circular.
-    from m3resp.workflows.compiler import compile_pipeline
+    from m3resp.workflows.compiler import compile_workflow
 
-    compiled = compile_pipeline(parsed, available=available)
+    compiled = compile_workflow(parsed, available=available)
 
     run_id = run_id or new_run_id()
     run_timestamp = utc_now_iso()
@@ -100,18 +117,20 @@ def run_pipeline(
     start_monotonic = time.monotonic()
 
     def emit(event_type: Any, **fields: Any) -> None:
+        """Send a progress event to the caller's event sink when supplied."""
+
         if event_sink is not None:
             event_sink(make_event(event_type, run_id=run_id, **fields))
 
-    emit("pipeline_started", name=parsed.name, step_count=len(compiled.steps))
+    emit("workflow_started", name=parsed.name, step_count=len(compiled.steps))
 
     step_records: list[StepExecutionRecord] = []
-    status: PipelineStatus = "succeeded"
+    status: WorkflowStatus = "succeeded"
 
     for compiled_step in compiled.steps:
         if cancellation_token is not None and cancellation_token.cancelled:
             status = "cancelled"
-            emit("pipeline_cancelled", name=parsed.name)
+            emit("workflow_cancelled", name=parsed.name)
             break
 
         record = StepExecutionRecord(
@@ -162,8 +181,8 @@ def run_pipeline(
                 position=record.position,
                 error=record.error,
             )
-            emit("pipeline_failed", name=parsed.name)
-            raise PipelineExecutionError(
+            emit("workflow_failed", name=parsed.name)
+            raise WorkflowExecutionError(
                 step_id=compiled_step.id,
                 position=compiled_step.position,
                 operation_id=compiled_step.operation_id,
@@ -195,13 +214,13 @@ def run_pipeline(
 
         if cancellation_token is not None and cancellation_token.cancelled:
             status = "cancelled"
-            emit("pipeline_cancelled", name=parsed.name)
+            emit("workflow_cancelled", name=parsed.name)
             break
 
     finished_at = utc_now_iso()
     duration_seconds = time.monotonic() - start_monotonic
     if status == "succeeded":
-        emit("pipeline_completed", name=parsed.name, duration_seconds=duration_seconds)
+        emit("workflow_completed", name=parsed.name, duration_seconds=duration_seconds)
 
     produced = {
         key: ctx.get(key)
@@ -209,7 +228,7 @@ def run_pipeline(
         if key != SESSION_KEY and key not in parsed.inputs
     }
     all_warnings = tuple(w for record in step_records for w in record.warnings)
-    pipeline_result = PipelineResult(
+    workflow_result = WorkflowResult(
         name=parsed.name,
         context=ctx,
         outputs=produced,
@@ -218,7 +237,7 @@ def run_pipeline(
         started_at=started_at,
         finished_at=finished_at,
         duration_seconds=duration_seconds,
-        compiled_pipeline=compiled,
+        compiled_workflow=compiled,
         step_records=tuple(step_records),
         diagnostics=diagnostics,
         warnings=all_warnings,
@@ -226,9 +245,9 @@ def run_pipeline(
         resolved_output_dir=ctx.values.get(RESOLVED_OUTPUT_DIR_KEY),
     )
     if ctx.session.datamodel is not None:
-        run = ctx.session.datamodel.record_pipeline_result(pipeline_result)
-        pipeline_result.processing_run_id = run.processing_run_id
-    return pipeline_result
+        run = ctx.session.datamodel.record_workflow_result(workflow_result)
+        workflow_result.processing_run_id = run.processing_run_id
+    return workflow_result
 
 
 def _replay_captured_warnings(
@@ -260,13 +279,8 @@ def _replay_captured_warnings(
     caught.clear()
 
 
-def _record_processing_step(ctx: PipelineContext, record: StepExecutionRecord) -> None:
-    """log every executed step onto the session's universal
-    ``ProcessingHistory``, using exactly what the engine already knows
-    (bindings/parameters/timing/outcome) - no step function needs to call
-    anything itself. Distinct from the datamodel's per-*pipeline*
-    ``ProcessingRun`` (see ``DataModelRecorder.record_pipeline_result``), so
-    this never creates a duplicate/competing ``ProcessingRun``."""
+def _record_processing_step(ctx: WorkflowContext, record: StepExecutionRecord) -> None:
+    """Add an executed step's settings, input/output keys and status to history."""
 
     ctx.session.processing_history.record(
         record.operation_id,
@@ -280,11 +294,13 @@ def _record_processing_step(ctx: PipelineContext, record: StepExecutionRecord) -
 
 
 def _bind_compiled_arguments(
-    compiled_step: CompiledStep, ctx: PipelineContext
+    compiled_step: CompiledStep, ctx: WorkflowContext
 ) -> dict[str, Any]:
-    """Build a step's call kwargs from an already-compiled step:
-    context reads resolve against the live context; static parameters were
-    already fully resolved (``@ref``s and paths) at compile time."""
+    """Build call arguments from context inputs and resolved static settings.
+
+    Missing optional context inputs use the step function's defaults.
+    Raises WorkflowSpecError for a missing required context key.
+    """
 
     kwargs: dict[str, Any] = {}
     for param, context_key in compiled_step.input_bindings.items():
@@ -297,16 +313,22 @@ def _bind_compiled_arguments(
 
 
 def _store_compiled_outputs(
-    compiled_step: CompiledStep, ctx: PipelineContext, result: Any
+    compiled_step: CompiledStep, ctx: WorkflowContext, result: Any
 ) -> None:
+    """Store each declared output under its compiled context key.
+
+    Raises WorkflowSpecError if result is not a dictionary or a declared
+    output is missing.
+    """
+
     if not isinstance(result, dict):
-        raise PipelineSpecError(
+        raise WorkflowSpecError(
             f"Step #{compiled_step.position} '{compiled_step.operation_id}' must "
             f"return a mapping of outputs or None, got {type(result).__name__}."
         )
     for name, context_key in compiled_step.output_bindings.items():
         if name not in result:
-            raise PipelineSpecError(
+            raise WorkflowSpecError(
                 f"Step #{compiled_step.position} '{compiled_step.operation_id}' "
                 f"declared output '{name}' but did not return it."
             )

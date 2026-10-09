@@ -107,8 +107,8 @@ def test_preprocess_envelope_defaults_to_rms_not_arv():
 
 
 def test_preprocess_bandpass_defaults_to_the_literature_range():
-    """20-500 Hz, capped by Nyquist. The high-pass deliberately does not sit
-    low enough to double as ECG suppression - `emg.ecg_gating` owns that."""
+    """20-500 Hz, capped by Nyquist. ECG removal is done by
+    `emg.ecg_gating`."""
 
     fs = 2000.0
     adapter = ReSurfEMGAdapter()
@@ -136,7 +136,7 @@ def test_detect_breaths_reproduces_resurfemg_peak_detection_exactly():
 
     events = adapter.detect_breaths(processed)
 
-    actual_peak_indices = [round(event.peak_time * fs) for event in events]
+    actual_peak_indices = [round(event.extremum_time * fs) for event in events]
     assert actual_peak_indices == [int(p) for p in expected_peaks]
 
 
@@ -198,7 +198,7 @@ def test_wavelet_denoise_ecg_reproduces_resurfemg_exactly_including_padding():
 
     fs = 2048.0
     # >=15 s: wavelet_denoising's internal noise-estimation window is
-    # 15 * fs samples wide (see docs/pipelines.md "ECG-removal alternatives"),
+    # 15 * fs samples wide (see docs/workflows.md "ECG-removal alternatives"),
     # so shorter signals raise inside resurfemg itself, independent of this
     # wrapper's own behavior. 20.002 s (not 20.0 s) gives a sample count that
     # is not already a multiple of 2**4, so real zero-padding is exercised.

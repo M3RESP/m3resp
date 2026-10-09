@@ -7,14 +7,14 @@ ventilator data reached a session only as a passenger of the EMG path. Its
 defaults are native, built on `m3resp.processing.filters` and
 `m3resp.processing.peaks`.
 
-Loading is the one exception, and it has three sources rather than one:
+Loading is the one exception, and it has three sources:
 ventilator channels arrive in the multi-channel file shared with the sEMG -
 where `load` delegates to `ReSurfEMGAdapter` - inside the EIT `*.bin` itself,
 where the device stores them beside the impedance frames and `load` goes
 through `EITProcessingAdapter` (see `_eit_source`) - or in a third-party format
 neither of those knows about, read by a function registered via
-`register_ventilator_loader` (see `_loaders`), so a new format does not need a
-code change here. Dispatch is by file suffix for the first two; either can be
+`register_ventilator_loader` (see `_loaders`), so a new format is added
+without editing this module. Dispatch is by file suffix for the first two; either can be
 replaced with an injected loader per instance, or a registered extension takes
 over automatically for every instance.
 

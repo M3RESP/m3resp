@@ -169,12 +169,12 @@ def test_describe_steps_prefix_filter_separates_ventilator_from_emg():
     assert not names & set(_EMG_STEP_NAMES)
 
 
-def test_all_sixty_five_built_in_steps_still_describe_without_error():
+def test_all_sixty_seven_built_in_steps_still_describe_without_error():
     descriptions = describe_steps()
-    assert len(descriptions) == 65
+    assert len(descriptions) == 67
     with_metadata = [
         d
         for d in descriptions
         if d.parameters or d.output_artifacts or d.input_artifacts
     ]
-    assert len(with_metadata) == 65
+    assert len(with_metadata) == 67

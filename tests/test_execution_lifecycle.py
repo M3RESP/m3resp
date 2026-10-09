@@ -1,6 +1,6 @@
-"""Tests for Phase 4 of the pipeline-structure plan: pipeline/step states,
+"""Tests for the workflow execution lifecycle: workflow/step states,
 structured execution errors, deliberate warning capture, progress events,
-cooperative cancellation, and the additive ``PipelineResult`` lifecycle
+cooperative cancellation, and the additive ``WorkflowResult`` lifecycle
 fields (plan/stage2/3_pipeline_structure_implementation_plan.md).
 """
 
@@ -13,9 +13,9 @@ import pytest
 
 from m3resp.workflows import (
     CancellationToken,
-    PipelineExecutionError,
+    WorkflowExecutionError,
     register_step,
-    run_pipeline,
+    run_workflow,
 )
 from m3resp.workflows.registry import STEP_REGISTRY
 
@@ -51,20 +51,20 @@ def _lifecycle_steps():
 
 
 # --------------------------------------------------------------------------- #
-# 4.1 / 4.7: pipeline/step states and additive PipelineResult fields         #
+# 4.1 / 4.7: workflow/step states and additive WorkflowResult fields         #
 # --------------------------------------------------------------------------- #
 
 
 def test_successful_run_reports_succeeded_status_and_step_records(_lifecycle_steps):
     spec = {"name": "p", "steps": [{"uses": "lifecycle_test.ok", "with": {"n": 5}}]}
-    result = run_pipeline(spec)
+    result = run_workflow(spec)
 
     assert result.status == "succeeded"
     assert result.run_id
     assert result.started_at is not None
     assert result.finished_at is not None
     assert result.duration_seconds is not None and result.duration_seconds >= 0
-    assert result.compiled_pipeline is not None
+    assert result.compiled_workflow is not None
     assert len(result.step_records) == 1
 
     record = result.step_records[0]
@@ -77,12 +77,12 @@ def test_successful_run_reports_succeeded_status_and_step_records(_lifecycle_ste
     assert record.output_summaries == {"x": 5}
 
 
-def test_pipeline_result_still_exposes_existing_public_api(_lifecycle_steps):
+def test_workflow_result_still_exposes_existing_public_api(_lifecycle_steps):
     """The pre-Phase-4 contract (name/session/context/outputs/value()) must
     be unchanged - Phase 4 additions are additive only."""
 
     spec = {"name": "p", "steps": [{"uses": "lifecycle_test.ok", "with": {"n": 1}}]}
-    result = run_pipeline(spec)
+    result = run_workflow(spec)
     assert result.name == "p"
     assert result.session is result.context.session
     assert result.value("x") == 1
@@ -96,7 +96,7 @@ def test_execution_context_records_deterministic_metadata(_lifecycle_steps):
         "execution": {"seed": 42},
         "steps": [{"uses": "lifecycle_test.ok"}],
     }
-    result = run_pipeline(spec)
+    result = run_workflow(spec)
     assert result.execution_context is not None
     assert result.execution_context.seed == 42
     assert result.execution_context.run_id == result.run_id
@@ -107,10 +107,10 @@ def test_execution_context_records_deterministic_metadata(_lifecycle_steps):
 # --------------------------------------------------------------------------- #
 
 
-def test_step_failure_is_wrapped_in_pipeline_execution_error(_lifecycle_steps):
+def test_step_failure_is_wrapped_in_workflow_execution_error(_lifecycle_steps):
     spec = {"name": "p", "steps": [{"uses": "lifecycle_test.fail"}]}
-    with pytest.raises(PipelineExecutionError) as excinfo:
-        run_pipeline(spec)
+    with pytest.raises(WorkflowExecutionError) as excinfo:
+        run_workflow(spec)
 
     error = excinfo.value
     assert error.operation_id == "lifecycle_test.fail"
@@ -128,11 +128,11 @@ def test_earlier_steps_complete_before_a_later_failure(_lifecycle_steps):
             {"uses": "lifecycle_test.fail"},
         ],
     }
-    with pytest.raises(PipelineExecutionError):
-        run_pipeline(spec)
+    with pytest.raises(WorkflowExecutionError):
+        run_workflow(spec)
     # No direct assertion possible on the (unreturned) partial result here;
     # covered by the event-based test below, which observes step_completed
-    # for the first step before pipeline_failed.
+    # for the first step before workflow_failed.
 
 
 # --------------------------------------------------------------------------- #
@@ -145,7 +145,7 @@ def test_warnings_are_captured_on_the_step_record_and_still_reach_the_caller(
 ):
     spec = {"name": "p", "steps": [{"uses": "lifecycle_test.warn_then_ok"}]}
     with pytest.warns(UserWarning, match="benign"):
-        result = run_pipeline(spec)
+        result = run_workflow(spec)
 
     assert len(result.step_records[0].warnings) == 1
     assert result.step_records[0].warnings[0].message == "benign"
@@ -157,9 +157,9 @@ def test_a_warning_issued_right_before_a_failure_is_not_dropped(_lifecycle_steps
     spec = {"name": "p", "steps": [{"uses": "lifecycle_test.warn_then_fail"}]}
     with (
         pytest.warns(UserWarning, match="right before failure"),
-        pytest.raises(PipelineExecutionError),
+        pytest.raises(WorkflowExecutionError),
     ):
-        run_pipeline(spec)
+        run_workflow(spec)
 
 
 # --------------------------------------------------------------------------- #
@@ -170,13 +170,13 @@ def test_a_warning_issued_right_before_a_failure_is_not_dropped(_lifecycle_steps
 def test_progress_events_fire_in_order_for_a_successful_run(_lifecycle_steps):
     events: list[dict[str, Any]] = []
     spec = {"name": "p", "steps": [{"uses": "lifecycle_test.ok"}]}
-    run_pipeline(spec, event_sink=events.append)
+    run_workflow(spec, event_sink=events.append)
 
     assert [e["event"] for e in events] == [
-        "pipeline_started",
+        "workflow_started",
         "step_started",
         "step_completed",
-        "pipeline_completed",
+        "workflow_completed",
     ]
     assert all("run_id" in e and "timestamp" in e for e in events)
 
@@ -184,15 +184,15 @@ def test_progress_events_fire_in_order_for_a_successful_run(_lifecycle_steps):
 def test_progress_events_include_step_warning_and_step_failed(_lifecycle_steps):
     events: list[dict[str, Any]] = []
     spec = {"name": "p", "steps": [{"uses": "lifecycle_test.warn_then_fail"}]}
-    with pytest.warns(UserWarning), pytest.raises(PipelineExecutionError):
-        run_pipeline(spec, event_sink=events.append)
+    with pytest.warns(UserWarning), pytest.raises(WorkflowExecutionError):
+        run_workflow(spec, event_sink=events.append)
 
     assert [e["event"] for e in events] == [
-        "pipeline_started",
+        "workflow_started",
         "step_started",
         "step_warning",
         "step_failed",
-        "pipeline_failed",
+        "workflow_failed",
     ]
 
 
@@ -201,7 +201,7 @@ def test_progress_events_are_json_safe(_lifecycle_steps):
 
     events: list[dict[str, Any]] = []
     spec = {"name": "p", "steps": [{"uses": "lifecycle_test.ok", "with": {"n": 1}}]}
-    run_pipeline(spec, event_sink=events.append)
+    run_workflow(spec, event_sink=events.append)
     json.dumps(events)
 
 
@@ -228,7 +228,7 @@ def test_cancellation_before_a_step_stops_the_run_and_preserves_completed_work(
                 {"uses": "lifecycle_test.ok", "with": {"n": 99}},
             ],
         }
-        result = run_pipeline(spec, cancellation_token=token)
+        result = run_workflow(spec, cancellation_token=token)
         assert result.status == "cancelled"
         assert len(result.step_records) == 1
         assert "z" in result.context.values
@@ -241,15 +241,15 @@ def test_cancellation_before_the_run_starts_executes_nothing(_lifecycle_steps):
     token = CancellationToken()
     token.cancel()
     spec = {"name": "p", "steps": [{"uses": "lifecycle_test.ok"}]}
-    result = run_pipeline(spec, cancellation_token=token)
+    result = run_workflow(spec, cancellation_token=token)
     assert result.status == "cancelled"
     assert result.step_records == ()
 
 
-def test_pipeline_cancelled_event_fires(_lifecycle_steps):
+def test_workflow_cancelled_event_fires(_lifecycle_steps):
     token = CancellationToken()
     token.cancel()
     events: list[dict[str, Any]] = []
     spec = {"name": "p", "steps": [{"uses": "lifecycle_test.ok"}]}
-    run_pipeline(spec, cancellation_token=token, event_sink=events.append)
-    assert [e["event"] for e in events] == ["pipeline_started", "pipeline_cancelled"]
+    run_workflow(spec, cancellation_token=token, event_sink=events.append)
+    assert [e["event"] for e in events] == ["workflow_started", "workflow_cancelled"]

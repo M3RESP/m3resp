@@ -21,7 +21,7 @@ def test_rate_from_evenly_spaced_breaths():
 @pytest.mark.parametrize("indices", [[], [250]])
 def test_fewer_than_two_breaths_gives_nan_and_warns(indices):
     """No time between breaths can be measured, so there is no rate. This
-    must not crash a pipeline whose recording had too few breaths."""
+    must not crash a workflow whose recording had too few breaths."""
 
     with pytest.warns(UserWarning, match="at least two breaths"):
         median_rate, breath_to_breath = respiratory_rate_from_indices(

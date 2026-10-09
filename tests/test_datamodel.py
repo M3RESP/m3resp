@@ -74,7 +74,7 @@ def test_store_accepts_quality_annotations_for_every_target_type():
             file_path="subject.eit",
         )
     )
-    run = store.add_processing_run(ProcessingRun(pipeline_name="demo"))
+    run = store.add_processing_run(ProcessingRun(name="demo"))
     event = store.add_clinical_event(
         ClinicalEvent(session_id=session.session_id, event_type="other")
     )
@@ -148,7 +148,7 @@ def test_store_builds_case_session_stream_file_run_feature_chain():
         )
     )
     run = store.add_processing_run(
-        ProcessingRun(pipeline_name="demo", input_file_ids=[data_file.file_id])
+        ProcessingRun(name="demo", input_file_ids=[data_file.file_id])
     )
     feature = store.add_derived_feature(
         DerivedFeature(

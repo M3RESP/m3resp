@@ -24,7 +24,7 @@ Modality-specific migration tables:
 | Shifting one recording's timestamps to match another by hand | `m3resp.compute_offsets_from_timestamps(reference_modality, timestamps)` then `m3resp.synchronization.align_events_by_modality_offset` (or just `session.synchronize_multimodal_breaths(...)`) |
 | Resampling one signal onto another's sampling rate by hand | `m3resp.resample_signal(signal, target_frequency_hz)` |
 | Matching already-detected breaths (EIT/EMG/ventilator, or any other modality) by eyeballing timestamps | `m3resp.link_breaths_by_time({"eit": ..., "emg": ..., "ventilator": ...})` or `session.link_breaths(time_tolerance=...)` -> `LinkedBreath` objects (breath detection must already have produced the `BreathEvent`s passed in; this only matches breaths across modalities, it does not detect them) |
-| Computing a timing offset/delay between two modalities' breaths by hand | `session.compute_multimodal_parameters()` after `session.link_breaths()` - see [concepts/synchronization.md](concepts/synchronization.md) |
+| Computing a timing offset/delay between two modalities' breaths by hand | `session.compute_breath_timing_parameters()` after `session.link_breaths()` - see [concepts/synchronization.md](concepts/synchronization.md) |
 | Writing your own CSV/JSON export per project | `session.export_summary(output_dir)` (see [tutorials/export-results.md](tutorials/export-results.md)) |
 
 ## What does not change
