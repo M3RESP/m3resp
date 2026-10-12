@@ -19,6 +19,13 @@ the installed version of the first package in the step's
 their values in m3resp, so their records now have None in place of the
 ReSurfEMG version.
 
+A workflow run warns when a step registered without `record=True` returns
+`"_provenance"` details, because those details are not saved.
+
+A workflow run also writes one `session.processing_history` entry per step,
+as before. Steps with `record=True` therefore appear in both
+`session.provenance` and `session.processing_history`.
+
 ### Step descriptions share one field list (#111)
 
 The fields that describe a step (name, summary, description, modality,
@@ -58,7 +65,10 @@ Other differences:
 - A signal with fewer than two samples, or a time axis that is not strictly
   increasing, raises `ValueError`.
 - The result has `metadata["interpolation"] = "linear"`, and
-  `sample_frequency` is 1 / the median time step of the new time points.
+  `sample_frequency` is 1 / the median time step of the new time points,
+  rounded to 9 significant digits (a 20 Hz time axis gives exactly 20.0).
+- Both time axes must be on the same clock. Synchronize the recordings
+  first; the function cannot check this.
 
 As before, the interpolation is linear with no anti-aliasing filter:
 low-pass filter the signal first when the new time points are further

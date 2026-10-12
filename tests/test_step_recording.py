@@ -136,3 +136,21 @@ def test_the_registry_holds_the_recording_function(registered):
 
     assert definition.func is scale
     assert definition.record is True
+
+
+def test_a_workflow_warns_when_a_step_without_record_returns_details(registered):
+    @register_step("record_test.unrecorded", writes=("value",))
+    def _unrecorded() -> dict[str, Any]:
+        return {"value": 1, "_provenance": {"parameters": {}}}
+
+    registered.append("record_test.unrecorded")
+    session = M3Session()
+
+    with pytest.warns(UserWarning, match="without record=True"):
+        result = run_workflow(
+            {"name": "unrecorded", "steps": [{"uses": "record_test.unrecorded"}]},
+            session=session,
+        )
+
+    assert result.outputs["value"] == 1
+    assert all(e.action != "record_test.unrecorded" for e in session.provenance)

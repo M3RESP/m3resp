@@ -24,7 +24,10 @@ compared on one shared time axis. Key pieces:
 - `interpolate_to_time(signal, time)` puts a signal onto another signal's
   time points, for the cases where you need two signals on one shared
   sample grid (e.g. a sample-by-sample comparison). Pass the other
-  signal's `time`, after both recordings have their start times set. It
+  signal's `time`. Synchronize the recordings first
+  (`session.synchronize_raw_modalities(...)`): the function cannot check
+  that the two time axes are on the same clock, so with unsynchronized
+  recordings the result is wrong and no warning is given. It
   uses linear interpolation between the original samples and applies no
   anti-aliasing filter, so low-pass filter the signal before lowering its
   sampling rate. Time points outside the signal's recording get NaN, with

@@ -1,5 +1,10 @@
 """Put a signal onto another time axis by linear interpolation.
 
+Both time axes must be on the same clock. For recordings from different
+devices, set their start times first (``session.synchronize_raw_modalities``).
+This module cannot check that: with unsynchronized recordings the result is
+wrong and no warning is given.
+
 Use this to compare two recordings sample by sample, for example an EMG
 envelope on the time points of an EIT signal. The new values are read off
 the straight line between the two nearest original samples. No anti-aliasing
@@ -24,6 +29,9 @@ def interpolate_to_time[SignalT: TimeSeries](
 ) -> SignalT:
     """Return a copy of `signal` with its values at the time points `time`.
 
+    `signal.time` and `time` must be on the same clock: synchronize the
+    recordings first. This function cannot check that.
+
     Each new value is linearly interpolated between the two original samples
     around it. Values with more than one number per time point (channels,
     EIT pixel frames) are interpolated per number along the time axis.
@@ -41,7 +49,8 @@ def interpolate_to_time[SignalT: TimeSeries](
     Returns:
         A copy of `signal` with the new `time`, the interpolated `values`
         (as floats), `sample_frequency` set to 1 / the median time step of
-        `time` (in Hz; None for a single time point) and
+        `time`, rounded to 9 significant digits (in Hz; None for a single
+        time point) and
         ``metadata["interpolation"] = "linear"``. All other fields are copied.
 
     Raises:
@@ -79,9 +88,11 @@ def interpolate_to_time[SignalT: TimeSeries](
         )
 
     new_values = new_flat.reshape((new_time.size, *old_values.shape[1:]))
-    sample_frequency = (
-        1.0 / float(np.median(np.diff(new_time))) if new_time.size > 1 else None
-    )
+    sample_frequency = None
+    if new_time.size > 1:
+        # Rounding removes the float error of the time steps: a 20 Hz time
+        # axis gives 20.0, not 19.999999999999893.
+        sample_frequency = float(f"{1.0 / np.median(np.diff(new_time)):.9g}")
     return dataclasses.replace(
         signal,
         values=new_values,

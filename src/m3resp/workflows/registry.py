@@ -24,12 +24,11 @@ import json
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, fields
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as installed_version
 from inspect import Parameter, signature
 from typing import Any, Literal
 
 from m3resp.core.exceptions import StepMetadataError, UnknownStepError
+from m3resp.workflows.lifecycle import optional_package_version
 
 # A step callable receives bound keyword arguments and returns a mapping of
 # {output_name: value}. ``None`` is treated as "no outputs".
@@ -38,7 +37,9 @@ StepCallable = Callable[..., Mapping[str, Any] | None]
 #: Output key a step registered with ``record=True`` uses for its own
 #: provenance details (settings used, source function, ...). The step's
 #: wrapper takes this key out of the outputs and adds the details to the
-#: step's provenance record.
+#: step's provenance record. Steps write the key as the text
+#: ``"_provenance"``; the registry and the workflow engine use this name
+#: to look for it.
 PROVENANCE_KEY = "_provenance"
 
 #: Allowed ``StepParameter.value_type`` values.
@@ -403,8 +404,10 @@ def _record_each_call(name: str, func: StepCallable) -> StepCallable:
                 "step": name,
                 "reads": sorted(definition.reads),
                 "writes": list(definition.writes),
-                "upstream_version": _first_package_version(
-                    definition.optional_packages
+                "upstream_version": (
+                    optional_package_version(definition.optional_packages[0])
+                    if definition.optional_packages
+                    else None
                 ),
                 **details,
             },
@@ -412,19 +415,6 @@ def _record_each_call(name: str, func: StepCallable) -> StepCallable:
         return None if result is None else outputs
 
     return run_and_record
-
-
-def _first_package_version(packages: tuple[str, ...]) -> str | None:
-    """Installed version of the first package, read from package metadata
-    without importing the package. None when there is no package or it is
-    not installed."""
-
-    if not packages:
-        return None
-    try:
-        return installed_version(packages[0])
-    except PackageNotFoundError:
-        return None
 
 
 def _validate_step_definition(definition: StepDefinition) -> None:

@@ -8,11 +8,11 @@ quality check actually produces during a workflow run; conversion to
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any, Literal, get_args
 
 from m3resp.data.categories import normalize_category
-from m3resp.data.parameters import check_breath_scope
+from m3resp.data.events import check_breath_scope
 
 #: Controlled vocabulary for ``QualityFlag.severity`` (doc Sec 12).
 Severity = Literal["info", "warning", "error", "critical"]
@@ -63,21 +63,14 @@ class QualityFlag:
             )
 
     def to_dict(self) -> dict[str, Any]:
-        """JSON-serializable representation, one key per field."""
+        """JSON-serializable representation, one key per field in field order.
 
-        return {
-            "name": self.name,
-            "passed": self.passed,
-            "severity": self.severity,
-            "modality": self.modality,
-            "category": self.category,
-            "signal_name": self.signal_name,
-            "breath_id": self.breath_id,
-            "breath_ids": None if self.breath_ids is None else list(self.breath_ids),
-            "start_time": self.start_time,
-            "end_time": self.end_time,
-            "message": self.message,
-            "value": self.value,
-            "threshold": self.threshold,
-            "metadata": dict(self.metadata),
-        }
+        ``breath_ids`` and ``metadata`` are copies, so changing the result
+        leaves the flag unchanged.
+        """
+
+        row = {item.name: getattr(self, item.name) for item in fields(self)}
+        if self.breath_ids is not None:
+            row["breath_ids"] = list(self.breath_ids)
+        row["metadata"] = dict(self.metadata)
+        return row

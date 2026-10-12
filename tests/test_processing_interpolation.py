@@ -74,20 +74,21 @@ def test_interpolates_each_channel_of_2d_values():
     values = np.column_stack([time, 10.0 * time])
     signal = TimeSeries(values=values, time=time)
 
-    result = interpolate_to_time(signal, [0.5, 1.5])
+    result = interpolate_to_time(signal, [0.5, 1.0, 1.5])
 
-    np.testing.assert_allclose(result.values, [[0.5, 5.0], [1.5, 15.0]])
+    np.testing.assert_allclose(result.values, [[0.5, 5.0], [1.0, 10.0], [1.5, 15.0]])
 
 
 def test_interpolates_each_pixel_of_eit_frames():
-    time = np.array([0.0, 1.0])
-    frames = np.stack([np.zeros((2, 3)), np.arange(6.0).reshape(2, 3)])
+    time = np.array([0.0, 1.0, 2.0, 3.0])
+    pixels = np.arange(6.0).reshape(2, 3)
+    frames = time[:, None, None] * pixels
     signal = Signal(values=frames, time=time, modality="eit")
 
     result = interpolate_to_time(signal, [0.5])
 
     assert result.values.shape == (1, 2, 3)
-    np.testing.assert_allclose(result.values[0], np.arange(6.0).reshape(2, 3) / 2)
+    np.testing.assert_allclose(result.values[0], 0.5 * pixels)
 
 
 def test_time_points_outside_the_recording_get_nan_and_a_warning():
@@ -143,3 +144,11 @@ def test_refuses_a_signal_whose_time_goes_back():
 
     with pytest.raises(ValueError, match="signal.time must be strictly increasing"):
         interpolate_to_time(signal, [0.5])
+
+
+def test_the_sample_frequency_of_an_even_axis_is_exact():
+    eit_time = np.arange(0.0, 60.0, 0.05)
+
+    result = interpolate_to_time(_ramp(np.arange(0.0, 61.0, 0.001)), eit_time)
+
+    assert result.sample_frequency == 20.0
