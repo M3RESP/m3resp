@@ -326,6 +326,58 @@ def test_record_quality_flag_falls_back_to_session_target_without_a_signal():
     assert annotation.quality_label == "suspect"
 
 
+def test_record_quality_flag_keeps_one_breath_and_the_time_window():
+    session = M3Session()
+    store = DataModelStore()
+    recorder = DataModelRecorder(session, store)
+
+    annotation = recorder.record_quality_flag(
+        QualityFlag(
+            name="snr_check",
+            passed=False,
+            severity="warning",
+            breath_id="4",
+            start_time=10.0,
+            end_time=12.5,
+        )
+    )
+
+    assert annotation.breath_ids == ["4"]
+    assert (annotation.time_window_start, annotation.time_window_end) == (10.0, 12.5)
+
+
+def test_record_quality_flag_keeps_several_breaths_in_one_annotation():
+    session = M3Session()
+    store = DataModelStore()
+    recorder = DataModelRecorder(session, store)
+
+    annotation = recorder.record_quality_flag(
+        QualityFlag(
+            name="stable_stretch",
+            passed=True,
+            severity="info",
+            breath_ids=["3", "4", "7"],
+        )
+    )
+
+    assert annotation.breath_ids == ["3", "4", "7"]
+    assert len(store.quality_annotations) == 1
+
+
+def test_record_quality_flag_without_breaths_leaves_breath_ids_empty():
+    session = M3Session()
+    store = DataModelStore()
+    recorder = DataModelRecorder(session, store)
+
+    annotation = recorder.record_quality_flag(
+        QualityFlag(name="global_check", passed=True, severity="info")
+    )
+
+    assert annotation.breath_ids is None
+    assert annotation.time_window_start is None
+    assert annotation.time_window_end is None
+
+
 def test_record_processing_step_resolves_input_file_ids_from_recorded_signals():
     session = M3Session()
     store = DataModelStore()

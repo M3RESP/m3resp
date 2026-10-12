@@ -32,8 +32,10 @@ class QualityFlag:
     passed: bool
     severity: Severity        # "info" | "warning" | "error" | "critical"
     modality: str | None = None
+    category: str | None = None
     signal_name: str | None = None
     breath_id: str | None = None
+    breath_ids: list[str] | None = None
     start_time: float | None = None
     end_time: float | None = None
     message: str | None = None
@@ -48,13 +50,37 @@ middle), emit one `QualityFlag` per affected window with `start_time`/
 `end_time` set, rather than a single flag for the whole signal -
 `signal_name` ties them all back to the same signal.
 
+A flag about one breath sets `breath_id`. A flag about several breaths
+judged together sets `breath_ids`, for example ten breaths marked as a
+stable stretch, or a set of breaths with gaps between them. A flag
+sets one or the other; setting both, or an empty `breath_ids` list,
+raises `ValueError`. The per-breath steps use the breath's position in its
+breath list as the id (`"0"`, `"1"`, ...).
+
+```python
+QualityFlag(
+    name="stable_stretch",
+    passed=True,
+    severity="info",
+    modality="eit",
+    breath_ids=["3", "4", "5", "6"],
+)
+```
+
+In `quality_flags.csv`, `breath_ids` is written as a Python list
+(`['3', '4', '5', '6']`); `ast.literal_eval` reads it back. In
+`summary.json` it is a JSON list.
+
 `QualityFlag` mirrors the persisted `QualityAnnotation` entity
 (`m3resp.datamodel.entities`, Layer 2 - see
 [provenance.md](provenance.md)) but is the lightweight, in-memory object a
 quality check actually produces during a workflow run; conversion to
-`QualityAnnotation` happens in `DataModelRecorder`. A skipped or
-not-applicable check emits no flag; the native EMG quality steps follow this
-rule.
+`QualityAnnotation` happens in `DataModelRecorder`. Each flag becomes one
+annotation that keeps the flag's time window (`start_time`/`end_time`, in
+seconds) and its breaths in `QualityAnnotation.breath_ids`: a one-item list
+for a flag about one breath, the full list for a flag about several
+breaths. A skipped or not-applicable check emits no flag; the native EMG
+quality steps follow this rule.
 
 ## Where `QualityFlag`s come from
 

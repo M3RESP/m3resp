@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### One `QualityFlag` can cover several breaths (#94)
+
+`QualityFlag` has a new field, `breath_ids`, for a check that judges a
+set of breaths together, such as ten breaths marked as a stable stretch.
+It works like `ParameterResult.breath_ids`. The list reaches
+`quality_flags.csv` and `summary.json`, and `QualityFlag.to_dict()` gives
+the same fields as a dictionary.
+
+A `QualityFlag` or `ParameterResult` sets `breath_id` for one breath or
+`breath_ids` for several breaths. Setting both, or giving an empty
+`breath_ids` list, now raises `ValueError`.
+
+- **Fixes** `DataModelRecorder.record_quality_flag` dropping the flag's
+  breath and time window. The stored `QualityAnnotation` now keeps
+  `start_time`/`end_time` as its time window, and its breaths in the new
+  `QualityAnnotation.breath_ids` field.
+- `validate_store` reports a `QualityAnnotation` whose time window ends
+  before it starts, as it already did for derived features and clinical
+  events.
+
 ### `FilterType` renamed to `ButterworthFilterType` (#90)
 
 `m3resp.processing.filters` holds more than Butterworth filters, so the

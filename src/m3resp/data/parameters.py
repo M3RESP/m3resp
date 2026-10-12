@@ -1,4 +1,4 @@
-"""``ParameterResult``: a computed respiratory metric (plan_stage2.md Sec 11).
+"""``ParameterResult``: a computed respiratory metric.
 
 Covers both scalar metrics (EIT TIV, EMG amplitude, respiratory rate) and
 array-valued ones (regional ventilation maps), computed by a workflow step
@@ -17,13 +17,41 @@ from m3resp.data.metrics import normalize_metric_name
 from m3resp.data.units import normalize_unit
 
 
+def check_breath_scope(
+    breath_id: str | None, breath_ids: list[str] | None, owner: str
+) -> None:
+    """Check that a result names either one breath or a list of breaths.
+
+    Args:
+        breath_id: Identifier of the single breath, or None.
+        breath_ids: Identifiers of several breaths, or None.
+        owner: Class name used in the error message.
+
+    Raises:
+        ValueError: If both are set, or if ``breath_ids`` is an empty list.
+    """
+
+    if breath_id is not None and breath_ids is not None:
+        raise ValueError(
+            f"{owner} got both breath_id={breath_id!r} and "
+            f"breath_ids={breath_ids!r}; set breath_id for one breath or "
+            "breath_ids for several breaths."
+        )
+    if breath_ids is not None and len(breath_ids) == 0:
+        raise ValueError(
+            f"{owner}.breath_ids is an empty list; leave it as None when the "
+            "result covers no specific breaths."
+        )
+
+
 @dataclass
 class ParameterResult:
     """A named, unit-tagged metric produced by a processing step.
 
-    A parameter can be scoped to whichever of these apply (all are
-    optional and independent, so combinations - e.g. one metric per
-    breath within a time period - are possible):
+    A parameter can be scoped to whichever of these apply. All are
+    optional and can be combined (e.g. one metric per breath within a
+    time period), except ``breath_id`` with ``breath_ids``, which raises
+    ``ValueError``:
 
     - a single breath (``breath_id``);
     - multiple breaths, e.g. a metric computed over a rolling window of
@@ -71,6 +99,7 @@ class ParameterResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        check_breath_scope(self.breath_id, self.breath_ids, "ParameterResult")
         self.unit = normalize_unit(self.unit)
         self.category = normalize_category(self.category) or self.category
         if self.metric_type is None:

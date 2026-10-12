@@ -427,6 +427,12 @@ class DataModelRecorder:
         Without an explicit target, this annotates the ``SignalStream``
         already recorded for ``flag.modality``, falling back to the session
         itself if no such stream exists yet (e.g. a session-level check).
+
+        One flag gives one annotation. The flag's ``start_time``/``end_time``
+        (seconds) become the annotation's time window. Its breaths become
+        ``breath_ids``: ``[breath_id]`` for a flag about one breath, the
+        flag's ``breath_ids`` for a flag about several breaths, and None
+        for a flag about no specific breath.
         """
 
         resolved_type: TargetType = target_type or "signal"
@@ -437,10 +443,19 @@ class DataModelRecorder:
             resolved_type = "session"
             resolved_id = self.recording_session.session_id
 
+        breath_ids: list[str] | None = None
+        if flag.breath_ids is not None:
+            breath_ids = list(flag.breath_ids)
+        elif flag.breath_id is not None:
+            breath_ids = [flag.breath_id]
+
         return self.store.add_quality_annotation(
             QualityAnnotation(
                 target_type=resolved_type,
                 target_id=resolved_id,
+                time_window_start=flag.start_time,
+                time_window_end=flag.end_time,
+                breath_ids=breath_ids,
                 quality_label="valid" if flag.passed else "suspect",
                 annotation_source="automated",
                 annotator_ref=flag.name,

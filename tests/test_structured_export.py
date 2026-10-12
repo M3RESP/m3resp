@@ -95,6 +95,32 @@ def test_linked_breaths_csv_flattens_both_modalities(tmp_path):
     assert float(row["confidence"]) == 0.9
 
 
+def test_quality_flag_breaths_reach_the_csv_and_summary_json(tmp_path):
+    session = M3Session()
+    session.quality.add(
+        QualityFlag(name="snr_check", passed=False, severity="warning", breath_id="2")
+    )
+    session.quality.add(
+        QualityFlag(
+            name="stable_stretch",
+            passed=True,
+            severity="info",
+            breath_ids=["3", "4", "7"],
+        )
+    )
+
+    output_dir = session.export_summary(tmp_path)
+
+    with (output_dir / "quality_flags.csv").open(newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert [row["breath_id"] for row in rows] == ["2", ""]
+    assert [row["breath_ids"] for row in rows] == ["", "['3', '4', '7']"]
+    assert ast.literal_eval(rows[1]["breath_ids"]) == ["3", "4", "7"]
+
+    summary = json.loads((output_dir / "summary.json").read_text())
+    assert summary["quality"]["items"][1]["breath_ids"] == ["3", "4", "7"]
+
+
 def test_processing_history_json_contains_provenance(tmp_path):
     session = M3Session()
     session._record("demo_action", parameters={"x": 1})

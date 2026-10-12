@@ -12,7 +12,8 @@ all optional and can be combined:
 
 - `breath_id`, this number is about one specific breath.
 - `breath_ids`, this number was computed across several breaths (for
-  example a rolling average).
+  example a rolling average). Set either `breath_id` or `breath_ids`;
+  setting both raises `ValueError`.
 - `event_id`, this number is tied to a specific
   [`Event`](events-and-breaths.md) - for example a blood-gas value recorded
   at that timepoint, or a validation value resulting from a labeled
@@ -56,9 +57,9 @@ class ParameterResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 ```
 
-A parameter can be scoped to whichever of these apply (all are optional and
-independent, so combinations - e.g. one metric per breath within a time
-period - are possible):
+A parameter can be scoped to whichever of these apply. All are optional
+and can be combined (e.g. one metric per breath within a time period),
+except `breath_id` with `breath_ids`:
 
 - a single breath (`breath_id`);
 - multiple breaths, e.g. a metric computed over a rolling window of breaths

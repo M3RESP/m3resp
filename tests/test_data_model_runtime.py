@@ -6,6 +6,8 @@ and serialized (plan_stage2.md Milestone 2.1).
 
 from __future__ import annotations
 
+import dataclasses
+
 import numpy as np
 import pytest
 
@@ -124,6 +126,16 @@ class TestParameterResult:
         assert not result.is_scalar
         assert result.to_dict()["value"] == [0.1, 0.2, 0.3]
 
+    def test_refuses_both_one_breath_and_several_breaths(self):
+        with pytest.raises(ValueError, match="both breath_id"):
+            ParameterResult(
+                name="tiv", value=1.0, modality="eit", breath_id="0", breath_ids=["0"]
+            )
+
+    def test_refuses_an_empty_breath_list(self):
+        with pytest.raises(ValueError, match="empty list"):
+            ParameterResult(name="tiv", value=1.0, modality="eit", breath_ids=[])
+
 
 class TestQualityFlag:
     def test_create_with_valid_severity(self):
@@ -133,6 +145,54 @@ class TestQualityFlag:
     def test_rejects_unknown_severity(self):
         with pytest.raises(ValueError, match="severity"):
             QualityFlag(name="snr_check", passed=False, severity="catastrophic")
+
+    def test_one_flag_covers_several_breaths(self):
+        flag = QualityFlag(
+            name="stable_stretch",
+            passed=True,
+            severity="info",
+            modality="eit",
+            breath_ids=["3", "4", "7"],
+        )
+
+        row = flag.to_dict()
+
+        assert row["breath_id"] is None
+        assert row["breath_ids"] == ["3", "4", "7"]
+
+    def test_to_dict_has_one_key_per_field(self):
+        flag = QualityFlag(
+            name="snr_check",
+            passed=False,
+            severity="warning",
+            breath_id="2",
+            start_time=1.5,
+            end_time=2.5,
+            value=3.0,
+            threshold=5.0,
+            metadata={"channel": 1},
+        )
+
+        row = flag.to_dict()
+
+        assert list(row) == [f.name for f in dataclasses.fields(QualityFlag)]
+        assert row["breath_id"] == "2"
+        assert (row["start_time"], row["end_time"]) == (1.5, 2.5)
+        assert row["metadata"] == {"channel": 1}
+
+    def test_refuses_both_one_breath_and_several_breaths(self):
+        with pytest.raises(ValueError, match="both breath_id"):
+            QualityFlag(
+                name="check",
+                passed=True,
+                severity="info",
+                breath_id="0",
+                breath_ids=["0", "1"],
+            )
+
+    def test_refuses_an_empty_breath_list(self):
+        with pytest.raises(ValueError, match="empty list"):
+            QualityFlag(name="check", passed=True, severity="info", breath_ids=[])
 
 
 class TestProcessingHistoryAndStep:
