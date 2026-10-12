@@ -224,7 +224,7 @@ class M3Session:
 
     def load_eit(
         self,
-        path: str | Path,
+        path: str | Path | Sequence[str | Path],
         vendor: str | None = None,
         *,
         loader: EITLoaderChoice = "auto",
@@ -236,7 +236,12 @@ class M3Session:
         time and synchronization record from before are cleared.
 
         Args:
-            path (str | Path): The EIT file to read.
+            path (str | Path | list): The EIT file to read, or a list of
+                files recorded one after the other, read as one recording.
+                The files are joined in the given order; a pause between two
+                files stays in the time axis and gives a warning. With
+                eitprocessing, ``first_frame``/``max_frames`` cannot be used
+                with several files.
             vendor (str | None): The EIT device maker, passed to
                 `eitprocessing` (for example ``"draeger"``).
             loader (str): ``"eitprocessing"`` reads a Draeger, Sentec or
@@ -260,7 +265,14 @@ class M3Session:
         self.eit = recording
         self.raw["eit"] = recording
         self._forget_synchronization("eit")
-        self._record("load_eit", "eit", path=str(path), vendor=vendor, loader=loader)
+        recorded_path: str | list[str] = (
+            [str(item) for item in recording.paths]
+            if not isinstance(path, str | Path)
+            else str(path)
+        )
+        self._record(
+            "load_eit", "eit", path=recorded_path, vendor=vendor, loader=loader
+        )
         return recording.data
 
     def load_emg(self, path: str | Path, **kwargs: Any) -> Any:

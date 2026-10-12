@@ -78,6 +78,9 @@ class StepParameter:
     description: str = ""
     #: When ``value_type == "path"``: ``"file"``, ``"directory"``, or ``None``.
     path_kind: str | None = None
+    #: When ``value_type == "path"``: True if the parameter also takes a list
+    #: of paths (several files read as one recording).
+    allow_list: bool = False
     #: Hint that a GUI may hide this behind an "advanced" toggle by default.
     advanced: bool = False
 
@@ -93,6 +96,7 @@ class StepParameter:
             "choices": list(self.choices) if self.choices is not None else None,
             "description": self.description,
             "path_kind": self.path_kind,
+            "allow_list": self.allow_list,
             "advanced": self.advanced,
         }
 

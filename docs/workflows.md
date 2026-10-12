@@ -260,6 +260,15 @@ result = run_workflow(
 
 `eit.load_custom` stops with an error when no loader was given.
 
+`file_path` of both steps also takes a list of files recorded one after the other, for a recording the device split into several files:
+
+```yaml
+- uses: eit.load
+  with: { file_path: [part_1.bin, part_2.bin], vendor: draeger }
+```
+
+`eit.load` reads each file and joins them into one recording, in the order given. Each file must start after the one before it ends; files out of order or overlapping stop the workflow with an error that names the two files. A pause between two files stays in the time axis and gives a warning with its length, because filters and breath detection run across it. The files must come from the same device, with the same image size and sampling rate. `first_frame` and `max_frames` cannot be used with several files (eitprocessing would apply them to each file); cut the joined recording with `eit.slice_recording` instead. `eit.load_custom` passes the list to the loader as given.
+
 ## Adding a custom step
 
 Register a function with `@register_step`. Declare the context keys it reads (mapped onto its parameter names) and the output names it returns:

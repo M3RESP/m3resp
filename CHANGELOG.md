@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Several EIT files loaded as one recording (#121)
+
+`eit.load`, `eit.load_custom` and `session.load_eit()` take a list of files
+recorded one after the other and read them as one recording:
+
+```yaml
+- uses: eit.load
+  with: { file_path: [part_1.bin, part_2.bin], vendor: draeger }
+```
+
+The files are joined in the given order. A file that starts before the one
+before it ends is refused with an error naming both files. A pause between
+two files stays in the time axis and gives a warning with its length.
+`first_frame` and `max_frames` are refused with several files, because
+eitprocessing applies them to each file; cut the joined recording with
+`eit.slice_recording`. A custom loader receives the list as given.
+
+`EITRecording` has a new `paths` field listing every file (`path` is the
+first one); the provenance record of `load_eit` lists them all, and the
+data-model recorder stores one raw `DataFile` per file. Step parameters
+have a new `allow_list` field, true for a `path` parameter that also takes
+a list of paths; workflow checks resolve and check each path in the list.
+
 ### `eit.load_custom` for your own EIT loader; `eit.load` needs a vendor (#106)
 
 `eit.load` reads Draeger, Sentec and Timpel files with eitprocessing, and

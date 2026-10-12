@@ -90,7 +90,13 @@ _LOAD_OUTPUTS = (
             value_type="path",
             required=True,
             path_kind="file",
-            description="EIT recording file to load.",
+            allow_list=True,
+            description=(
+                "EIT recording file to load, or a list of files recorded one "
+                "after the other, which are joined into one recording in the "
+                "given order. A pause between two files stays in the time "
+                "axis and gives a warning."
+            ),
         ),
         StepParameter(
             name="vendor",
@@ -152,7 +158,7 @@ _LOAD_OUTPUTS = (
 def load(
     session: M3Session,
     *,
-    file_path: str,
+    file_path: str | list[str],
     vendor: str,
     sample_frequency: float | None = None,
     first_frame: int = 0,
@@ -165,7 +171,8 @@ def load(
 
     Args:
         session: Session that loads and stores the recording and signals.
-        file_path: EIT recording to read.
+        file_path: EIT recording to read, or a list of files joined in the
+            given order.
         vendor: Device maker: ``"draeger"``, ``"sentec"`` or ``"timpel"``.
         sample_frequency: Sampling rate in Hz; ``None`` uses the reader's value.
         first_frame: Index of the first frame to read, starting at zero.
@@ -183,7 +190,9 @@ def load(
     Raises:
         TypeError: If ``loader_options`` is other than a mapping.
         ValueError: If ``loader_options`` includes ``sample_frequency``,
-            ``first_frame`` or ``max_frames``.
+            ``first_frame`` or ``max_frames``; if ``first_frame`` or
+            ``max_frames`` is set with several files; or if the files are out
+            of order, overlap, or cannot be joined.
     """
 
     if loader_options is not None and not isinstance(loader_options, Mapping):
@@ -252,7 +261,8 @@ def load(
             name="file_path",
             value_type="path",
             required=True,
-            description="File or folder the loader reads.",
+            allow_list=True,
+            description="File or folder the loader reads, or a list of them (passed to the loader as a list).",
         ),
         StepParameter(
             name="loader_options",
@@ -268,7 +278,7 @@ def load(
 def load_custom(
     session: M3Session,
     *,
-    file_path: str,
+    file_path: str | list[str],
     loader_options: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Load an EIT recording with the session's custom loader.
@@ -280,7 +290,7 @@ def load_custom(
 
     Args:
         session: Session that loads and stores the recording and signals.
-        file_path: File or folder the loader reads.
+        file_path: File or folder the loader reads, or a list of them.
         loader_options: Keyword arguments for the loader.
 
     Returns:

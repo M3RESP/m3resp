@@ -22,6 +22,7 @@ from m3resp.data.events import (
 )
 from m3resp.processing.filters import butterworth_filter
 
+from ._joining import eit_file_paths, join_eit_sequences
 from ._shared import (
     _breath_intervals_to_dicts,
     _lazy_import,
@@ -94,8 +95,12 @@ class EITProcessingAdapter:
     ) -> Any:
         """Load a Draeger, Sentec or Timpel file with `eitprocessing`.
 
+        Several files are read as one recording: each file is read, then they
+        are joined in the given order (see `join_eit_sequences`).
+
         Args:
-            path: The EIT file to read.
+            path: The EIT file to read, or a list of files recorded one after
+                the other.
             vendor: ``"draeger"``, ``"sentec"`` or ``"timpel"``.
             **kwargs: Passed on to ``eitprocessing``'s ``load_eit_data``
                 (``sample_frequency``, ``first_frame``, ``max_frames``, label
@@ -105,7 +110,10 @@ class EITProcessingAdapter:
             The loaded eitprocessing Sequence.
 
         Raises:
-            ValueError: If vendor is None.
+            ValueError: If vendor is None; if ``first_frame`` or
+                ``max_frames`` is set with more than one file (eitprocessing
+                would apply them to each file); or if the files cannot be
+                joined.
             OptionalDependencyError: If eitprocessing is not installed.
         """
 
@@ -123,7 +131,21 @@ class EITProcessingAdapter:
             ),
         )
 
-        return load_eit_data(path, vendor=vendor, **kwargs)
+        paths = eit_file_paths(path)
+        if len(paths) == 1:
+            return load_eit_data(paths[0], vendor=vendor, **kwargs)
+
+        if kwargs.get("first_frame") or kwargs.get("max_frames") is not None:
+            raise ValueError(
+                "first_frame and max_frames apply to each file, so they cannot "
+                "be used when loading several EIT files at once. Load the "
+                "files, then cut the recording with eit.slice_recording "
+                "(session.slice_eit)."
+            )
+        sequences = [
+            load_eit_data(single_path, vendor=vendor, **kwargs) for single_path in paths
+        ]
+        return join_eit_sequences(sequences, paths)
 
     def get_raw_eit(self, sequence: Any, label: str = "raw") -> Any:
         """Return the raw EIT data object from an upstream sequence."""
