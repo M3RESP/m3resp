@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Step descriptions share one field list (#111)
+
+The fields that describe a step (name, summary, description, modality,
+category, parameters, inputs and outputs, alternatives, optional packages,
+version, ...) are declared once, in the new `StepInfo` class in
+`m3resp.workflows.registry`. `StepDefinition` and `StepDescription` both
+build on it, and `describe_step` and `StepDescription.as_dict()` copy every
+field from that list. A new step field is added in `StepInfo` and as a
+`register_step` keyword; a test fails when one of the two is missing.
+
+The output of `describe_step`, `describe_steps` and `m3resp describe` is
+the same as before. `StepDefinition` and `StepDescription` take keyword
+arguments only.
+
 ### `resample_signal` replaced by `interpolate_to_time` (#110)
 
 `resample_signal(signal, target_frequency_hz)` built a new, evenly spaced
