@@ -240,6 +240,26 @@ Cutting steps follow one naming rule:
 
 `emg.slice` and `eit.slice`, the names used before, still work in specs.
 
+Two steps load EIT data:
+
+| Step | Reads |
+|---|---|
+| `eit.load` | A Draeger, Sentec or Timpel file, with eitprocessing. `vendor` is required; `sample_frequency`, `first_frame` and `max_frames` are optional. |
+| `eit.load_custom` | Any other file, with a loader you write in Python. The loader is called as `loader(file_path, vendor=None, **loader_options)` and returns an eitprocessing `Sequence`. |
+
+Both give the same outputs (`raw_eit`, `raw_global_impedance_signal`, `raw_pixel_impedance_signal`, ...), so the steps after them work with either. The custom loader is given to the session's EIT adapter before the workflow runs:
+
+```python
+from m3resp.adapters import EITProcessingAdapter
+from m3resp.workflows import run_workflow
+
+result = run_workflow(
+    "my-workflow.yaml", eit_adapter=EITProcessingAdapter(loader=my_loader)
+)
+```
+
+`eit.load_custom` stops with an error when no loader was given.
+
 ## Adding a custom step
 
 Register a function with `@register_step`. Declare the context keys it reads (mapped onto its parameter names) and the output names it returns:

@@ -53,11 +53,61 @@ class EITProcessingAdapter:
     def __init__(self, loader: Callable[..., Any] | None = None):
         self._loader = loader
 
+    @property
+    def has_custom_loader(self) -> bool:
+        """True when this adapter was given a loader of its own (``loader=``)."""
+
+        return self._loader is not None
+
     def load(self, path: str, vendor: str | None = None, **kwargs: Any) -> Any:
-        """Load EIT data through `eitprocessing` or an injected loader."""
+        """Load EIT data through the injected loader, or else `eitprocessing`."""
 
         if self._loader is not None:
             return self._loader(path, vendor=vendor, **kwargs)
+        return self.load_with_eitprocessing(path, vendor=vendor, **kwargs)
+
+    def load_with_custom_loader(self, path: str, **kwargs: Any) -> Any:
+        """Load EIT data through the loader given as ``loader=``.
+
+        Args:
+            path: File (or folder) the loader reads.
+            **kwargs: Passed on to the loader.
+
+        Returns:
+            Whatever the loader returns, normally an eitprocessing Sequence.
+
+        Raises:
+            UnsupportedWorkflowError: If this adapter has no loader of its own.
+        """
+
+        if self._loader is None:
+            raise UnsupportedWorkflowError(
+                "No custom EIT loader is set. Create the session with "
+                "M3Session(eit_adapter=EITProcessingAdapter(loader=my_loader)), "
+                "or pass that adapter as run_workflow(..., eit_adapter=...). "
+                "Use 'eit.load' with a vendor for Draeger, Sentec or Timpel files."
+            )
+        return self._loader(path, vendor=None, **kwargs)
+
+    def load_with_eitprocessing(
+        self, path: str, vendor: str | None = None, **kwargs: Any
+    ) -> Any:
+        """Load a Draeger, Sentec or Timpel file with `eitprocessing`.
+
+        Args:
+            path: The EIT file to read.
+            vendor: ``"draeger"``, ``"sentec"`` or ``"timpel"``.
+            **kwargs: Passed on to ``eitprocessing``'s ``load_eit_data``
+                (``sample_frequency``, ``first_frame``, ``max_frames``, label
+                and name).
+
+        Returns:
+            The loaded eitprocessing Sequence.
+
+        Raises:
+            ValueError: If vendor is None.
+            OptionalDependencyError: If eitprocessing is not installed.
+        """
 
         if vendor is None:
             raise ValueError(

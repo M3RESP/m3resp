@@ -355,8 +355,8 @@ _ROTARC_SPEC: dict[str, Any] = {
     "name": "rotarc-breath-duration",
     "steps": [
         {
-            "uses": "eit.load",
-            "with": {"file_path": "data/eit.bin", "vendor": "draeger"},
+            "uses": "eit.load_custom",
+            "with": {"file_path": "data/eit.bin"},
         },
         {
             "uses": "eit.slice",

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### `eit.load_custom` for your own EIT loader; `eit.load` needs a vendor (#106)
+
+`eit.load` reads Draeger, Sentec and Timpel files with eitprocessing, and
+its `vendor` parameter is required. It uses eitprocessing even when the
+session's EIT adapter has a loader of its own.
+
+The new step `eit.load_custom` reads a file with the loader given as
+`EITProcessingAdapter(loader=...)`, either on the session or through
+`run_workflow(..., eit_adapter=...)`. It takes `file_path` and
+`loader_options`, gives the same outputs as `eit.load`, and stops with an
+error when no loader was given.
+
+| Before | Now |
+|---|---|
+| `eit.load` with a custom loader set and no `vendor` | `eit.load_custom` |
+
+`session.load_eit()` has a new `loader` argument: `"eitprocessing"`,
+`"custom"`, or `"auto"` (default, the custom loader when there is one,
+else eitprocessing, as before). `EITProcessingAdapter` has the matching
+methods `load_with_eitprocessing` and `load_with_custom_loader`.
+
 ### EMG preprocessing as separate steps; the envelope has its own step (#124)
 
 Four new workflow steps split EMG preprocessing into its parts:

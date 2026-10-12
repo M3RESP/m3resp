@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 
@@ -22,19 +22,45 @@ class EITRecording:
     global_impedance: Any = None
 
 
+EITLoaderChoice = Literal["auto", "eitprocessing", "custom"]
+
+
 def load(
     path: str | Path,
     vendor: str | None = None,
     *,
     adapter: Any = None,
+    loader: EITLoaderChoice = "auto",
     **kwargs: Any,
 ) -> EITRecording:
-    """Load an EIT recording through the Stage 1 adapter."""
+    """Load an EIT recording through the EIT adapter.
+
+    ``loader`` picks the reader: ``"eitprocessing"`` reads a Draeger, Sentec
+    or Timpel file (``vendor`` required), ``"custom"`` uses the loader given
+    to the adapter, and ``"auto"`` uses the custom loader when there is one,
+    else eitprocessing.
+    """
 
     from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
 
     eit_adapter = adapter or EITProcessingAdapter()
-    sequence = eit_adapter.load(str(path), vendor=vendor, **kwargs)
+    if loader == "eitprocessing":
+        sequence = eit_adapter.load_with_eitprocessing(
+            str(path), vendor=vendor, **kwargs
+        )
+    elif loader == "custom":
+        if vendor is not None:
+            raise ValueError(
+                "A custom EIT loader takes no vendor; pass reading options "
+                "for the loader as keyword arguments."
+            )
+        sequence = eit_adapter.load_with_custom_loader(str(path), **kwargs)
+    elif loader == "auto":
+        sequence = eit_adapter.load(str(path), vendor=vendor, **kwargs)
+    else:
+        raise ValueError(
+            f"loader must be 'auto', 'eitprocessing' or 'custom'; got {loader!r}."
+        )
     raw = None
     global_impedance = None
     if hasattr(sequence, "eit_data"):

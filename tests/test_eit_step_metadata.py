@@ -15,6 +15,7 @@ from m3resp.workflows.registry import describe_step, describe_steps
 
 _EIT_STEP_NAMES = [
     "eit.load",
+    "eit.load_custom",
     "eit.slice_signal",
     "eit.slice_recording",
     "eit.detect_rates",
@@ -36,7 +37,7 @@ _EIT_STEP_NAMES = [
 ]
 
 
-def test_all_nineteen_eit_steps_are_registered_and_described():
+def test_all_twenty_eit_steps_are_registered_and_described():
     descriptions = describe_steps(prefix="eit.")
     assert {d.name for d in descriptions} == set(_EIT_STEP_NAMES)
 

@@ -299,6 +299,7 @@ _AUDITED_SESSION_STEPS = frozenset(
         "eit.eeli",
         "eit.functional_impedance",
         "eit.load",
+        "eit.load_custom",
         "eit.mdn_filter",
         "eit.normalize_breaths",
         "eit.pixel_breaths",

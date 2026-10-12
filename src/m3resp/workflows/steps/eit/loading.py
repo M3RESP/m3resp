@@ -22,29 +22,67 @@ from ._shared import (
     _upstream_metadata,
 )
 
+_LOAD_WRITES = (
+    "raw_eit",
+    "raw_global_impedance",
+    "eit_sequence",
+    "raw_global_impedance_signal",
+    "raw_pixel_impedance_signal",
+)
+
+_LOAD_SESSION_WRITES = (
+    "session.raw.eit",
+    "session.signals",
+    # A new recording is not synchronized: its start time is cleared.
+    "session.start_times",
+    "session.sync_methods",
+)
+
+_LOAD_OUTPUTS = (
+    StepArtifact(
+        name="raw_eit",
+        artifact_type="eit_pixel_signal",
+        description="Raw upstream EITData object (pixel impedance).",
+        compatibility_only=True,
+    ),
+    StepArtifact(
+        name="raw_global_impedance",
+        artifact_type="eit_impedance_waveform",
+        required=False,
+        description="Raw global impedance (the upstream object), when present.",
+        compatibility_only=True,
+    ),
+    StepArtifact(
+        name="eit_sequence",
+        artifact_type="eit_sequence",
+        description="Upstream EIT Sequence container used by downstream adapter calls.",
+        public=False,
+        compatibility_only=True,
+    ),
+    StepArtifact(
+        name="raw_global_impedance_signal",
+        artifact_type="signal",
+        required=False,
+        description="Native Signal wrapping the raw global impedance, when present.",
+    ),
+    StepArtifact(
+        name="raw_pixel_impedance_signal",
+        artifact_type="signal",
+        description="Native Signal wrapping the raw pixel impedance.",
+    ),
+)
+
 
 @register_step(
     "eit.load",
     reads={"session": "session"},
-    writes=(
-        "raw_eit",
-        "raw_global_impedance",
-        "eit_sequence",
-        "raw_global_impedance_signal",
-        "raw_pixel_impedance_signal",
-    ),
+    writes=_LOAD_WRITES,
     summary="Load an EIT recording into the session.",
     description="Load a vendor EIT recording file through EITProcessingAdapter and expose the raw pixel/global-impedance data.",
     category="loading",
     modality="eit",
     optional_packages=_EITPROCESSING,
-    session_writes=(
-        "session.raw.eit",
-        "session.signals",
-        # A new recording is not synchronized: its start time is cleared.
-        "session.start_times",
-        "session.sync_methods",
-    ),
+    session_writes=_LOAD_SESSION_WRITES,
     input_artifacts=(_SESSION_ARTIFACT,),
     parameters=(
         StepParameter(
@@ -57,10 +95,9 @@ from ._shared import (
         StepParameter(
             name="vendor",
             value_type="choice",
-            required=False,
-            default=None,
+            required=True,
             choices=("draeger", "sentec", "timpel"),
-            description="Recording vendor. Required unless a custom loader was injected into the adapter.",
+            description="Device maker of the recording. For other files, use 'eit.load_custom'.",
         ),
         StepParameter(
             name="sample_frequency",
@@ -109,46 +146,14 @@ from ._shared import (
             advanced=True,
         ),
     ),
-    output_artifacts=(
-        StepArtifact(
-            name="raw_eit",
-            artifact_type="eit_pixel_signal",
-            description="Raw upstream EITData object (pixel impedance).",
-            compatibility_only=True,
-        ),
-        StepArtifact(
-            name="raw_global_impedance",
-            artifact_type="eit_impedance_waveform",
-            required=False,
-            description="Raw global impedance (the upstream object), when present.",
-            compatibility_only=True,
-        ),
-        StepArtifact(
-            name="eit_sequence",
-            artifact_type="eit_sequence",
-            description="Upstream EIT Sequence container used by downstream adapter calls.",
-            public=False,
-            compatibility_only=True,
-        ),
-        StepArtifact(
-            name="raw_global_impedance_signal",
-            artifact_type="signal",
-            required=False,
-            description="Native Signal wrapping the raw global impedance, when present.",
-        ),
-        StepArtifact(
-            name="raw_pixel_impedance_signal",
-            artifact_type="signal",
-            description="Native Signal wrapping the raw pixel impedance.",
-        ),
-    ),
+    output_artifacts=_LOAD_OUTPUTS,
     record=True,
 )
 def load(
     session: M3Session,
     *,
     file_path: str,
-    vendor: str | None = None,
+    vendor: str,
     sample_frequency: float | None = None,
     first_frame: int = 0,
     max_frames: int | None = None,
@@ -161,7 +166,7 @@ def load(
     Args:
         session: Session that loads and stores the recording and signals.
         file_path: EIT recording to read.
-        vendor: Device maker passed to the file reader; ``None`` uses its default.
+        vendor: Device maker: ``"draeger"``, ``"sentec"`` or ``"timpel"``.
         sample_frequency: Sampling rate in Hz; ``None`` uses the reader's value.
         first_frame: Index of the first frame to read, starting at zero.
         max_frames: Maximum number of frames to read; ``None`` reads to the end.
@@ -206,7 +211,114 @@ def load(
     if max_frames is not None:
         read_options["max_frames"] = max_frames
 
-    session.load_eit(file_path, vendor=vendor, **read_options, **extra)
+    session.load_eit(
+        file_path, vendor=vendor, loader="eitprocessing", **read_options, **extra
+    )
+    return {
+        **_loaded_recording_outputs(session),
+        "_provenance": _upstream_metadata(
+            source_function="eitprocessing.datahandling.loading.load_eit_data",
+            operation="eit.load",
+            parameters={
+                "vendor": vendor,
+                "sample_frequency": sample_frequency,
+                "first_frame": first_frame,
+                "max_frames": max_frames,
+                "loader_options": extra,
+            },
+        ),
+    }
+
+
+@register_step(
+    "eit.load_custom",
+    reads={"session": "session"},
+    writes=_LOAD_WRITES,
+    summary="Load an EIT recording with your own loader.",
+    description=(
+        "Load an EIT recording with the loader given to the session's EIT "
+        "adapter (EITProcessingAdapter(loader=...)), for files that "
+        "eitprocessing cannot read. The loader returns an eitprocessing "
+        "Sequence; the outputs are the same as those of eit.load."
+    ),
+    category="loading",
+    modality="eit",
+    optional_packages=_EITPROCESSING,
+    session_writes=_LOAD_SESSION_WRITES,
+    alternatives=("eit.load",),
+    input_artifacts=(_SESSION_ARTIFACT,),
+    parameters=(
+        StepParameter(
+            name="file_path",
+            value_type="path",
+            required=True,
+            description="File or folder the loader reads.",
+        ),
+        StepParameter(
+            name="loader_options",
+            value_type="mapping",
+            required=False,
+            default=None,
+            description="Keyword arguments passed on to the loader.",
+        ),
+    ),
+    output_artifacts=_LOAD_OUTPUTS,
+    record=True,
+)
+def load_custom(
+    session: M3Session,
+    *,
+    file_path: str,
+    loader_options: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Load an EIT recording with the session's custom loader.
+
+    The loader is set in Python, before the workflow runs:
+    ``M3Session(eit_adapter=EITProcessingAdapter(loader=my_loader))``, or
+    ``run_workflow(spec, eit_adapter=EITProcessingAdapter(loader=my_loader))``.
+    It is called as ``my_loader(file_path, vendor=None, **loader_options)``.
+
+    Args:
+        session: Session that loads and stores the recording and signals.
+        file_path: File or folder the loader reads.
+        loader_options: Keyword arguments for the loader.
+
+    Returns:
+        dict[str, Any]: The same outputs as ``eit.load``.
+
+    Raises:
+        TypeError: If ``loader_options`` is other than a mapping.
+        UnsupportedWorkflowError: If the session's EIT adapter has no loader
+            of its own.
+    """
+
+    if loader_options is not None and not isinstance(loader_options, Mapping):
+        raise TypeError(
+            "eit.load_custom 'loader_options' must be a mapping of keyword "
+            f"arguments for the loader, got {type(loader_options).__name__}."
+        )
+    extra = dict(loader_options or {})
+    session.load_eit(file_path, loader="custom", **extra)
+    loader = getattr(session.eit_adapter, "_loader", None)
+    return {
+        **_loaded_recording_outputs(session),
+        "_provenance": {
+            "source_package": getattr(loader, "__module__", None),
+            "source_function": getattr(loader, "__qualname__", repr(loader)),
+            "implementation": "custom_loader",
+            "parameters": {"loader_options": extra},
+            "operation": "eit.load_custom",
+        },
+    }
+
+
+def _loaded_recording_outputs(session: M3Session) -> dict[str, Any]:
+    """The outputs shared by both loading steps, from the session's new recording.
+
+    Adds the raw global impedance (when present) and the raw pixel impedance
+    to `session.signals` as m3resp `Signal`s.
+    """
+
     recording = session.eit
     assert recording is not None
 
@@ -245,15 +357,4 @@ def load(
         "eit_sequence": recording.data,
         "raw_global_impedance_signal": raw_global_impedance_signal,
         "raw_pixel_impedance_signal": raw_pixel_impedance_signal,
-        "_provenance": _upstream_metadata(
-            source_function="eitprocessing.datahandling.loading.load_eit_data",
-            operation="eit.load",
-            parameters={
-                "vendor": vendor,
-                "sample_frequency": sample_frequency,
-                "first_frame": first_frame,
-                "max_frames": max_frames,
-                "loader_options": extra,
-            },
-        ),
     }

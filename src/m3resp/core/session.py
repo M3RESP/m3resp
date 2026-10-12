@@ -33,7 +33,12 @@ from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
 from m3resp.data.processing import ProcessingHistory
 from m3resp.export.session_export import export_session_summary
-from m3resp.modalities.eit import EITRecording, frame_window, keep_frames
+from m3resp.modalities.eit import (
+    EITLoaderChoice,
+    EITRecording,
+    frame_window,
+    keep_frames,
+)
 from m3resp.modalities.eit import load as load_eit_recording
 from m3resp.modalities.emg import EMGRecording
 from m3resp.modalities.emg import keep_samples as keep_emg_samples
@@ -218,7 +223,12 @@ class M3Session:
         self.datamodel: DataModelRecorder | None = None
 
     def load_eit(
-        self, path: str | Path, vendor: str | None = None, **kwargs: Any
+        self,
+        path: str | Path,
+        vendor: str | None = None,
+        *,
+        loader: EITLoaderChoice = "auto",
+        **kwargs: Any,
     ) -> Any:
         """Load EIT data and store it under `raw["eit"]`.
 
@@ -229,6 +239,11 @@ class M3Session:
             path (str | Path): The EIT file to read.
             vendor (str | None): The EIT device maker, passed to
                 `eitprocessing` (for example ``"draeger"``).
+            loader (str): ``"eitprocessing"`` reads a Draeger, Sentec or
+                Timpel file and needs ``vendor``; ``"custom"`` uses the loader
+                given to `session.eit_adapter` (``EITProcessingAdapter(
+                loader=...)``); ``"auto"`` uses that custom loader when there
+                is one, else eitprocessing.
             **kwargs (Any): Passed on to the EIT file reader.
 
         Returns:
@@ -239,12 +254,13 @@ class M3Session:
             path,
             vendor=vendor,
             adapter=self.eit_adapter,
+            loader=loader,
             **kwargs,
         )
         self.eit = recording
         self.raw["eit"] = recording
         self._forget_synchronization("eit")
-        self._record("load_eit", "eit", path=str(path), vendor=vendor)
+        self._record("load_eit", "eit", path=str(path), vendor=vendor, loader=loader)
         return recording.data
 
     def load_emg(self, path: str | Path, **kwargs: Any) -> Any:
