@@ -79,11 +79,29 @@ private clinical data. Examples reference the generated files under
 
 ## Running the suite
 
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
 ```bash
 pytest                       # full suite
 ruff check .                 # lint
 mypy src                     # type check
 ```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run pytest                # full suite
+uv run ruff check .          # lint
+uv run mypy src              # type check
+```
+:::
+::::
 
 All three must pass before a change is considered done; do not weaken mypy
 settings or exclude a package to make it pass.

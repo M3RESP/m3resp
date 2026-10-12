@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### uv commands next to the pip commands (#88)
+
+The install, test, docs and run commands in the README, `CONTRIBUTING.md`,
+the documentation site and the synthetic data README are shown both for pip
+and for [uv](https://docs.astral.sh/uv/). On the
+documentation site each command block has a "pip" and a "uv" tab, and the
+choice carries over to every page. The `uv synx` typo in the README is fixed.
+
 ### Origin of the EIT code noted in each module (#87)
 
 `processing/peaks.py` (`remove_duplicate_extrema`,

@@ -8,9 +8,25 @@ This is the declarative engine (`m3resp.workflows`). For the smaller, named pres
 
 From the command line:
 
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
 ```bash
 m3resp run path/to/workflow.yaml
 ```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run m3resp run path/to/workflow.yaml
+```
+:::
+::::
 
 From Python:
 
@@ -29,9 +45,25 @@ result.session                # the backing M3Session (events, parameters)
 
 List the available built-in steps:
 
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
 ```bash
 m3resp steps
 ```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run m3resp steps
+```
+:::
+::::
 
 Or from Python:
 
@@ -320,6 +352,12 @@ Worked examples ship with the repository. All except the two smaller introductor
 
 Run them from the repository root:
 
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
 ```bash
 m3resp run examples/ROTARC_example/breath-duration.workflow.yaml
 m3resp run examples/eit_full_preprocessing/eit-full.workflow.yaml
@@ -328,6 +366,21 @@ m3resp run examples/multimodal_full/multimodal-full.workflow.yaml
 m3resp run examples/multimodal_example/multimodal.workflow.yaml
 m3resp run examples/multidomain_recording1/recording1_a2.workflow.yaml
 ```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run m3resp run examples/ROTARC_example/breath-duration.workflow.yaml
+uv run m3resp run examples/eit_full_preprocessing/eit-full.workflow.yaml
+uv run m3resp run examples/emg_full_preprocessing/emg-full.workflow.yaml
+uv run m3resp run examples/multimodal_full/multimodal-full.workflow.yaml
+uv run m3resp run examples/multimodal_example/multimodal.workflow.yaml
+uv run m3resp run examples/multidomain_recording1/recording1_a2.workflow.yaml
+```
+:::
+::::
 
 Update `inputs.eit_file` in the ROTARC example before running it — it contains a site-specific path.
 
@@ -357,11 +410,27 @@ The ReSurfEMG gap migration keeps validated ReSurfEMG algorithms behind `ReSurfE
 
 Using any `emg.*`/ventilator step requires the optional `resurfemg` dependency:
 
-```bash
-pip install "m3resp[emg]"
-```
+::::{tab-set}
+:sync-group: installer
 
-Steps whose upstream call needs it raise `OptionalDependencyError` with that same install hint if it's missing; `import m3resp` and `m3resp steps` work without it (upstream imports are lazy, inside the adapter methods that need them).
+:::{tab-item} pip
+:sync: pip
+
+```bash
+python -m pip install -e ".[emg]"
+```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv sync --extra emg
+```
+:::
+::::
+
+Steps whose upstream call needs it raise `OptionalDependencyError` with an install hint if it's missing; `import m3resp` and `m3resp steps` work without it (upstream imports are lazy, inside the adapter methods that need them).
 
 ### Step table
 
