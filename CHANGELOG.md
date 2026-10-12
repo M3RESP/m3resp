@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+### EMG polishing: session baseline and adapter docs (#72)
+
+`M3Session.emg_moving_baseline(window_seconds=7.5, step_seconds=0.2,
+percentile=33.0, variant=None)` computes the moving baseline of the
+processed EMG envelope, with the same calculation as the
+`emg.moving_baseline` step. The baseline is added to `session.signals` as
+`<channel>_moving_baseline` (`<channel>_moving_baseline:<variant>` for a
+preprocessing variant), replacing the one from an earlier call, and the
+call is recorded in `session.provenance` as `emg_moving_baseline` with its
+settings and variant. The EMG tutorial now runs preprocess, baseline, then
+breath detection:
+
+```python
+session.preprocess_emg(channel=1)
+baseline = session.emg_moving_baseline()
+session.detect_emg_breaths(baseline=baseline)
+```
+
+The `"emg"` preset uses it, with the same numbers as before; its baseline
+now also appears in `session.signals` and `session.provenance`.
+`config={"baseline": {...}}` takes `window_seconds`, `step_seconds` and
+`percentile` (converted to numbers, so `"7.5"` works); other keys,
+including `variant`, raise `TypeError`, so the baseline always comes from
+the processed EMG that breath detection uses. A zero window or step now
+raises `ValueError`; before, it became one sample.
+
+`ReSurfEMGAdapter` and its method files have plain-language docstrings
+(inputs, outputs, units, and which values come from ReSurfEMG and which are
+computed in m3resp), and the adapter page in the developer docs lists every
+method that way. References to planning documents and project stages are
+removed from the EMG and ventilator code.
+
 ### Several EIT files loaded as one recording (#121)
 
 `eit.load`, `eit.load_custom` and `session.load_eit()` take a list of files

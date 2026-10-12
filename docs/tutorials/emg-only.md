@@ -19,7 +19,9 @@ session.load_emg(
 
 # Channel 1 carries the breathing muscle signal; channel 0 is mostly noise.
 session.preprocess_emg(channel=1)  # bandpass filter + envelope -> session.signals
-session.detect_emg_breaths()  # -> session.events["emg_breaths"]
+# The quiet level of the envelope; breath detection measures above it.
+baseline = session.emg_moving_baseline()  # 7.5 s window, 0.2 s step, 33rd percentile
+session.detect_emg_breaths(baseline=baseline)  # -> session.events["emg_breaths"]
 session.postprocess_emg()     # features + quality -> parameter_results/quality
 
 session.export_summary("results/emg-only/")
@@ -27,7 +29,8 @@ session.export_summary("results/emg-only/")
 
 After this:
 
-- `session.signals` has the raw/filtered/envelope EMG `Signal`s (see
+- `session.signals` has the raw/filtered/envelope EMG `Signal`s and the
+  baseline (see
   [../concepts/signals.md](../concepts/signals.md)).
 - `session.events["emg_breaths"]` has the detected `BreathEvent`s.
 - `session.parameter_results` has amplitude/AUC/pseudo-slope/time-to-peak/

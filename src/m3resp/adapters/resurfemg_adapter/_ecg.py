@@ -1,4 +1,5 @@
-"""ECG-artifact-handling methods of `ReSurfEMGAdapter`."""
+"""`ReSurfEMGAdapter` methods that find heartbeats (ECG peaks) in an EMG
+recording and remove them, by gating or by wavelet denoising (ReSurfEMG)."""
 
 from __future__ import annotations
 

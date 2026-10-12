@@ -30,10 +30,11 @@ def _upstream_metadata(
     source_package: str = "resurfemg",
     implementation: str = "upstream_adapter",
 ) -> dict[str, Any]:
-    """Build the Stage 2 EMG provenance metadata schema shared by native
-    `Signal`/`ParameterResult` outputs (see `plan/stage2/
-    2_resurfemg_gap_migration_implementation_plan.md`, "Use one provenance
-    schema"). Mirrors `m3resp.workflows.steps.eit._upstream_metadata`.
+    """The provenance details an EMG step returns under ``"_provenance"``.
+
+    The same fields as `m3resp.workflows.steps.eit._upstream_metadata`: which
+    package and function computed the value, the settings used, and the
+    step name.
 
     `source_package`/`implementation` default to the ReSurfEMG-adapter case;
     pass `source_package="m3resp"`, `implementation="m3resp.processing.<module>"`

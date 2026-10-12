@@ -1,4 +1,6 @@
-"""Load/preprocess/postprocess orchestration methods of `ReSurfEMGAdapter`."""
+"""`ReSurfEMGAdapter` methods that load EMG files, run preprocessing and
+postprocessing, and turn their results into m3resp signals, parameters and
+quality flags."""
 
 from __future__ import annotations
 
@@ -29,7 +31,22 @@ class _CoreMixin:
         self._loader = loader
 
     def load(self, path: str, **kwargs: Any) -> Any:
-        """Load EMG data through `resurfemg` or an injected loader."""
+        """Read an EMG file.
+
+        Uses the loader given as ``loader=`` when there is one. Biopac
+        tab-delimited ``.txt`` exports are read by m3resp; other formats
+        (``.Poly5``, ``.npy``, ``.csv``, ...) by ReSurfEMG's ``load_file``.
+
+        Args:
+            path: The EMG file.
+            **kwargs: Passed on to the loader or to ``load_file``.
+
+        Returns:
+            dict: ``"array"`` (channels by samples, in the file's units),
+                ``"dataframe"`` and ``"metadata"`` (with ``"fs"``, the
+                sampling rate in Hz, and the channel ``"labels"`` and
+                ``"units"``).
+        """
 
         if self._loader is not None:
             return self._loader(path, **kwargs)
@@ -58,7 +75,12 @@ class _CoreMixin:
         }
 
     def preprocess(self, signal: Any, **kwargs: Any) -> Any:
-        """Preprocess EMG data through ReSurfEMG or a provided callable."""
+        """Choose a channel, filter it and compute its envelope.
+
+        See `_preprocess_default` for the settings. ``preprocess=`` replaces
+        the whole step with a function of your own, called as
+        ``preprocess(signal, **kwargs)``.
+        """
 
         preprocess = kwargs.pop("preprocess", None)
         if preprocess is not None:
@@ -67,7 +89,12 @@ class _CoreMixin:
         return cast(_DefaultsProtocol, self)._preprocess_default(signal, **kwargs)
 
     def detect_breaths(self, signal: Any, **kwargs: Any) -> list[BreathEvent]:
-        """Detect EMG breaths and normalize them into `BreathEvent` objects."""
+        """Find the breaths in the EMG envelope, as `BreathEvent`s.
+
+        See `_detect_breaths_default` for the settings. ``detector=`` replaces
+        the detection with a function of your own; its results are turned
+        into `BreathEvent`s the same way.
+        """
 
         detector = kwargs.pop("detector", None)
         if detector is not None:
@@ -90,18 +117,29 @@ class _CoreMixin:
     def compute_features(
         self, signal: Any, events: Sequence[BreathEvent], **kwargs: Any
     ) -> Any:
-        """Compute EMG features when an upstream callable is provided."""
+        """Compute EMG features with a function you pass as ``compute=``.
+
+        The per-breath EMG measures themselves are workflow steps
+        (``emg.amplitude``, ``emg.time_product``, ...) and
+        `M3Session.postprocess_emg`.
+        """
 
         compute = kwargs.pop("compute", None)
         if compute is None:
             raise UnsupportedWorkflowError(
-                "EMG feature extraction needs an upstream callable in Stage 1. "
-                "Pass `compute=callable`."
+                "compute_features needs a function to compute the features: "
+                "pass `compute=callable`. The built-in per-breath measures "
+                "are the emg.* feature steps and session.postprocess_emg()."
             )
         return compute(signal, events, **kwargs)
 
     def to_signals(self, processed_emg: dict[str, Any]) -> list[Signal]:
-        """Convert preprocessed EMG channel arrays into `Signal` objects."""
+        """The raw channel, filtered trace and envelope of a preprocessing
+        result as m3resp `Signal`s, on a time axis in seconds from 0.
+
+        Traces that are missing (for example an envelope not yet computed)
+        are left out.
+        """
 
         if not isinstance(processed_emg, dict) or "fs" not in processed_emg:
             raise UnsupportedWorkflowError(
@@ -142,7 +180,12 @@ class _CoreMixin:
         return signals
 
     def to_parameters(self, postprocessed: dict[str, Any]) -> list[ParameterResult]:
-        """Convert computed EMG features into `ParameterResult` objects."""
+        """The per-breath measures of a `postprocess` result as `ParameterResult`s.
+
+        The respiratory rate gives two results: ``respiratory_rate`` (the
+        median, breaths/min) and ``respiratory_rate_breath_to_breath`` (one
+        value per breath).
+        """
 
         features = _computed_category(postprocessed, "features")
         parameters = []
@@ -211,7 +254,8 @@ class _CoreMixin:
         return flags
 
     def available_postprocessing(self) -> dict[str, list[str]]:
-        """Return ReSurfEMG postprocessing functions exposed by M3Resp."""
+        """The ReSurfEMG postprocessing functions m3resp can run, by group
+        (baseline, event_detection, features, quality_assessment)."""
 
         return {
             category: list(functions)
@@ -224,7 +268,12 @@ class _CoreMixin:
         events: Sequence[BreathEvent] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Run default EMG postprocessing and report unavailable input needs."""
+        """Compute baselines, breath on/offsets, per-breath measures and
+        quality checks from preprocessed EMG and detected breaths.
+
+        See `_postprocess_default` for the settings and the result.
+        ``postprocess=`` replaces it with a function of your own.
+        """
 
         custom = kwargs.pop("postprocess", None)
         if custom is not None:
@@ -237,7 +286,13 @@ class _CoreMixin:
     def run_postprocessing_function(
         self, category: str, function_name: str, *args: Any, **kwargs: Any
     ) -> Any:
-        """Call any exposed `resurfemg.postprocessing` function by name."""
+        """Call one ReSurfEMG postprocessing function by group and name.
+
+        For example ``run_postprocessing_function("features", "amplitude",
+        ...)`` with the arguments ReSurfEMG's ``amplitude`` takes. Only the
+        functions listed by `available_postprocessing` can be called;
+        arguments are passed on unchanged.
+        """
 
         if function_name not in POSTPROCESSING_FUNCTIONS.get(category, ()):
             raise ValueError(

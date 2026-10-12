@@ -1,4 +1,7 @@
-"""Native fallback implementations of `ReSurfEMGAdapter`, used when the optional `resurfemg` package is unavailable."""
+"""`ReSurfEMGAdapter`'s default preprocessing, breath detection and
+postprocessing, and the preprocessing parts (channel, notch filter, band-pass
+filter, envelope). The band-pass filter is ReSurfEMG's; channel choice, notch
+filter, envelope and breath detection are computed in m3resp."""
 
 from __future__ import annotations
 

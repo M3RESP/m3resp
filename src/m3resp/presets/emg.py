@@ -10,6 +10,10 @@ if TYPE_CHECKING:
     from m3resp.core.session import M3Session
 
 
+#: Settings the preset passes to `M3Session.emg_moving_baseline`.
+_BASELINE_DEFAULTS = {"window_seconds": 7.5, "step_seconds": 0.2, "percentile": 33.0}
+
+
 class EMGPreset(Preset):
     """Preprocess loaded EMG, remove ECG, detect breaths and calculate features.
 
@@ -22,7 +26,7 @@ class EMGPreset(Preset):
     ``postprocess``. Envelope options are ``window_seconds`` and ``method``;
     they default to the envelope settings preprocessing used.
     Baseline options are ``window_seconds`` (7.5 s by default), ``step_seconds``
-    (0.2 s) and additional moving-baseline options such as ``percentile``.
+    (0.2 s) and ``percentile`` (33); other keys raise TypeError.
     ``ecg_detect_peaks.ecg_channel`` selects a reference ECG channel.
 
     ``ecg_removal.enabled=False`` skips gating; cardiac activity can then
@@ -70,28 +74,32 @@ class EMGPreset(Preset):
     def _moving_baseline(self, session: M3Session, config: PresetConfig | None) -> Any:
         """Estimate the quiet level of the stored EMG envelope.
 
-        Config's baseline window_seconds and step_seconds are converted using
-        fs in Hz to at least one sample each; other options reach the adapter.
+        Uses `M3Session.emg_moving_baseline` with config's ``baseline``
+        options (``window_seconds``, ``step_seconds``, ``percentile``, each
+        converted to a number). Other keys raise TypeError.
         Returns one value per envelope sample, in envelope units, or None when
         an envelope is unavailable.
         """
 
-        import numpy as np
-
         processed = session.processed.get("emg") or {}
-        envelope = processed.get("envelope")
-        if envelope is None:
+        if processed.get("envelope") is None:
             return None
-
-        kwargs = dict(self._kwargs_for(config, "baseline"))
-        fs = float(processed["fs"])
-        window_seconds = float(kwargs.pop("window_seconds", 7.5))
-        step_seconds = float(kwargs.pop("step_seconds", 0.2))
-        return session.emg_adapter.moving_baseline(
-            np.asarray(envelope, dtype=float),
-            window_samples=max(1, int(window_seconds * fs)),
-            step_samples=max(1, int(step_seconds * fs)),
-            **kwargs,
+        options = self._kwargs_for(config, "baseline")
+        unknown = sorted(set(options) - set(_BASELINE_DEFAULTS))
+        if unknown:
+            raise TypeError(
+                f"EMGPreset config['baseline'] accepts {sorted(_BASELINE_DEFAULTS)}; "
+                f"got {unknown}. The baseline is computed from the same processed "
+                "EMG that breath detection uses."
+            )
+        settings = {
+            name: float(options.get(name, default))
+            for name, default in _BASELINE_DEFAULTS.items()
+        }
+        return session.emg_moving_baseline(
+            window_seconds=settings["window_seconds"],
+            step_seconds=settings["step_seconds"],
+            percentile=settings["percentile"],
         )
 
     def _remove_ecg(
