@@ -72,6 +72,12 @@ cut one of them without moving the others.
   `session.signals` would keep the full length.
 - **Cut samples are gone** from the loaded recording. Reload the file to get
   them back.
+- **In a workflow, the steps after a cut read the cut part.**
+  `eit.slice_recording` gives the cut recording under the names `eit.load`
+  uses (`raw_eit`, `raw_global_impedance`, `eit_sequence` and the two raw
+  signals), and `emg.slice_recording` under the names `emg.load` uses
+  (`emg_recording`, `raw_emg_signals`). The raw signals of the cut recording
+  replace the uncut ones in `session.signals`.
 - **Time mode of `eit.slice_signal` uses the signal's own time values.**
   Data read from an EIT file can include timestamps as time of the day,
   rather than seconds from the start: a Draeger file, for example, can start

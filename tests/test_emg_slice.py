@@ -145,3 +145,36 @@ def test_step_calls_the_session_method():
 
     assert result["emg_slice"]["start_seconds"] == 5.0
     assert session.emg.data["array"].shape[1] == int(55.0 * FS)
+
+
+def test_steps_after_the_slice_step_read_the_cut_recording(tmp_path):
+    from m3resp.workflows import load_spec, run_workflow
+
+    (tmp_path / "study.txt").write_text("")
+    session = M3Session(
+        emg_adapter=ReSurfEMGAdapter(loader=lambda *args, **kwargs: _recording())
+    )
+    spec = {
+        "name": "cut",
+        "steps": [
+            {"uses": "emg.load", "with": {"file_path": "study.txt"}},
+            {
+                "uses": "emg.slice_recording",
+                "with": {"start_seconds": 10.0, "end_seconds": 25.0},
+            },
+        ],
+    }
+
+    context = run_workflow(load_spec(spec, root=tmp_path), session=session).context
+
+    signals = context.get("raw_emg_signals")
+    assert [signal.channel for signal in signals] == ["Paw", "EMGdi"]
+    assert all(len(signal.values) == int(15.0 * FS) for signal in signals)
+    assert signals[0].values[0] == pytest.approx(10.0)
+    raw_in_session = [
+        signal
+        for signal in session.signals.items
+        if signal.modality == "emg" and signal.processing_state == "raw"
+    ]
+    assert len(raw_in_session) == 2
+    assert all(len(signal.values) == int(15.0 * FS) for signal in raw_in_session)

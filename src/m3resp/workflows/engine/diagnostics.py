@@ -176,7 +176,11 @@ def collect_diagnostics(
         output_artifacts_by_name = {a.name: a for a in definition.output_artifacts}
         for name in definition.writes:
             context_key = step_spec.outputs.get(name, name)
-            if context_key in produced and context_key not in seeded:
+            if (
+                context_key in produced
+                and context_key not in seeded
+                and name not in definition.replaces
+            ):
                 diagnostics.append(
                     Diagnostic(
                         severity="error",
