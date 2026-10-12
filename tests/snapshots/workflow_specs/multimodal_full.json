@@ -206,7 +206,6 @@
       "uses": "emg.preprocess",
       "with": {
         "channel": 1,
-        "envelope_window_seconds": 0.5,
         "high_pass_hz": 20
       }
     },
@@ -224,12 +223,24 @@
       "in": {
         "processed_emg": "processed_emg_before_ecg"
       },
-      "out": {
-        "processed_emg_after_ecg": "processed_emg"
-      },
+      "out": {},
       "uses": "emg.ecg_gating",
       "with": {
         "fill_method": 1
+      }
+    },
+    {
+      "id": "envelope",
+      "in": {
+        "processed_emg": "processed_emg_after_ecg"
+      },
+      "out": {
+        "processed_emg_with_envelope": "processed_emg"
+      },
+      "uses": "emg.envelope",
+      "with": {
+        "method": "rms",
+        "window_seconds": 0.5
       }
     },
     {
@@ -265,8 +276,8 @@
       "out": {},
       "uses": "ventilator.channels",
       "with": {
-        "flow_channel": 1,
         "airway_pressure_channel": 0,
+        "flow_channel": 1,
         "volume_channel": 2
       }
     },

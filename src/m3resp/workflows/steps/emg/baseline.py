@@ -17,6 +17,7 @@ from ._shared import (
     _require_percentile,
     _require_positive_seconds,
     _upstream_metadata,
+    require_envelope,
 )
 
 
@@ -92,7 +93,7 @@ def moving_baseline(
     _require_positive_seconds("step_seconds", step_seconds)
     _require_percentile("percentile", percentile)
 
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.moving_baseline")
     fs = float(processed_emg["fs"])
     window_samples = max(1, int(window_seconds * fs))
     step_samples = max(1, int(step_seconds * fs))
@@ -274,7 +275,7 @@ def slopesum_baseline(
     _require_percentile("percentile", percentile)
     _require_percentile("augmented_percentile", augmented_percentile)
 
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.slopesum_baseline")
     fs = float(processed_emg["fs"])
     window_samples = max(1, int(window_seconds * fs))
     step_samples = max(1, int(step_seconds * fs))

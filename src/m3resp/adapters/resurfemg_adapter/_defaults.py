@@ -42,6 +42,12 @@ from ._shared import (
 from ._signals import peak_indices_from_events, ventilator_signals
 
 
+def default_low_pass_hz(sample_frequency: float) -> float:
+    """Default EMG low-pass cutoff in Hz: 500 Hz, or 95 % of Nyquist if lower."""
+
+    return min(sample_frequency / 2 * 0.95, 500)
+
+
 class _DefaultsMixin:
     def _preprocess_default(
         self,
@@ -65,8 +71,8 @@ class _DefaultsMixin:
         enough to attenuate the QRS complex still leaves its higher-frequency
         content in the pass band. ECG gating (``emg.ecg_gating``, run by the
         ``"emg"`` preset) removes it from the filtered signal afterwards.
-        When compute_envelope is False, the envelope settings remain in the output
-        so gating can use them when calculating a new envelope.
+        When compute_envelope is False, the envelope settings are still
+        recorded under ``filter``.
 
         RMS is the envelope used in the literature. ARV is an opt-in choice and
         gives different values from RMS on real sEMG. The median envelope (median
@@ -105,72 +111,46 @@ class _DefaultsMixin:
                 EMG channel and channel is None.
         """
 
-        try:
-            import numpy as np
-            from resurfemg.preprocessing.filtering import emg_bandpass_butter
-        except ImportError as exc:
-            raise OptionalDependencyError(
-                "EMG preprocessing requires the optional dependency `resurfemg`. "
-                'Install with `pip install "m3resp[emg]"`.'
-            ) from exc
-
-        _require_emg_recording(recording)
-
-        metadata = dict(recording["metadata"])
-        fs = float(metadata["fs"])
-        array = recording["array"]
-        if channel is None:
-            channel = _choose_emg_channel(len(array), metadata.get("labels"))
-        raw = np.asarray(array[channel], dtype=float)
-
+        processed = self.select_emg_channel(recording, channel=channel)
+        fs = processed["fs"]
+        raw = processed["raw_channel"]
         if low_pass_hz is None:
-            low_pass_hz = min(fs / 2 * 0.95, 500)
+            low_pass_hz = default_low_pass_hz(fs)
 
         def notch(values: Any, base_frequency: float) -> Any:
-            # Default the notch's reach to Nyquist, not `low_pass_hz`: a
-            # harmonic landing at or just past the low-pass cutoff (e.g. the
-            # EIT frame-rate comb's 10th harmonic sitting on a 500 Hz
-            # low-pass edge) is only partially attenuated by the low-pass
-            # filter's finite roll-off, so it must still be fully inside the
-            # notch's stopband rather than at its boundary.
-            return harmonic_notch_filter(
+            return self.notch_filter_emg(
                 values,
-                base_frequency=base_frequency,
                 sample_frequency=fs,
-                max_frequency=notch_max_frequency or (fs / 2),
+                base_frequency=base_frequency,
+                max_frequency=notch_max_frequency,
                 quality_factor=notch_quality_factor,
             )
 
         filtered = raw
         if notch_base_frequency is not None and notch_before_bandpass:
             filtered = notch(filtered, notch_base_frequency)
-        filtered = emg_bandpass_butter(
-            emg_raw=filtered,
-            high_pass=high_pass_hz,
-            low_pass=low_pass_hz,
-            fs_emg=fs,
+        filtered = self.bandpass_filter_emg(
+            filtered,
+            sample_frequency=fs,
+            high_pass_hz=high_pass_hz,
+            low_pass_hz=low_pass_hz,
         )
         if notch_base_frequency is not None and not notch_before_bandpass:
             filtered = notch(filtered, notch_base_frequency)
-        # ECG gating replaces the band-passed signal and recomputes the
-        # envelope from the gated trace, so an envelope computed here would be
-        # discarded. `compute_envelope=False` skips it; the window and method
-        # are still recorded below, so the gating step recomputes with the
-        # settings asked for here.
+        # ECG removal replaces the band-passed signal, and the envelope is then
+        # computed from the cleaned trace. `compute_envelope=False` skips it
+        # here; the window and method are still recorded below.
         envelope = None
         if compute_envelope:
-            envelope_window_samples = max(1, int(envelope_window_seconds * fs))
-            envelope = rolling_envelope(
+            envelope = self.emg_envelope(
                 filtered,
-                window_length=envelope_window_samples,
+                sample_frequency=fs,
+                window_seconds=envelope_window_seconds,
                 method=envelope_method,
             )
 
         return {
-            **recording,
-            "channel": channel,
-            "fs": fs,
-            "raw_channel": raw,
+            **processed,
             "filtered": filtered,
             "envelope": envelope,
             "filter": {
@@ -192,6 +172,155 @@ class _DefaultsMixin:
                 ),
             },
         }
+
+    def select_emg_channel(
+        self, recording: Any, *, channel: int | None = None
+    ) -> dict[str, Any]:
+        """Take one channel of a loaded EMG recording as the trace to analyse.
+
+        Args:
+            recording: Loaded dictionary with a channel-major array
+                (n_channels, n_samples) and metadata containing fs in Hz.
+            channel: Zero-based channel index. When None, channel labels select
+                a breathing-muscle channel, excluding ECG/EKG labels.
+
+        Returns:
+            dict[str, Any]: The recording fields plus ``channel``, ``fs`` (Hz),
+                ``raw_channel`` (the channel's samples, in the file's units)
+                and an empty ``filter`` record that the filter steps fill in.
+
+        Raises:
+            TypeError: If recording lacks the required array or metadata.
+            UnresolvedChannelError: If channel labels do not select an
+                unambiguous EMG channel and channel is None.
+        """
+
+        import numpy as np
+
+        _require_emg_recording(recording)
+        metadata = dict(recording["metadata"])
+        fs = float(metadata["fs"])
+        array = recording["array"]
+        if channel is None:
+            channel = _choose_emg_channel(len(array), metadata.get("labels"))
+        return {
+            **recording,
+            "channel": channel,
+            "fs": fs,
+            "raw_channel": np.asarray(array[channel], dtype=float),
+            "filter": {},
+        }
+
+    def bandpass_filter_emg(
+        self,
+        values: Any,
+        *,
+        sample_frequency: float,
+        high_pass_hz: float = 20.0,
+        low_pass_hz: float | None = None,
+    ) -> Any:
+        """Band-pass filter an EMG trace with ReSurfEMG's Butterworth filter.
+
+        The 20-500 Hz band is the range used in respiratory-sEMG literature.
+
+        Args:
+            values: EMG samples, one value per sample.
+            sample_frequency: Sampling rate in Hz.
+            high_pass_hz: Lower cutoff in Hz.
+            low_pass_hz: Upper cutoff in Hz. None uses the smaller of 500 Hz
+                and 95 percent of the Nyquist frequency.
+
+        Returns:
+            numpy.ndarray: The filtered trace, same length and units.
+
+        Raises:
+            OptionalDependencyError: If ReSurfEMG is unavailable.
+        """
+
+        try:
+            from resurfemg.preprocessing.filtering import emg_bandpass_butter
+        except ImportError as exc:
+            raise OptionalDependencyError(
+                "EMG preprocessing requires the optional dependency `resurfemg`. "
+                'Install with `pip install "m3resp[emg]"`.'
+            ) from exc
+
+        if low_pass_hz is None:
+            low_pass_hz = default_low_pass_hz(sample_frequency)
+        return emg_bandpass_butter(
+            emg_raw=values,
+            high_pass=high_pass_hz,
+            low_pass=low_pass_hz,
+            fs_emg=sample_frequency,
+        )
+
+    def notch_filter_emg(
+        self,
+        values: Any,
+        *,
+        sample_frequency: float,
+        base_frequency: float,
+        max_frequency: float | None = None,
+        quality_factor: float = 30.0,
+    ) -> Any:
+        """Notch-filter an EMG trace at a base frequency and its harmonics.
+
+        Removes mains hum (e.g. 50 Hz) or the harmonic comb a co-recorded EIT
+        device adds at its frame rate and multiples of it.
+
+        Args:
+            values: EMG samples, one value per sample.
+            sample_frequency: Sampling rate in Hz.
+            base_frequency: Lowest frequency to remove, in Hz.
+            max_frequency: Highest harmonic to remove, in Hz. None or zero
+                uses the Nyquist frequency, so a harmonic near the low-pass
+                cutoff (which the low-pass filter only partly removes) is
+                still notched.
+            quality_factor: Quality factor of each notch; higher is narrower.
+
+        Returns:
+            numpy.ndarray: The filtered trace, same length and units.
+        """
+
+        return harmonic_notch_filter(
+            values,
+            base_frequency=base_frequency,
+            sample_frequency=sample_frequency,
+            max_frequency=max_frequency or (sample_frequency / 2),
+            quality_factor=quality_factor,
+        )
+
+    def emg_envelope(
+        self,
+        values: Any,
+        *,
+        sample_frequency: float,
+        window_seconds: float = 0.25,
+        method: str = "rms",
+    ) -> Any:
+        """Compute the envelope of an EMG trace over a moving window.
+
+        RMS is the envelope used in the literature. ARV gives different values
+        from RMS on real sEMG. The median envelope (median of the absolute
+        signal) ignores short spikes such as heartbeat leftovers.
+
+        Args:
+            values: EMG samples, one value per sample.
+            sample_frequency: Sampling rate in Hz.
+            window_seconds: Window length in seconds, converted to at least
+                one sample (rounded down).
+            method: ``"rms"``, ``"arv"`` or ``"median"``.
+
+        Returns:
+            numpy.ndarray: The envelope, one value per sample, in the units of
+                the trace.
+        """
+
+        return rolling_envelope(
+            values,
+            window_length=max(1, int(window_seconds * sample_frequency)),
+            method=method,
+        )
 
     def _detect_breaths_default(
         self,
@@ -239,6 +368,12 @@ class _DefaultsMixin:
                 "Default EMG breath detection expects processed EMG data from "
                 "`preprocess_emg()`. Pass `detector=callable` to normalize "
                 "custom detections."
+            )
+        if processed_emg["envelope"] is None:
+            raise UnsupportedWorkflowError(
+                "EMG breath detection needs an EMG envelope, and the processed "
+                "EMG has none. Add an 'emg.envelope' step after filtering and "
+                "ECG removal."
             )
 
         fs = float(processed_emg["fs"])
@@ -364,6 +499,12 @@ class _DefaultsMixin:
             raise UnsupportedWorkflowError(
                 "Default EMG postprocessing expects processed EMG data from "
                 "`preprocess_emg()`."
+            )
+        if processed_emg["envelope"] is None:
+            raise UnsupportedWorkflowError(
+                "EMG postprocessing needs an EMG envelope, and the processed "
+                "EMG has none. Add an 'emg.envelope' step after filtering and "
+                "ECG removal."
             )
 
         envelope = np.asarray(processed_emg["envelope"], dtype=float)

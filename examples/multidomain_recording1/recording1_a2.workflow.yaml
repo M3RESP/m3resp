@@ -54,8 +54,7 @@ steps:
 
   # Stage 1: 50 Hz harmonic notch (Q 30, harmonics up to 950 Hz, just below
   # Nyquist), then band-pass 20-500 Hz. The notch goes first, as in the
-  # notebook. The envelope is the median of the absolute signal over 850 ms:
-  # the median ignores short spikes such as heartbeat leftovers.
+  # notebook.
   - uses: emg.preprocess
     with:
       channel: 1
@@ -65,8 +64,6 @@ steps:
       notch_before_bandpass: true
       high_pass_hz: 20.0
       low_pass_hz: 500.0
-      envelope_method: median
-      envelope_window_seconds: 0.85
     out: { processed_emg: processed_emg_before_ecg }
 
   # Stage 2: heartbeat (ECG) removal by wavelet denoising. R peaks are found
@@ -80,7 +77,13 @@ steps:
   - uses: emg.ecg_wavelet_denoising
     in: { processed_emg: processed_emg_before_ecg }
     with: { source: filtered, levels: 4, fixed_threshold: 4.5, hard_thresholding: true }
-    out: { processed_emg_after_ecg: processed_emg }
+
+  # Envelope of the cleaned signal: the median of the absolute signal over
+  # 850 ms. The median ignores short spikes such as heartbeat leftovers.
+  - uses: emg.envelope
+    in: { processed_emg: processed_emg_after_ecg }
+    with: { window_seconds: 0.85, method: median }
+    out: { processed_emg_with_envelope: processed_emg }
 
   # Stages 3-4: moving baseline (33rd percentile over 7.5 s, updated every
   # 0.2 s). The envelope itself is left unchanged: breath detection,

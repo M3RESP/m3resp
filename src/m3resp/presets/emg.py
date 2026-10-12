@@ -13,12 +13,14 @@ if TYPE_CHECKING:
 class EMGPreset(Preset):
     """Preprocess loaded EMG, remove ECG, detect breaths and calculate features.
 
-    Runs preprocessing, ECG peak detection and gating, a moving baseline,
-    breath detection and postprocessing in that order. Gating recomputes the
-    EMG envelope before baseline estimation and breath detection.
+    Runs preprocessing, ECG peak detection and gating, the envelope of the
+    gated signal, a moving baseline, breath detection and postprocessing in
+    that order.
 
     Config groups keyword arguments under ``preprocess``, ``ecg_detect_peaks``,
-    ``ecg_gating``, ``baseline``, ``detect_breaths`` and ``postprocess``.
+    ``ecg_gating``, ``envelope``, ``baseline``, ``detect_breaths`` and
+    ``postprocess``. Envelope options are ``window_seconds`` and ``method``;
+    they default to the envelope settings preprocessing used.
     Baseline options are ``window_seconds`` (7.5 s by default), ``step_seconds``
     (0.2 s) and additional moving-baseline options such as ``percentile``.
     ``ecg_detect_peaks.ecg_channel`` selects a reference ECG channel.
@@ -98,7 +100,7 @@ class EMGPreset(Preset):
         processed: Any,
         config: PresetConfig | None,
     ) -> None:
-        """Gate ECG peaks and update the session's EMG signal and envelope.
+        """Gate ECG peaks, then compute the envelope of the gated signal.
 
         Read ECG detection, gating and removal options from config. Use supplied
         ECG sample positions when available; otherwise detect them with the
@@ -142,9 +144,38 @@ class EMGPreset(Preset):
             # type; this step always returns its declared writes.
             peak_indices = (detected or {})["ecg_peak_indices"]
 
-        ecg_gating(
+        gated = ecg_gating(
             session,
             processed,
             peak_indices,
             **self._kwargs_for(config, "ecg_gating"),
         )
+        # `or {}` only to satisfy `StepCallable`'s `Mapping | None` return type.
+        self._envelope(
+            session, processed, (gated or {})["processed_emg_after_ecg"], config
+        )
+
+    def _envelope(
+        self,
+        session: M3Session,
+        processed: Any,
+        gated: Any,
+        config: PresetConfig | None,
+    ) -> None:
+        """Compute the envelope of the ECG-cleaned EMG bundle `gated`.
+
+        Window and method come from config's ``envelope`` group, else from the
+        envelope settings preprocessing recorded in `processed`.
+        """
+
+        from m3resp.workflows.steps.emg.preprocessing import envelope
+
+        settings = (
+            (processed.get("filter") or {}) if isinstance(processed, dict) else {}
+        )
+        kwargs = {
+            "window_seconds": settings.get("envelope_window_seconds", 0.25),
+            "method": settings.get("envelope_method") or "rms",
+            **self._kwargs_for(config, "envelope"),
+        }
+        envelope(session, gated, **kwargs)

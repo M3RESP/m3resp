@@ -15,6 +15,7 @@ from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
     _upstream_metadata,
+    require_envelope,
 )
 
 
@@ -88,9 +89,8 @@ def snr_pseudo(
     *,
     minimum_snr: float | None = None,
 ) -> dict[str, Any]:
-    import numpy as np
 
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.snr_pseudo")
     fs = float(processed_emg["fs"])
     result = session.emg_adapter.snr_pseudo(
         envelope, peak_indices, baseline, sample_frequency=fs
@@ -237,9 +237,8 @@ def percentage_under_baseline(
     aub_window_seconds: float | None = None,
     aub_threshold: float = 40.0,
 ) -> dict[str, Any]:
-    import numpy as np
 
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.percentage_under_baseline")
     fs = float(processed_emg["fs"])
     aub_window_samples = (
         max(1, int(aub_window_seconds * fs)) if aub_window_seconds is not None else None

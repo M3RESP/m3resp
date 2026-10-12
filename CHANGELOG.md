@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+### EMG preprocessing as separate steps; the envelope has its own step (#124)
+
+Four new workflow steps split EMG preprocessing into its parts:
+
+| Step | Does |
+|---|---|
+| `emg.select_channel` | takes one channel of the loaded EMG recording |
+| `emg.notch_filter` | removes a frequency and its harmonics (mains hum, EIT frame-rate comb) |
+| `emg.bandpass_filter` | band-pass filter, 20-500 Hz by default |
+| `emg.envelope` | RMS, ARV or median envelope over a moving window (0.25 s, RMS by default) |
+
+`emg.preprocess` runs channel selection, the notch filter and the band-pass
+filter in one step, and its settings are now listed as step parameters.
+**The envelope is computed only by `emg.envelope`**, normally after ECG
+removal:
+
+- `emg.preprocess` returns the filtered EMG with `"envelope"` None. Its
+  former `envelope_window_seconds`, `envelope_method` and
+  `compute_envelope` settings are refused with an error that names
+  `emg.envelope`.
+- `emg.ecg_gating` and `emg.ecg_wavelet_denoising` drop their
+  `envelope_window_seconds` and `envelope_method` parameters, and the
+  processed EMG they return has `"envelope"` None.
+- Steps that need the envelope stop with an error naming `emg.envelope`
+  when it is missing.
+
+| Before | Now |
+|---|---|
+| `emg.preprocess` with `envelope_window_seconds: 0.5`, then `emg.ecg_gating` with `out: { processed_emg_after_ecg: processed_emg }` | `emg.preprocess`, then `emg.ecg_gating`, then `emg.envelope` with `in: { processed_emg: processed_emg_after_ecg }`, `with: { window_seconds: 0.5 }` and `out: { processed_emg_with_envelope: processed_emg }` |
+
+The four example workflows are changed this way and give the same numbers
+as before. `session.preprocess_emg()` still filters and computes the
+envelope in one call. The `"emg"` preset runs `emg.envelope` after ECG
+gating with the window and method preprocessing used, or with
+`config={"envelope": {...}}`; its results are the same as before.
+
+The parts are also `ReSurfEMGAdapter` methods: `select_emg_channel`,
+`notch_filter_emg`, `bandpass_filter_emg` and `emg_envelope`.
+
 ### `register_step(..., record=True)` logs each call (#104)
 
 A step registered with `record=True` adds one record to

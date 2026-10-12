@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
-
 from m3resp.processing.metrics import (
     amplitude_at_peaks,
     respiratory_rate_from_indices,
@@ -21,6 +19,8 @@ from m3resp.processing.metrics import (
     time_to_peak as _time_to_peak,
 )
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
+
+from ._shared import require_envelope
 
 
 @register_step(
@@ -68,7 +68,7 @@ def time_to_peak(
     end_indices: Any,
 ) -> dict[str, Any]:
 
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.time_to_peak")
     absolute_times, percent_times = _time_to_peak(envelope, start_indices, end_indices)
     return {"time_to_peak": (absolute_times, percent_times)}
 
@@ -117,7 +117,7 @@ def pseudo_slope(
     end_indices: Any,
 ) -> dict[str, Any]:
 
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.pseudo_slope")
     result = _pseudo_slope(envelope, start_indices, end_indices)
     return {"pseudo_slope": result}
 
@@ -162,7 +162,7 @@ def pseudo_slope(
 )
 def amplitude(processed_emg: Any, peak_indices: Any, baseline: Any) -> dict[str, Any]:
 
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.amplitude")
     return {"amplitude": amplitude_at_peaks(envelope, peak_indices, baseline)}
 
 
@@ -217,7 +217,7 @@ def time_product(
     baseline: Any,
 ) -> dict[str, Any]:
 
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.time_product")
     fs = float(processed_emg["fs"])
     result = window_integral(envelope, fs, start_indices, end_indices, baseline)
     return {"time_product": result}
@@ -292,7 +292,7 @@ def area_under_baseline(
     window_seconds: float = 5.0,
 ) -> dict[str, Any]:
 
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.area_under_baseline")
     fs = float(processed_emg["fs"])
     window_samples = max(1, int(window_seconds * fs))
     areas, references = _area_under_baseline(

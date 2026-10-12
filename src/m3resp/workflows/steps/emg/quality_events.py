@@ -19,6 +19,7 @@ from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
     _upstream_metadata,
+    require_envelope,
 )
 
 
@@ -102,7 +103,7 @@ def evaluate_bell_curve_error(
     time_product: Any,
 ) -> dict[str, Any]:
 
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.evaluate_bell_curve_error")
     fs = float(processed_emg["fs"])
     result = session.emg_adapter.evaluate_bell_curve_error(
         peak_indices,
@@ -406,7 +407,7 @@ def evaluate_respiratory_rates(
     minimum_fraction: float = 0.1,
 ) -> dict[str, Any]:
     fs = float(processed_emg["fs"])
-    envelope = processed_emg["envelope"]
+    envelope = require_envelope(processed_emg, "emg.evaluate_respiratory_rates")
     rr_vent = ventilator_respiratory_rate[0]
     result = session.emg_adapter.evaluate_respiratory_rates(
         peak_indices, len(envelope) / fs, rr_vent, minimum_fraction=minimum_fraction

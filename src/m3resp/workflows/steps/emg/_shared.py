@@ -79,23 +79,39 @@ def resolve_emg_source(processed_emg: Any, source: str | None, step_name: str) -
     return key
 
 
-def _update_session_after_ecg_removal(
-    session: M3Session,
-    processed_emg_after_ecg: dict[str, Any],
-) -> None:
-    """Update `session.processed["emg"]` and the `EMGRecording` signal fields
-    so existing breath detection operates on the ECG-cleaned data (mirrors
-    what `M3Session.preprocess_emg` does).
+def _store_processed_emg(session: M3Session, processed_emg: dict[str, Any]) -> None:
+    """Make `processed_emg` the session's current processed EMG.
 
-    `filtered` keeps the band-passed signal: ECG removal writes its result to
-    `ecg_cleaned`, so both stages stay available.
+    Sets `session.processed["emg"]`, which breath detection reads, and the
+    trace fields of `session.emg` (mirrors what `M3Session.preprocess_emg`
+    does).
     """
 
-    session.processed["emg"] = processed_emg_after_ecg
+    session.processed["emg"] = processed_emg
     if session.emg is not None:
-        session.emg.filtered = processed_emg_after_ecg.get("filtered")
-        session.emg.ecg_cleaned = processed_emg_after_ecg.get("ecg_cleaned")
-        session.emg.envelope = processed_emg_after_ecg.get("envelope")
+        session.emg.filtered = processed_emg.get("filtered")
+        session.emg.ecg_cleaned = processed_emg.get("ecg_cleaned")
+        session.emg.envelope = processed_emg.get("envelope")
+        session.emg.channel = processed_emg.get("channel")
+        session.emg.fs = processed_emg.get("fs")
+
+
+def require_envelope(processed_emg: Any, step_name: str) -> np.ndarray:
+    """The envelope in a processed EMG bundle, as a float array.
+
+    Raises a ValueError naming `emg.envelope` when the bundle has none: the
+    envelope is computed by its own step, after filtering and ECG removal.
+    """
+
+    envelope = (
+        processed_emg.get("envelope") if isinstance(processed_emg, Mapping) else None
+    )
+    if envelope is None:
+        raise ValueError(
+            f"{step_name} needs an EMG envelope, and the processed EMG has "
+            "none. Add an 'emg.envelope' step after filtering and ECG removal."
+        )
+    return np.asarray(envelope, dtype=float)
 
 
 def _require_positive_seconds(name: str, value: float) -> None:

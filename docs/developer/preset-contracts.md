@@ -29,7 +29,7 @@ and provenance on the session. The supplied session is updated and returned.
 | Preset | `name` | Calls |
 |---|---|---|
 | `EITPreset` | `"eit"` | `session.preprocess_eit(...)`, `session.detect_eit_breaths(...)` |
-| `EMGPreset` | `"emg"` | `session.preprocess_emg(...)`, `emg.ecg_detect_peaks` + `emg.ecg_gating`, a moving baseline (`session.emg_adapter.moving_baseline`), `session.detect_emg_breaths(...)`, `session.postprocess_emg(...)` |
+| `EMGPreset` | `"emg"` | `session.preprocess_emg(...)`, `emg.ecg_detect_peaks` + `emg.ecg_gating` + `emg.envelope`, a moving baseline (`session.emg_adapter.moving_baseline`), `session.detect_emg_breaths(...)`, `session.postprocess_emg(...)` |
 | `MultimodalPreset` | `"multimodal"` | `session.synchronize_raw_modalities(...)`, `session.synchronize_multimodal_breaths(...)` |
 
 `presets/registry.py` maps each `name` to its class via `register_preset`/
@@ -42,8 +42,11 @@ session.run_preset("emg", config={"preprocess": {"variant": "native"}})
 session.run_preset("multimodal")
 ```
 
-`EMGPreset` calls the registered steps `emg.ecg_detect_peaks` and
-`emg.ecg_gating`, which update the session's signals and provenance.
+`EMGPreset` calls the registered steps `emg.ecg_detect_peaks`,
+`emg.ecg_gating` and `emg.envelope`, which update the session's signals and
+provenance. The envelope of the gated signal uses the window and method
+`preprocess_emg` recorded, unless `config={"envelope": {"window_seconds": ...,
+"method": ...}}` sets them.
 Its default processing order is:
 band-pass -> ECG peak detection -> gating -> envelope -> baseline -> breath
 detection -> feature extraction. The baseline is the quiet level of the envelope

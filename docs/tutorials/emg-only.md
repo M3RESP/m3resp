@@ -54,7 +54,7 @@ an error asking for `channel=` instead of a guess.
 
 Calls `preprocess_emg()`, then ECG peak detection + gating, then
 `detect_emg_breaths()` and `postprocess_emg()` in sequence. Pass
-`config={"preprocess": {...}, "ecg_detect_peaks": {...}, "ecg_gating": {...}, "detect_breaths": {...}, "postprocess": {...}}`
+`config={"preprocess": {...}, "ecg_detect_peaks": {...}, "ecg_gating": {...}, "envelope": {...}, "detect_breaths": {...}, "postprocess": {...}}`
 to override any call's keyword arguments. See
 [../developer/preset-contracts.md](../developer/preset-contracts.md).
 
@@ -86,8 +86,8 @@ Two defaults worth knowing, both settable per call on
   respiratory-sEMG literature specifies. `"arv"` (average rectified value) is
   available as an explicit opt-in, and is what reproduces `resurfemg`'s
   `full_rolling_arv` exactly; on real bursty sEMG its values differ from RMS.
-  The choice is recorded in the processed bundle's `"filter"` mapping, so the
-  post-gating envelope recomputation uses the same method.
+  The choice is recorded in the processed bundle's `"filter"` mapping, and
+  the preset computes the envelope of the gated signal with the same method.
 
 ## ECG removal and other advanced operations
 
