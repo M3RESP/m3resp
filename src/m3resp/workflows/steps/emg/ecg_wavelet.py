@@ -15,7 +15,6 @@ from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
     _processed_channel_label_and_unit,
-    _record_step,
     _update_session_after_ecg_removal,
     _upstream_metadata,
     resolve_emg_source,
@@ -149,6 +148,7 @@ from ._shared import (
             description="Native array-valued ParameterResult: boolean mask of denoised samples.",
         ),
     ),
+    record=True,
 )
 def ecg_wavelet_denoising(
     session: M3Session,
@@ -279,15 +279,6 @@ def ecg_wavelet_denoising(
     for array_result in (decomposition_result, thresholds_result, gate_mask_result):
         session.parameter_results.add(array_result)
 
-    _record_step(
-        session,
-        "emg.ecg_wavelet_denoising",
-        metadata=_upstream_metadata(
-            source_function="resurfemg.preprocessing.ecg_removal.wavelet_denoising",
-            operation="emg.ecg_wavelet_denoising",
-            parameters=wavelet_parameters,
-        ),
-    )
     return {
         "ecg_wavelet_cleaned_emg": cleaned,
         "processed_emg_after_ecg": processed_emg_after_ecg,
@@ -295,4 +286,9 @@ def ecg_wavelet_denoising(
         "wavelet_decomposition_result": decomposition_result,
         "wavelet_thresholds_result": thresholds_result,
         "wavelet_gate_mask_result": gate_mask_result,
+        "_provenance": _upstream_metadata(
+            source_function="resurfemg.preprocessing.ecg_removal.wavelet_denoising",
+            operation="emg.ecg_wavelet_denoising",
+            parameters=wavelet_parameters,
+        ),
     }

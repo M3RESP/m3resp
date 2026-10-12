@@ -19,7 +19,6 @@ from m3resp.workflows.registry import (
 from ._shared import (
     _EITPROCESSING,
     _SESSION_ARTIFACT,
-    _record_step,
     _upstream_metadata,
 )
 
@@ -143,6 +142,7 @@ from ._shared import (
             description="Native Signal wrapping the raw pixel impedance.",
         ),
     ),
+    record=True,
 )
 def load(
     session: M3Session,
@@ -239,10 +239,13 @@ def load(
     )
     session.signals.add(raw_pixel_impedance_signal)
 
-    _record_step(
-        session,
-        "eit.load",
-        metadata=_upstream_metadata(
+    return {
+        "raw_eit": recording.raw,
+        "raw_global_impedance": recording.global_impedance,
+        "eit_sequence": recording.data,
+        "raw_global_impedance_signal": raw_global_impedance_signal,
+        "raw_pixel_impedance_signal": raw_pixel_impedance_signal,
+        "_provenance": _upstream_metadata(
             source_function="eitprocessing.datahandling.loading.load_eit_data",
             operation="eit.load",
             parameters={
@@ -253,11 +256,4 @@ def load(
                 "loader_options": extra,
             },
         ),
-    )
-    return {
-        "raw_eit": recording.raw,
-        "raw_global_impedance": recording.global_impedance,
-        "eit_sequence": recording.data,
-        "raw_global_impedance_signal": raw_global_impedance_signal,
-        "raw_pixel_impedance_signal": raw_pixel_impedance_signal,
     }

@@ -22,18 +22,6 @@ _SESSION_ARTIFACT = StepArtifact(
 )
 
 
-def _resurfemg_version() -> str | None:
-    """Installed `resurfemg` version, read from package metadata without
-    importing the package itself (so this stays optional-dependency-safe)."""
-
-    from importlib.metadata import PackageNotFoundError, version
-
-    try:
-        return version("resurfemg")
-    except PackageNotFoundError:
-        return None
-
-
 def _upstream_metadata(
     *,
     source_function: str,
@@ -59,28 +47,6 @@ def _upstream_metadata(
         "parameters": parameters,
         "operation": operation,
     }
-
-
-def _record_step(
-    session: M3Session, step_name: str, *, metadata: dict[str, Any]
-) -> None:
-    """Record per-step EMG provenance through `M3Session._record()`, using
-    the step's declared reads/writes from the registry."""
-
-    from m3resp.workflows.registry import get_step
-
-    definition = get_step(step_name)
-    session._record(
-        step_name,
-        "emg",
-        parameters={
-            "step": step_name,
-            "reads": sorted(definition.reads),
-            "writes": list(definition.writes),
-            "upstream_version": _resurfemg_version(),
-            **metadata,
-        },
-    )
 
 
 def resolve_emg_source(processed_emg: Any, source: str | None, step_name: str) -> str:

@@ -18,7 +18,6 @@ from m3resp.workflows.steps._per_breath import _per_breath_flags
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _record_step,
     _upstream_metadata,
 )
 
@@ -83,6 +82,7 @@ from ._shared import (
             description="Native QualityFlag for the overall check.",
         ),
     ),
+    record=True,
 )
 def interpeak_dist(
     session: M3Session,
@@ -154,19 +154,15 @@ def interpeak_dist(
         session.parameter_results.add(result)
     session.quality.add(flag)
 
-    _record_step(
-        session,
-        "emg.interpeak_dist",
-        metadata=_upstream_metadata(
-            source_function="resurfemg.postprocessing.quality_assessment.interpeak_dist",
-            operation="emg.interpeak_dist",
-            parameters={"threshold": threshold},
-        ),
-    )
     return {
         "interpeak_dist": valid,
         "interpeak_dist_result": results,
         "interpeak_dist_flag": flag,
+        "_provenance": _upstream_metadata(
+            source_function="resurfemg.postprocessing.quality_assessment.interpeak_dist",
+            operation="emg.interpeak_dist",
+            parameters={"threshold": threshold},
+        ),
     }
 
 

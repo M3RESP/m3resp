@@ -11,7 +11,6 @@ from m3resp.workflows.steps._per_breath import _per_breath_flags
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _record_step,
     _upstream_metadata,
 )
 
@@ -60,6 +59,7 @@ from ._shared import (
             description="Native QualityFlag per manoeuvre.",
         ),
     ),
+    record=True,
 )
 def detect_non_consecutive_manoeuvres(
     session: M3Session, ventilator_breath_indices: Any, pocc_indices: Any
@@ -76,16 +76,12 @@ def detect_non_consecutive_manoeuvres(
     )
     for flag in flags:
         session.quality.add(flag)
-    _record_step(
-        session,
-        "ventilator.detect_non_consecutive_manoeuvres",
-        metadata=_upstream_metadata(
+    return {
+        "detect_non_consecutive_manoeuvres": result,
+        "detect_non_consecutive_manoeuvres_flags": flags,
+        "_provenance": _upstream_metadata(
             source_function="resurfemg.postprocessing.quality_assessment.detect_non_consecutive_manoeuvres",
             operation="ventilator.detect_non_consecutive_manoeuvres",
             parameters={},
         ),
-    )
-    return {
-        "detect_non_consecutive_manoeuvres": result,
-        "detect_non_consecutive_manoeuvres_flags": flags,
     }

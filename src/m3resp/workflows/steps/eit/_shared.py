@@ -89,37 +89,3 @@ def _upstream_metadata(
         "parameters": parameters,
         "operation": operation,
     }
-
-
-def _eitprocessing_version() -> str | None:
-    """Installed `eitprocessing` version, read from package metadata without
-    importing the package itself (so this stays optional-dependency-safe)."""
-
-    from importlib.metadata import PackageNotFoundError, version
-
-    try:
-        return version("eitprocessing")
-    except PackageNotFoundError:
-        return None
-
-
-def _record_step(
-    session: M3Session, step_name: str, *, metadata: dict[str, Any]
-) -> None:
-    """Record per-step EIT provenance through `M3Session._record()`, using
-    the step's declared reads/writes from the registry."""
-
-    from m3resp.workflows.registry import get_step
-
-    definition = get_step(step_name)
-    session._record(
-        step_name,
-        "eit",
-        parameters={
-            "step": step_name,
-            "reads": sorted(definition.reads),
-            "writes": list(definition.writes),
-            "upstream_version": _eitprocessing_version(),
-            **metadata,
-        },
-    )

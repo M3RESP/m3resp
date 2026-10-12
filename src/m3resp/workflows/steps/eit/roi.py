@@ -18,7 +18,6 @@ from m3resp.workflows.registry import (
 from ._shared import (
     _EITPROCESSING,
     _SESSION_ARTIFACT,
-    _record_step,
     _upstream_metadata,
 )
 
@@ -121,6 +120,7 @@ def _to_pixel_mask(
             axes=("row", "column"),
         ),
     ),
+    record=True,
 )
 def roi_tiv_lungspace(
     *,
@@ -170,11 +170,11 @@ def roi_tiv_lungspace(
     )
     session.pixel_masks.add(tiv_lungspace_result)
 
-    _record_step(session, "eit.roi_tiv_lungspace", metadata=metadata)
     return {
         "tiv_lungspace_mask": mask,
         "tiv_lungspace_captures": result["captures"],
         "tiv_lungspace_result": tiv_lungspace_result,
+        "_provenance": metadata,
     }
 
 
@@ -251,6 +251,7 @@ def roi_tiv_lungspace(
             axes=("row", "column"),
         ),
     ),
+    record=True,
 )
 def roi_amplitude_lungspace(
     *,
@@ -307,11 +308,11 @@ def roi_amplitude_lungspace(
     )
     session.pixel_masks.add(amplitude_lungspace_result)
 
-    _record_step(session, "eit.roi_amplitude_lungspace", metadata=metadata)
     return {
         "amplitude_lungspace_mask": mask,
         "amplitude_lungspace_captures": result["captures"],
         "amplitude_lungspace_result": amplitude_lungspace_result,
+        "_provenance": metadata,
     }
 
 
@@ -379,6 +380,7 @@ def roi_amplitude_lungspace(
             axes=("row", "column"),
         ),
     ),
+    record=True,
 )
 def roi_watershed(
     *,
@@ -431,11 +433,11 @@ def roi_watershed(
     )
     session.pixel_masks.add(watershed_lungspace_result)
 
-    _record_step(session, "eit.roi_watershed", metadata=metadata)
     return {
         "watershed_lungspace_mask": mask,
         "watershed_captures": result["captures"],
         "watershed_lungspace_result": watershed_lungspace_result,
+        "_provenance": metadata,
     }
 
 
@@ -492,6 +494,7 @@ def roi_watershed(
             axes=("row", "column"),
         ),
     ),
+    record=True,
 )
 def roi_filter_by_size(
     mask: Any,
@@ -548,8 +551,8 @@ def roi_filter_by_size(
     )
     session.pixel_masks.add(size_filtered_roi_result)
 
-    _record_step(session, "eit.roi_filter_by_size", metadata=metadata)
     return {
         "size_filtered_roi_mask": result,
         "size_filtered_roi_result": size_filtered_roi_result,
+        "_provenance": metadata,
     }

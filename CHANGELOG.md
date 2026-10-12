@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### `register_step(..., record=True)` logs each call (#104)
+
+A step registered with `record=True` adds one record to
+`session.provenance` after each call: step name and modality, its reads
+and writes, the version of its upstream package, and the details the step
+returns under the output key `"_provenance"`. The key is removed from the
+outputs. The 33 built-in steps that logged their own call now use it, and
+the three `_record_step` helpers in the EIT, EMG and ventilator step
+modules are removed. See "Adding a custom step" in the workflow docs.
+
+The records are the same as before, with one change: `upstream_version` is
+the installed version of the first package in the step's
+`optional_packages`, and None for a step without one.
+`ventilator.pocc_time_product` and `emg.remove_invalid_breaths` compute
+their values in m3resp, so their records now have None in place of the
+ReSurfEMG version.
+
 ### Step descriptions share one field list (#111)
 
 The fields that describe a step (name, summary, description, modality,

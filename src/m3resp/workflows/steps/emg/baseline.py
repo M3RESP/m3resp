@@ -14,7 +14,6 @@ from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
     _processed_channel_label_and_unit,
-    _record_step,
     _require_percentile,
     _require_positive_seconds,
     _upstream_metadata,
@@ -79,6 +78,7 @@ from ._shared import (
             description="Native Signal wrapping the baseline.",
         ),
     ),
+    record=True,
 )
 def moving_baseline(
     session: M3Session,
@@ -127,10 +127,10 @@ def moving_baseline(
         },
     )
     session.signals.add(baseline_signal)
-    _record_step(
-        session,
-        "emg.moving_baseline",
-        metadata=_upstream_metadata(
+    return {
+        "baseline": baseline,
+        "baseline_signal": baseline_signal,
+        "_provenance": _upstream_metadata(
             source_function="resurfemg.postprocessing.baseline.moving_baseline",
             operation="emg.moving_baseline",
             parameters={
@@ -141,8 +141,7 @@ def moving_baseline(
                 "effective_step_samples": step_samples,
             },
         ),
-    )
-    return {"baseline": baseline, "baseline_signal": baseline_signal}
+    }
 
 
 @register_step(
@@ -255,6 +254,7 @@ def moving_baseline(
             description="Native Signal wrapping the running std.",
         ),
     ),
+    record=True,
 )
 def slopesum_baseline(
     session: M3Session,
@@ -352,15 +352,6 @@ def slopesum_baseline(
     session.signals.add(running_mean_signal)
     session.signals.add(running_std_signal)
 
-    _record_step(
-        session,
-        "emg.slopesum_baseline",
-        metadata=_upstream_metadata(
-            source_function="resurfemg.postprocessing.baseline.slopesum_baseline",
-            operation="emg.slopesum_baseline",
-            parameters=effective_samples,
-        ),
-    )
     return {
         "baseline": baseline,
         "slopesum_baseline_detail": {
@@ -375,4 +366,9 @@ def slopesum_baseline(
         },
         "baseline_running_mean_signal": running_mean_signal,
         "baseline_running_std_signal": running_std_signal,
+        "_provenance": _upstream_metadata(
+            source_function="resurfemg.postprocessing.baseline.slopesum_baseline",
+            operation="emg.slopesum_baseline",
+            parameters=effective_samples,
+        ),
     }

@@ -18,11 +18,14 @@ so each of these fields is declared once.
 
 from __future__ import annotations
 
+import functools
 import importlib.util
 import json
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, fields
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as installed_version
 from inspect import Parameter, signature
 from typing import Any, Literal
 
@@ -31,6 +34,12 @@ from m3resp.core.exceptions import StepMetadataError, UnknownStepError
 # A step callable receives bound keyword arguments and returns a mapping of
 # {output_name: value}. ``None`` is treated as "no outputs".
 StepCallable = Callable[..., Mapping[str, Any] | None]
+
+#: Output key a step registered with ``record=True`` uses for its own
+#: provenance details (settings used, source function, ...). The step's
+#: wrapper takes this key out of the outputs and adds the details to the
+#: step's provenance record.
+PROVENANCE_KEY = "_provenance"
 
 #: Allowed ``StepParameter.value_type`` values.
 ParameterType = Literal[
@@ -201,6 +210,9 @@ class StepDefinition(StepInfo):
     #: dotted prefix (``"session.raw"`` covers ``"session.raw.eit"``), so a
     #: step may declare whichever level of detail was checked.
     session_writes: tuple[str, ...] = ()
+    #: Whether each call adds one provenance record to the session; see
+    #: ``register_step(..., record=True)``.
+    record: bool = False
 
     @property
     def operation_id(self) -> str:
@@ -244,6 +256,7 @@ def register_step(
     resource_profile: str | None = None,
     version: str | None = None,
     deprecated_since: str | None = None,
+    record: bool = False,
     aliases: tuple[str, ...] = (),
 ) -> Callable[[StepCallable], StepCallable]:
     """Register a function and its workflow inputs, outputs and descriptions.
@@ -272,22 +285,32 @@ def register_step(
         resource_profile: Optional description of processing resources needed.
         version: Optional operation version.
         deprecated_since: Version from which this operation is deprecated.
+        record: Add one provenance record to ``session.provenance`` after
+            each call. The record holds the step name, its reads and writes,
+            the installed version of its first optional package (None for a
+            step without one), and the details the step returns under the
+            output key ``"_provenance"``. That key is removed from the
+            outputs. The step must read ``session``.
         aliases: Former operation names that resolve to this registration and
             are omitted from step discovery.
 
     Returns:
         Callable: Decorator that validates metadata, adds the definition and
-            aliases to the registries, and returns the supplied function.
+            aliases to the registries, and returns the supplied function, or
+            with ``record=True`` the function wrapped to record each call.
 
     Raises:
         ValueError: When applying the decorator, if a name or alias conflicts
             with a registration, or optional_reads names an undeclared input.
         StepMetadataError: When applying the decorator, if names, parameters,
-            input/output descriptions or their JSON representation are invalid.
+            input/output descriptions or their JSON representation are
+            invalid, or ``record=True`` is set for a step that does not read
+            ``session``.
     """
 
     def decorator(func: StepCallable) -> StepCallable:
-        """Validate and register the step definition and aliases, returning func."""
+        """Validate and register the step definition and aliases, returning
+        func (wrapped when ``record=True``)."""
 
         if name in STEP_REGISTRY:
             raise ValueError(f"Workflow step '{name}' is already registered.")
@@ -308,9 +331,14 @@ def register_step(
                 f"Workflow step '{name}' declares optional_reads "
                 f"{sorted(unknown_optional)} that are not in 'reads'."
             )
+        if record and "session" not in (reads or {}):
+            raise StepMetadataError(
+                f"Workflow step '{name}' sets record=True, so it must read 'session'."
+            )
+        step_func = _record_each_call(name, func) if record else func
         definition = StepDefinition(
             name=name,
-            func=func,
+            func=step_func,
             reads=dict(reads or {}),
             optional_reads=tuple(optional_reads),
             writes=tuple(writes),
@@ -333,14 +361,70 @@ def register_step(
             resource_profile=resource_profile,
             version=version,
             deprecated_since=deprecated_since,
+            record=record,
         )
         _validate_step_definition(definition)
         STEP_REGISTRY[name] = definition
         for alias in aliases:
             STEP_ALIASES[alias] = name
-        return func
+        return step_func
 
     return decorator
+
+
+def _record_each_call(name: str, func: StepCallable) -> StepCallable:
+    """Wrap a step so that each call adds one provenance record to its session.
+
+    The record is added after the step returns, with the fields described
+    under ``record`` in :func:`register_step`.
+    """
+
+    func_signature = signature(func)
+
+    @functools.wraps(func)
+    def run_and_record(*args: Any, **kwargs: Any) -> Mapping[str, Any] | None:
+        result = func(*args, **kwargs)
+        if result is None:
+            outputs: dict[str, Any] = {}
+        else:
+            outputs = dict(result)
+        details = outputs.pop(PROVENANCE_KEY, {})
+        session = func_signature.bind_partial(*args, **kwargs).arguments.get("session")
+        if session is None:
+            raise TypeError(
+                f"Workflow step '{name}' records each call in the session's "
+                "provenance, so it needs a session."
+            )
+        definition = STEP_REGISTRY[name]
+        session._record(
+            name,
+            definition.modality,
+            parameters={
+                "step": name,
+                "reads": sorted(definition.reads),
+                "writes": list(definition.writes),
+                "upstream_version": _first_package_version(
+                    definition.optional_packages
+                ),
+                **details,
+            },
+        )
+        return None if result is None else outputs
+
+    return run_and_record
+
+
+def _first_package_version(packages: tuple[str, ...]) -> str | None:
+    """Installed version of the first package, read from package metadata
+    without importing the package. None when there is no package or it is
+    not installed."""
+
+    if not packages:
+        return None
+    try:
+        return installed_version(packages[0])
+    except PackageNotFoundError:
+        return None
 
 
 def _validate_step_definition(definition: StepDefinition) -> None:

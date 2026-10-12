@@ -10,7 +10,7 @@ from m3resp.core.session import M3Session
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 from m3resp.workflows.steps._per_breath import extremum_sample_index
 
-from ._shared import _SESSION_ARTIFACT, _record_step, _upstream_metadata
+from ._shared import _SESSION_ARTIFACT, _upstream_metadata
 
 # Per-breath EMG features this step shortens together with the breaths.
 # Each one is an array with one value per breath, or a pair of such arrays
@@ -82,6 +82,7 @@ _FEATURE_KEYS = (
             description="Kept breaths: their original breath numbers, peak/onset/offset indices and features, plus a list of the removed breaths with the flags they failed.",
         ),
     ),
+    record=True,
 )
 def remove_invalid_breaths(
     session: M3Session,
@@ -174,18 +175,16 @@ def remove_invalid_breaths(
         ],
     }
 
-    _record_step(
-        session,
-        "emg.remove_invalid_breaths",
-        metadata=_upstream_metadata(
+    return {
+        "valid_breaths": valid_breaths,
+        "_provenance": _upstream_metadata(
             source_function="m3resp.workflows.steps.emg.selection.remove_invalid_breaths",
             operation="emg.remove_invalid_breaths",
             parameters={"flag_names": names},
             source_package="m3resp",
             implementation="m3resp.workflows.steps.emg.selection",
         ),
-    )
-    return {"valid_breaths": valid_breaths}
+    }
 
 
 def _failed_flags_per_breath(
