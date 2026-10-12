@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### `capture_value` moved to `m3resp.processing.captures` (#91)
+
+`capture_value` stores an extra result of a processing function in the
+optional `captures` dictionary. It is used by the filters and the peak
+detection, so it has its own module.
+
+| Before | Now |
+|---|---|
+| `from m3resp.processing.filters import capture_value` | `from m3resp.processing.captures import capture_value` |
+
 ### One `QualityFlag` can cover several breaths (#94)
 
 `QualityFlag` has a new field, `breath_ids`, for a check that judges a

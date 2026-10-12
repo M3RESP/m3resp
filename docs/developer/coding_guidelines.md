@@ -19,7 +19,7 @@ the output object, and an OOP detector class).
 
 Instead, accept an optional `captures: dict[str, Any] | None = None`
 parameter and fill it in-place via the shared `capture_value` helper
-(`m3resp.processing.filters.capture_value`):
+(`m3resp.processing.captures.capture_value`):
 
 ```python
 def detect_peaks(
