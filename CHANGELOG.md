@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### Tests on recorded data (part of #92)
+
+New tests run m3resp on dataset 3 of the 27 July 2026 recordings (TestPS3):
+one minute with EIT on (37-97 s) and one with EIT off (140-200 s). The
+FluxMed and EIT recordings are lined up on the Biopac clock by
+cross-correlating the airway pressure. The tests check that each step gives
+exactly what `eitprocessing` and `resurfemg` give, that the results equal the
+stored values in `tests/regression/real_data/reference_values.json`, and that
+heart rate, breathing rate and breath onsets agree with the ECG and the flow.
+They run with `pytest -m real_data` and read the recordings from the folder
+in `M3RESP_REAL_DATA`; the normal test run leaves them out.
+`scripts/update_real_data_references.py` rewrites the stored values.
+
+### Steps after a cut read the cut recording
+
+`eit.slice_recording` cut the recording in the session, but `raw_eit`,
+`eit_sequence` and `raw_global_impedance` kept the whole recording, so the
+steps after it (rates, MDN filter, global impedance, breaths) used the whole
+file. On one minute of TestPS3 this gave a heart rate of 40 per minute from
+all 106 s; the cut minute gives 75.5 per minute. `eit.slice_recording` now
+gives the cut recording under the names `eit.load` uses, and
+`emg.slice_recording` does the same for `emg_recording` and
+`raw_emg_signals`. The raw signals of the cut recording replace the uncut
+ones in `session.signals`. Step registrations have a new field, `replaces`:
+the outputs a step may write again under a name an earlier step wrote.
+
 ### uv commands next to the pip commands (#88)
 
 The install, test, docs and run commands in the README, `CONTRIBUTING.md`,
