@@ -1,0 +1,48 @@
+# Recordings used by the real-data tests (`pytest -m real_data`).
+#
+# The recordings of 27 July 2026 ("TestPS" on disk): one volunteer, Biopac
+# (airway pressure and surface EMG), FluxMed ventilator (flow and airway
+# pressure) and Draeger EIT (with airway pressure) recorded at the same time.
+# File paths are relative to the folder named by the environment variable
+# M3RESP_REAL_DATA (default: data/source/Test_PS_27072026 in the repository).
+# A test refuses a file whose SHA-256 checksum differs from the one below,
+# since the reference values in reference_values.json were made from these
+# exact files.
+#
+# The devices are lined up on the Biopac clock by cross-correlating the
+# airway pressure they all record, separately for each window
+# (real_data_helpers.paw_offset).
+
+testps3:
+  description: >-
+    Dataset 3: spontaneous breathing through a mask. EIT runs from the start
+    of the Biopac recording to 105.3 s; the EIT interference in the EMG stops
+    at 119.8 s.
+  files:
+    biopac:
+      path: EMG_Vent/TestPS3.txt
+      sha256: 216dc55e6ff5bda873dc718a24d347b71bbf269daa8494a4d01f9230dcfd3519
+    fluxmed:
+      path: EMG_Vent/TestPS3 26_07_27-15_22_08 Signals.txt
+      sha256: 9d2784cabbeea6efaa1b76ab80903af4fea9cc35307e672a36579f3df425820a
+    eit:
+      path: EIT/TestPS_M3Resp_03.bin
+      sha256: 98fe589e89ec621ee2bf5cb063078aef01f0c9f5488f56653e0b63f34d8a57e9
+  # Biopac columns after the time column: 0 = airway pressure (cmH2O),
+  # 1 = EMGdi (diaphragm, mV), 2 = EMGsc (scalene, mV).
+  emgdi_channel: 1
+  airway_pressure:
+    biopac_channel: 0
+    eit_channel: airway pressure (pod)
+  # The analysed windows, in seconds on the Biopac clock.
+  windows:
+    # EIT on: the minute with the most regular breathing while EIT data
+    # exist (0-105 s). Of all 60 s windows in 1 s steps, the one with the
+    # smallest sum of the coefficient of variation of the breath-to-breath
+    # interval and of the tidal volume, both from the FluxMed flow (starts
+    # 35-38 s tie; 37 s is the start of the paper window A1).
+    eit_on: [37.0, 97.0]
+    # EIT off: the paper window A2.
+    eit_off: [140.0, 200.0]
+  # The window with EIT data.
+  eit_window: eit_on
