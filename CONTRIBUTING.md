@@ -37,6 +37,18 @@ Run the checks manually at any time:
 pre-commit run --all-files
 ```
 
+## Code taken from eitprocessing or ReSurfEMG
+
+When a module contains code copied or adapted from `eitprocessing` or
+`ReSurfEMG`, give it a "Provenance" block at the top of the module docstring,
+laid out like the one in `src/m3resp/processing/filters.py`. The block starts
+with the line `Portions of this module are derived from eitprocessing.` (or
+`ReSurfEMG.`), then names the source, the revision, the original functions,
+the copyright and the licence, and lists what M3Resp changed. Also add the
+file to that project's list in [NOTICE.md](NOTICE.md).
+`tests/test_notice_provenance.py` checks that the blocks and `NOTICE.md` list
+the same files.
+
 ## Documentation
 
 Install the documentation tools and build the website locally:

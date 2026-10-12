@@ -19,6 +19,23 @@ Modified for M3RESP:
       conventions.
     - Parameters renamed and reorganized as keyword-only arguments.
 
+Portions of this module are derived from eitprocessing.
+
+    Source:     https://github.com/EIT-ALIVE/eitprocessing
+    Revision:   m3resp-integration (6d6da6a825a08201ad01c0a7b68f4de07d4501f3),
+                version 1.8.7
+    Original:   eitprocessing/features/breath_detection.py::
+                BreathDetection._remove_doubles,
+                BreathDetection._remove_low_amplitudes
+    Copyright:  Copyright (c) Netherlands eScience Center and Erasmus MC
+    License:    Apache License, Version 2.0
+
+Modified for M3RESP:
+    - Extracted from the `BreathDetection` class into the free functions
+      `remove_duplicate_extrema` and `remove_low_amplitude_peaks`; the
+      amplitude cut-off fraction is the argument `fraction`.
+    - Inputs go through `numpy.asarray`, so plain lists are accepted.
+
 The original copyright and license notices are retained per Apache-2.0 §4.
 Full attribution notice: see top-level NOTICE.md.
 ---------------------------------------------------------------------------

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Origin of the EIT code noted in each module (#87)
+
+`processing/peaks.py` (`remove_duplicate_extrema`,
+`remove_low_amplitude_peaks`) and `data/pixel_maps.py` (the checks of
+`PixelMask`) have a Provenance block naming the eitprocessing code they
+follow, and are listed in `NOTICE.md`. The eitprocessing blocks in
+`filters.py`, `windows.py` and `metrics.py` give the commit m3resp installs
+(`m3resp-integration`, `6d6da6a`, version 1.8.7). `CONTRIBUTING.md` describes
+the block, and `tests/test_notice_provenance.py` checks that the blocks and
+`NOTICE.md` list the same files.
+
 ### EMG polishing: session baseline and adapter docs (#72)
 
 `M3Session.emg_moving_baseline(window_seconds=7.5, step_seconds=0.2,

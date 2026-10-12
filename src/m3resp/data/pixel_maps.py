@@ -11,6 +11,33 @@ NaN; a pixel that is part of it is 1, or a weight from 0 to 1.
 
 Both follow eitprocessing's ``PixelMap`` and ``PixelMask``, so values can be
 handed back to eitprocessing without being changed.
+
+---------------------------------------------------------------------------
+Provenance
+----------
+Portions of this module are derived from eitprocessing.
+
+    Source:     https://github.com/EIT-ALIVE/eitprocessing
+    Revision:   m3resp-integration (6d6da6a825a08201ad01c0a7b68f4de07d4501f3),
+                version 1.8.7
+    Original:   eitprocessing/roi/__init__.py::PixelMask.__init__
+    Copyright:  Copyright (c) Netherlands eScience Center and Erasmus MC
+    License:    Apache License, Version 2.0
+
+Modified for M3RESP:
+    - The checks of `PixelMask.__init__` (2D grid, true/false grids, values
+      from 0 to 1, zeros turned into NaN, all-NaN warning) and their four
+      switches (`keep_zeros`, `suppress_value_range_error`,
+      `suppress_zero_conversion_warning`, `suppress_all_nan_warning`) run in
+      `PixelMask.__post_init__`.
+    - The mask has the fields `name`, `values`, `modality`, `method` and
+      `metadata`, the same as `PixelMap`; plot settings and adding,
+      subtracting or multiplying masks stay in eitprocessing.
+    - Error and warning messages are reworded.
+
+The original copyright and license notices are retained per Apache-2.0 §4.
+Full attribution notice: see top-level NOTICE.md.
+---------------------------------------------------------------------------
 """
 
 from __future__ import annotations

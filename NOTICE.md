@@ -34,6 +34,7 @@ Source: https://github.com/EIT-ALIVE/eitprocessing
 License: Apache License, Version 2.0
 
 Portions of `src/m3resp/processing/filters.py`,
-`src/m3resp/processing/windows.py`, and `src/m3resp/processing/metrics.py`
+`src/m3resp/processing/windows.py`, `src/m3resp/processing/metrics.py`,
+`src/m3resp/processing/peaks.py`, and `src/m3resp/data/pixel_maps.py`
 are derived from eitprocessing; see the per-module "Provenance"
 notes in those files for the specific functions and upstream revision.
