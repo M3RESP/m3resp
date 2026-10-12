@@ -25,7 +25,7 @@ The "Recorded as" value is stored per recording in `session.sync_methods`.
 |---|---|
 | `compute_offsets_from_timestamps` | Turns device start timestamps into offsets |
 | `align_events_by_modality_offset` | Shifts a list of events by a per-modality offset |
-| `resample_signal` | Changes a signal's sampling rate |
+| `interpolate_to_time` | Puts a signal onto another signal's time points |
 | Offset estimators in `tools/visualization_tools/` | Tuned for one dataset (Annemijn's); **not part of the package** |
 
 ## How it works

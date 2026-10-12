@@ -131,8 +131,9 @@ session.export_summary(os.path.join("path", "to", "results"))
   that check numerical agreement with the upstream packages.
 - Shared, validated representations of signals, parameters, breaths, quality
   flags, and processing history.
-- Manual-offset and timestamp-derived synchronization, signal resampling, and
-  breath matching across modalities.
+- Manual-offset and timestamp-derived synchronization, interpolation of one
+  signal onto another signal's time points, and breath matching across
+  modalities.
 - Reproducible YAML/JSON workflows, a command-line interface, and named
   EIT-only, EMG-only, and multimodal presets.
 - CSV, JSON, figure, and full-session structured exports with provenance.

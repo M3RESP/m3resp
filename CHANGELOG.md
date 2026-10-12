@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+### `resample_signal` replaced by `interpolate_to_time` (#110)
+
+`resample_signal(signal, target_frequency_hz)` built a new, evenly spaced
+time axis from a rate in Hz. Device time axes are not perfectly even, so
+that axis drifted away from the other device's real timestamps.
+`interpolate_to_time(signal, time)` takes the time points themselves, so a
+signal can be put on exactly the time points of another signal. It lives
+with the other signal operations in `m3resp.processing`. **The old name is
+removed.**
+
+| Before | Now |
+|---|---|
+| `m3resp.resample_signal(emg, eit.sample_frequency)` | `m3resp.interpolate_to_time(emg, eit.time)` |
+| `from m3resp.synchronization import resample_signal` | `from m3resp.processing import interpolate_to_time` |
+
+Other differences:
+
+- Time points before the first or after the last sample get NaN, with a
+  warning. `resample_signal` copied the first or last value outward without
+  a warning.
+- Values with more than one number per time point (channels, EIT pixel
+  frames) work. `resample_signal` handled one number per time point only.
+- A signal with fewer than two samples, or a time axis that is not strictly
+  increasing, raises `ValueError`.
+- The result has `metadata["interpolation"] = "linear"`, and
+  `sample_frequency` is 1 / the median time step of the new time points.
+
+As before, the interpolation is linear with no anti-aliasing filter:
+low-pass filter the signal first when the new time points are further
+apart than the original samples.
+
 ### `capture_value` moved to `m3resp.processing.captures` (#91)
 
 `capture_value` stores an extra result of a processing function in the

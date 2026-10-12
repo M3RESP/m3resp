@@ -6,11 +6,9 @@ common multimodal events.
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from m3resp import M3Session
-from m3resp.data import Signal
 from m3resp.data.events import BreathEvent
 from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
@@ -22,7 +20,6 @@ from m3resp.synchronization import (
     compute_timing_delay,
     is_breath_timing_result,
     link_breaths_by_time,
-    resample_signal,
 )
 
 
@@ -37,46 +34,6 @@ class TestComputeOffsetsFromTimestamps:
     def test_raises_when_reference_modality_is_missing(self):
         with pytest.raises(KeyError):
             compute_offsets_from_timestamps("eit", {"emg": 1.0})
-
-
-class TestResampleSignal:
-    def test_upsamples_a_linear_ramp(self):
-        signal = Signal(
-            values=[0.0, 1.0, 2.0],
-            time=[0.0, 1.0, 2.0],
-            modality="eit",
-            sample_frequency=1.0,
-        )
-
-        resampled = resample_signal(signal, 2.0)
-
-        assert resampled.sample_frequency == 2.0
-        assert resampled.n_samples == 5
-        np.testing.assert_allclose(resampled.values, [0.0, 0.5, 1.0, 1.5, 2.0])
-
-    def test_rejects_non_positive_target_frequency(self):
-        signal = Signal(values=[0.0], time=[0.0], modality="eit")
-        with pytest.raises(ValueError):
-            resample_signal(signal, 0.0)
-
-    def test_warns_when_the_signal_spans_no_time(self):
-        # One sample: first and last timestamp coincide, so there is no span
-        # to interpolate across.
-        signal = Signal(values=[3.0], time=[7.0], modality="eit", sample_frequency=1.0)
-
-        with pytest.warns(UserWarning, match="spans no time"):
-            resampled = resample_signal(signal, 10.0)
-
-        np.testing.assert_allclose(resampled.values, [3.0])
-        assert resampled.sample_frequency == 10.0
-
-    def test_handles_empty_signal(self):
-        signal = Signal(values=[], time=[], modality="eit")
-
-        resampled = resample_signal(signal, 10.0)
-
-        assert resampled.n_samples == 0
-        assert resampled.sample_frequency == 10.0
 
 
 class TestLinkBreathsByTime:
