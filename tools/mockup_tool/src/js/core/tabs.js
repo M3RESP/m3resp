@@ -14,10 +14,17 @@ function goToView(name){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b===btn));
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
-  // "Available data" may be stale if it was already the active palette tab
-  // (the default) when sequences were saved or nodes changed elsewhere
+  // draw "Available data" again: sequences saved in 1 · Prepare since the
+  // last visit go into it
   if(name==='design' && typeof renderDataTab==='function') renderDataTab();
+  // the first visit shows the whole graph; after that the user's zoom stays
+  if(name==='design' && !designViewFitted && typeof fitCanvasToView==='function'){
+    designViewFitted = true;
+    fitCanvasToView(1);
+    if(typeof openWelcome==='function' && welcomeAtStart()) openWelcome();
+  }
 }
+let designViewFitted = false;
 document.getElementById('tabs').addEventListener('click', e=>{
   const btn = e.target.closest('.tab-btn'); if(!btn) return;
   goToView(btn.dataset.view);

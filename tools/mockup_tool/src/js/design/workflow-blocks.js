@@ -28,42 +28,86 @@ const REFERENCE_WORKFLOWS = [
   {name:'annemijn_multimodal', desc:'Real EIT + diaphragm sEMG + airway pressure recording — examples/annemijn_multimodal'},
 ];
 
+// ---- "Workflows" tab: sections "Ready to insert" and "Reference only" ----
+let blocksView = 'grid';
+let blocksOpenSec = 'ready';
+const blocksSearchEl = document.getElementById('blocksSearchInput');
+
+function blockItemHtml(b){
+  if(blocksView==='grid'){
+    return `<div class="tb-tile" data-block="${b.id}" title="Click to add this workflow as one box">
+      <span class="tb-icon mod-${b.mod}">${categoryIconSvg('workflow', 18)}</span>
+      <span class="tb-name">${escHtml(b.name)}</span>
+      <span class="tb-sub">${b.ops.length} steps</span>
+    </div>`;
+  }
+  return `<div class="block-item" data-block="${b.id}" title="Click to add this workflow as one box">
+    <div class="bname"><span class="block-swatches"><span style="background:var(--${b.mod})"></span></span>${escHtml(b.name)}<span class="bcount">${b.ops.length} steps</span></div>
+    <div class="bdesc">${escHtml(b.desc)}</div>
+    <div class="bsteps">${b.ops.map(o=>stepShortName(o)).join(' → ')}</div>
+  </div>`;
+}
+function referenceItemHtml(w, i){
+  if(blocksView==='grid'){
+    return `<div class="tb-tile unavailable" data-ref="${i}" title="Full example pipeline, not in this mockup yet">
+      <span class="tb-icon mod-generic">${categoryIconSvg('workflow', 18)}</span>
+      <span class="tb-name">${escHtml(w.name).replace(/_/g, '_<wbr>')}</span>
+      <span class="tb-sub">yaml</span>
+    </div>`;
+  }
+  return `<div class="block-item unavailable" data-ref="${i}" title="Full example pipeline, not in this mockup yet">
+    <div class="bname">${escHtml(w.name)}<span class="bcount">yaml</span></div>
+    <div class="bdesc">${escHtml(w.desc)}</div>
+  </div>`;
+}
+
 function renderBlocksTab(){
   const el = document.getElementById('blocksTab');
   if(!el) return;
-  let html = `<div class="pal-group-head open" style="cursor:default;"><span class="chip-dot" style="background:var(--accent)"></span>Ready to insert<span class="count">${PREDEFINED_BLOCKS.length}</span></div>`;
-  PREDEFINED_BLOCKS.forEach(b=>{
-    html += `<div class="block-item" data-block="${b.id}" title="Click to add this block to the canvas">
-      <div class="bname"><span class="block-swatches"><span style="background:var(--${b.mod})"></span></span>${b.name}<span class="bcount">${b.ops.length} steps</span></div>
-      <div class="bdesc">${b.desc}</div>
-      <div class="bsteps">${b.ops.map(o=>o.split('.')[1]).join(' → ')}</div>
-    </div>`;
-  });
-  html += `<div class="pal-group-head open" style="cursor:default;margin-top:8px;"><span class="chip-dot" style="background:var(--generic)"></span>Reference only<span class="count">${REFERENCE_WORKFLOWS.length}</span></div>`;
-  REFERENCE_WORKFLOWS.forEach(w=>{
-    html += `<div class="block-item unavailable" title="Full example pipeline — not yet insertable in this mockup">
-      <div class="bname">${w.name}<span class="bcount">yaml</span></div>
-      <div class="bdesc">${w.desc}</div>
-    </div>`;
-  });
-  el.innerHTML = html;
-  el.querySelectorAll('.block-item[data-block]').forEach(row=>{
-    row.addEventListener('click', ()=> insertBlock(row.dataset.block));
-  });
+  const q = blocksSearchEl.value.trim().toLowerCase();
+  const hit = (...texts)=> !q || texts.some(t=>String(t).toLowerCase().includes(q));
+  const wrap = items=> `<div class="${blocksView==='grid'?'tb-grid':'tb-list'}">${items}</div>`;
+  const ready = PREDEFINED_BLOCKS.filter(b=>hit(b.name, b.desc, ...b.ops));
+  const refs = REFERENCE_WORKFLOWS.map((w, i)=>[w, i]).filter(([w])=>hit(w.name, w.desc));
+  const sections = [];
+  if(ready.length) sections.push({key:'ready', label:'Ready to insert', dot:'var(--accent)', count:ready.length,
+    body: wrap(ready.map(blockItemHtml).join(''))});
+  if(refs.length) sections.push({key:'reference', label:'Reference only', dot:'var(--generic)', count:refs.length,
+    body: wrap(refs.map(([w, i])=>referenceItemHtml(w, i)).join(''))});
+  el.innerHTML = sections.length
+    ? sections.map(sec=> paletteSectionHtml({...sec, open: !!q || sec.key===blocksOpenSec})).join('')
+    : `<div class="pal-empty">No workflow matches “${escHtml(q)}”.</div>`;
 }
+
+const blocksTabEl = document.getElementById('blocksTab');
+blocksTabEl.addEventListener('click', e=>{
+  const head = e.target.closest('.pal-group-head[data-sec]');
+  if(head){
+    blocksOpenSec = nextOpenSection(blocksOpenSec, head.dataset.sec);
+    blocksSearchEl.value = '';
+    renderBlocksTab();
+    return;
+  }
+  const item = e.target.closest('[data-block]');
+  if(item) insertBlock(item.dataset.block);
+});
+blocksSearchEl.addEventListener('input', renderBlocksTab);
+wireViewSeg('blocksViewSeg', view=>{ blocksView = view; renderBlocksTab(); });
 
 function insertBlock(blockId){
   const block = PREDEFINED_BLOCKS.find(b=>b.id===blockId);
   if(!block) return;
-  const baseY = Math.max(...NODES.map(n=>n.y+nodeHeight(n)), 480) + 40;
-  const col = addSlotIndex % 5; addSlotIndex++;
-  const x = 30 + col*(NODE_W+30);
+  // the box goes to a free place under the graph; its steps lie left to
+  // right from there, in the order they run
+  const stepX = nodeWidth({}) + (NODE_VIEW==='compact' ? 60 : 40);
+  const box = findFreeSpot(30, stagingTop(), nodeWidth({}), nodeHeight({ins:[[]], outs:[[]]}));
+  const x = box.x, baseY = box.y;
   const added = [];
   block.ops.forEach((op, i)=>{
-    const def = STEP_DEFS[op] || {ins:[], outs:[]};
+    const def = stepPorts(op);
     const n = {
       id: nextSlugId(op.split('.')[1]), op, mod: opModality(op),
-      x, y: baseY + i*140,
+      x: x + i*stepX, y: baseY,
       ins: def.ins.map(([nm,ty])=>[nm,ty]),
       outs: def.outs.map(([nm,ty])=>[nm,ty]),
       status:'pending',

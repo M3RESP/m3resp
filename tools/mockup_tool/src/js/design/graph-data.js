@@ -1,61 +1,37 @@
-// ---- palette data (subset of the real 60-step registry, grouped by modality/category) ----
-const PALETTE = [
-  {mod:'eit', label:'EIT', color:'var(--eit)', groups:[
-    {cat:'loading', ops:[['eit.load','load']]},
-    {cat:'preprocessing', ops:[['eit.mdn_filter','mdn_filter'],['eit.butterworth_filter','butterworth_filter'],['eit.global_impedance','global_impedance'],['eit.slice','slice']]},
-    {cat:'detection', ops:[['eit.detect_breaths','detect_breaths'],['eit.detect_rates','detect_rates'],['eit.pixel_breaths','pixel_breaths']]},
-    {cat:'roi', ops:[['eit.roi_watershed','roi_watershed'],['eit.roi_filter_by_size','roi_filter_by_size']]},
-    {cat:'parameters', ops:[['eit.continuous_tiv','continuous_tiv'],['eit.eeli','eeli']]},
-  ]},
-  {mod:'emg', label:'EMG', color:'var(--emg)', groups:[
-    {cat:'loading', ops:[['emg.load','load']]},
-    {cat:'preprocessing', ops:[['emg.preprocess','preprocess'],['emg.ecg_gating','ecg_gating'],['emg.ecg_wavelet_denoising','ecg_wavelet_denoising',true]]},
-    {cat:'detection', ops:[['emg.detect_breaths','detect_breaths'],['emg.peak_indices','peak_indices'],['emg.onoffpeak_baseline_crossing','onoffpeak_baseline_crossing']]},
-    {cat:'features', ops:[['emg.time_product','time_product'],['emg.amplitude','amplitude'],['emg.pseudo_slope','pseudo_slope']]},
-    {cat:'quality', ops:[['emg.snr_pseudo','snr_pseudo'],['emg.evaluate_bell_curve_error','evaluate_bell_curve_error'],['emg.detect_local_high_aub','detect_local_high_aub']]},
-  ]},
-  {mod:'vent', label:'Ventilator', color:'var(--vent)', groups:[
-    {cat:'loading', ops:[['ventilator.load','load']]},
-    {cat:'preprocessing', ops:[['ventilator.channels','channels']]},
-    {cat:'detection', ops:[['ventilator.detect_breaths','detect_breaths'],['ventilator.find_occluded_breaths','find_occluded_breaths']]},
-    {cat:'parameters', ops:[['ventilator.respiratory_rate','respiratory_rate'],['ventilator.pocc_time_product','pocc_time_product']]},
-  ]},
-  {mod:'generic', label:'Generic', color:'var(--generic)', groups:[
-    {cat:'synchronization', ops:[['session.sync_raw','sync_raw'],['sync.estimate_offset','estimate_offset']]},
-    {cat:'export', ops:[['export.session_summary','session_summary'],['export.json_file','json_file']]},
-  ]},
+// ---- the operations of the palette: every step of the real registry ----
+// STEP_INFO (js/data/step-info.js) is exported from the m3resp step registry.
+// The palette groups its steps by modality and then by category.
+const MODALITIES = [
+  {mod:'eit', key:'eit', label:'EIT'},
+  {mod:'emg', key:'emg', label:'EMG'},
+  {mod:'vent', key:'ventilator', label:'Ventilator'},
+  {mod:'generic', key:'generic', label:'Generic'},
 ];
+const CATEGORY_ORDER = ['loading','preprocessing','baseline','detection','roi','features','parameters',
+  'quality','synchronization','reducer','export','other'];
+// Example of a step whose optional package is missing: the palette shows it
+// greyed out and it cannot be added.
+const MOCK_UNAVAILABLE = new Set(['emg.ecg_wavelet_denoising']);
 
+// modality of a step as used for node colours ('eit', 'emg', 'vent', 'generic')
+function stepMod(op){
+  const info = STEP_INFO[op];
+  const key = info ? info.modality : op.split('.')[0];
+  const m = MODALITIES.find(x=>x.key===key);
+  return m ? m.mod : 'generic';
+}
+// short name of a step, without its modality prefix
+function stepShortName(op){ return op.slice(op.indexOf('.')+1); }
+
+// Ports of the steps on the default canvas graph. Steps not listed here take
+// their ports from STEP_INFO.
 const STEP_DEFS = {"eit.load":{"ins":[["sequence","sequence_bundle"]],"outs":[["raw_eit","eit_pixel_signal"],["raw_global_impedance","eit_global_impedance"],["eit_sequence","eit_sequence"]]},"eit.mdn_filter":{"ins":[["signal","eit_pixel_signal"],["respiratory_rate_hz","scalar_metric"],["heart_rate_hz","scalar_metric"]],"outs":[["filtered_eit","eit_pixel_signal"],["filter_captures","diagnostic_summary"],["filtered_eit_signal","signal"]]},"eit.butterworth_filter":{"ins":[["signal","eit_pixel_signal"],["eit_sequence","eit_sequence"]],"outs":[["filtered_eit","eit_pixel_signal"],["filter_captures","diagnostic_summary"]]},"eit.global_impedance":{"ins":[["signal","eit_pixel_signal"],["eit_sequence","eit_sequence"]],"outs":[["global_impedance","eit_global_impedance"]]},"eit.slice":{"ins":[["signal","any"]],"outs":[["result","any"]]},"eit.detect_breaths":{"ins":[["signal","eit_global_impedance"]],"outs":[["breath_intervals","interval_collection"],["breath_detector","eit_breath_detector"]]},"eit.detect_rates":{"ins":[["signal","eit_pixel_signal"],["session","m3session"]],"outs":[["respiratory_rate_hz","scalar_metric"],["heart_rate_hz","scalar_metric"],["rate_detector","eit_rate_detector"]]},"eit.pixel_breaths":{"ins":[["eit_data","eit_pixel_signal"],["timing_data","eit_global_impedance"],["eit_sequence","eit_sequence"]],"outs":[["pixel_breaths","eit_sparse_data"],["pixel_breath_timing_result","parameter_result"]]},"eit.roi_watershed":{"ins":[["eit_data","eit_pixel_signal"],["timing_data","eit_global_impedance"],["session","m3session"]],"outs":[["watershed_lungspace_mask","roi_mask"],["watershed_captures","diagnostic_summary"],["watershed_lungspace_result","parameter_result"]]},"eit.roi_filter_by_size":{"ins":[["mask","roi_mask"],["session","m3session"]],"outs":[["size_filtered_roi_mask","roi_mask"],["size_filtered_roi_result","parameter_result"]]},"eit.continuous_tiv":{"ins":[["signal","eit_global_impedance"],["eit_sequence","eit_sequence"],["breath_detector","eit_breath_detector"]],"outs":[["continuous_tiv","eit_sparse_data"]]},"eit.eeli":{"ins":[["signal","eit_global_impedance"],["eit_sequence","eit_sequence"],["breath_detector","eit_breath_detector"]],"outs":[["eeli","eit_sparse_data"],["eeli_result","parameter_result"]]},"emg.load":{"ins":[["sequence","sequence_bundle"]],"outs":[["emg_recording","emg_recording"],["raw_emg_signals","signal_list"]]},"emg.preprocess":{"ins":[["session","m3session"]],"outs":[["processed_emg","emg_processed_bundle"]]},"emg.ecg_gating":{"ins":[["session","m3session"],["processed_emg","emg_processed_bundle"],["ecg_peak_indices","index_array"]],"outs":[["ecg_gated_emg","signal_array"],["processed_emg_after_ecg","emg_processed_bundle"],["ecg_gated_signal","signal"]]},"emg.ecg_wavelet_denoising":{"ins":[["session","m3session"],["processed_emg","emg_processed_bundle"],["ecg_peak_indices","index_array"]],"outs":[["ecg_wavelet_cleaned_emg","signal_array"],["processed_emg_after_ecg","emg_processed_bundle"],["ecg_wavelet_cleaned_signal","signal"]]},"emg.detect_breaths":{"ins":[["session","m3session"]],"outs":[["emg_breath_events","breath_event_list"]]},"emg.peak_indices":{"ins":[["events","breath_event_list"],["processed_emg","emg_processed_bundle"]],"outs":[["peak_indices","index_array"]]},"emg.onoffpeak_baseline_crossing":{"ins":[["processed_emg","emg_processed_bundle"],["baseline","signal_array"],["peak_indices","index_array"]],"outs":[["start_indices","index_array"],["end_indices","index_array"],["start_end_validity","boolean_array"]]},"emg.time_product":{"ins":[["processed_emg","emg_processed_bundle"],["start_indices","index_array"],["end_indices","index_array"]],"outs":[["time_product","array"]]},"emg.amplitude":{"ins":[["processed_emg","emg_processed_bundle"],["peak_indices","index_array"],["baseline","signal_array"]],"outs":[["amplitude","array"]]},"emg.pseudo_slope":{"ins":[["processed_emg","emg_processed_bundle"],["start_indices","index_array"],["end_indices","index_array"]],"outs":[["pseudo_slope","array"]]},"emg.snr_pseudo":{"ins":[["session","m3session"],["processed_emg","emg_processed_bundle"],["peak_indices","index_array"]],"outs":[["snr_pseudo","array"],["snr_pseudo_results","parameter_result_list"],["snr_pseudo_flags","quality_flag_list"]]},"emg.evaluate_bell_curve_error":{"ins":[["session","m3session"],["peak_indices","index_array"],["start_indices","index_array"]],"outs":[["evaluate_bell_curve_error","array"],["evaluate_bell_curve_error_results","parameter_result_list"],["evaluate_bell_curve_error_flags","quality_flag_list"]]},"emg.detect_local_high_aub":{"ins":[["session","m3session"],["area_under_baseline","array"],["peak_indices","index_array"]],"outs":[["detect_local_high_aub","boolean_array"],["detect_local_high_aub_flags","quality_flag_list"],["detect_local_high_aub_threshold_result","parameter_result"]]},"ventilator.load":{"ins":[["sequence","sequence_bundle"]],"outs":[["ventilator_raw","ventilator_recording"]]},"ventilator.channels":{"ins":[["ventilator_raw","ventilator_recording"]],"outs":[["ventilator_signals","ventilator_channel_bundle"]]},"ventilator.detect_breaths":{"ins":[["ventilator_signals","ventilator_channel_bundle"]],"outs":[["ventilator_breath_indices","index_array"]]},"ventilator.find_occluded_breaths":{"ins":[["ventilator_signals","ventilator_channel_bundle"]],"outs":[["pocc_indices","index_array"]]},"ventilator.respiratory_rate":{"ins":[["ventilator_breath_indices","index_array"],["ventilator_signals","ventilator_channel_bundle"]],"outs":[["ventilator_respiratory_rate","scalar_metric"]]},"ventilator.pocc_time_product":{"ins":[["session","m3session"],["ventilator_signals","ventilator_channel_bundle"],["pocc_start_indices","index_array"]],"outs":[["pocc_time_products","array"],["pocc_time_product_result","parameter_result"]]},"session.sync_raw":{"ins":[["session","m3session"]],"outs":[["sync_summary","sync_summary"]]},"sync.estimate_offset":{"ins":[["session","m3session"]],"outs":[["estimated_offset_seconds","scalar_metric"],["offset_estimation","diagnostic_summary"]]},"export.session_summary":{"ins":[["session","m3session"]],"outs":[["output_dir","directory_path"]]},"export.json_file":{"ins":[["payload","mapping"]],"outs":[["json_path","file_path"]]}};
-const paletteEl = document.getElementById('palette');
-PALETTE.forEach(mod=>{
-  mod.groups.forEach(g=>{
-    const gid = mod.mod+'-'+g.cat;
-    const head = document.createElement('div');
-    head.className='pal-group-head';
-    head.innerHTML = `<svg class="chevron" width="8" height="8" viewBox="0 0 8 8"><path d="M2 1l4 3-4 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="chip-dot" style="background:${mod.color}"></span>${mod.label} / ${g.cat}<span class="count">${g.ops.length}</span>`;
-    const body = document.createElement('div');
-    body.id = 'g-'+gid;
-    body.classList.add('hidden'); // collapsed by default on load
-    g.ops.forEach(([full,short,unavailable])=>{
-      const it = document.createElement('div');
-      it.className = 'pal-item'+(unavailable?' unavailable':'');
-      it.innerHTML = `<span class="pal-name">${short}</span><span class="op">${full}</span><span class="add-hint">+ add</span>`;
-      if(!unavailable){
-        it.title = 'Click to add '+full+' to the canvas';
-        it.addEventListener('click', ()=> addNodeFromPalette(full, short, mod.mod));
-      }
-      body.appendChild(it);
-    });
-    head.addEventListener('click', ()=>{
-      body.classList.toggle('hidden');
-      head.classList.toggle('open', !body.classList.contains('hidden'));
-    });
-    const wrap = document.createElement('div'); wrap.className='pal-group';
-    wrap.appendChild(head); wrap.appendChild(body);
-    paletteEl.appendChild(wrap);
-  });
-});
+// [name, artifact type] lists of the inputs and outputs a new node gets
+function stepPorts(op){
+  if(STEP_DEFS[op]) return STEP_DEFS[op];
+  const info = STEP_INFO[op];
+  return info ? {ins: info.ins, outs: info.outs} : {ins:[], outs:[]};
+}
 
 // ---- node graph: real steps from examples/multimodal_full/multimodal-full.pipeline.yaml ----
 // Edge colour = artifact-type FAMILY, deliberately independent of the modality
@@ -150,6 +126,77 @@ const NODE_BORDER = 1;              // .node border-width, inside the border-box
 const PORTS_PAD_TOP = 6, PORTS_PAD_BOT = 8;   // .node-ports padding
 const ARROW_LEN = 9, ARROW_W = 4.5; // direction marker drawn at the input port
 const PORT_R = 6;                   // port dots straddle the node border, radius incl. ring
+
+// Two ways to draw a node. 'compact' is a circle with the step name under it,
+// with the input dots on the left arc and the output dots on the right arc.
+// 'detailed' is the card that lists every port by name. The geometry below
+// follows the .node.compact rules in css/popover.css.
+let NODE_VIEW = 'compact';
+const CNODE_W = 132;                // width of the node box (circle + name)
+const CNODE_D = 60;                 // circle diameter
+const CNODE_LABEL_GAP = 6, CNODE_LABEL_H = 30;
+const CNODE_PORT_R = CNODE_D/2 + 1; // dots sit on the circle edge
+const CPORT_R = 4.5;                // radius of a compact port dot
+const CPORT_MAX_STEP = 26;          // degrees between two dots on one arc
+const CPORT_MAX_SPREAD = 76;        // degrees, all dots of one side together
+
+// category of a node ('loading', 'detection', ...), from the step registry
+function nodeCategory(n){
+  if(n.isGroup) return 'workflow';
+  if(n.op==='prepare.sequence') return 'sequence';
+  return (STEP_INFO[n.op] && STEP_INFO[n.op].category) || 'other';
+}
+
+// Node positions are stored for the view on screen. Compact nodes are smaller,
+// so the compact layout is the detailed one shrunk by COMPACT_SCALE; switching
+// views scales all positions, so the arrangement stays the same.
+const COMPACT_SCALE = 0.62;
+function scaleLayout(f){
+  NODES.forEach(n=>{ n.x = Math.round(n.x*f); n.y = Math.round(n.y*f); });
+  GROUPS.forEach(g=>{ g.x = Math.round(g.x*f); g.y = Math.round(g.y*f); });
+  if(sessionRailBox) sessionRailBox = {top: Math.round(sessionRailBox.top*f), height: Math.round(sessionRailBox.height*f)};
+  // notes keep their size (it holds text); their places and arrows scale
+  ANNOTATIONS.forEach(a=>{
+    if(a.kind==='note'){ a.x = Math.round(a.x*f); a.y = Math.round(a.y*f); }
+    else { a.x1 = Math.round(a.x1*f); a.y1 = Math.round(a.y1*f); a.x2 = Math.round(a.x2*f); a.y2 = Math.round(a.y2*f); }
+  });
+}
+// The session band in the detailed layout: from y = 312, 130 px high, around
+// the EMG row (y = 320). In the compact layout it follows that row.
+const RAIL_TOP = 312, RAIL_H = 130, RAIL_ROW_Y = 320;
+// After "Arrange" the band follows the EMG lane: {top, height} in the
+// coordinates of the view on screen (null: the default place above)
+let sessionRailBox = null;
+function positionSessionRail(){
+  const rail = document.querySelector('.session-rail');
+  if(!rail) return;
+  if(sessionRailBox){
+    rail.style.top = sessionRailBox.top+'px';
+    rail.style.height = sessionRailBox.height+'px';
+  } else if(NODE_VIEW==='compact'){
+    const rowY = Math.round(RAIL_ROW_Y*COMPACT_SCALE);
+    rail.style.top = (rowY-14)+'px';
+    rail.style.height = (nodeHeight({})+22)+'px';
+  } else {
+    rail.style.top = RAIL_TOP+'px';
+    rail.style.height = RAIL_H+'px';
+  }
+}
+
+function nodeWidth(n){ return NODE_VIEW==='compact' ? CNODE_W : NODE_W; }
+// top of the free area under the graph, where new nodes are placed
+function stagingTop(){
+  const floor = NODE_VIEW==='compact' ? Math.round(480*COMPACT_SCALE) : 480;
+  // the compact gap leaves room for the frame of an opened workflow group
+  return Math.max(...NODES.map(n=>n.y+nodeHeight(n)), floor) + (NODE_VIEW==='compact' ? 64 : 40);
+}
+// position of port dot `idx` of `count` on one side, relative to the node box
+function compactPortOffset(side, idx, count){
+  const step = count>1 ? Math.min(CPORT_MAX_STEP, CPORT_MAX_SPREAD/(count-1)) : 0;
+  const a = (idx-(count-1)/2)*step*Math.PI/180;
+  const dx = Math.cos(a)*CNODE_PORT_R, dy = Math.sin(a)*CNODE_PORT_R;
+  return {x: CNODE_W/2 + (side==='out' ? dx : -dx), y: CNODE_D/2 + dy};
+}
 // ---- workflow groups -------------------------------------------------------
 // A block inserted from the Workflows tab stays addressable as one unit: the
 // member steps are ordinary NODES, and a GROUP records which ones belong
@@ -158,10 +205,21 @@ const PORT_R = 6;                   // port dots straddle the node border, radiu
 // drawn normally inside a transparent frame. Nothing about the underlying graph
 // changes — collapsing is purely a view over the same nodes and edges.
 const GROUPS = [];
+// Notes and arrows on the canvas (js/design/annotations.js):
+// {id, kind:'note', x, y, w, h, text} or {id, kind:'arrow', x1, y1, x2, y2}
+const ANNOTATIONS = [];
+// the box around each note and arrow, for the canvas size and "fit"
+function annotationRects(){
+  return ANNOTATIONS.map(a=> a.kind==='note'
+    ? {x:a.x, y:a.y, w:a.w, h:a.h}
+    : {x:Math.min(a.x1, a.x2), y:Math.min(a.y1, a.y2), w:Math.abs(a.x2-a.x1), h:Math.abs(a.y2-a.y1)});
+}
 function groupOfNode(id){ return GROUPS.find(g=>g.members.includes(id)); }
 function collapsedGroupOf(id){ const g = groupOfNode(id); return g && g.collapsed ? g : null; }
 function groupById(id){ return GROUPS.find(g=>g.id===id); }
 function isInternalEdge(g, e){ return g.members.includes(e.src) && g.members.includes(e.dst); }
+// the default graph above is written in detailed-layout positions
+if(NODE_VIEW==='compact') scaleLayout(COMPACT_SCALE);
 
 // Ports that cross the group boundary: every member input not fed from inside,
 // and every member output not consumed inside.
@@ -188,12 +246,18 @@ function computeGroupPorts(g){
   });
   return {ins, outs};
 }
+// run state of a closed group, from the states of its steps
+function groupStatus(g){
+  const st = g.members.map(id=>(NODES.find(n=>n.id===id)||{}).status || 'pending');
+  for(const s of ['running','error','warn','stale','pending']) if(st.includes(s)) return s;
+  return st.length ? 'ok' : 'pending';
+}
 // the stand-in node drawn while a group is collapsed
 function groupVirtualNode(g){
   const {ins, outs} = computeGroupPorts(g);
   return {
     id: g.id, op: `workflow · ${g.members.length} steps`, mod: g.mod,
-    x: g.x, y: g.y, ins, outs, status: g.status || 'pending',
+    x: g.x, y: g.y, ins, outs, status: groupStatus(g),
     isGroup: true, group: g, label: g.name,
   };
 }
@@ -214,6 +278,7 @@ function edgeEndpoint(nodeId, side, portName){
   return {id:g.id, port:lb||null, group:g};
 }
 function nodeHeight(n){
+  if(NODE_VIEW==='compact') return CNODE_D + CNODE_LABEL_GAP + CNODE_LABEL_H;
   const rows = Math.max(n.ins.length, n.outs.length, 1);
   return NODE_BORDER*2 + HEAD_H + PORTS_PAD_TOP + rows*PORT_H + PORTS_PAD_BOT;
 }
@@ -226,6 +291,11 @@ function portY(n, idx){
 function portPoint(nodeId, side, portName, idx){
   const n = nodeById(nodeId);
   if(!n) return null;
+  if(NODE_VIEW==='compact'){
+    const list = side==='out' ? n.outs : n.ins;
+    const off = compactPortOffset(side, Math.max(idx,0), idx>=0 ? list.length : 1);
+    return {x: n.x+off.x, y: n.y+off.y};
+  }
   return {
     x: side==='out' ? n.x+NODE_W : n.x,
     // idx<0 only for a port that no longer exists on the node — aim at the head
@@ -241,10 +311,12 @@ function updateStepCountPill(){
   }
 }
 function updateCanvasSize(){
-  const maxX = Math.max(...NODES.map(n=>n.x+NODE_W), 900);
-  const maxY = Math.max(...NODES.map(n=>n.y+nodeHeight(n)), 480);
+  const notes = annotationRects();
+  const maxX = Math.max(...NODES.map(n=>n.x+nodeWidth(n)), ...notes.map(r=>r.x+r.w), 900);
+  const maxY = Math.max(...NODES.map(n=>n.y+nodeHeight(n)), ...notes.map(r=>r.y+r.h), 480);
   inner.style.width = (maxX+60)+'px';
   inner.style.height = (maxY+40)+'px';
+  positionSessionRail();
   syncCanvasFootprint();
 }
 

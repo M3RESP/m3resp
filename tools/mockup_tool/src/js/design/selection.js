@@ -15,11 +15,12 @@ function refreshMultiSelectUI(){
   const btn = document.getElementById('deleteSelectedBtn');
   if(!btn) return;
   btn.disabled = multiSelected.size===0;
-  btn.textContent = multiSelected.size ? `🗑 Delete selected (${multiSelected.size})` : '🗑 Delete selected';
+  btn.textContent = multiSelected.size ? `🗑 Delete (${multiSelected.size})` : '🗑 Delete';
 }
 function deleteMultiSelected(){
   if(multiSelected.size===0) return;
   const ids = new Set(multiSelected);
+  const fed = EDGES.filter(e=>ids.has(e.src) && !ids.has(e.dst)).map(e=>e.dst);
   for(let i=EDGES.length-1;i>=0;i--){ if(ids.has(EDGES[i].src) || ids.has(EDGES[i].dst)) EDGES.splice(i,1); }
   for(let i=NODES.length-1;i>=0;i--){ if(ids.has(NODES[i].id)) NODES.splice(i,1); }
   const wasSelected = ids.has(insp.dataset.selected);
@@ -28,6 +29,7 @@ function deleteMultiSelected(){
   drawEdges();
   refreshMultiSelectUI();
   if(wasSelected) renderInspectorEmpty();
+  fed.forEach(markStale);
 }
 document.getElementById('deleteSelectedBtn').addEventListener('click', deleteMultiSelected);
 
@@ -41,7 +43,7 @@ function canvasPoint(e){
 let selectionBoxEl = null;
 inner.addEventListener('mousedown', e=>{
   if(e.button!==0) return;
-  if(e.target.closest('.node') || e.target.closest('.port-dot')) return;
+  if(e.target.closest('.node') || e.target.closest('.port-dot') || e.target.closest('.annot-note, .annot-arrow')) return;
   const additive = e.shiftKey || e.ctrlKey || e.metaKey;
   if(!additive) clearMultiSelect();
   const before = new Set(multiSelected);
@@ -64,7 +66,7 @@ inner.addEventListener('mousedown', e=>{
     box.style.left=x1+'px'; box.style.top=y1+'px';
     box.style.width=(x2-x1)+'px'; box.style.height=(y2-y1)+'px';
     NODES.forEach(n=>{
-      const nx2=n.x+NODE_W, ny2=n.y+nodeHeight(n);
+      const nx2=n.x+nodeWidth(n), ny2=n.y+nodeHeight(n);
       const intersects = n.x<x2 && nx2>x1 && n.y<y2 && ny2>y1;
       if(intersects) multiSelected.add(n.id);
       else if(before.has(n.id)) multiSelected.add(n.id);

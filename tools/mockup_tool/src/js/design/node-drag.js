@@ -48,6 +48,11 @@ function startNodeDrag(n, el, e){
       group.forEach(g=>g.el.classList.remove('dragging'));
       suppressNodeClick = true;
       updateCanvasSize();
+      // no step may end on top of another: one dropped step (or workflow)
+      // slides to the nearest free place; a dropped selection of several
+      // pushes the steps under it aside
+      const ids = [...new Set(group.map(g=> g.node.isGroup ? g.node.id : blockIdOf(g.node.id)))];
+      if(ids.length===1) slideToFreeSpot(ids[0]); else makeRoomFor(ids);
       // click (if any) consumes this synchronously; this is just a safety net
       // in case the drag ends without a click ever following (e.g. released off-node)
       setTimeout(()=>{ suppressNodeClick=false; }, 0);
@@ -60,29 +65,32 @@ function startNodeDrag(n, el, e){
 // The transparent frame drawn around an expanded group: it shows the boundary
 // the collapsed box stands for, and lists what crosses it.
 function renderGroupFrame(g){
-  const members = g.members.map(id=>NODES.find(x=>x.id===id)).filter(Boolean);
-  if(members.length===0) return;
-  const PAD = 26, TOP = 34;
-  const x1 = Math.min(...members.map(m=>m.x)) - PAD;
-  const y1 = Math.min(...members.map(m=>m.y)) - PAD - TOP;
-  const x2 = Math.max(...members.map(m=>m.x+NODE_W)) + PAD;
-  const y2 = Math.max(...members.map(m=>m.y+nodeHeight(m))) + PAD;
+  const r = groupFrameRect(g);
+  if(!r) return;
   const {ins, outs} = computeGroupPorts(g);
   const el = document.createElement('div');
   el.className = 'group-frame mod-'+g.mod;
   el.dataset.group = g.id;
-  el.style.left=x1+'px'; el.style.top=y1+'px';
-  el.style.width=(x2-x1)+'px'; el.style.height=(y2-y1)+'px';
+  el.style.left=r.x+'px'; el.style.top=r.y+'px';
+  el.style.width=r.w+'px'; el.style.height=r.h+'px';
   el.innerHTML = `
-    <div class="group-frame-head">
-      <button class="group-collapse" title="Collapse this workflow back into one box">▾</button>
+    <div class="group-frame-head" title="Double-click to pack the workflow into one box">
+      <button class="group-collapse" title="Pack this workflow into one box">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 6.5l3-3 3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Pack
+      </button>
       <span class="group-name">${g.name}</span>
-      <span class="group-meta">${members.length} steps · ${ins.length} in · ${outs.length} out</span>
+      <span class="group-meta">${g.members.length} steps · ${ins.length} in · ${outs.length} out</span>
     </div>`;
   el.querySelector('.group-collapse').addEventListener('click', e=>{
     e.stopPropagation();
     setGroupCollapsed(g, true);
   });
+  el.querySelector('.group-frame-head').addEventListener('dblclick', e=>{
+    e.stopPropagation();
+    setGroupCollapsed(g, true);
+  });
+  // a press on the head must not start a box selection on the canvas
+  el.querySelector('.group-frame-head').addEventListener('mousedown', e=> e.stopPropagation());
   inner.appendChild(el);
 }
 function setGroupCollapsed(g, collapsed){
@@ -95,6 +103,10 @@ function setGroupCollapsed(g, collapsed){
   renderAllNodes();
   drawEdges();
   refreshMultiSelectUI();
+  // an opened workflow needs more room; a packed box in the detailed view can
+  // be taller than the frame (it lists every port that crosses it): in both
+  // cases the other steps move out of its way
+  makeRoomFor([g.id]);
 }
 function removeGroup(g){
   [...g.members].forEach(id=>{
@@ -121,6 +133,8 @@ function renderAllNodes(){
   GROUPS.filter(g=>g.collapsed).forEach(g=> renderNode(groupVirtualNode(g)));
   updateCanvasSize();
   updateStepCountPill();
+  pruneNodeWindows();
+  renderAnnotations();
   if(typeof renderDataTab==='function') renderDataTab();
 }
 
@@ -164,18 +178,21 @@ function resolvePortIdx(node, side, preferred, type){
 // right and arrives at an entry point going right, whatever the nodes' relative
 // positions. The offset scales with the gap and is clamped, so short hops don't
 // balloon and long ones don't flatten into a hard step.
-function edgePathD(sx, sy, ex, ey){
+function edgeCurve(sx, sy, ex, ey){
   const span = ex - sx;
-  if(span > 30){
-    const c = Math.max(24, Math.min(160, span*0.5));
-    return `M ${sx} ${sy} C ${sx+c} ${sy}, ${ex-c} ${ey}, ${ex} ${ey}`;
-  }
   // target sits left of (or on top of) the source — bulge the control points
   // outward so the edge still loops around instead of collapsing into a flat
   // line running back through both nodes
-  const off = Math.max(70, Math.min(180, Math.abs(ey-sy)/2 + 80));
-  return `M ${sx} ${sy} C ${sx+off} ${sy}, ${ex-off} ${ey}, ${ex} ${ey}`;
+  const c = span > 30
+    ? Math.max(24, Math.min(160, span*0.5))
+    : Math.max(70, Math.min(180, Math.abs(ey-sy)/2 + 80));
+  return {
+    d: `M ${sx} ${sy} C ${sx+c} ${sy}, ${ex-c} ${ey}, ${ex} ${ey}`,
+    // point of the cubic curve at t = 0.5, where the link label goes
+    mid: {x: (sx + 3*(sx+c) + 3*(ex-c) + ex)/8, y: (sy + 3*sy + 3*ey + ey)/8},
+  };
 }
+function edgePathD(sx, sy, ex, ey){ return edgeCurve(sx, sy, ex, ey).d; }
 
 function drawEdges(){
   svg.innerHTML = '';
@@ -198,8 +215,9 @@ function drawEdges(){
     const color = key==='session' ? 'var(--generic)' : tc(srcType || 'm3session');
     // the arrow points at the input circle and stops just outside it, so the
     // ring stays readable; the tail starts under the filled output dot
-    const tipX = dx - PORT_R, endX = tipX - ARROW_LEN;
-    const d = edgePathD(sx, sy, endX, dy);
+    const tipX = dx - (NODE_VIEW==='compact' ? CPORT_R : PORT_R), endX = tipX - ARROW_LEN;
+    const curve = edgeCurve(sx, sy, endX, dy);
+    const d = curve.d;
 
     const g = document.createElementNS('http://www.w3.org/2000/svg','g');
     const hit = document.createElementNS('http://www.w3.org/2000/svg','path');
@@ -229,6 +247,25 @@ function drawEdges(){
     head.setAttribute('d', `M ${endX} ${dy-ARROW_W} L ${tipX} ${dy} L ${endX} ${dy+ARROW_W} Z`);
     head.setAttribute('fill', color);
     g.appendChild(hit); g.appendChild(path); g.appendChild(head);
+    // compact view: the name of the data the link carries, at its middle
+    // (the detailed cards already list the port names)
+    if(NODE_VIEW==='compact' && !session){
+      const outName = (fromNode.outs[oidx]||[])[0] || srcKey || key;
+      const inName = (toNode.ins[iidx]||[])[0] || key;
+      const label = document.createElementNS('http://www.w3.org/2000/svg','text');
+      label.setAttribute('class', 'edge-label');
+      label.setAttribute('x', curve.mid.x.toFixed(1));
+      label.setAttribute('y', (curve.mid.y-5).toFixed(1));
+      // shorten a name that is longer than the link (about 5.8 px per
+      // character at 10.5 px); the tooltip keeps the full name
+      const room = Math.abs(endX - sx) - 18;
+      const maxChars = Math.max(4, Math.floor(room/5.8));
+      label.textContent = outName.length > maxChars ? outName.slice(0, maxChars-1)+'…' : outName;
+      const tip = document.createElementNS('http://www.w3.org/2000/svg','title');
+      tip.textContent = `${outName} → ${inName} · ${srcType || 'unknown type'}`;
+      label.appendChild(tip);
+      g.appendChild(label);
+    }
     svg.appendChild(g);
   });
 }
@@ -237,6 +274,7 @@ function removeEdge(edge){
   const idx = EDGES.indexOf(edge);
   if(idx>=0) EDGES.splice(idx,1);
   drawEdges();
+  markStale(edge.dst);
 }
 
 let edgeNoteTimer = null;
@@ -258,6 +296,8 @@ function showEdgeNote(nearEl, text){
 }
 
 function removeNode(id){
+  // the steps that got data from this one are out of date after it is gone
+  const fed = EDGES.filter(e=>e.src===id).map(e=>e.dst);
   for(let i=EDGES.length-1;i>=0;i--){
     if(EDGES[i].src===id || EDGES[i].dst===id) EDGES.splice(i,1);
   }
@@ -269,5 +309,6 @@ function removeNode(id){
   drawEdges();
   refreshMultiSelectUI();
   if(wasSelected) renderInspectorEmpty();
+  fed.forEach(markStale);
 }
 

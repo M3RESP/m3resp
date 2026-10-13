@@ -35,6 +35,8 @@ function syncCanvasFootprint(recentre){
 }
 function applyCanvasZoom(){
   inner.style.transform = 'scale('+canvasZoom+')';
+  // link labels get too small to read below 70 %
+  inner.classList.toggle('labels-off', canvasZoom<0.7);
   syncCanvasFootprint(true);
   const pill = document.getElementById('canvasZoomPill');
   if(pill) pill.textContent = Math.round(canvasZoom*100)+'%';
@@ -59,21 +61,27 @@ function canvasZoomBy(factor, anchorClientX, anchorClientY){
   applyCanvasZoom();
 }
 function canvasContentBounds(){
-  if(NODES.length===0) return {minX:0, minY:0, maxX:900, maxY:480};
+  const rects = [
+    ...NODES.map(n=>({x:n.x, y:n.y, w:nodeWidth(n), h:nodeHeight(n)})),
+    ...annotationRects(),
+  ];
+  if(rects.length===0) return {minX:0, minY:0, maxX:900, maxY:480};
   return {
-    minX: Math.min(...NODES.map(n=>n.x)),
-    minY: Math.min(...NODES.map(n=>n.y)),
-    maxX: Math.max(...NODES.map(n=>n.x+NODE_W)),
-    maxY: Math.max(...NODES.map(n=>n.y+nodeHeight(n))),
+    minX: Math.min(...rects.map(r=>r.x)),
+    minY: Math.min(...rects.map(r=>r.y)),
+    maxX: Math.max(...rects.map(r=>r.x+r.w)),
+    maxY: Math.max(...rects.map(r=>r.y+r.h)),
   };
 }
-function fitCanvasToView(){
+// maxZoom (optional) keeps a small graph from being blown up past that scale
+function fitCanvasToView(maxZoom){
   const {minX,minY,maxX,maxY} = canvasContentBounds();
   const contentW = Math.max(1, maxX-minX), contentH = Math.max(1, maxY-minY);
   const pad = 28;
   const availW = Math.max(1, canvasScrollEl.clientWidth-pad*2);
   const availH = Math.max(1, canvasScrollEl.clientHeight-pad*2);
-  canvasZoom = Math.max(CANVAS_ZOOM_MIN, Math.min(CANVAS_ZOOM_MAX, Math.min(availW/contentW, availH/contentH)));
+  const ceiling = Math.min(CANVAS_ZOOM_MAX, maxZoom || CANVAS_ZOOM_MAX);
+  canvasZoom = Math.max(CANVAS_ZOOM_MIN, Math.min(ceiling, Math.min(availW/contentW, availH/contentH)));
   applyCanvasZoom();
   // applyCanvasZoom() already centred whatever slack is left; scroll to the
   // content's top-left corner for the axis (if any) that still overflows.
@@ -84,7 +92,7 @@ function fitCanvasToView(){
 }
 document.getElementById('canvasZoomInBtn').addEventListener('click', ()=> canvasZoomBy(1.25));
 document.getElementById('canvasZoomOutBtn').addEventListener('click', ()=> canvasZoomBy(0.8));
-document.getElementById('canvasZoomFitBtn').addEventListener('click', fitCanvasToView);
+document.getElementById('canvasZoomFitBtn').addEventListener('click', ()=> fitCanvasToView());
 window.addEventListener('resize', ()=> syncCanvasFootprint(true));
 canvasScrollEl.addEventListener('wheel', e=>{
   if(!(e.ctrlKey || e.metaKey)) return;
@@ -106,7 +114,8 @@ function nodeHtml(n){
   }
   portsHtml += '</div>';
   return `
-    <div class="status-dot ${n.status}"></div>
+    ${runBadgeHtml(n)}
+    <div class="run-bar"></div>
     <div class="node-head">
       <div class="node-head-row">
         <span class="id" title="${n.label || n.id}">${n.isGroup?'▸ ':''}${n.label || n.id}</span>
@@ -118,14 +127,96 @@ function nodeHtml(n){
   `;
 }
 
+// ---- run state of a node: badge and progress (logic in js/design/run-state.js) ----
+// node.status: 'pending' (not run), 'running', 'ok', 'warn', 'error',
+// 'stale' (out of date: its settings or inputs changed after its last run)
+const RUN_BADGE = {
+  ok:    {d:'M5.5 10.5l3 3 6-7', title:'Done'},
+  warn:  {d:'M10 5v6M10 14.5v.5', title:'Done, with a warning'},
+  error: {d:'M6.5 6.5l7 7M13.5 6.5l-7 7', title:'Failed'},
+  stale: {d:'M15 9a5 5 0 1 0-1.5 4.5M15 5v4h-4', title:'Out of date: run it again'},
+};
+function nodeStatus(n){ return (n.isGroup ? groupStatus(n.group) : n.status) || 'pending'; }
+function runBadgeHtml(n){
+  const b = RUN_BADGE[nodeStatus(n)];
+  if(!b) return '<span class="run-badge"></span>';
+  return `<span class="run-badge on" title="${b.title}"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <path d="${b.d}" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+}
+
+// one small line icon per step category, drawn in the modality colour
+const NODE_ICONS = {
+  loading:        'M10 3v9M6 8l4 4 4-4M4 13v4h12v-4',
+  preprocessing:  'M3 4h14l-5.5 6.5V16l-3 1.5v-7z',
+  detection:      'M2 15l3.5-6 3 4 3.5-9 3 8 3-3',
+  roi:            'M10 3a7 7 0 1 0 0 14a7 7 0 1 0 0-14M10 3v14M3 10h14',
+  baseline:       'M2 15h16M2 11c2.5-6 4.5-6 7 0s4.5 6 7 0',
+  parameters:     'M15 4H5l5 6-5 6h10',
+  features:       'M15 4H5l5 6-5 6h10',
+  quality:        'M10 2l6 2.5v5c0 4-3 6.5-6 8-3-1.5-6-4-6-8v-5zM7 10l2 2 4-4',
+  synchronization:'M3 7h12M12 4l3 3-3 3M17 13H5M8 10l-3 3 3 3',
+  export:         'M10 12V3M6 7l4-4 4 4M4 12v5h12v-5',
+  reducer:        'M3 4l7 7 7-7M10 11v6',
+  sequence:       'M3 5h14v10H3zM7 5v10M13 5v10',
+  workflow:       'M10 3l7 4-7 4-7-4zM3 11l7 4 7-4',
+  other:          'M10 6a4 4 0 1 0 0 8a4 4 0 1 0 0-8',
+};
+function categoryIconSvg(cat, size){
+  const d = NODE_ICONS[cat] || NODE_ICONS.other;
+  return `<svg class="cnode-icon" width="${size}" height="${size}" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <path d="${d}" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+function nodeIconSvg(n){ return categoryIconSvg(nodeCategory(n), 26); }
+// the light arc behind the dots of one side, so the input and output zones of
+// the circle are visible before the mouse is over them
+function compactArcPath(side, count){
+  const step = count>1 ? Math.min(CPORT_MAX_STEP, CPORT_MAX_SPREAD/(count-1)) : 0;
+  const half = ((count-1)*step/2 + 16)*Math.PI/180;
+  const cx = CNODE_W/2, cy = CNODE_D/2, r = CNODE_PORT_R, sgn = side==='out' ? 1 : -1;
+  const x1 = cx + sgn*Math.cos(half)*r, y1 = cy - Math.sin(half)*r;
+  const x2 = cx + sgn*Math.cos(half)*r, y2 = cy + Math.sin(half)*r;
+  return `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 0 ${side==='out'?1:0} ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+}
+function nodeCompactHtml(n){
+  let dots = '', arcs = '';
+  [['in', n.ins], ['out', n.outs]].forEach(([side, list])=>{
+    if(!list.length) return;
+    arcs += `<path d="${compactArcPath(side, list.length)}"/>`;
+    list.forEach(([name, type], i)=>{
+      const p = compactPortOffset(side, i, list.length);
+      dots += `<span class="port-dot cport" data-side="${side}" data-port="${name}" data-type="${type}" title="${side==='in'?'input':'output'} · ${name} · ${type}" style="left:${p.x.toFixed(1)}px;top:${p.y.toFixed(1)}px;--port-color:${tc(type)}"></span>`;
+    });
+  });
+  // let long snake_case names wrap after an underscore
+  const label = (n.label || n.id).replace(/_/g, '_<wbr>');
+  return `
+    <svg class="cnode-arcs" width="${CNODE_W}" height="${CNODE_D}" aria-hidden="true">${arcs}</svg>
+    <div class="cnode-ring" title="${n.label || n.id} · ${n.op}">
+      ${nodeIconSvg(n)}
+      ${n.isGroup ? `<span class="cnode-count">${n.group.members.length}</span>` : ''}
+      <svg class="run-progress" width="72" height="72" viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r="34"/></svg>
+      ${runBadgeHtml(n)}
+      <button class="node-remove" title="${n.isGroup?'Remove this whole workflow':'Remove this node'}">×</button>
+    </div>
+    ${dots}
+    <div class="cnode-label">${label}</div>
+  `;
+}
+
 let suppressNodeClick = false;
 function renderNode(n){
   const el = document.createElement('div');
-  el.className = 'node mod-'+n.mod+(n.isGroup?' group-node':'');
+  const compact = NODE_VIEW==='compact';
+  el.className = 'node mod-'+n.mod+(n.isGroup?' group-node':'')+(compact?' compact':'');
   el.style.left = n.x+'px'; el.style.top = n.y+'px';
   el.dataset.id = n.id;
+  el.dataset.status = nodeStatus(n);
   el.style.height = nodeHeight(n)+'px';
-  el.innerHTML = nodeHtml(n);
+  el.innerHTML = compact ? nodeCompactHtml(n) : nodeHtml(n);
+  // keep the selection mark when nodes are drawn again (the Inspector panel
+  // records which node is selected)
+  const inspEl = document.getElementById('inspectorBody');
+  if(inspEl && inspEl.dataset.selected===n.id) el.classList.add('selected');
   el.classList.toggle('multi-picked', multiSelected.has(n.id));
   el.addEventListener('click', e=>{
     if(e.target.closest('.node-remove') || e.target.closest('.port-dot')) return;
@@ -137,6 +228,11 @@ function renderNode(n){
     }
     clearMultiSelect();
     selectNode(n.id);
+  });
+  // a double-click opens the node window (a closed workflow opens on one click)
+  el.addEventListener('dblclick', e=>{
+    if(n.isGroup || e.target.closest('.node-remove') || e.target.closest('.port-dot')) return;
+    openNodeWindow(n.id);
   });
   el.querySelector('.node-remove').addEventListener('click', e=>{
     e.stopPropagation();
@@ -155,3 +251,21 @@ function renderNode(n){
   return el;
 }
 
+
+// ---- "Compact | Detailed" switch in the canvas toolbar ----
+function setNodeView(view){
+  if(view===NODE_VIEW) return;
+  NODE_VIEW = view;
+  scaleLayout(view==='compact' ? COMPACT_SCALE : 1/COMPACT_SCALE);
+  // cards and circles have other sizes, so check for overlaps again
+  resolveAllOverlaps();
+  document.querySelectorAll('#nodeViewSeg button').forEach(b=> b.classList.toggle('on', b.dataset.nodeview===view));
+  renderAllNodes();
+  drawEdges();
+  refreshMultiSelectUI();
+  fitCanvasToView(1);
+}
+document.getElementById('nodeViewSeg').addEventListener('click', e=>{
+  const btn = e.target.closest('button[data-nodeview]');
+  if(btn) setNodeView(btn.dataset.nodeview);
+});

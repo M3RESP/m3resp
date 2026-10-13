@@ -25,10 +25,44 @@ function markPortTargets(nodeId, side, type){
     dot.classList.toggle('port-invalid', !valid);
     dot.classList.toggle('port-match', valid && dot.dataset.type===type);
   });
+  // compact view: a link can also land on the circle itself, so ring every
+  // node that has a port of the right type on the other side
+  inner.querySelectorAll('.node').forEach(el=>{
+    const host = nodeById(el.dataset.id);
+    el.classList.toggle('drop-match', !!host && host.id!==nodeId && matchingPorts(host, side, type).length>0);
+  });
 }
 function clearPortTargets(){
   inner.classList.remove('connecting');
   inner.querySelectorAll('.port-dot').forEach(dot=> dot.classList.remove('port-invalid','port-match'));
+  inner.querySelectorAll('.node.drop-match').forEach(el=> el.classList.remove('drop-match'));
+}
+// ports on `host` that can take the other end of a link dragged from `side`
+// with artifact type `type` (type 'any' fits everything)
+function matchingPorts(host, side, type){
+  const list = side==='out' ? host.ins : host.outs;
+  return list.filter(p=> p[1]===type || p[1]==='any' || type==='any');
+}
+function portHasLink(nodeId, side, portName){
+  const end = realEndpoint(nodeId, side, portName);
+  return side==='in'
+    ? EDGES.some(e=> e.dst===end.node && e.key===end.port)
+    : EDGES.some(e=> e.src===end.node && (e.srcKey||e.key)===end.port);
+}
+// record one binding from an exit point to an entry point
+function connectPorts(nodeId, side, portName, targetNodeId, targetPort){
+  // a port on a collapsed group belongs to one of its member steps — the
+  // binding is recorded against that step, not against the box
+  const outSide = realEndpoint(...(side==='out' ? [nodeId, 'out', portName] : [targetNodeId, 'out', targetPort]));
+  const inSide  = realEndpoint(...(side==='in'  ? [nodeId, 'in',  portName] : [targetNodeId, 'in',  targetPort]));
+  // an input reads one piece of data, so a new link replaces the old one
+  for(let i=EDGES.length-1;i>=0;i--){
+    const e = EDGES[i];
+    if(!e.session && e.dst===inSide.node && e.key===inSide.port) EDGES.splice(i,1);
+  }
+  EDGES.push({src:outSide.node, dst:inSide.node, key:inSide.port, srcKey:outSide.port});
+  drawEdges();
+  markStale(inSide.node);
 }
 function startConnectionDrag(nodeId, side, portName, e){
   connDrag = {nodeId, side, portName};
@@ -51,23 +85,41 @@ function startConnectionDrag(nodeId, side, portName, e){
   function onUp(ev){
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
-    dragPath.remove();
     clearPortTargets();
+    connDrag = null;
     const target = document.elementFromPoint(ev.clientX, ev.clientY);
     const dot = target && target.closest('.port-dot');
+    const hostEl = target && target.closest('.node');
+    const type = srcPort && srcPort[1];
+    const onEmptyCanvas = !dot && !hostEl && target && target.closest('#canvasScroll') && !target.closest('.canvas-hud');
+    if(onEmptyCanvas){
+      // dropped on empty canvas: choose a step that can take this data; the
+      // dashed line stays until the menu closes
+      openQuickMenu({clientX:ev.clientX, clientY:ev.clientY, at:canvasPoint(ev),
+        from:{nodeId, side, portName, type}, dragPath});
+      return;
+    }
+    dragPath.remove();
     if(dot){
       const targetNodeId = dot.closest('.node').dataset.id;
       const targetSide = dot.dataset.side, targetPort = dot.dataset.port;
       if(targetNodeId!==nodeId && targetSide!==side){
-        // a port on a collapsed group belongs to one of its member steps — the
-        // binding is recorded against that step, not against the box
-        const outSide  = realEndpoint(...(side==='out' ? [nodeId, 'out', portName] : [targetNodeId, 'out', targetPort]));
-        const inSide   = realEndpoint(...(side==='in'  ? [nodeId, 'in',  portName] : [targetNodeId, 'in',  targetPort]));
-        EDGES.push({src:outSide.node, dst:inSide.node, key:inSide.port});
-        drawEdges();
+        connectPorts(nodeId, side, portName, targetNodeId, targetPort);
+      }
+    } else if(hostEl && hostEl.dataset.id!==nodeId){
+      // dropped on the node itself: one matching port is used at once; with
+      // several, the link chooser asks which one
+      const host = nodeById(hostEl.dataset.id);
+      const fits = host ? matchingPorts(host, side, type) : [];
+      const otherSide = side==='out' ? 'in' : 'out';
+      if(fits.length===1){
+        connectPorts(nodeId, side, portName, host.id, fits[0][0]);
+      } else if(fits.length>1){
+        openLinkChooser({clientX:ev.clientX, clientY:ev.clientY, from:{nodeId, side, portName, type}, host, fits});
+      } else if(host){
+        showEdgeNote(hostEl, `${host.label || host.id} has no ${otherSide==='in'?'input':'output'} of type ${type}.`);
       }
     }
-    connDrag = null;
   }
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
@@ -77,17 +129,25 @@ renderAllNodes();
 drawEdges();
 renderBlocksTab();
 
-// ---- toolbar: clear the board / reset to the default starting workflow ----
-function clearBoard(){
-  NODES.length = 0;
-  EDGES.length = 0;
-  GROUPS.length = 0;
+// ---- toolbar: clear the board / load the default starting workflow ----
+// (both are also choices on the welcome card, js/design/welcome.js)
+function resetCanvasState(){
   addSlotIndex = 0;
+  sessionRailBox = null;
   clearMultiSelect();
   renderAllNodes();
   drawEdges();
   renderInspectorEmpty();
-  showEdgeNote(document.getElementById('clearBoardBtn'), 'Canvas cleared — add operations from the palette or click Auto layout to bring the default workflow back.');
+  PROBLEMS = NODES.filter(n=>KNOWN_WARNINGS[n.id]).map(n=>({node:n.id, sev:'warn', ...KNOWN_WARNINGS[n.id]}));
+  renderProblems();
+}
+function clearBoard(){
+  NODES.length = 0;
+  EDGES.length = 0;
+  GROUPS.length = 0;
+  ANNOTATIONS.length = 0;
+  resetCanvasState();
+  showEdgeNote(document.getElementById('clearBoardBtn'), 'Canvas cleared. Add steps from the palette, or open an example with Examples….');
 }
 function resetToDefaultWorkflow(){
   NODES.length = 0;
@@ -95,15 +155,12 @@ function resetToDefaultWorkflow(){
   EDGES.length = 0;
   EDGES.push(...JSON.parse(JSON.stringify(DEFAULT_EDGES)));
   GROUPS.length = 0;
-  addSlotIndex = 0;
-  clearMultiSelect();
-  renderAllNodes();
-  drawEdges();
-  renderInspectorEmpty();
-  showEdgeNote(document.getElementById('autoLayoutBtn'), 'Reset to the default multimodal-full starting graph (15 steps).');
+  ANNOTATIONS.length = 0;
+  if(NODE_VIEW==='compact') scaleLayout(COMPACT_SCALE);
+  resetCanvasState();
+  fitCanvasToView(1);
 }
 document.getElementById('clearBoardBtn').addEventListener('click', clearBoard);
-document.getElementById('autoLayoutBtn').addEventListener('click', resetToDefaultWorkflow);
 
 // ---- inspector ----
 const insp = document.getElementById('inspectorBody');
@@ -134,49 +191,10 @@ function renderInspectorEmpty(){
     <div class="insp-head"><h3>Inspector</h3><p>Select a node on the canvas to view its parameters, ports, and description — generated entirely from the step registry (<code>StepParameter</code> / <code>StepArtifact</code>), no per-operation UI code.</p></div>
   `;
 }
-const NODE_META = {
-  emg_ecg_gating: {
-    summary:'Remove ECG peaks from EMG by gating (zero/interpolate/replace).',
-    params:[
-      {name:'source', type:'text', value:'filtered', unit:null, desc:"Which processed EMG variant to gate."},
-      {name:'gate_width_seconds', type:'number', value:'0.05', unit:'s', desc:'Width of the window zeroed/replaced around each detected ECG peak.'},
-      {name:'fill_method', type:'seg', options:['zero','interpolate','replace'], value:1, desc:'How the gated window is filled back in.'},
-    ],
-  },
-  mdn_filter: {
-    summary:'Apply an MDN heart-rate-removal filter to EIT data.',
-    params:[
-      {name:'label', type:'text', value:'filtered', unit:null, desc:'Label assigned to the filtered signal.'},
-    ],
-  },
-  vent_detect_breaths: {
-    summary:'Detect ventilator breaths from the ventilator volume channel.',
-    params:[
-      {name:'breath_width_seconds', type:'number', value:'0.5', unit:'s', desc:'Minimum breath width accepted by the detector.'},
-    ],
-  },
-};
 function selectNode(id){
   insp.dataset.selected = id;
   document.querySelectorAll('.node').forEach(el=>el.classList.toggle('selected', el.dataset.id===id));
   const n = nodeById(id);
-  const isSequenceNode = n && n.op === 'prepare.sequence';
-  const meta = NODE_META[id] || {
-    summary: isSequenceNode ? 'Not a registry step — a sequence saved in 1 · Prepare\'s working window, concatenated from its selected time ranges. Any load step\'s "sequence" input can pull its own channel from it.' : '',
-    params: [],
-  };
-  let paramsHtml = '';
-  if(meta.params.length===0){
-    paramsHtml = `<p style="font-size:11.5px;color:var(--text-faint);">No tunable parameters — audited and confirmed parameter-free.</p>`;
-  } else {
-    meta.params.forEach(p=>{
-      if(p.type==='seg'){
-        paramsHtml += `<div class="param-row"><label>${p.name}</label><div class="seg">${p.options.map((o,i)=>`<button class="${i===p.value?'on':''}">${o}</button>`).join('')}</div><div class="desc">${p.desc}</div></div>`;
-      } else {
-        paramsHtml += `<div class="param-row"><label>${p.name}${p.unit?`<span class="unit">${p.unit}</span>`:''}</label><input type="text" value="${p.value}"><div class="desc">${p.desc}</div></div>`;
-      }
-    });
-  }
   let portsHtml = '<div class="insp-section-title">Inputs</div>';
   n.ins.forEach(([name,type])=> portsHtml += `<div class="port-line"><span>${name}</span><span class="type-chip">${type}</span></div>`);
   if(n.ins.length===0) portsHtml += `<div class="port-line" style="color:var(--text-faint);">none</div>`;
@@ -187,14 +205,17 @@ function selectNode(id){
     <div class="insp-head">
       <span class="op">${n.op}</span>
       <h3>${n.id}</h3>
-      <p>${meta.summary || 'Registered step — see docs/stage3.md for full description.'}</p>
+      <p>${escHtml(nodeSummary(n))}</p>
+      ${n.isGroup ? '' : '<button class="insp-open-btn" type="button" title="Settings and a preview of the output (or double-click the step)">Open window ↗</button>'}
     </div>
     <div class="insp-scroll">
       <div class="insp-section-title">Parameters</div>
-      ${paramsHtml}
+      ${paramFormHtml(n)}
       ${portsHtml}
     </div>
   `;
+  const openBtn = insp.querySelector('.insp-open-btn');
+  if(openBtn) openBtn.addEventListener('click', ()=> openNodeWindow(id));
 }
 renderInspectorEmpty();
 selectNode('emg_ecg_gating');

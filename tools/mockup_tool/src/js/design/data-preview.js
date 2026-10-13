@@ -66,54 +66,83 @@ function svgLineFromSamples(vals, {w=520,h=140,stroke='var(--accent)'}={}){
   </svg>`;
 }
 
-function renderKeyPreview(key, type, nodeId, op){
+// Preview of one output: {html, summary}. `seed` is a text made from the
+// step's settings, so a change of a setting gives a new (illustrative) shape.
+function keyPreview(key, type, nodeId, op, seed){
   const color = tc(type);
+  const rnd = seededRand(seed ? key+'|'+seed : key);
   // signal-like family: draw a real representative waveform
   if(color==='var(--type-signal)'){
     const gen = signalGeneratorFor(op, key);
     const N=300, dur=Math.min(REC_SECONDS,60);
-    const vals=[]; for(let i=0;i<N;i++) vals.push(gen((i/N)*dur, i));
-    return `<div class="data-viz-plot">${svgLineFromSamples(vals,{stroke:color})}</div>
-      <p class="data-viz-note">Illustrative preview generated from ${op}'s signal shape over the working window — this mockup has no backend to fetch <code>${key}</code>'s real values from.</p>`;
+    let vals=[]; for(let i=0;i<N;i++) vals.push(gen((i/N)*dur, i));
+    if(seed){
+      // a moving average and a slow drift that follow the settings (the plot
+      // is scaled to its own range, so a plain gain would not show)
+      const win = Math.floor(rnd()*10), drift = (rnd()-0.5)*1.2;
+      const lo = Math.min(...vals), span = (Math.max(...vals)-lo) || 1;
+      vals = vals.map((_, i)=>{
+        const part = vals.slice(Math.max(0, i-win), i+win+1);
+        return part.reduce((a, b)=>a+b, 0)/part.length + drift*span*(i/N);
+      });
+    }
+    return {
+      summary: `${dur.toFixed(1)} s of signal`,
+      html: `<div class="data-viz-plot">${svgLineFromSamples(vals,{stroke:color})}</div>
+      <p class="data-viz-note">Illustrative preview generated from ${op}'s signal shape over the working window — this mockup has no backend to fetch <code>${key}</code>'s real values from.</p>`,
+    };
   }
   // index/event-like: a timeline of representative tick marks
   if(color==='var(--type-index)'){
-    const rnd = seededRand(key);
     const n = 6+Math.floor(rnd()*8);
     const ticks=[]; let t=rnd()*3;
     for(let i=0;i<n;i++){ t += 2+rnd()*4; ticks.push(Math.min(58,t)); }
     const w=520;
     const marks = ticks.map(tt=>`<line x1="${(tt/60*w).toFixed(1)}" y1="10" x2="${(tt/60*w).toFixed(1)}" y2="50" stroke="${color}" stroke-width="2.5"/>`).join('');
-    return `<div class="data-viz-plot"><svg viewBox="0 0 ${w} 60" style="width:100%;height:60px;display:block;">
+    return {
+      summary: `${n} events`,
+      html: `<div class="data-viz-plot"><svg viewBox="0 0 ${w} 60" style="width:100%;height:60px;display:block;">
         <line x1="0" y1="30" x2="${w}" y2="30" stroke="var(--border)" stroke-width="1"/>${marks}
       </svg></div>
-      <p class="data-viz-note">Illustrative event markers — ${n} representative occurrences along the working window. <code>${key}</code> holds the real indices once this step actually runs.</p>`;
+      <p class="data-viz-note">Illustrative event markers — ${n} representative occurrences along the working window. <code>${key}</code> holds the real indices once this step actually runs.</p>`,
+    };
   }
   // mask-like: a small binary-ish grid, seeded so it always looks the same for this key
   if(color==='var(--type-mask)'){
-    const rnd = seededRand(key);
     const cx=8, cy=8, r=6.2;
-    let cells='';
+    let cells='', count=0;
     for(let y=0;y<16;y++) for(let x=0;x<16;x++){
       const inCircle = Math.hypot(x-cx,y-cy) <= r;
       const on = inCircle && rnd() > 0.35;
+      if(on) count++;
       cells += `<div style="background:${on?color:'#0b1430'};"></div>`;
     }
-    return `<div class="data-viz-grid">${cells}</div>
-      <p class="data-viz-note">Illustrative ROI mask over a 16×16 grid — a stand-in for <code>${key}</code>'s real pixel selection.</p>`;
+    return {
+      summary: `${count} of 256 pixels in the mask`,
+      html: `<div class="data-viz-grid">${cells}</div>
+      <p class="data-viz-note">Illustrative ROI mask over a 16×16 grid — a stand-in for <code>${key}</code>'s real pixel selection.</p>`,
+    };
   }
   // result/scalar: a single representative number
   if(color==='var(--type-result)'){
-    const rnd = seededRand(key);
     const val = (rnd()*40+2).toFixed(2);
-    return `<div class="data-viz-bignum">${val}<span class="unit">a.u.</span></div>
-      <p class="data-viz-note">Illustrative value — <code>${key}</code> is a computed result; its real number appears here once <b>${op}</b> has actually run.</p>`;
+    return {
+      summary: `${val} a.u.`,
+      html: `<div class="data-viz-bignum">${val}<span class="unit">a.u.</span></div>
+      <p class="data-viz-note">Illustrative value — <code>${key}</code> is a computed result; its real number appears here once <b>${op}</b> has actually run.</p>`,
+    };
   }
   // generic/plumbing: honestly say there's nothing to plot
-  return `<div class="data-viz-info">
+  return {
+    summary: 'no data to plot',
+    html: `<div class="data-viz-info">
       <div style="font-size:26px;margin-bottom:8px;">⚙️</div>
       <code>${key}</code> is plumbing/bookkeeping data (type <code>${type}</code>), not a scientific signal — there's nothing meaningful to chart here.
-    </div>`;
+    </div>`,
+  };
+}
+function renderKeyPreview(key, type, nodeId, op){
+  return keyPreview(key, type, nodeId, op).html;
 }
 
 function renderSequencePreview(seq){
@@ -169,11 +198,15 @@ function loadSequenceAsNode(seqId){
     if(el) el.scrollIntoView({behavior:'smooth', block:'center', inline:'center'});
     return;
   }
-  const baseY = Math.max(...NODES.map(n=>n.y+nodeHeight(n)), 480) + 40;
-  const col = addSlotIndex % 5; addSlotIndex++;
+  // left of the load steps, in the nearest free place
+  const loads = NODES.filter(n=>/^load_/.test(n.id));
+  const want = loads.length
+    ? {x: Math.min(...loads.map(n=>n.x)) - nodeWidth({}) - 60, y: Math.min(...loads.map(n=>n.y))}
+    : {x: 30, y: stagingTop()};
+  const spot = findFreeSpot(want.x, want.y, nodeWidth({}), nodeHeight({ins:[], outs:[[]]}));
   const n = {
     id: seq.name, op:'prepare.sequence', mod:'generic',
-    x: 30 + col*(NODE_W+30), y: baseY,
+    x: spot.x, y: spot.y,
     // port is literally named 'sequence' (not the sequence's own name) so it
     // matches load_eit/load_emg/load_ventilator's 'sequence' input exactly —
     // the node id already carries the sequence's unique identity.
