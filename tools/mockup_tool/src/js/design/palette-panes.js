@@ -1,5 +1,5 @@
 // ---- parts of the two side panels: Steps and Available data on the left;
-// Help, Edge legend and Inspector on the right. A click on a part head
+// Inspector, Edge legend and Help on the right. A click on a part head
 // closes or opens the part. The bar under an open part changes its size
 // against the next open part below it, and a double-click on the bar makes
 // the two equal. The open parts share the height of the panel by their

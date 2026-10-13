@@ -23,7 +23,7 @@
 .side-collapse-btn svg{display:block;}
 .palette.collapsed .pal-pane, .palette.collapsed .pal-splitter{display:none;}
 /* both side panels are cut in parts, one above the other: Steps and
-   Available data on the left; Help, Edge legend and Inspector on the right.
+   Available data on the left; Inspector, Edge legend and Help on the right.
    A click on a part head closes or opens the part; the bar under an open
    part changes its size against the next open part. The open parts share
    the height by their --grow values (set in the HTML and by the bars), so
@@ -259,7 +259,7 @@ body.pal-resizing{cursor:row-resize;user-select:none;}
 .tb-tile.unavailable:hover{background:transparent;}
 .tb-list .pal-item{padding-left:14px;}
 
-/* ---- help box at the top of the right panel ---- */
+/* ---- help box at the bottom of the right panel ---- */
 .help-box{
   flex:1;min-height:0;overflow:auto;background:var(--surface-2);
   padding:10px 12px;font-size:11.5px;color:var(--text-dim);

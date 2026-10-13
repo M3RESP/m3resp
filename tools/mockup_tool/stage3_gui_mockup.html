@@ -480,13 +480,13 @@
         <button class="side-collapse-btn" id="inspectorCollapseBtn" title="Collapse this panel"></button>
         <span class="side-panel-topbar-label">Details</span>
       </div>
-      <!-- what the item under the mouse is -->
-      <div class="pal-pane" id="helpPane" data-pane="help" style="--grow:22">
+      <!-- the settings of the selected step -->
+      <div class="pal-pane" id="inspectorPane" data-pane="inspector" style="--grow:45">
         <button type="button" class="pal-pane-head" title="Open or close this panel">
-          <span class="pal-pane-chevron"></span><span class="pal-pane-title">Help</span>
+          <span class="pal-pane-chevron"></span><span class="pal-pane-title">Inspector</span>
         </button>
         <div class="pal-pane-body">
-          <div class="help-box" id="helpBox" aria-live="polite"></div>
+          <div class="insp-body" id="inspectorBody"></div>
         </div>
       </div>
 
@@ -529,13 +529,13 @@
 
       <div class="pal-splitter" title="Drag to change the size of the panels; double-click to make them equal"></div>
 
-      <!-- the settings of the selected step -->
-      <div class="pal-pane" id="inspectorPane" data-pane="inspector" style="--grow:45">
+      <!-- what the item under the mouse is -->
+      <div class="pal-pane" id="helpPane" data-pane="help" style="--grow:22">
         <button type="button" class="pal-pane-head" title="Open or close this panel">
-          <span class="pal-pane-chevron"></span><span class="pal-pane-title">Inspector</span>
+          <span class="pal-pane-chevron"></span><span class="pal-pane-title">Help</span>
         </button>
         <div class="pal-pane-body">
-          <div class="insp-body" id="inspectorBody"></div>
+          <div class="help-box" id="helpBox" aria-live="polite"></div>
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-// ---- help box at the top of the right panel: what the palette item under
+// ---- help box at the bottom of the right panel: what the palette item under
 // the mouse is. It shows a step from Operations, a workflow from Workflows,
 // or a data row from Available data, and keeps the last item until the next
 // one. ----
