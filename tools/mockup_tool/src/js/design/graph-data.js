@@ -126,6 +126,7 @@ const NODE_BORDER = 1;              // .node border-width, inside the border-box
 const PORTS_PAD_TOP = 6, PORTS_PAD_BOT = 8;   // .node-ports padding
 const ARROW_LEN = 9, ARROW_W = 4.5; // direction marker drawn at the input port
 const PORT_R = 6;                   // port dots straddle the node border, radius incl. ring
+const EDGE_LABEL_CHAR_W = 5.8;      // width of one character of a link label (10.5 px font)
 
 // Two ways to draw a node. 'compact' is a circle with the step name under it,
 // with the input dots on the left arc and the output dots on the right arc.

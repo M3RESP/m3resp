@@ -35,8 +35,9 @@ function syncCanvasFootprint(recentre){
 }
 function applyCanvasZoom(){
   inner.style.transform = 'scale('+canvasZoom+')';
-  // link labels get too small to read below 70 %
-  inner.classList.toggle('labels-off', canvasZoom<0.7);
+  // link labels get too small to read below 70 %. The detailed cards show
+  // port names in the same font size, so there the labels stay down to 50 %.
+  inner.classList.toggle('labels-off', canvasZoom < (NODE_VIEW==='compact' ? 0.7 : 0.5));
   syncCanvasFootprint(true);
   const pill = document.getElementById('canvasZoomPill');
   if(pill) pill.textContent = Math.round(canvasZoom*100)+'%';
@@ -118,6 +119,7 @@ function nodeHtml(n){
     <div class="run-bar"></div>
     <div class="node-head">
       <div class="node-head-row">
+        ${nodeIconSvg(n, 14)}
         <span class="id" title="${n.label || n.id}">${n.isGroup?'▸ ':''}${n.label || n.id}</span>
         <button class="node-remove" title="${n.isGroup?'Remove this whole workflow':'Remove this node'}">×</button>
       </div>
@@ -166,7 +168,7 @@ function categoryIconSvg(cat, size){
   return `<svg class="cnode-icon" width="${size}" height="${size}" viewBox="0 0 20 20" fill="none" aria-hidden="true">
     <path d="${d}" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
-function nodeIconSvg(n){ return categoryIconSvg(nodeCategory(n), 26); }
+function nodeIconSvg(n, size){ return categoryIconSvg(nodeCategory(n), size || 26); }
 // the light arc behind the dots of one side, so the input and output zones of
 // the circle are visible before the mouse is over them
 function compactArcPath(side, count){

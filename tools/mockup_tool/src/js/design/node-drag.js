@@ -247,19 +247,18 @@ function drawEdges(){
     head.setAttribute('d', `M ${endX} ${dy-ARROW_W} L ${tipX} ${dy} L ${endX} ${dy+ARROW_W} Z`);
     head.setAttribute('fill', color);
     g.appendChild(hit); g.appendChild(path); g.appendChild(head);
-    // compact view: the name of the data the link carries, at its middle
-    // (the detailed cards already list the port names)
-    if(NODE_VIEW==='compact' && !session){
+    // the name of the data the link carries, at its middle
+    if(!session){
       const outName = (fromNode.outs[oidx]||[])[0] || srcKey || key;
       const inName = (toNode.ins[iidx]||[])[0] || key;
       const label = document.createElementNS('http://www.w3.org/2000/svg','text');
       label.setAttribute('class', 'edge-label');
       label.setAttribute('x', curve.mid.x.toFixed(1));
       label.setAttribute('y', (curve.mid.y-5).toFixed(1));
-      // shorten a name that is longer than the link (about 5.8 px per
-      // character at 10.5 px); the tooltip keeps the full name
+      // shorten a name that is longer than the link; the tooltip keeps the
+      // full name
       const room = Math.abs(endX - sx) - 18;
-      const maxChars = Math.max(4, Math.floor(room/5.8));
+      const maxChars = Math.max(4, Math.floor(room/EDGE_LABEL_CHAR_W));
       label.textContent = outName.length > maxChars ? outName.slice(0, maxChars-1)+'…' : outName;
       const tip = document.createElementNS('http://www.w3.org/2000/svg','title');
       tip.textContent = `${outName} → ${inName} · ${srcType || 'unknown type'}`;

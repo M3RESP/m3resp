@@ -35,7 +35,7 @@ These parts are illustrative:
 
 **2 · Design.** A node editor over the step registry, after the canvas of Orange Data Mining.
 
-- Each step is a circle in its modality colour, with a category icon and its name under it. Inputs are dots on the left edge, outputs dots on the right edge, and each link shows the name of its data. "Detailed" in the toolbar shows each step as a card with all port names; the cards replace the link labels.
+- Each step is a circle in its modality colour, with a category icon and its name under it. Inputs are dots on the left edge, outputs dots on the right edge, and each link shows the name of its data. "Detailed" in the toolbar shows each step as a card with its category icon and all port names.
 - The palette on the left has two halves. The upper half, Steps, has two tabs: Operations (all registry steps) and Workflows (ready-made chains of steps). The lower half, Available data, lists the data made on the canvas and the sequences saved in 1 · Prepare. Each list has a search box, a switch between icons and a list, and sections that open one at a time.
 - The right panel has three parts, from the top: the Inspector, Edge legend (what the link colours, arrows, ports, step colours and run badges mean) and Help (explains the palette item under the mouse).
 - A click on the head of a part (Steps, Available data, Help, Edge legend, Inspector) closes or opens it. Drag the bar under an open part to change its size against the next open part; a double-click on the bar makes the two equal. One open part alone fills its panel.
@@ -43,7 +43,7 @@ These parts are illustrative:
 - A click on a step shows its parameters in the Inspector. A double-click opens the node window: parameters on the left, a preview of an output and the linked inputs on the right. With "Apply automatically" on, each change goes to the step at once; with it off, changes wait for "Apply".
 - "▶ Run pipeline" runs the steps in graph order with a progress ring on each step and a line per step in the Run log. Badges show done, warning, failed and out of date. A change of a setting or a link makes the step and every step after it out of date; with "Auto-run" on, those steps run again at once. "Validate" fills the Problems list without a run, and a click on a problem shows its step.
 - Steps never land on top of each other. A new step goes to the nearest free place, an opened workflow pushes the other steps aside, and a dropped step slides to a free place. A workflow from the Workflows tab arrives as one box; a click opens it, and "Pack" on its frame closes it again.
-- "⇶ Arrange" puts the steps in columns by graph order, with one lane per modality. "Examples…" opens the welcome card: empty canvas, open a pipeline file, the multimodal-full example, recent files.
+- "⇶ Arrange" puts the steps in columns by graph order, with one lane per modality. In the detailed view, the space after each column is wide enough for the longest data name on its links. "Examples…" opens the welcome card: empty canvas, open a pipeline file, the multimodal-full example, recent files.
 - ✎ adds a note and ↗ draws an arrow on the canvas. Notes and arrows move and zoom with the canvas.
 - "?" in the zoom controls lists the mouse and key actions.
 

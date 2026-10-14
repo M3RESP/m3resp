@@ -45,13 +45,24 @@ function arrangeByDepth(){
   const isFrame = b=> b.g && !b.g.collapsed;
   const cell = (c, l)=> blocks.filter(b=>depth.get(b.id)===c && lane(b)===l && !isFrame(b)).sort((a, b)=>a.rect.y-b.rect.y);
 
-  const gapX = NODE_VIEW==='compact' ? 90 : 70, gapY = LAYOUT_GAP + 14;
+  const gapY = LAYOUT_GAP + 14;
+  // Space after column c. In the detailed view the links between cards are
+  // short, so the gap grows until the longest data name on a link that leaves
+  // the column fits on it (see the link labels in drawEdges).
+  const gapAfter = c=>{
+    if(NODE_VIEW==='compact') return 90;
+    const chars = EDGES.filter(e=> !e.session && depth.get(blockIdOf(e.src))===c && blockIdOf(e.dst)!==blockIdOf(e.src))
+      .map(e=> (e.srcKey||e.key).length);
+    // the label room is the gap minus the arrow, the port dots and 18 px margin
+    const need = Math.ceil((Math.max(0, ...chars)+1)*EDGE_LABEL_CHAR_W) + 2*PORT_R + ARROW_LEN + 18;
+    return Math.min(200, Math.max(70, need));
+  };
   const colX = [];
   let x = 30;
   cols.forEach(c=>{
     colX[c] = x;
     const widths = blocks.filter(b=>depth.get(b.id)===c && !isFrame(b)).map(b=>b.rect.w);
-    x += (widths.length ? Math.max(...widths) : nodeWidth({})) + gapX;
+    x += (widths.length ? Math.max(...widths) : nodeWidth({})) + gapAfter(c);
   });
   let laneTop = 40;
   ARRANGE_LANES.forEach((_, l)=>{
