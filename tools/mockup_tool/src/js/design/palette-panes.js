@@ -1,48 +1,75 @@
 // ---- parts of the side panels: Steps and Available data on the left;
-// Inspector, Edge legend and Help on the right; Recording, Modalities, On
-// this page and Saved sequences on 1 · Prepare. A click on a part head
-// closes or opens the part. The bar under an open part changes its size
-// against the next open part below it, and a double-click on the bar makes
-// the two equal. The open parts share the height of the panel by their
-// --grow values, so one open part alone fills the panel. ----
-const SIDE_PANELS = [document.getElementById('palettePanel'), document.getElementById('inspector'), document.getElementById('prepSidebar')];
+// Inspector, Edge legend and Help on the right; Recording, Steps and Saved
+// sequences on 1 · Prepare; Run, Report and Legend on 3 · Check.
+// A click on a part head closes or opens the part. Open parts sit at the top
+// in their first order; closed parts go to the bottom of the panel. A bar
+// between two open parts changes their sizes (a double-click makes the two
+// equal). The open parts share the height of the panel by their --grow
+// values, so one open part alone fills the panel. ----
+const SIDE_PANELS = [document.getElementById('palettePanel'), document.getElementById('inspector'), document.getElementById('prepSidebar'), document.getElementById('checkSidebar')];
 const PANE_MIN_PX = 70;   // smallest height of an open part while a bar is dragged
+const PANE_REOPEN_GROW = 160;   // size of a part that was closed from the start, when it opens
 
 document.querySelectorAll('.pal-pane-chevron').forEach(el=>{ el.innerHTML = PAL_CHEVRON_SVG; });
 document.querySelectorAll('.pal-pane-head').forEach(head=> head.setAttribute('aria-expanded', 'true'));
 
 function paneIsOpen(pane){ return !pane.classList.contains('collapsed'); }
 function paneGrow(pane){ return parseFloat(getComputedStyle(pane).getPropertyValue('--grow')) || 50; }
-// the two parts a bar resizes: the part just above it, and the nearest open
-// part below it
-function splitterPanes(bar){
-  const above = bar.previousElementSibling;
-  let below = bar.nextElementSibling;
-  while(below && !(below.classList.contains('pal-pane') && paneIsOpen(below))) below = below.nextElementSibling;
-  return {above, below};
-}
-// a bar shows only when there is an open part on both sides of it
-function updateSplitters(panel){
-  panel.querySelectorAll(':scope > .pal-splitter').forEach(bar=>{
-    const {above, below} = splitterPanes(bar);
-    bar.classList.toggle('hidden', !(above && paneIsOpen(above) && below));
+const panesOf = panel=> [...panel.querySelectorAll(':scope > .pal-pane')];
+
+// open parts first, in their first order, then the closed parts; one bar
+// between each two open parts
+function arrangePanes(panel){
+  const items = [...panel.children].filter(el=> el.matches('.pal-pane, .pal-splitter'));
+  if(!items.length) return;
+  const ref = items[items.length-1].nextSibling;
+  items.filter(el=> el.matches('.pal-splitter')).forEach(el=> el.remove());
+  const panes = panesOf(panel).sort((x, y)=> x.dataset.paneOrder - y.dataset.paneOrder);
+  const open = panes.filter(paneIsOpen), closed = panes.filter(p=> !paneIsOpen(p));
+  [...open, ...closed].forEach((pane, i)=>{
+    if(i>0 && i<open.length){
+      const bar = document.createElement('div');
+      bar.className = 'pal-splitter';
+      bar.title = 'Drag to change the size of the panels; double-click to make them equal';
+      panel.insertBefore(bar, ref);
+    }
+    panel.insertBefore(pane, ref);
   });
+}
+// the first change of a panel: every open part keeps the height it has on
+// screen (parts marked .fit take the height of their content until then)
+function fixPaneSizes(panel){
+  if(panel.dataset.sized || !panel.offsetHeight) return;
+  panesOf(panel).forEach(p=>{
+    if(paneIsOpen(p)) p.style.setProperty('--grow', p.offsetHeight);
+    else if(p.classList.contains('fit')) p.style.setProperty('--grow', PANE_REOPEN_GROW);
+    p.classList.remove('fit');
+  });
+  panel.dataset.sized = '1';
+}
+// the two parts a bar resizes: the parts just above and just below it
+function splitterPanes(bar){
+  return {above: bar.previousElementSibling, below: bar.nextElementSibling};
 }
 
 SIDE_PANELS.forEach(panel=>{
+  panesOf(panel).forEach((p, i)=> p.dataset.paneOrder = i);
+
   panel.addEventListener('click', e=>{
     const head = e.target.closest('.pal-pane-head');
     if(!head) return;
+    fixPaneSizes(panel);
     const pane = head.closest('.pal-pane');
     const closed = pane.classList.toggle('collapsed');
     head.setAttribute('aria-expanded', String(!closed));
-    updateSplitters(panel);
+    arrangePanes(panel);
   });
 
   panel.addEventListener('mousedown', e=>{
     const bar = e.target.closest('.pal-splitter');
     if(!bar || e.button!==0) return;
     e.preventDefault();
+    fixPaneSizes(panel);
     const {above, below} = splitterPanes(bar);
     const top = above.getBoundingClientRect().top;
     const height = above.offsetHeight + below.offsetHeight;
@@ -67,13 +94,14 @@ SIDE_PANELS.forEach(panel=>{
   panel.addEventListener('dblclick', e=>{
     const bar = e.target.closest('.pal-splitter');
     if(!bar) return;
+    fixPaneSizes(panel);
     const {above, below} = splitterPanes(bar);
     const half = (paneGrow(above) + paneGrow(below)) / 2;
     above.style.setProperty('--grow', half);
     below.style.setProperty('--grow', half);
   });
 
-  updateSplitters(panel);
+  arrangePanes(panel);
 });
 
 // the help box shows what a palette part holds while the mouse is on its head

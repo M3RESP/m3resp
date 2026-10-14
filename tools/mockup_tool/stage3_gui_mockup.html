@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="src/css/design.css">
 <link rel="stylesheet" href="src/css/popover.css">
 <link rel="stylesheet" href="src/css/results.css">
+<link rel="stylesheet" href="src/css/check.css">
 
 <div class="appbar">
   <div class="brand">
@@ -342,15 +343,46 @@
       </div>
       <div class="mod-head-right">
         <span class="pill ok">Loaded</span>
-        <button class="tb-btn small load-file-btn" data-mod="vent" data-icon="folder" title="Browse for a .Poly5 recording to load into this modality">Load file…</button>
-        <input type="file" class="load-file-input" data-mod="vent" accept=".Poly5,.poly5" style="display:none;">
       </div>
     </div>
     <div class="card-body">
-      <div class="card-toolbar" data-zoom-toolbar="vent">
-        <div class="ct-left">
+      <!-- several ventilator files; sections of them merge into one recording (js/prepare/vent-files.js) -->
+      <div class="eit-files mod-files" id="ventFiles">
+        <div class="ef-head">
+          <span class="ct-label">Files</span><span class="ef-count" id="ventFileCount"></span>
+          <span class="ef-hint">Drag on a file to select a section. Drag a section to slide it, or its edge to change its length.</span>
+          <div class="tb-spacer"></div>
+          <div class="tb-seg small" role="group" aria-label="Load ventilator files">
+            <button id="ventAddFilesBtn" title="Choose one or more .Poly5 files"><span data-icon="plus"></span>Add files…</button>
+            <button id="ventAddFolderBtn" title="Add every ventilator file in a folder"><span data-icon="folder"></span>Add folder…</button>
+          </div>
+          <input type="file" id="ventAddFilesInput" accept=".Poly5,.poly5" multiple hidden>
+          <input type="file" id="ventAddFolderInput" webkitdirectory hidden>
+        </div>
+        <!-- the ventilator channels: ticked ones show on the file lanes and in the plots below -->
+        <div class="ef-lane-signals">
           <span class="ct-label">Channels</span>
           <div class="vent-checks" id="ventChecks"></div>
+        </div>
+        <div class="ef-list" id="ventFileList"></div>
+        <div class="ef-merge">
+          <div class="ef-merge-head">
+            <span class="ct-label">Merge order</span>
+            <span class="ef-summary" id="ventMergeSummary"></span>
+          </div>
+          <div class="ef-sections" id="ventSectionList"></div>
+          <div class="ef-preview" id="ventMergePreview" aria-label="Merged recording"></div>
+          <div class="ef-merge-foot">
+            <span class="ef-warn" id="ventMergeWarn" hidden></span>
+            <div class="tb-spacer"></div>
+            <button class="tb-btn small primary" id="ventMergeBtn" data-icon="check">Merge sections</button>
+          </div>
+        </div>
+      </div>
+      <div class="card-toolbar" data-zoom-toolbar="vent">
+        <div class="ct-left">
+          <label class="ct-label" for="ventSourceSelect">Show</label>
+          <select id="ventSourceSelect" class="tb-select" title="The recording that the ventilator plots below show"></select>
         </div>
         <div class="ct-right">
           <div class="tb-seg small view-seg" role="group" aria-label="Time range">
@@ -366,6 +398,7 @@
       <div class="eit-img-title eit-plots-title">Ventilator signals</div>
       <div class="vent-stack zoom-stack" id="ventStack" data-zoom="vent"></div>
       <div class="eit-time-axis" data-zoom-axis="vent"></div>
+      <p class="slice-note" style="margin-top:12px;" id="ventSourceNote"></p>
       <p class="slice-note">Channel indices come from <code>ventilator.channels</code> (<code>pressure_channel</code>, <code>flow_channel</code>, <code>volume_channel</code>); each trace is labelled with its canonical category from <code>m3resp.data.categories</code>. Esophageal, gastric and transpulmonary pressure are known categories the taxonomy already supports — tick them to show the extra derived traces a Pes-instrumented recording would carry.</p>
     </div>
   </div>
@@ -551,7 +584,6 @@
         </div>
       </div>
 
-      <div class="pal-splitter" title="Drag to change the size of the panels; double-click to make them equal"></div>
 
       <!-- lower half: the data made on the canvas and the saved sequences -->
       <div class="pal-pane" id="dataPane" data-pane="data" style="--grow:50">
@@ -615,6 +647,7 @@
             <span><b>✎ Note</b> / <b>↗ Arrow</b>, then click or drag</span><span>add a note or an arrow</span>
             <span><b>Delete</b></span><span>remove the selected steps, note or arrow</span>
             <span><b>Ctrl + scroll</b></span><span>zoom at the mouse</span>
+            <span><b>Space + drag</b></span><span>move the view</span>
           </span>
         </span></span>
       </div>
@@ -657,7 +690,6 @@
         </div>
       </div>
 
-      <div class="pal-splitter" title="Drag to change the size of the panels; double-click to make them equal"></div>
 
       <!-- what the marks on the canvas mean -->
       <div class="pal-pane" id="legendPane" data-pane="legend" style="--grow:33">
@@ -694,7 +726,6 @@
         </div>
       </div>
 
-      <div class="pal-splitter" title="Drag to change the size of the panels; double-click to make them equal"></div>
 
       <!-- what the item under the mouse is -->
       <div class="pal-pane" id="helpPane" data-pane="help" style="--grow:22">
@@ -711,94 +742,97 @@
 
 <!-- ============ 3. CHECK ============ -->
 <div class="view" id="view-check">
-  <!-- ===== A. Quality flags & run report ===== -->
-  <div class="card" id="sectionQualityRun">
-    <div class="card-head"><h3>Quality flags &amp; run report</h3><span class="hint">everything produced while <code>multimodal-full</code> ran</span></div>
-    <div class="card-body" style="padding:0;">
-      <div class="dock tall">
-        <div class="dock-tabs">
-          <div class="dock-tab active" data-dock="qflags">Quality checks <span class="n">86/96</span></div>
-          <div class="dock-tab" data-dock="runlog">Run log <span class="n">47</span></div>
-          <div class="dock-tab" data-dock="prov">Provenance</div>
+
+  <div class="palette prep-sidebar check-sidebar" id="checkSidebar">
+    <div class="side-panel-topbar">
+      <span class="side-panel-topbar-title">
+        <span class="side-panel-topbar-label">Check</span>
+      </span>
+      <button class="side-collapse-btn" id="checkSidebarCollapseBtn" title="Collapse this panel"></button>
+    </div>
+
+    <!-- the run this page reports on -->
+    <div class="pal-pane fit" data-pane="run">
+      <button type="button" class="pal-pane-head" title="Open or close this panel">
+        <span class="pal-pane-chevron"></span><span class="pal-pane-title">Run</span>
+      </button>
+      <div class="pal-pane-body">
+        <dl class="rec-list">
+          <div class="rec-row"><dt>Pipeline</dt><dd class="mono">multimodal-full</dd></div>
+          <div class="rec-row"><dt>Status</dt><dd><span class="run-status ok">Succeeded</span></dd></div>
+          <div class="rec-row"><dt>Steps</dt><dd>47 of 47</dd></div>
+          <div class="rec-row"><dt>Run time</dt><dd>10.0 s</dd></div>
+          <div class="rec-row"><dt>Started</dt><dd>2026-07-30 12:42</dd></div>
+          <div class="rec-row"><dt>Run id</dt><dd class="mono" title="9907d215dda2452d">9907d215dda2</dd></div>
+        </dl>
+      </div>
+    </div>
+
+    <!-- the parts of the report; the main column shows one at a time -->
+    <div class="pal-pane fit" data-pane="report">
+      <button type="button" class="pal-pane-head" title="Open or close this panel">
+        <span class="pal-pane-chevron"></span><span class="pal-pane-title">Report</span>
+      </button>
+      <div class="pal-pane-body">
+        <div class="prep-steps" id="checkSteps">
+          <button type="button" class="step-item" data-part="checkAll"><span class="num">1</span><span class="step-name">Quality checks</span><span class="step-meta" id="checkAllCount"></span></button>
+          <div class="step-children"><div class="mod-list" id="checkModList"></div></div>
+          <button type="button" class="step-item" data-part="checkLog"><span class="num">2</span><span class="step-name">Run log</span><span class="step-meta">47</span></button>
+          <button type="button" class="step-item" data-part="checkProv"><span class="num">3</span><span class="step-name">Provenance</span></button>
+          <button type="button" class="step-item" data-part="checkConfirm"><span class="num">4</span><span class="step-name">Confirm</span><span class="step-meta" id="confirmStepMeta">to do</span></button>
         </div>
-        <div class="dock-body" id="rdockQflags" data-dock="qflags" style="padding:12px 14px;">
-          <table class="qtable">
-            <thead><tr><th>Severity</th><th>Modality</th><th>Check</th><th>Result</th><th>Note</th></tr></thead>
-            <tbody>
-              <tr>
-                <td><span class="sev-pill ok">info</span></td>
-                <td><span class="pmod-pill vent">ventilator</span></td>
-                <td><code>pocc_quality</code></td>
-                <td class="pval">1/2 passed</td>
-                <td class="pnote">per-breath check, see run log for the producing step</td>
-              </tr>
-              <tr>
-                <td><span class="sev-pill ok">info</span></td>
-                <td><span class="pmod-pill vent">ventilator</span></td>
-                <td><code>detect_non_consecutive_manoeuvres</code></td>
-                <td class="pval">1/2 passed</td>
-                <td class="pnote">per-breath check, see run log for the producing step</td>
-              </tr>
-              <tr>
-                <td><span class="sev-pill ok">info</span></td>
-                <td><span class="pmod-pill emg">emg</span></td>
-                <td><code>percentage_under_baseline</code></td>
-                <td class="pval">17/19 passed</td>
-                <td class="pnote">per-breath check, see run log for the producing step</td>
-              </tr>
-              <tr>
-                <td><span class="sev-pill ok">info</span></td>
-                <td><span class="pmod-pill emg">emg</span></td>
-                <td><code>evaluate_event_timing</code></td>
-                <td class="pval">12/13 passed</td>
-                <td class="pnote">per-breath check, see run log for the producing step</td>
-              </tr>
-              <tr>
-                <td><span class="sev-pill warn">warning</span></td>
-                <td><span class="pmod-pill emg">emg</span></td>
-                <td><code>evaluate_event_timing_unmatched</code></td>
-                <td class="pval">0/1 passed</td>
-                <td class="pnote">6 event(s) had no paired counterpart and were not assessed.</td>
-              </tr>
-              <tr>
-                <td><span class="sev-pill ok">info</span></td>
-                <td><span class="pmod-pill emg">emg</span></td>
-                <td><code>evaluate_bell_curve_error</code></td>
-                <td class="pval">2/19 passed</td>
-                <td class="pnote">per-breath check, see run log for the producing step</td>
-              </tr>
-              <tr>
-                <td><span class="sev-pill ok">info</span></td>
-                <td><span class="pmod-pill emg">emg</span></td>
-                <td><code>detect_local_high_aub</code></td>
-                <td class="pval">0/19 passed</td>
-                <td class="pnote">per-breath check, see run log for the producing step</td>
-              </tr>
-              <tr>
-                <td><span class="sev-pill ok">info</span></td>
-                <td><span class="pmod-pill emg">emg</span></td>
-                <td><code>detect_extreme_time_products</code></td>
-                <td class="pval">0/19 passed</td>
-                <td class="pnote">per-breath check, see run log for the producing step</td>
-              </tr>
-              <tr>
-                <td><span class="sev-pill ok">info</span></td>
-                <td><span class="pmod-pill emg">emg</span></td>
-                <td><code>evaluate_respiratory_rates</code></td>
-                <td class="pval">1/1 passed</td>
-                <td class="pnote">per-breath check, see run log for the producing step</td>
-              </tr>
-              <tr>
-                <td><span class="sev-pill ok">info</span></td>
-                <td><span class="pmod-pill emg">emg</span></td>
-                <td><code>interpeak_dist</code></td>
-                <td class="pval">1/1 passed</td>
-                <td class="pnote">per-breath check, see run log for the producing step</td>
-              </tr>
-            </tbody>
-          </table>
+      </div>
+    </div>
+
+    <!-- what the dots and pills mean -->
+    <div class="pal-pane" data-pane="legend">
+      <button type="button" class="pal-pane-head" title="Open or close this panel">
+        <span class="pal-pane-chevron"></span><span class="pal-pane-title">Legend</span>
+      </button>
+      <div class="pal-pane-body">
+        <div class="qc-legend">
+          <div class="qc-legend-title">Result</div>
+          <div class="qc-legend-row"><span class="qc-dot pass"></span>Passed: every breath or item passed</div>
+          <div class="qc-legend-row"><span class="qc-dot part"></span>Some failed</div>
+          <div class="qc-legend-row"><span class="qc-dot fail"></span>Failed: no breath or item passed</div>
+          <div class="qc-legend-title">Severity: how much a fail matters</div>
+          <div class="qc-legend-row"><span class="sev-pill info">info</span>for review; the run goes on</div>
+          <div class="qc-legend-row"><span class="sev-pill warn">warning</span>check the result before you use it</div>
+          <div class="qc-legend-row"><span class="sev-pill crit">error</span>the result is not usable</div>
+          <div class="qc-legend-title">Side panel dot</div>
+          <div class="qc-legend-row"><span class="st on"></span>all checks passed</div>
+          <div class="qc-legend-row"><span class="st part"></span>an info check has fails</div>
+          <div class="qc-legend-row"><span class="st fail"></span>a warning or error check has fails</div>
         </div>
-        <div class="dock-body hidden" id="rdockRunlog" data-dock="runlog" style="padding:12px 14px;">
+      </div>
+    </div>
+  </div>
+
+  <div class="prep-main" id="checkMain">
+
+  <div class="prep-crumb" id="checkCrumb" aria-live="polite"></div>
+
+  <!-- one card per modality (js/check/check-page.js); "1 Quality checks" shows all of them -->
+  <div id="checkModCards" class="check-mod-cards"></div>
+
+  <!-- Run log -->
+  <div class="card" id="checkLog">
+    <div class="card-head"><h3>Run log</h3><span class="hint">every step of <code>multimodal-full</code>, in run order</span></div>
+    <div class="card-body">
+      <div class="card-toolbar">
+        <div class="ct-left">
+          <span class="ct-label">Show</span>
+          <div class="tb-seg small" id="logFilter" role="group" aria-label="Steps to show">
+            <button class="on" data-mod="all">All</button>
+            <button data-mod="eit">EIT</button>
+            <button data-mod="emg">EMG</button>
+            <button data-mod="vent">Ventilator</button>
+            <button data-mod="session">Session</button>
+          </div>
+        </div>
+        <div class="ct-right"><span class="log-count" id="logCount"></span></div>
+      </div>
+      <div class="run-log" id="runLog">
 <div class="log-line ok">run <b>multimodal-full</b> · run_id 9907d215dda2 · m3resp 0.1.0 · started 12:42:52Z</div>
 <div class="log-line"><span class="t">+ 0.324s</span>eit.load                            323.6 ms  ok</div>
 <div class="log-line"><span class="t">+ 1.226s</span>emg.load                            902.2 ms  ok</div>
@@ -848,31 +882,63 @@
 <div class="log-line"><span class="t">+10.001s</span>emg.evaluate_respiratory_rates        0.5 ms  ok</div>
 <div class="log-line"><span class="t">+10.002s</span>emg.interpeak_dist                    0.7 ms  ok</div>
 <div class="log-line ok">47/47 steps completed · total 10.014s · status: succeeded</div>
-        </div>
-        <div class="dock-body hidden" id="rdockProv" data-dock="prov" style="padding:12px 14px;">
-          <div class="prov-row"><div class="k">Pipeline</div><div class="v">multimodal-full</div></div>
-          <div class="prov-row"><div class="k">Run id</div><div class="v">9907d215dda2452d</div></div>
-          <div class="prov-row"><div class="k">m3resp version</div><div class="v">0.1.0</div></div>
-          <div class="prov-row"><div class="k">Started</div><div class="v">2026-07-30T12:42:52Z</div></div>
-          <div class="prov-row"><div class="k">Finished</div><div class="v">2026-07-30T12:43:02Z · 10.014s</div></div>
-          <div class="prov-row"><div class="k">Status</div><div class="v">succeeded — 47/47 steps</div></div>
-          <div class="prov-row"><div class="k">Inputs</div><div class="v">m3resp_multimodal_1_eit_draeger.bin, m3resp_multimodal_1_emg.Poly5, m3resp_multimodal_1_ventilator.Poly5</div></div>
-          <p style="margin:14px 0 0;font-size:12px;color:var(--text-dim);">Editing a step's parameters and re-running invalidates only its downstream closure — for example, changing <b>emg.snr_pseudo</b>'s threshold invalidates <code>emg_time_product</code>, <code>emg_pseudo_slope</code>, the quality summary and <code>export.session_summary</code>, computed from <code>session_reads</code>/<code>session_writes</code> (see <b>2 · Design</b>).</p>
-          <button class="tb-btn primary" style="margin-top:12px;">Rerun 4 affected steps</button>
-        </div>
       </div>
     </div>
   </div>
 
-  <div class="check-confirm-bar" id="checkConfirmBar">
-    <div class="check-confirm-text">
-      <b>Reviewed the quality checks and run log?</b>
-      <span>Confirming unlocks <b>4 · Results</b> — the parameters, saved values, and plots this run produced.</span>
+  <!-- Provenance -->
+  <div class="card" id="checkProv">
+    <div class="card-head"><h3>Provenance</h3><span class="hint">where the results came from</span></div>
+    <div class="card-body">
+      <dl class="prov-list">
+        <div class="prov-row"><dt>Pipeline</dt><dd class="mono">multimodal-full</dd></div>
+        <div class="prov-row"><dt>Run id</dt><dd class="mono">9907d215dda2452d</dd></div>
+        <div class="prov-row"><dt>m3resp version</dt><dd class="mono">0.1.0</dd></div>
+        <div class="prov-row"><dt>Started</dt><dd class="mono">2026-07-30T12:42:52Z</dd></div>
+        <div class="prov-row"><dt>Finished</dt><dd class="mono">2026-07-30T12:43:02Z · 10.0 s</dd></div>
+        <div class="prov-row"><dt>Status</dt><dd><span class="run-status ok">Succeeded</span> 47 of 47 steps</dd></div>
+        <div class="prov-row"><dt>Inputs</dt><dd class="mono">m3resp_multimodal_1_eit_draeger.bin<br>m3resp_multimodal_1_emg.Poly5<br>m3resp_multimodal_1_ventilator.Poly5</dd></div>
+      </dl>
+      <div class="prov-rerun">
+        <div class="prov-rerun-text">
+          <b>Rerun after a change</b>
+          <span>A new parameter in a step makes the steps after it out of date. Example: a new <code>emg.snr_pseudo</code> threshold</span>
+          <div class="prov-stale">
+            <code>emg_time_product</code><code>emg_pseudo_slope</code><code>quality summary</code><code>export.session_summary</code>
+          </div>
+        </div>
+        <button class="tb-btn" data-icon="reset">Rerun 4 steps</button>
+      </div>
     </div>
-    <button class="tb-btn primary" id="confirmResultsBtn">Confirm &amp; continue →</button>
+  </div>
+
+  <!-- Confirm: the last step; it opens 4 · Results -->
+  <div class="card" id="checkConfirm">
+    <div class="card-head"><h3>Confirm the check</h3><span class="hint">opens 4 · Results</span></div>
+    <div class="card-body">
+      <div class="confirm-why">
+        <div><span class="confirm-k">What it means</span><p>You looked at the quality checks and accept this run for analysis.</p></div>
+        <div><span class="confirm-k">Why it is needed</span><p>4 · Results turns this run into parameters and plots. It stays locked until the checks are seen, so no result is used unchecked.</p></div>
+      </div>
+      <div class="confirm-sum" id="confirmSummary"></div>
+      <div class="confirm-act" id="checkConfirmBar">
+        <span class="confirm-state" id="confirmState">Not confirmed yet.</span>
+        <div class="tb-spacer"></div>
+        <button class="tb-btn primary" id="confirmResultsBtn" data-icon="check">Confirm and open 4 · Results</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Back / Next -->
+  <div class="prep-pager">
+    <button class="tb-btn" id="checkBackBtn">Back</button>
+    <div class="tb-spacer"></div>
+    <span class="pager-hint" id="checkNextHint"></span>
+    <button class="tb-btn primary" id="checkNextBtn">Next</button>
+  </div>
+
   </div>
 </div>
-
 <!-- ============ 4. RESULTS ============ -->
 <div class="view" id="view-results">
   <div class="card" id="sectionParams">
@@ -1063,6 +1129,7 @@
 <script src="src/js/design/layout.js"></script>
 <script src="src/js/design/arrange.js"></script>
 <script src="src/js/design/annotations.js"></script>
+<script src="src/js/design/canvas-pan.js"></script>
 <script src="src/js/design/palette-common.js"></script>
 <script src="src/js/design/palette-panel.js"></script>
 <script src="src/js/design/help-box.js"></script>
@@ -1086,9 +1153,12 @@
 <script src="src/js/prepare/file-merge.js"></script>
 <script src="src/js/prepare/eit-files.js"></script>
 <script src="src/js/prepare/vent-stack.js"></script>
+<script src="src/js/prepare/vent-files.js"></script>
 <script src="src/js/prepare/emg-panel.js"></script>
 <script src="src/js/prepare/sync-strip.js"></script>
 <script src="src/js/prepare/emg-files.js"></script>
 <script src="src/js/prepare/zoom-engine.js"></script>
+<script src="src/js/check/check-data.js"></script>
+<script src="src/js/check/check-page.js"></script>
 <script src="src/js/results/plots.js"></script>
 <script src="src/js/results/params-filter.js"></script>

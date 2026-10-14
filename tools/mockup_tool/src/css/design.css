@@ -27,8 +27,8 @@
    A click on a part head closes or opens the part; the bar under an open
    part changes its size against the next open part. The open parts share
    the height by their --grow values (set in the HTML and by the bars), so
-   one open part alone fills the panel; with every part closed, the heads
-   sit at the bottom. */
+   one open part alone fills the panel. Closed parts sit at the bottom
+   (js/design/palette-panes.js moves them there). */
 .pal-pane{display:flex;flex-direction:column;min-height:0;flex:var(--grow, 50) 1 0;}
 .pal-pane.collapsed{flex:none;}
 .side-panel-topbar + .pal-pane{margin-top:auto;}
@@ -339,6 +339,10 @@ body.pal-resizing{cursor:row-resize;user-select:none;}
 
 /* ---- notes and arrows on the canvas (js/design/annotations.js) ---- */
 .canvas-scroll.annot-drawing, .canvas-scroll.annot-drawing *{cursor:crosshair !important;}
+
+/* ---- Space + drag moves the view (js/design/canvas-pan.js) ---- */
+.canvas-scroll.pan-ready, .canvas-scroll.pan-ready *{cursor:grab !important;}
+.canvas-scroll.panning, .canvas-scroll.panning *{cursor:grabbing !important;user-select:none;}
 svg.annot-layer{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible;pointer-events:none;}
 .annot-hit{fill:none;stroke:transparent;stroke-width:14;pointer-events:stroke;cursor:move;}
 .annot-line{fill:none;stroke:var(--custom);stroke-width:2.5;stroke-linecap:round;pointer-events:none;}

@@ -171,6 +171,9 @@
 /* EMG card: the same block in the EMG colour */
 .mod-emg .ef-lane{border-left-color:var(--emg);}
 .mod-emg .ef-file.shown .ef-no{background:var(--emg);border-color:var(--emg);}
+/* ventilator card: the same block in the ventilator colour */
+.mod-vent .ef-lane{border-left-color:var(--vent);}
+.mod-vent .ef-file.shown .ef-no{background:var(--vent);border-color:var(--vent);}
 .ef-file.shown .ef-file-head::after{content:"shown below";order:2;font-size:10.5px;font-weight:700;color:var(--accent-strong);}
 .ef-preview{cursor:pointer;border-radius:6px;}
 .ef-preview.shown{box-shadow:0 0 0 2px var(--accent);}

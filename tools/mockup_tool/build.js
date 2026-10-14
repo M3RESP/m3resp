@@ -35,6 +35,7 @@ const CSS_FILES = [
   'css/design.css',
   'css/popover.css',
   'css/results.css',
+  'css/check.css',
 ];
 
 const HTML_FILES = [
@@ -58,6 +59,7 @@ const JS_FILES = [
   'js/design/layout.js',
   'js/design/arrange.js',
   'js/design/annotations.js',
+  'js/design/canvas-pan.js',
   'js/design/palette-common.js',
   'js/design/palette-panel.js',
   'js/design/help-box.js',
@@ -81,12 +83,16 @@ const JS_FILES = [
   'js/prepare/file-merge.js',
   'js/prepare/eit-files.js',
   'js/prepare/vent-stack.js',
+  'js/prepare/vent-files.js',
   'js/prepare/emg-panel.js',
   // after the EIT, ventilator and EMG signals: the first estimate runs on load
   'js/prepare/sync-strip.js',
   // after sync-strip.js: the file lanes draw the EMG envelope
   'js/prepare/emg-files.js',
   'js/prepare/zoom-engine.js',
+  // after 1 · Prepare and 2 · Design: "Show in 1 · Prepare" and "Find step"
+  'js/check/check-data.js',
+  'js/check/check-page.js',
   'js/results/plots.js',
   'js/results/params-filter.js',
 ];

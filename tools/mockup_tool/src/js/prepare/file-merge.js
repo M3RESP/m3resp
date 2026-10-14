@@ -1,5 +1,6 @@
 // ================= several files of one modality: sections and merge =================
-// Used by the EIT card (eit-files.js) and the EMG card (emg-files.js).
+// Used by the EIT, EMG and ventilator cards (eit-files.js, emg-files.js,
+// vent-files.js).
 // A modality card can hold more than one file. A drag on the lane of a file
 // selects a section of it; a drag on a section slides it, a drag on its edge
 // changes its length. The sections, in the order of the "Merge order" list,

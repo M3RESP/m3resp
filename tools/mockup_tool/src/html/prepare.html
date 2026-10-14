@@ -312,15 +312,46 @@
       </div>
       <div class="mod-head-right">
         <span class="pill ok">Loaded</span>
-        <button class="tb-btn small load-file-btn" data-mod="vent" data-icon="folder" title="Browse for a .Poly5 recording to load into this modality">Load file…</button>
-        <input type="file" class="load-file-input" data-mod="vent" accept=".Poly5,.poly5" style="display:none;">
       </div>
     </div>
     <div class="card-body">
-      <div class="card-toolbar" data-zoom-toolbar="vent">
-        <div class="ct-left">
+      <!-- several ventilator files; sections of them merge into one recording (js/prepare/vent-files.js) -->
+      <div class="eit-files mod-files" id="ventFiles">
+        <div class="ef-head">
+          <span class="ct-label">Files</span><span class="ef-count" id="ventFileCount"></span>
+          <span class="ef-hint">Drag on a file to select a section. Drag a section to slide it, or its edge to change its length.</span>
+          <div class="tb-spacer"></div>
+          <div class="tb-seg small" role="group" aria-label="Load ventilator files">
+            <button id="ventAddFilesBtn" title="Choose one or more .Poly5 files"><span data-icon="plus"></span>Add files…</button>
+            <button id="ventAddFolderBtn" title="Add every ventilator file in a folder"><span data-icon="folder"></span>Add folder…</button>
+          </div>
+          <input type="file" id="ventAddFilesInput" accept=".Poly5,.poly5" multiple hidden>
+          <input type="file" id="ventAddFolderInput" webkitdirectory hidden>
+        </div>
+        <!-- the ventilator channels: ticked ones show on the file lanes and in the plots below -->
+        <div class="ef-lane-signals">
           <span class="ct-label">Channels</span>
           <div class="vent-checks" id="ventChecks"></div>
+        </div>
+        <div class="ef-list" id="ventFileList"></div>
+        <div class="ef-merge">
+          <div class="ef-merge-head">
+            <span class="ct-label">Merge order</span>
+            <span class="ef-summary" id="ventMergeSummary"></span>
+          </div>
+          <div class="ef-sections" id="ventSectionList"></div>
+          <div class="ef-preview" id="ventMergePreview" aria-label="Merged recording"></div>
+          <div class="ef-merge-foot">
+            <span class="ef-warn" id="ventMergeWarn" hidden></span>
+            <div class="tb-spacer"></div>
+            <button class="tb-btn small primary" id="ventMergeBtn" data-icon="check">Merge sections</button>
+          </div>
+        </div>
+      </div>
+      <div class="card-toolbar" data-zoom-toolbar="vent">
+        <div class="ct-left">
+          <label class="ct-label" for="ventSourceSelect">Show</label>
+          <select id="ventSourceSelect" class="tb-select" title="The recording that the ventilator plots below show"></select>
         </div>
         <div class="ct-right">
           <div class="tb-seg small view-seg" role="group" aria-label="Time range">
@@ -336,6 +367,7 @@
       <div class="eit-img-title eit-plots-title">Ventilator signals</div>
       <div class="vent-stack zoom-stack" id="ventStack" data-zoom="vent"></div>
       <div class="eit-time-axis" data-zoom-axis="vent"></div>
+      <p class="slice-note" style="margin-top:12px;" id="ventSourceNote"></p>
       <p class="slice-note">Channel indices come from <code>ventilator.channels</code> (<code>pressure_channel</code>, <code>flow_channel</code>, <code>volume_channel</code>); each trace is labelled with its canonical category from <code>m3resp.data.categories</code>. Esophageal, gastric and transpulmonary pressure are known categories the taxonomy already supports — tick them to show the extra derived traces a Pes-instrumented recording would carry.</p>
     </div>
   </div>

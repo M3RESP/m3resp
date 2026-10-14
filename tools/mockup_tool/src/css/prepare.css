@@ -2,8 +2,8 @@
 #view-prepare{padding:0;gap:0;overflow:hidden;flex-direction:row;align-items:stretch;}
 /* left side panel: the same top bar, part heads and collapse arrow as the
    palette on 2 · Design (css/design.css). Parts marked .fit take the height
-   of their content; Saved sequences fills the rest. */
-.prep-sidebar .side-panel-topbar + .pal-pane{margin-top:0;}
+   of their content until the first resize or close; the last part fills the
+   rest. Closed parts sit at the bottom (js/design/palette-panes.js). */
 .prep-sidebar .pal-pane.fit{flex:none;}
 .prep-sidebar .pal-pane:last-child{border-bottom:1px solid var(--border);}
 .prep-sidebar .pal-pane-body{overflow:auto;}

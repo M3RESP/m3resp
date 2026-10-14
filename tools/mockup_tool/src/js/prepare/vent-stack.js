@@ -60,13 +60,22 @@ const VENT_CHANNELS = [
   },
 ];
 
+// the recording the ventilator plots show (one file or the merged sections,
+// set by js/prepare/vent-files.js): its length, the file time at each shown
+// time, and the times where two merged sections meet
+let VENT_VIEW = {dur:VENT_DUR, at:t=>({tau:t, gain:1}), joins:[]};
+function ventViewValue(chan, t){
+  const p = VENT_VIEW.at(t);
+  return p.gain * chan.fn(ventPhase(p.tau));
+}
+
 function buildVentPanel(chan){ return ventPanelFor(chan, 0, VENT_DUR); }
 function ventPanelFor(chan, t0, t1){
   const W=1000, H=156, TOP=20, BOT=10;
   const vals=[];
   for(let i=0;i<VENT_PTS;i++){
     const t=t0+(i/(VENT_PTS-1))*(t1-t0);
-    vals.push(chan.fn(ventPhase(t)));
+    vals.push(ventViewValue(chan, t));
   }
   let lo=Math.min(...vals), hi=Math.max(...vals);
   const pad=(hi-lo)*0.12 || 1; lo-=pad; hi+=pad;
@@ -82,6 +91,11 @@ function ventPanelFor(chan, t0, t1){
     const zy=TOP+(1-(0-lo)/(hi-lo))*(H-TOP-BOT);
     zeroLine=`<line x1="0" y1="${zy.toFixed(1)}" x2="${W}" y2="${zy.toFixed(1)}" stroke="var(--border)" stroke-width="1" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>`;
   }
+  // dashed lines where two merged sections meet
+  const joins = VENT_VIEW.joins.filter(tj=> tj>t0 && tj<t1).map(tj=>{
+    const x=((tj-t0)/(t1-t0)*W).toFixed(1);
+    return `<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="var(--text-dim)" stroke-width="1.5" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"><title>Join of two sections at ${fmtSec(tj)}</title></line>`;
+  }).join('');
   const div=document.createElement('div');
   div.className='vent-panel';
   div.id='ventPanel-'+chan.id;
@@ -94,7 +108,7 @@ function ventPanelFor(chan, t0, t1){
       <span class="ch">${chan.cat} · ${chan.ch}</span>
     </div>
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-      ${zeroLine}
+      ${zeroLine}${joins}
       <polyline points="${pts.trim()}" fill="none" stroke="${chan.color}" stroke-width="1.9" vector-effect="non-scaling-stroke"/>
     </svg>`;
   return div;
@@ -134,6 +148,8 @@ ventChecks.addEventListener('change', e=>{
   c.on=inp.checked;
   syncVentVisibility();
   if(typeof renderSliceLanes==='function') renderSliceLanes();
+  // the file lanes draw the ticked channels
+  if(typeof VENT_MERGE!=='undefined') VENT_MERGE.render();
 });
 
 

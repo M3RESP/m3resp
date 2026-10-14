@@ -35,7 +35,7 @@ document.getElementById('confirmResultsBtn').addEventListener('click', e=>{
   const btn = e.currentTarget;
   if(btn.dataset.confirmed) { goToView('results'); return; }
   btn.disabled = true;
-  btn.textContent = 'Generating parameters & plots…';
+  btn.textContent = 'Making parameters and plots…';
   setTimeout(()=>{
     const resultsTab = document.getElementById('resultsTab');
     resultsTab.classList.remove('locked');
@@ -43,8 +43,9 @@ document.getElementById('confirmResultsBtn').addEventListener('click', e=>{
     resultsTab.title = '';
     btn.disabled = false;
     btn.dataset.confirmed = '1';
-    btn.textContent = '✓ Confirmed — view results →';
+    btn.textContent = 'Open 4 · Results';
     document.getElementById('checkConfirmBar').classList.add('confirmed');
+    if(typeof checkConfirmed==='function') checkConfirmed();
     goToView('results');
   }, 650);
 });
