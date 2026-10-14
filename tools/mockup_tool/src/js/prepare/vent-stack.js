@@ -1,15 +1,16 @@
 // ================= Ventilator multi-channel stack =================
 // Breath-phase waveform model: a ventilator trace is not a sine wave, so each
-// channel is generated from the same inspiratory/expiratory phase clock.
+// channel is generated from the same inspiratory/expiratory phase clock. The
+// clock is the breath clock of js/prepare/signal-lanes.js, so the ventilator
+// breaths are the breaths of the EIT recording. The ventilator is the
+// reference of the synchronization: its time is the reference time.
 const VENT_DUR = REC_SECONDS;      // same session length as every other view
-const VENT_RR  = 15.6;            // br/min  (matches ventilator.respiratory_rate)
-const VENT_T   = 60 / VENT_RR;    // breath period
-const VENT_TI  = 0.34;            // inspiratory fraction of the cycle
+const VENT_TI  = 0.4;             // inspiratory part of each breath
 const VENT_PTS = 1100;
 
 // phase helpers: ip = 0..1 through inspiration, ep = 0..1 through expiration
 function ventPhase(t){
-  const p = (t % VENT_T) / VENT_T;
+  const p = breathPhaseAt(t).p;
   return p < VENT_TI
     ? {insp:true,  f:p / VENT_TI}
     : {insp:false, f:(p - VENT_TI) / (1 - VENT_TI)};

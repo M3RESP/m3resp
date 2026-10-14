@@ -6,7 +6,7 @@
   --border:#cfd9d6;
   --text:#122023;
   --text-dim:#57696c;
-  --text-faint:#8a9a9c;
+  --text-faint:#66777a;
   --accent:#0f8b8d;
   --accent-strong:#0a6c6e;
   --accent-soft:#e0f2f1;
@@ -20,9 +20,22 @@
   --type-mask:#b2453c;
   --type-result:#3f9e6e;
   --ok:#2f9e6e;
-  --warn:#c98a2c;
+  --warn:#d1a10f;
+  --warn-ink:#7d6000;      /* warning text on a light background */
+  --on-warn:#3a2c00;       /* icon or text on a --warn fill */
   --crit:#d1554f;
   --canvas-dot:#c9d3d1;
+  --plot-grid:#e9eeed;     /* grid lines inside signal plots */
+  /* white plot area with 4 horizontal and 6 vertical grid bands; the
+     vertical lines meet the 7 labels of the time axis under each plot */
+  --plot-bg:
+    repeating-linear-gradient(to bottom, transparent 0 calc(25% - 1px), var(--plot-grid) calc(25% - 1px) 25%),
+    repeating-linear-gradient(to right, transparent 0 calc(100%/6 - 1px), var(--plot-grid) calc(100%/6 - 1px) calc(100%/6)),
+    var(--surface);
+  --ctl-h:30px;            /* height of buttons, fields and switches */
+  --r-ctl:7px;             /* corner radius of controls */
+  --r-card:10px;           /* corner radius of cards */
+  --r-chip:999px;          /* chips and tags */
   --shadow: 0 1px 2px rgba(18,32,35,0.06), 0 4px 16px rgba(18,32,35,0.06);
   --mono: ui-monospace, "SF Mono", "Cascadia Code", "Consolas", "Roboto Mono", monospace;
   --sans: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
@@ -95,6 +108,55 @@ h1,h2,h3{text-wrap:balance;}
 .mock-badge{
   font-size:10.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;
   color:var(--text-faint);border:1px dashed var(--border);border-radius:5px;padding:3px 7px;
+}
+
+/* ---------- Shared controls (all tabs) ----------
+   .tb-btn: one button shape. Kinds: normal (grey fill), .quiet (no fill),
+   .primary (filled accent), .icon (square, for an icon alone).
+   .tb-seg: a row of joined buttons; .on marks the chosen one. */
+.tb-btn{
+  font-size:12px;font-weight:600;border:1px solid var(--border);background:var(--surface-2);color:var(--text);
+  padding:0 12px;border-radius:var(--r-ctl);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  height:var(--ctl-h);flex:none;white-space:nowrap;font-family:var(--sans);
+  transition:border-color .12s, background-color .12s, transform .08s;
+}
+.tb-btn:hover{border-color:var(--accent);}
+.tb-btn:active:not(:disabled){transform:translateY(1px);}
+.tb-btn.quiet{background:transparent;border-color:transparent;color:var(--text-dim);}
+.tb-btn.quiet:hover{background:var(--surface-2);border-color:var(--border);color:var(--text);}
+.tb-btn.icon{width:var(--ctl-h);padding:0;}
+.tb-btn.small{--ctl-h:26px;font-size:11.5px;padding:0 9px;}
+.tb-btn.small.icon{padding:0;}
+.tb-btn.primary{background:var(--accent-strong);border-color:var(--accent-strong);color:#fff;}
+.tb-btn.primary:hover{background:#085a5c;border-color:#085a5c;}
+.tb-btn:disabled{opacity:0.45;cursor:not-allowed;}
+.tb-btn:disabled:hover{border-color:var(--border);background:var(--surface-2);}
+.tb-btn.quiet:disabled:hover{border-color:transparent;background:transparent;}
+.tb-btn svg, .tb-seg button svg{display:block;flex:none;}
+.tb-sep{width:1px;align-self:stretch;background:var(--border);margin:0 2px;}
+.tb-spacer{flex:1;}
+.tb-seg{display:flex;border:1px solid var(--border);border-radius:var(--r-ctl);overflow:hidden;height:var(--ctl-h);flex:none;}
+.tb-seg button{
+  appearance:none;border:none;background:var(--surface-2);color:var(--text-dim);font-family:var(--sans);
+  font-size:12px;font-weight:600;padding:0 10px;cursor:pointer;white-space:nowrap;
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;transition:background-color .12s, color .12s;
+}
+.tb-seg button + button, .tb-seg button + .tb-seg-readout, .tb-seg .tb-seg-readout + button{border-left:1px solid var(--border);}
+.tb-seg button:hover:not(:disabled){background:var(--surface);color:var(--text);}
+.tb-seg button:active:not(:disabled){background:var(--surface-3);}
+.tb-seg button:disabled{color:var(--text-faint);opacity:0.6;cursor:not-allowed;}
+.tb-seg button.on{background:var(--surface);color:var(--accent-strong);box-shadow:inset 0 -2px 0 var(--accent);}
+.tb-seg.small{--ctl-h:26px;}
+.tb-seg.small button{font-size:11.5px;padding:0 8px;}
+/* a value shown inside a .tb-seg, between its buttons */
+.tb-seg-readout{
+  display:flex;align-items:center;padding:0 10px;background:var(--surface);
+  font-family:var(--mono);font-size:11px;color:var(--text-dim);white-space:nowrap;font-variant-numeric:tabular-nums;
+}
+/* keyboard focus: one ring for every control */
+:where(button, input, select, textarea, [tabindex]):focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{transition-duration:0s !important;animation-duration:0s !important;}
 }
 
 /* ---------- Panels / views ---------- */

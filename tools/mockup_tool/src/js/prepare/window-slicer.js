@@ -8,15 +8,6 @@ let windows = [{id:'w1', start:4, end:22, type:'keep'}];
 let activeWindowId = 'w1';
 const CUT_COLOR = '#d1554f'; // --crit, needed as a literal for SVG fill/stroke
 
-function fmtTime(sec){
-  sec = Math.max(0, Math.round(sec));
-  const m = Math.floor(sec/60), s = sec%60;
-  return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
-}
-function fmtDuration(sec){
-  const m = Math.floor(sec/60), s = Math.round(sec%60);
-  return m+'m '+s+'s';
-}
 function clampSeconds(v){ return Math.min(Math.max(v,0), REC_SECONDS); }
 function sortedWindows(){ return [...windows].sort((a,b)=>a.start-b.start); }
 function isCut(w){ return w.type==='cut'; }
@@ -139,6 +130,7 @@ function updateActiveFields(){
     startInput.value=''; endInput.value='';
     activeHint.textContent = windows.length ? 'click a window to edit it' : 'no windows selected';
     durationChip.textContent = '—';
+    durationChip.classList.remove('cut');
     return;
   }
   activeHint.textContent = isCut(w)
@@ -146,7 +138,8 @@ function updateActiveFields(){
     : 'editing window '+seqIndexOf(w.id);
   if(sliceMode==='time'){ startInput.value=w.start.toFixed(1); endInput.value=w.end.toFixed(1); }
   else { startInput.value=Math.round(w.start*EIT_HZ); endInput.value=Math.round(w.end*EIT_HZ); }
-  durationChip.textContent = (isCut(w) ? 'removing: ' : 'active window: ')+fmtDuration(w.end-w.start);
+  durationChip.textContent = fmtDuration(w.end-w.start);
+  durationChip.classList.toggle('cut', isCut(w));
 }
 
 function wireWindowDrag(el, w){
@@ -206,8 +199,8 @@ function buildWindowEl(w, seq){
   el.style.setProperty('--win-color', windowColor(w));
   positionWindowEl(el, w);
   el.innerHTML = `
-    <span class="slice-select-badge" title="${cut?'removed span '+seq:'kept window '+seq}">${cut?'✂':seq}</span>
-    <button class="slice-select-remove" title="Delete this ${cut?'removed span':'window'}">×</button>
+    <span class="slice-select-badge" title="${cut?'removed span '+seq:'kept window '+seq}">${cut?'−':seq}</span>
+    <button class="slice-select-remove" title="Delete this ${cut?'removed span':'window'}" aria-label="Delete this ${cut?'removed span':'window'}">${prepIcon('close', 12)}</button>
     <div class="slice-handle" data-h="left"></div>
     <div class="slice-handle" data-h="right"></div>
   `;
@@ -225,10 +218,10 @@ function renderWindowsList(sorted){
   const parts = [];
   if(keeps.length) parts.push(`${keeps.length} kept`);
   if(cuts.length) parts.push(`${cuts.length} removed`);
-  if(segs.length) parts.push(`→ ${segs.length} segment${segs.length===1?'':'s'} · ${fmtDuration(resolvedTotal())} saved`);
+  if(segs.length) parts.push(`${segs.length} segment${segs.length===1?'':'s'}, ${fmtDuration(resolvedTotal())} saved`);
   document.getElementById('windowsCount').textContent = parts.join(' · ');
   if(sorted.length===0){
-    list.innerHTML = '<div class="windows-empty">Nothing selected — click "⤢ Whole signal" to keep all of it, "+ Keep window" or "− Remove window", or drag directly on a lane above.</div>';
+    list.innerHTML = '<div class="windows-empty">Nothing selected. Click "Whole signal" to keep all of it, or "Keep window" or "Remove window", or drag on a lane above.</div>';
     return;
   }
   list.innerHTML = '';
@@ -240,11 +233,11 @@ function renderWindowsList(sorted){
     row.dataset.id=w.id;
     row.style.setProperty('--win-color', windowColor(w));
     row.innerHTML = `
-      <span class="badge">${cut?'✂':seq}</span>
+      <span class="badge">${cut?'−':seq}</span>
       <button class="win-kind" data-kind title="Switch this span between kept and removed">${cut?'remove':'keep'}</button>
-      <span class="range">${fmtTime(w.start)}–${fmtTime(w.end)}</span>
+      <span class="range">${fmtRange(w.start, w.end)}</span>
       <span class="dur">${fmtDuration(w.end-w.start)}</span>
-      <button data-remove>Delete</button>`;
+      <button class="tb-btn small icon quiet remove" data-remove title="Delete this ${cut?'removed span':'window'}" aria-label="Delete this ${cut?'removed span':'window'}">${prepIcon('close')}</button>`;
     row.addEventListener('click', e=>{
       if(e.target.closest('button')) return;
       activeWindowId=w.id; applyActiveClasses();

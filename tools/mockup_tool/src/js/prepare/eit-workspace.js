@@ -97,120 +97,260 @@ function buildPixelGrid(container, {showRoiLines, showRoiLabels}){
 const dynPolys = buildPixelGrid(document.getElementById('eitDynamicImg'), {showRoiLines:false, showRoiLabels:false});
 const minPolys = buildPixelGrid(document.getElementById('eitMinuteImg'), {showRoiLines:true,  showRoiLabels:true});
 
-// minute image is static
-{
-  const m=decodeB62(EIT.minute, EIT.nelem, 0);
-  minPolys.forEach((p,i)=>{ if(p) p.setAttribute('fill', eitColor(m[i])); });
+// ================= EIT details: one recording at a time =================
+// The plots and images show one "detail": a file of the Files block or the
+// merged recording (js/prepare/eit-files.js chooses it with setEitDetail).
+// A detail holds raw curves on a 20 Hz grid over its length (global
+// impedance and ROI 1 to 4, ventral to dorsal), a minute image, and a
+// function that gives the dynamic image at time t.
+const DETAIL_HZ = 20;
+const ROI_KEYS = ['roi1','roi2','roi3','roi4'];
+const REAL_MINUTE = decodeB62(EIT.minute, EIT.nelem, 0);
+const PIXEL_BAND = Array.from({length:EIT.nelem}, (_,i)=> rowBand(Math.floor(i/G)));
+// size of each ROI curve of the real recording, relative to the global curve
+const REAL_ROI_WEIGHTS = EIT.mtv.roi.map(v=> v/EIT.mtv.global);
+// MTV in display units: the real global MTV shows as 4718, as on the device
+const MTV_SCALE = 4718 / EIT.mtv.global;
+
+// the real dynamic image of file 1 at file time t (3.0 to 13.0 s), else null
+function realEitFrame(t){
+  if(t < EIT.t0 || t > EIT.t0+EIT.dur) return null;
+  const idx = Math.round((t-EIT.t0)/EIT.dur*(EIT.nframes-1));
+  return decodeB62(EIT.frames, EIT.nelem, idx*EIT.nelem);
+}
+// the real minute image with a gain per ROI (1 = unchanged), peak scaled to 1
+function minuteWithGains(gains){
+  const out = new Float32Array(EIT.nelem); let mx = 0;
+  for(let i=0;i<out.length;i++){ out[i] = REAL_MINUTE[i]*gains[PIXEL_BAND[i]]; mx = Math.max(mx, out[i]); }
+  if(mx>0) for(let i=0;i<out.length;i++) out[i] /= mx;
+  return out;
+}
+
+// detail of one file. globalAt(t): global impedance at file time t;
+// weights: size of each ROI curve against the global curve; gains: minute
+// image per ROI; realFrame(t): a real dynamic image, or null
+function makeFileDetail({dur, globalAt, weights, gains, realFrame=null}){
+  const n = Math.round(dur*DETAIL_HZ)+1;
+  const raw = {global:new Float32Array(n)};
+  ROI_KEYS.forEach(k=> raw[k]=new Float32Array(n));
+  for(let i=0;i<n;i++){
+    const t = i/DETAIL_HZ;
+    raw.global[i] = globalAt(t);
+    // each ROI follows the global curve with its own size, a delay of
+    // 0.06 s per band (dorsal regions fill a little later) and a slow change of size
+    ROI_KEYS.forEach((k,b)=>{
+      raw[k][i] = globalAt(Math.max(0, t-0.06*b)) * weights[b] * (1 + 0.05*Math.sin(2*Math.PI*t/(9+3*b)));
+    });
+  }
+  const d = {dur, raw, minute:minuteWithGains(gains), joins:[]};
+  d.frameAt = t=> (realFrame && realFrame(t)) || derivedFrame(d, t);
+  return finishDetail(d);
+}
+// dynamic image from the minute image and the level of each ROI curve at t
+function derivedFrame(d, t){
+  const i = Math.max(0, Math.min(d.q.global.length-1, Math.round(t*DETAIL_HZ)));
+  const lv = ROI_KEYS.map(k=> d.q[k][i]);
+  const out = new Float32Array(EIT.nelem);
+  for(let p=0;p<out.length;p++) out[p] = d.minute[p]*(0.12 + 0.88*lv[PIXEL_BAND[p]]);
+  return out;
+}
+// sections of file details joined in order: [{detail, start, end}]
+function makeMergedDetail(parts){
+  const pieces = []; let at = 0, total = 0;
+  parts.forEach(p=>{
+    const i0 = Math.round(p.start*DETAIL_HZ), i1 = Math.round(p.end*DETAIL_HZ);
+    pieces.push({...p, i0, i1, from:at});
+    at += (i1-i0)/DETAIL_HZ; total += i1-i0;
+  });
+  const raw = {};
+  ['global', ...ROI_KEYS].forEach(k=>{
+    const a = new Float32Array(total+1); let w = 0;
+    pieces.forEach(pc=>{ a.set(pc.detail.raw[k].subarray(pc.i0, pc.i1), w); w += pc.i1-pc.i0; });
+    const last = pieces[pieces.length-1];
+    a[total] = last.detail.raw[k][Math.min(last.i1, last.detail.raw[k].length-1)];
+    raw[k] = a;
+  });
+  // minute image: the mean of the parts, weighted by their length
+  const minute = new Float32Array(EIT.nelem);
+  pieces.forEach(pc=>{ const w = (pc.i1-pc.i0)/total; for(let p=0;p<minute.length;p++) minute[p] += pc.detail.minute[p]*w; });
+  const d = {dur: total/DETAIL_HZ, raw, minute, joins: pieces.slice(1).map(pc=>pc.from)};
+  d.frameAt = t=>{
+    let pc = pieces[0];
+    for(const x of pieces) if(t >= x.from) pc = x;
+    return pc.detail.frameAt(pc.start + (t - pc.from));
+  };
+  return finishDetail(d);
+}
+
+// normalized curves, MTV per curve, ROI shares, breaths and rate
+function finishDetail(d){
+  const n = d.raw.global.length;
+  d.q = {}; d.lo = {}; d.hi = {};
+  ['global', ...ROI_KEYS].forEach(k=>{
+    const a = d.raw[k]; let lo=Infinity, hi=-Infinity;
+    for(const v of a){ if(v<lo) lo=v; if(v>hi) hi=v; }
+    const q = new Float32Array(n), span = (hi-lo)||1;
+    for(let i=0;i<n;i++) q[i] = (a[i]-lo)/span;
+    d.q[k]=q; d.lo[k]=lo; d.hi[k]=hi;
+  });
+  const starts = breathStartsOf(t=> d.raw.global[Math.min(n-1, Math.round(t*DETAIL_HZ))], d.dur);
+  d.breaths = Math.max(0, starts.length-1);
+  d.rate = starts.length>1 ? 60*(starts.length-1)/(starts[starts.length-1]-starts[0]) : null;
+  // MTV: the mean of (highest − lowest) value within each breath
+  d.mtv = {};
+  ['global', ...ROI_KEYS].forEach(k=>{
+    const a = d.raw[k];
+    if(starts.length<2){ d.mtv[k] = d.hi[k]-d.lo[k]; return; }
+    let sum = 0;
+    for(let b=0;b<starts.length-1;b++){
+      let lo=Infinity, hi=-Infinity;
+      for(let i=Math.round(starts[b]*DETAIL_HZ); i<=Math.round(starts[b+1]*DETAIL_HZ) && i<n; i++){ lo=Math.min(lo,a[i]); hi=Math.max(hi,a[i]); }
+      sum += hi-lo;
+    }
+    d.mtv[k] = sum/(starts.length-1);
+  });
+  const roiSum = ROI_KEYS.reduce((s,k)=> s+d.mtv[k], 0) || 1;
+  d.pct = ROI_KEYS.map(k=> Math.round(d.mtv[k]/roiSum*100));
+  return d;
 }
 
 // ---- stacked plots ----
 const PANELS=[
-  {key:'global', name:'Global',  pct:100,               h:96,  cls:'is-global'},
-  {key:'roi1',   name:'ROI 1',   pct:EIT.mtv.pct[0],    h:64,  cls:''},
-  {key:'roi2',   name:'ROI 2',   pct:EIT.mtv.pct[1],    h:64,  cls:''},
-  {key:'roi3',   name:'ROI 3',   pct:EIT.mtv.pct[2],    h:64,  cls:''},
-  {key:'roi4',   name:'ROI 4',   pct:EIT.mtv.pct[3],    h:64,  cls:''},
+  {key:'global', name:'Global', h:96, cls:'is-global'},
+  {key:'roi1',   name:'ROI 1',  h:64, cls:''},
+  {key:'roi2',   name:'ROI 2',  h:64, cls:''},
+  {key:'roi3',   name:'ROI 3',  h:64, cls:''},
+  {key:'roi4',   name:'ROI 4',  h:64, cls:''},
 ];
-// MTV in display units: scale the raw impedance units to a readable integer scale
-const MTV_SCALE = 4718 / EIT.mtv.global;   // keeps Global at a device-like magnitude
 const stack=document.getElementById('eitPlotStack');
 const cursorEl=document.getElementById('eitCursor');
 
-// panels are built once; their polylines are redrawn whenever the view window changes
-const eitCurveCache={}, eitPolys={};
-PANELS.forEach((pn,pi)=>{
-  eitCurveCache[pn.key]=decodeB62(EIT.curves[pn.key].q, EIT.npts, 0);
+// panels are built once; their heads and polylines change with the detail
+const eitPolys={}, eitHeads={};
+PANELS.forEach(pn=>{
   const W=1000, H=pn.h;
-  const mtvVal = pn.key==='global' ? EIT.mtv.global : EIT.mtv.roi[pi-1];
-  const shown  = Math.round(mtvVal*MTV_SCALE);
   const div=document.createElement('div');
   div.className='eit-panel '+pn.cls;
   div.style.height=H+'px';
   div.innerHTML=`
     <div class="eit-panel-head">
       <span class="nm">${pn.name}</span>
-      <span class="mtv">MTV: ${shown} = ${pn.pct} %</span>
-      <span class="mx">${EIT.curves[pn.key].hi.toFixed(3)}</span>
+      <span class="mtv"></span>
+      <span class="mx"></span>
     </div>
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
       <polyline fill="none" stroke="${pn.key==='global'?'var(--accent)':'var(--eit)'}" stroke-width="1.7" vector-effect="non-scaling-stroke"/>
     </svg>`;
   stack.insertBefore(div, cursorEl);
   eitPolys[pn.key]=div.querySelector('polyline');
+  eitHeads[pn.key]=div.querySelector('.eit-panel-head');
 });
 
-// redraw every EIT panel for the visible window [t0,t1] (seconds within the excerpt)
+let DET = null;          // the detail on screen
+// redraw every EIT panel for the visible window [t0,t1] (seconds of the detail)
 function renderEitWindow(t0,t1){
+  if(!DET) return;
   PANELS.forEach(pn=>{
-    const q=eitCurveCache[pn.key];
+    const q=DET.q[pn.key], n=q.length;
     const W=1000, H=pn.h, TOP=17, BOT=6;
-    const i0=Math.max(0, Math.floor(t0/EIT.dur*(EIT.npts-1)));
-    const i1=Math.min(EIT.npts-1, Math.ceil(t1/EIT.dur*(EIT.npts-1)));
+    const i0=Math.max(0, Math.floor(t0*DETAIL_HZ)), i1=Math.min(n-1, Math.ceil(t1*DETAIL_HZ));
     let pts='';
     for(let i=i0;i<=i1;i++){
-      const t=(i/(EIT.npts-1))*EIT.dur;
-      const x=((t-t0)/(t1-t0))*W;
+      const x=((i/DETAIL_HZ-t0)/(t1-t0))*W;
       const y=TOP+(1-q[i])*(H-TOP-BOT);
       pts+=`${x.toFixed(1)},${y.toFixed(1)} `;
     }
     eitPolys[pn.key].setAttribute('points', pts.trim());
   });
+  // dashed lines where two merged sections meet
+  stack.querySelectorAll('.eit-join').forEach(el=>el.remove());
+  DET.joins.forEach(tj=>{
+    if(tj<=t0 || tj>=t1) return;
+    const el=document.createElement('div');
+    el.className='eit-join';
+    el.style.left=((tj-t0)/(t1-t0)*100)+'%';
+    el.title=`Join of two sections at ${fmtSec(tj)}`;
+    stack.appendChild(el);
+  });
   placeEitCursor();
 }
 
-document.getElementById('eitRate').textContent = EIT.rate+' br/min';
-document.getElementById('eitBreaths').textContent = EIT.breaths;
+// show a detail: heads, minute image, rate, note, time range and cursor
+function setEitDetail(d, note){
+  const keepTime = DET && eitTime <= d.dur ? eitTime : d.dur*0.55;
+  DET = d;
+  if(typeof stopPlay==='function' && eitTimer) stopPlay();
+  PANELS.forEach((pn,pi)=>{
+    const shown = Math.round(d.mtv[pn.key]*MTV_SCALE);
+    const pct = pn.key==='global' ? 100 : d.pct[pi-1];
+    eitHeads[pn.key].querySelector('.mtv').textContent = `MTV: ${shown} = ${pct} %`;
+    eitHeads[pn.key].querySelector('.mx').textContent = d.hi[pn.key].toFixed(3);
+  });
+  minPolys.forEach((p,i)=>{ if(p) p.setAttribute('fill', eitColor(d.minute[i])); });
+  document.getElementById('eitRate').textContent = d.rate ? d.rate.toFixed(1)+' br/min' : '— br/min';
+  document.getElementById('eitDetailNote').innerHTML = note || '';
+  if(ZOOM.eit) ZOOM.eit.setFullDur(d.dur);
+  setEitTime(keepTime);
+}
 
 // ---- cursor + transport ----
-let eitFrame = 0;                                  // 0 .. nframes-1
+const EIT_IMAGE_STEP = 0.1;      // s between two dynamic images
+let eitTime = 0;                 // cursor time, s of the detail
 function placeEitCursor(){
-  const t=(eitFrame/(EIT.nframes-1))*EIT.dur;
-  const v=ZOOM.eit ? ZOOM.eit.window() : {t0:0,t1:EIT.dur};
-  const frac=(t-v.t0)/(v.t1-v.t0);
+  const v=ZOOM.eit ? ZOOM.eit.window() : {t0:0,t1:DET.dur};
+  const frac=(eitTime-v.t0)/(v.t1-v.t0);
   cursorEl.style.display=(frac<0||frac>1)?'none':'block';
   cursorEl.style.left=(frac*100)+'%';
 }
-function setEitFrame(f){
-  eitFrame=Math.max(0,Math.min(EIT.nframes-1,f));
+function setEitTime(t){
+  eitTime=Math.max(0, Math.min(DET.dur, Math.round(t/EIT_IMAGE_STEP)*EIT_IMAGE_STEP));
   placeEitCursor();
-  const d=decodeB62(EIT.frames, EIT.nelem, eitFrame*EIT.nelem);
+  const d=DET.frameAt(eitTime);
   dynPolys.forEach((p,i)=>{ if(p) p.setAttribute('fill', eitColor(d[i])); });
-  const tsec=(eitFrame/(EIT.nframes-1))*EIT.dur;
-  const mm=String(Math.floor(tsec/60)).padStart(2,'0');
-  const ss=String(Math.floor(tsec%60)).padStart(2,'0');
-  const ms=String(Math.round((tsec%1)*1000)).padStart(3,'0');
-  document.getElementById('eitCursorTime').textContent=`${mm}:${ss}.${ms}`;
-  document.getElementById('eitImageNo').textContent=Math.round(EIT.t0*EIT.fs)+eitFrame*4+1;
+  document.getElementById('eitCursorTime').textContent=fmtSec(eitTime, 2);
+  document.getElementById('eitImageNo').textContent=Math.round(eitTime*EIT.fs)+1;
 }
 
-function frameAtClientX(cx){
+function timeAtClientX(cx){
   const r=stack.getBoundingClientRect();
-  const v=ZOOM.eit ? ZOOM.eit.window() : {t0:0,t1:EIT.dur};
-  const t=v.t0+((cx-r.left)/r.width)*(v.t1-v.t0);
-  return Math.round((t/EIT.dur)*(EIT.nframes-1));
+  const v=ZOOM.eit ? ZOOM.eit.window() : {t0:0,t1:DET.dur};
+  return v.t0+((cx-r.left)/r.width)*(v.t1-v.t0);
 }
 
 let eitTimer=null;
 const playBtn=document.querySelector('.eit-tbtn.play');
-function stopPlay(){ if(eitTimer){clearInterval(eitTimer); eitTimer=null;} playBtn.classList.remove('on'); playBtn.textContent='▶'; }
+function stopPlay(){ if(eitTimer){clearInterval(eitTimer); eitTimer=null;} playBtn.classList.remove('on'); playBtn.innerHTML=prepIcon('play'); }
+playBtn.innerHTML=prepIcon('play');
 document.querySelector('.eit-transport').addEventListener('click', e=>{
   const b=e.target.closest('.eit-tbtn'); if(!b) return;
   const t=b.dataset.t;
-  if(t==='start'){ stopPlay(); setEitFrame(0); }
-  else if(t==='end'){ stopPlay(); setEitFrame(EIT.nframes-1); }
-  else if(t==='back'){ stopPlay(); setEitFrame(eitFrame-1); }
-  else if(t==='fwd'){ stopPlay(); setEitFrame(eitFrame+1); }
+  if(t==='start'){ stopPlay(); setEitTime(0); }
+  else if(t==='end'){ stopPlay(); setEitTime(DET.dur); }
+  else if(t==='back'){ stopPlay(); setEitTime(eitTime-EIT_IMAGE_STEP); }
+  else if(t==='fwd'){ stopPlay(); setEitTime(eitTime+EIT_IMAGE_STEP); }
   else if(t==='play'){
     if(eitTimer){ stopPlay(); }
     else {
-      playBtn.classList.add('on'); playBtn.textContent='❚❚';
+      playBtn.classList.add('on'); playBtn.innerHTML=prepIcon('pause');
+      // 12.5 images per s at 0.1 s per image: a little slower than real time
       eitTimer=setInterval(()=>{
-        setEitFrame(eitFrame>=EIT.nframes-1 ? 0 : eitFrame+1);
+        setEitTime(eitTime>=DET.dur-1e-9 ? 0 : eitTime+EIT_IMAGE_STEP);
       }, 1000/12.5);
     }
   }
 });
 
-setEitFrame(Math.round(EIT.nframes*0.55));
-
-
+// ---- "Display" menu in the EIT toolbar (the items are not wired in this mockup) ----
+(function wireEitDisplayMenu(){
+  const btn=document.querySelector('#cardEit .menu-btn');
+  const menu=document.querySelector('#cardEit .menu-pop');
+  function setOpen(open){ menu.hidden=!open; btn.setAttribute('aria-expanded', String(open)); }
+  btn.addEventListener('click', ()=> setOpen(menu.hidden));
+  menu.addEventListener('click', e=>{
+    const item=e.target.closest('button'); if(!item) return;
+    setOpen(false);
+    showEdgeNote(btn, `"${item.textContent}" opens its settings in the real program.`);
+  });
+  document.addEventListener('mousedown', e=>{ if(!menu.hidden && !e.target.closest('#cardEit .menu-wrap')) setOpen(false); });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !menu.hidden){ setOpen(false); btn.focus(); } });
+})();

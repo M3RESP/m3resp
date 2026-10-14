@@ -24,7 +24,7 @@
   font-size:11px;font-weight:700;padding:5px 11px;border-radius:999px;border:1px solid var(--border);
   background:var(--surface-2);color:var(--text-dim);cursor:pointer;user-select:none;
 }
-.mod-chip.on{background:var(--accent);border-color:var(--accent);color:#06201f;}
+.mod-chip.on{background:var(--accent-strong);border-color:var(--accent-strong);color:#fff;}
 .params-toolbar .tb-spacer{flex:1;}
 .params-count{font-size:11.5px;color:var(--text-faint);}
 table.ptable{width:100%;border-collapse:collapse;font-size:12px;}
@@ -95,7 +95,7 @@ table.qtable th{
 table.qtable td{padding:9px 6px;border-bottom:1px solid var(--surface-2);vertical-align:middle;}
 table.qtable tr:last-child td{border-bottom:none;}
 .sev-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;}
-.sev-pill.warn{background:color-mix(in srgb, var(--warn) 16%, var(--surface));color:var(--warn);}
+.sev-pill.warn{background:color-mix(in srgb, var(--warn) 16%, var(--surface));color:var(--warn-ink);}
 .sev-pill.ok{background:color-mix(in srgb, var(--ok) 16%, var(--surface));color:var(--ok);}
 .sev-pill.crit{background:color-mix(in srgb, var(--crit) 16%, var(--surface));color:var(--crit);}
 .rerun-btn{

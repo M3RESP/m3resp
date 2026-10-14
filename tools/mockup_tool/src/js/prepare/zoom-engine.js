@@ -1,12 +1,8 @@
 // ================= shared zoom / range-select engine =================
 
-function fmtAxisTime(sec, span){
-  if(span >= 120){
-    const m=Math.floor(sec/60), s=Math.round(sec%60);
-    return `${m}:${String(s).padStart(2,'0')}`;
-  }
-  return span < 2 ? sec.toFixed(2)+'s' : (span < 20 ? sec.toFixed(1)+'s' : Math.round(sec)+'s');
-}
+// 2 decimals below a 2 s range, else 1 (js/prepare/time-format.js)
+function axisDigits(span){ return span < 2 ? 2 : 1; }
+function fmtAxisTime(sec, span){ return fmtSec(sec, axisDigits(span)); }
 
 function makeZoomView(name, fullDur, render, {minSpan=0.2, onCursorClick=null}={}){
   const stackEl   = document.querySelector(`[data-zoom="${name}"]`);
@@ -29,7 +25,7 @@ function makeZoomView(name, fullDur, render, {minSpan=0.2, onCursorClick=null}={
     render(t0,t1);
     drawAxis();
     const span=t1-t0;
-    if(readoutEl) readoutEl.textContent=`${fmtAxisTime(t0,span)} – ${fmtAxisTime(t1,span)}  (${span<2?span.toFixed(2):span.toFixed(1)} s)`;
+    if(readoutEl) readoutEl.textContent=`${fmtRange(t0, t1, axisDigits(span))} (${fmtSec(span, axisDigits(span))})`;
     if(toolbarEl){
       const outBtn=toolbarEl.querySelector('[data-z="out"]');
       const inBtn =toolbarEl.querySelector('[data-z="in"]');
@@ -99,13 +95,15 @@ function makeZoomView(name, fullDur, render, {minSpan=0.2, onCursorClick=null}={
     }
   });
 
-  const api={window:()=>({t0,t1}), setWindow, zoomBy, refresh};
+  // a new recording with another length: show all of it
+  function setFullDur(d){ fullDur=d; setWindow(0, d); }
+  const api={window:()=>({t0,t1}), setWindow, zoomBy, refresh, setFullDur};
   ZOOM[name]=api;
   refresh();
   return api;
 }
 
-makeZoomView('eit',  EIT.dur,      renderEitWindow,  {minSpan:0.4, onCursorClick:cx=>setEitFrame(frameAtClientX(cx))});
+makeZoomView('eit',  DET.dur,      renderEitWindow,  {minSpan:0.4, onCursorClick:cx=>setEitTime(timeAtClientX(cx))});
 makeZoomView('vent', VENT_DUR,     renderVentWindow, {minSpan:0.5});
 makeZoomView('emg',  EMG_FULL_DUR, renderEmgWindow,  {minSpan:1.0});
 

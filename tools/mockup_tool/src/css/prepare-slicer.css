@@ -1,40 +1,65 @@
 /* ---- working-window slice tool ---- */
-.slice-toolbar{display:flex;align-items:flex-end;gap:22px;margin-bottom:14px;flex-wrap:wrap;}
+/* toolbar: "Edit" fields for the selected window on the left, the "Add"
+   buttons on the right. Their colour marks match the bands on the lanes. */
+.slice-toolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:12px 24px;margin-bottom:14px;flex-wrap:wrap;}
+.slice-group{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;}
 .slice-field{display:flex;flex-direction:column;gap:5px;}
-.slice-field label{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;}
+.slice-field label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;}
 .slice-field input{
   font-family:var(--mono);font-size:12.5px;background:var(--surface-2);border:1px solid var(--border);
-  border-radius:6px;padding:7px 9px;color:var(--text);width:110px;
+  border-radius:var(--r-ctl);height:var(--ctl-h);padding:0 9px;color:var(--text);width:96px;
 }
-.slice-duration{font-family:var(--mono);font-size:12px;color:var(--text-dim);background:var(--accent-soft);border:1px solid color-mix(in srgb, var(--accent) 35%, var(--border));border-radius:6px;padding:7px 12px;}
-.slice-toolbar .tb-spacer{flex:1;}
-/* one shared control height so the mode switch, the number fields, the duration
-   pill and the buttons all line up in the working-window bars */
-.slice-toolbar, .save-seq-bar{--ctl-h:32px;}
-.slice-toolbar .slice-field input, .save-seq-bar .slice-field input{height:var(--ctl-h);padding:0 9px;}
-.slice-toolbar .seg{height:var(--ctl-h);}
-.slice-toolbar .seg button{padding:0;}
-.slice-toolbar .slice-duration{height:var(--ctl-h);display:flex;align-items:center;padding:0 12px;}
-.slice-toolbar .tb-btn, .save-seq-bar .tb-btn{height:var(--ctl-h);}
+.slice-duration{
+  height:var(--ctl-h);display:flex;align-items:center;padding:0 12px;min-width:84px;
+  font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums;
+  background:color-mix(in srgb, var(--win-keep) 10%, var(--surface));border:1px solid color-mix(in srgb, var(--win-keep) 40%, var(--border));border-radius:var(--r-ctl);
+}
+.slice-duration.cut{background:color-mix(in srgb, var(--crit) 8%, var(--surface));border-color:color-mix(in srgb, var(--crit) 40%, var(--border));}
+.slice-active-hint{font-size:11px;color:var(--text-dim);display:flex;align-items:center;height:var(--ctl-h);}
+#sliceMode button{min-width:58px;}
+.win-mark{width:10px;height:10px;border-radius:2px;flex:none;border:1.5px solid;}
+.win-mark.keep{border-color:var(--win-keep);background:color-mix(in srgb, var(--win-keep) 30%, transparent);}
+.win-mark.cut{border-color:var(--crit);background:repeating-linear-gradient(45deg, color-mix(in srgb, var(--crit) 55%, transparent) 0 2px, transparent 2px 4px);}
+.add-seg button[disabled]{opacity:0.5;}
+
+/* card footer: the sequence name and the Save button */
+.card-foot{
+  display:flex;align-items:flex-end;gap:14px;padding:12px 16px;border-top:1px solid var(--border);
+  background:var(--surface-2);border-radius:0 0 var(--r-card) var(--r-card);
+}
+.card-foot .slice-field input{width:240px;background:var(--surface);font-family:var(--mono);}
+/* saved sequences under the Save bar: a panel like "Selected windows" */
+.card:has(.card-seqs) > .card-foot{border-radius:0;}
+.card-seqs{padding:0 16px 16px;}
+.card-seqs .seq-row{padding:8px 12px;border-radius:0;border-bottom:1px solid var(--surface-2);font-size:12px;}
+.card-seqs .seq-row:last-child{border-bottom:none;}
+.card-seqs .seq-row:hover{background:var(--accent-soft);}
+.card-seqs .seq-row .seq-icon{width:18px;height:18px;border-radius:5px;}
+.card-seqs .seq-row .seq-text{display:flex;align-items:baseline;gap:10px;}
+.card-seqs .seq-row .seq-name{font-size:12px;font-weight:600;}
+.card-seqs .seq-row .seq-meta{font-size:12px;}
+.card-seqs .seq-row .remove{opacity:0.6;}
+.card-seqs .seq-row:hover .remove{opacity:1;}
 .slice-track{
   position:relative;display:flex;flex-direction:column;gap:6px;overflow:visible;
 }
 .slice-panel{
-  position:relative;height:116px;border:1px solid var(--border);border-left-width:3px;border-radius:8px;
-  background:var(--surface-2);overflow:hidden;
+  position:relative;height:116px;border:1px solid var(--border);border-left-width:3px;border-radius:7px;
+  background:var(--plot-bg);overflow:hidden;
 }
 .slice-panel.mod-eit{border-left-color:var(--eit);}
 .slice-panel.mod-emg{border-left-color:var(--emg);}
 .slice-panel.mod-vent{border-left-color:var(--vent);}
 .slice-panel-label{
-  position:absolute;bottom:5px;left:9px;font-size:9.5px;font-family:var(--mono);color:var(--text-faint);
-  z-index:1;background:color-mix(in srgb, var(--surface-2) 70%, transparent);padding:1px 5px;border-radius:4px;
+  position:absolute;top:5px;left:9px;font-size:11px;font-weight:700;color:var(--text);
+  z-index:5;pointer-events:none;text-shadow:0 0 3px var(--surface), 0 0 3px var(--surface);
 }
+.slice-panel-label .src{font-weight:500;color:var(--text-dim);font-family:var(--mono);font-size:10.5px;margin-right:6px;}
 .slice-lane{position:absolute;inset:0;opacity:0.95;}
 .slice-lane svg{width:100%;height:100%;display:block;}
-/* colour coding: --win-neutral (blue) is the plain band, green marks a kept
+/* colour coding: --win-neutral (the accent) is the plain band, green marks a kept
    window, red a removed one — set per element as --win-color from JS */
-.slice-track, .windows-panel{--win-neutral:#3f7fd6;--win-keep:#3f9e6e;}
+.card{--win-neutral:var(--accent);--win-keep:var(--ok);}
 .slice-select{
   position:absolute;top:0;bottom:0;background:color-mix(in srgb, var(--win-color, var(--win-neutral)) 18%, transparent);
   border-left:2px solid var(--win-color, var(--win-neutral));border-right:2px solid var(--win-color, var(--win-neutral));
@@ -51,7 +76,7 @@
 .slice-handle::after{content:"";width:4px;height:100%;border-radius:3px;background:var(--win-color, var(--win-neutral));box-shadow:var(--shadow);}
 .slice-handle:hover::after, .slice-handle.dragging::after{background:var(--text);}
 .slice-select-badge{
-  position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:5px;z-index:4;
+  position:absolute;bottom:3px;left:3px;width:16px;height:16px;border-radius:5px;z-index:4;
   background:var(--win-color, var(--win-neutral));color:#fff;font-size:10px;font-weight:700;
   display:flex;align-items:center;justify-content:center;pointer-events:none;
 }
@@ -107,28 +132,9 @@
 }
 .window-row .range{font-family:var(--mono);font-weight:600;flex:none;}
 .window-row .dur{color:var(--text-dim);flex:1;}
-.window-row button{
-  font-size:10.5px;font-weight:700;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);
-  padding:3px 9px;border-radius:6px;cursor:pointer;flex:none;
-}
-.window-row button:hover{border-color:var(--crit);color:var(--crit);}
-.save-seq-bar{display:flex;align-items:flex-end;gap:14px;margin-top:14px;}
-.save-seq-bar .slice-field input{width:220px;}
-.seq-row{
-  display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--surface-2);font-size:12px;
-}
-.seq-row:last-child{border-bottom:none;}
-.seq-row .seq-icon{
-  width:20px;height:20px;border-radius:6px;background:var(--accent-soft);color:var(--accent-strong);
-  display:flex;align-items:center;justify-content:center;font-size:11px;flex:none;
-}
-.seq-row .seq-name{font-weight:700;font-family:var(--mono);flex:none;}
-.seq-row .seq-meta{color:var(--text-dim);flex:1;}
-.seq-row button{
-  font-size:10.5px;font-weight:700;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);
-  padding:3px 9px;border-radius:6px;cursor:pointer;flex:none;
-}
-.seq-row button:hover{border-color:var(--crit);color:var(--crit);}
+.window-row .remove{opacity:0.6;}
+.window-row:hover .remove{opacity:1;}
+.window-row .remove:hover{color:var(--crit);}
 .save-summary{
   margin-top:14px;border:1px solid color-mix(in srgb, var(--ok) 40%, var(--border));border-radius:8px;
   background:color-mix(in srgb, var(--ok) 8%, var(--surface));padding:12px 14px;font-size:12.5px;color:var(--text-dim);
@@ -137,7 +143,7 @@
 .save-summary .ok-pill{
   display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--ok);margin-bottom:6px;
 }
-.slice-axis{display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--mono);color:var(--text-faint);}
+.slice-axis{display:flex;justify-content:space-between;margin-top:6px;font-size:10.5px;font-family:var(--mono);color:var(--text-dim);font-variant-numeric:tabular-nums;}
 .slice-note{font-size:11.5px;color:var(--text-dim);margin-top:12px;line-height:1.5;}
 .slice-mask{fill:var(--accent);opacity:0.10;}
 .slice-mask-edge{stroke:var(--accent);stroke-width:1.5;stroke-dasharray:3 3;opacity:0.7;}

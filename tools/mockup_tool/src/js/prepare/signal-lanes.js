@@ -70,10 +70,59 @@ function eitOverviewAt(t){
   return EIT_FULL.lo + frac*(EIT_FULL.hi-EIT_FULL.lo);   // back to real impedance units
 }
 
+// ---- one breath clock for the example signals ----
+// The breath starts are the lowest points of the real EIT global impedance
+// (smoothed over 0.7 s; lowest within ±1.6 s, followed by a rise of more than
+// 25 % of the full range). The example ventilator and EMG signals follow these
+// breaths, so the three modalities line up once they are synchronized.
+// breath starts of any impedance curve fn(t) over 0..dur seconds
+function breathStartsOf(fn, dur){
+  const dt=0.1, N=Math.round(dur/dt)+1, v=[];
+  for(let k=0;k<N;k++){
+    let s=0, c=0;
+    for(let j=-3;j<=3;j++){ const t=(k+j)*dt; if(t>=0 && t<=dur){ s+=fn(t); c++; } }
+    v.push(s/c);
+  }
+  const range = Math.max(...v) - Math.min(...v);
+  const starts = [];
+  for(let k=0;k<N;k++){
+    let lowest = true;
+    for(let j=-16;j<=16;j++){ const m=k+j; if(m>=0 && m<N && v[m]<v[k]){ lowest=false; break; } }
+    if(!lowest) continue;
+    let rise = 0;
+    for(let j=1;j<=30 && k+j<N;j++) rise = Math.max(rise, v[k+j]-v[k]);
+    if(rise > 0.25*range) starts.push(Math.round(k*dt*10)/10);
+  }
+  return starts;
+}
+let BREATH_STARTS = null;
+function breathStarts(){
+  if(!BREATH_STARTS) BREATH_STARTS = breathStartsOf(eitOverviewAt, REC_SECONDS);
+  return BREATH_STARTS;
+}
+// where reference time t falls in its breath: p runs from 0 (breath start) to
+// 1; before the first and after the last start, breaths repeat at the mean length
+function breathPhaseAt(t){
+  const b = breathStarts(), n = b.length, mean = (b[n-1]-b[0])/(n-1);
+  let start, len;
+  if(t < b[0]){ start = b[0] - Math.ceil((b[0]-t)/mean)*mean; len = mean; }
+  else if(t >= b[n-1]){ start = b[n-1] + Math.floor((t-b[n-1])/mean)*mean; len = mean; }
+  else {
+    let lo=0, hi=n-1;
+    while(hi-lo>1){ const mid=(lo+hi)>>1; if(b[mid]<=t) lo=mid; else hi=mid; }
+    start = b[lo]; len = b[lo+1]-b[lo];
+  }
+  return {start, len, p:(t-start)/len};
+}
+
+// The lanes use the current synchronization offsets (js/prepare/sync-strip.js):
+// a recording that starts `o` seconds after the reference is read at t − o.
 function sliceLanes(){
-  const lanes=[{mod:'eit', label:'EIT · global impedance (real)', color:'var(--eit)', fn:eitOverviewAt}];
+  const off = mod=> (typeof syncOffsetOf==='function') ? syncOffsetOf(mod) : 0;
+  const oEit = off('eit'), oEmg = off('emg');
+  const lanes=[{mod:'eit', label:'EIT · global impedance', color:'var(--eit)', fn:t=>eitOverviewAt(t-oEit)}];
   EMG_CHANNELS.filter(c=>c.on).forEach(c=>{
-    lanes.push({mod:'emg', label:'EMG · '+c.name, color:c.color, fn:c.fn});
+    lanes.push({mod:'emg', label:'EMG · '+c.name, color:c.color, fn:(t,i)=>c.fn(t-oEmg, i)});
   });
   VENT_CHANNELS.filter(c=>c.on).forEach(c=>{
     lanes.push({mod:'vent', label:'Ventilator · '+c.name, color:c.color, fn:t=>c.fn(ventPhase(t))});
@@ -94,7 +143,9 @@ function renderSliceLanes(){
     panel.appendChild(lane);
     const lab=document.createElement('span');
     lab.className='slice-panel-label';
-    lab.textContent=l.label;
+    // "EIT · global impedance": the modality in small mono, then the signal name
+    const [src, ...rest]=l.label.split(' · ');
+    lab.innerHTML=`<span class="src">${src}</span>${rest.join(' · ')}`;
     panel.appendChild(lab);
     track.appendChild(panel); // z-index (not DOM order) keeps windows above lanes
   });
@@ -103,8 +154,8 @@ function renderSliceLanes(){
 // ---- working-window state ----
 let sliceMode = 'time';
 const EIT_HZ = 50;
-// window colour coding: blue (--win-neutral, CSS) is the plain/base band,
-// green = kept, red = removed
-const NEUTRAL_COLOR = '#3f7fd6';
-const KEEP_COLOR = '#3f9e6e';
+// window colour coding: teal (--win-neutral, CSS: the accent) is the plain
+// band, green (--ok) = kept, red = removed
+const NEUTRAL_COLOR = '#0f8b8d';
+const KEEP_COLOR = '#2f9e6e';
 

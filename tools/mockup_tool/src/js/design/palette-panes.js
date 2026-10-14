@@ -1,10 +1,11 @@
-// ---- parts of the two side panels: Steps and Available data on the left;
-// Inspector, Edge legend and Help on the right. A click on a part head
+// ---- parts of the side panels: Steps and Available data on the left;
+// Inspector, Edge legend and Help on the right; Recording, Modalities, On
+// this page and Saved sequences on 1 · Prepare. A click on a part head
 // closes or opens the part. The bar under an open part changes its size
 // against the next open part below it, and a double-click on the bar makes
 // the two equal. The open parts share the height of the panel by their
 // --grow values, so one open part alone fills the panel. ----
-const SIDE_PANELS = [document.getElementById('palettePanel'), document.getElementById('inspector')];
+const SIDE_PANELS = [document.getElementById('palettePanel'), document.getElementById('inspector'), document.getElementById('prepSidebar')];
 const PANE_MIN_PX = 70;   // smallest height of an open part while a bar is dragged
 
 document.querySelectorAll('.pal-pane-chevron').forEach(el=>{ el.innerHTML = PAL_CHEVRON_SVG; });

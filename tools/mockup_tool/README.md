@@ -19,7 +19,7 @@ These parts come from m3resp itself:
 
 - The default graph on 2 · Design follows `examples/*/multimodal-full.pipeline.yaml`: 15 of its 45 steps.
 - The step list of the palette, and the summaries, parameters, units, limits, choices and ports in the help box, the Inspector and the node window, come from the step registry (`describe_steps()`). The file `src/js/data/step-info.js` holds them; see "Step list from the registry" below.
-- The EIT images and impedance curves on 1 · Prepare are computed from the `.bin` recording under `data/source/synthetic/` with `eitprocessing.datahandling.loading.load_eit_data`.
+- The EIT global impedance, the minute image and the dynamic images from 3.0 to 13.0 s on 1 · Prepare are computed from the `.bin` recording under `data/source/synthetic/` with `eitprocessing.datahandling.loading.load_eit_data`. The ROI curves, the other dynamic images and all EIT files after the first are illustrative: they come from the global impedance and the minute image.
 - 3 · Check and 4 · Results show the output files of a past `multimodal-full-summary` run (`run_manifest.json`, `parameter_results.csv`, `quality_flags.csv` and others).
 
 These parts are illustrative:
@@ -32,6 +32,16 @@ These parts are illustrative:
 ## What each tab does
 
 **1 · Prepare.** Load a file per modality ("Load file…" opens a real file picker), set the raw synchronization offsets, and cut a working window out of the recording. Named sequences of time windows go into a library that 2 · Design can use.
+
+- The side panel uses the parts of the Design palette: Recording (subject type as a list, vendor, length, source), Steps and Saved sequences. Steps lists 1 Signals with one row per modality under it, 2 Synchronization and 3 Working window. "Add modality" opens a small form under the modality rows. The Working window card shows the same Saved sequences list under its Save bar.
+- The main column shows one section at a time: the one chosen in Steps. A title line names it ("1 Signals › EIT, 1 of 5"); Back and Next go through the sections in order, and the last Next opens 2 · Design.
+- Times are seconds everywhere: "4.0 s", ranges "4.0–22.0 s" (`src/js/prepare/time-format.js`).
+- Each modality card has the same toolbar: channel chips or tools on the left, and the time range (−, range, +, reset) on the right. The "?" button lists the mouse actions. "+ Add signal" in the EMG Files block and "Display" on the EIT card open small panels.
+- EIT and EMG files (`src/js/prepare/file-merge.js`, used by `eit-files.js` and `emg-files.js`): "Add files…" and "Add folder…" add files to the card. A drag on the lane of a file selects a section. A drag on a section slides it along the file, and a drag on its edge changes its length (arrow keys move a selected section by 0.1 s, with Shift by 1.0 s), and its × removes it. The sections look like the windows of the working window; "Merge order" sets the order of the sections, and "Merge sections" joins them into one recording. Added files get an example signal. On the EMG card, the signal chips and "+ Add signal" sit in the Files block: each ticked signal shows on the file lanes (its envelope, ECG removed, one row per signal) and in the EMG plots below (raw).
+- EIT details: "Show" in the EIT toolbar chooses the recording that the global and ROI plots, the dynamic image and the minute image show: one of the files, or the merged recording (with dashed lines at the joins). A click on a file name or on the merged preview chooses it too. "Show" in the EMG toolbar does the same for the EMG plots. Synchronization and the working window use file 1 of each modality.
+- Synchronization: each recording is a bar on the time line of the ventilator (the reference). Each row chooses its signal ("Signal": EIT global impedance or ROI 1 to 4; one of the loaded EMG signals, as its envelope with the ECG removed) and the ventilator signal it is compared with ("Compared with": P_aw, Flow or Volume; defaults: EIT against Volume, EMG against P_aw). An empty offset field uses the estimate, the cross-correlation of these two signals; a new choice gives a new estimate. "Estimate" goes back to it, and "Match" gives the correlation at the offset in use. "Check alignment" draws each ventilator signal in use, the EIT signal and the EMG envelope on one time line with the breath starts as dashed lines. The working-window lanes use the same offsets.
+- The example ventilator and EMG signals follow the breaths of the real EIT recording, and the EMG file starts 2.0 s before the ventilator, so the estimate has a real offset to find.
+- In the working window, the "Add" buttons carry the same colour marks as the bands on the lanes: green for a kept window, red hatched for a removed span. The sequence name and "Save as new sequence" are in the footer of the card.
 
 **2 · Design.** A node editor over the step registry, after the canvas of Orange Data Mining.
 
