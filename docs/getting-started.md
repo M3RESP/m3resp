@@ -5,17 +5,55 @@
 M3Resp currently supports Python 3.12, 3.13, and 3.14. For a local source checkout,
 install the base package with:
 
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
 ```bash
 python -m pip install -e .
 ```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv sync
+```
+:::
+::::
 
 Install the modality integrations that you need:
+
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
 
 ```bash
 python -m pip install -e ".[eit]"       # EIT processing
 python -m pip install -e ".[emg]"       # EMG processing
 python -m pip install -e ".[all]"       # Both integrations
 ```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv sync --extra eit  # EIT processing
+uv sync --extra emg  # EMG processing
+uv sync --extra all  # Both integrations
+```
+:::
+::::
+
+`uv sync` installs only the extras named in the command and removes the
+others, so name every extra you need, for example
+`uv sync --extra all --extra dev`.
 
 The base installation remains useful without either optional integration. It
 provides the shared data model, workflow specification and validation tools,
@@ -25,15 +63,47 @@ synchronization helpers, synthetic EIT generation, and export utilities.
 
 Workflows are described in YAML or JSON:
 
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
 ```bash
 m3resp run examples/multimodal_example/multimodal.workflow.yaml
 ```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run m3resp run examples/multimodal_example/multimodal.workflow.yaml
+```
+:::
+::::
 
 List the registered processing steps:
+
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
 
 ```bash
 m3resp steps
 ```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run m3resp steps
+```
+:::
+::::
 
 The example workflow references recording files that are not distributed with
 the source repository. Update its input paths before running it with local

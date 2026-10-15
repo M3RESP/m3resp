@@ -55,19 +55,37 @@ when enabled. Each record contains:
 EIT-only generation uses the base project dependencies:
 
 ```bash
-pip install -e ".[dev]"
+python -m pip install -e ".[dev]"
+```
+
+With uv:
+
+```bash
+uv sync --extra dev
 ```
 
 EMG and ventilator generation require ReSurfEMG:
 
 ```bash
-pip install -e ".[emg]"
+python -m pip install -e ".[emg]"
+```
+
+With uv:
+
+```bash
+uv sync --extra emg
 ```
 
 or, for all optional integrations:
 
 ```bash
-pip install -e ".[all,dev]"
+python -m pip install -e ".[all,dev]"
+```
+
+With uv:
+
+```bash
+uv sync --extra all --extra dev
 ```
 
 If ReSurfEMG is not installed and EMG or ventilator generation is enabled, the
@@ -103,6 +121,12 @@ From the repository root:
 python -m m3resp.synthetic.generator
 ```
 
+With uv:
+
+```bash
+uv run python -m m3resp.synthetic.generator
+```
+
 This loads `src/m3resp/synthetic/synthetic_generator_config.yaml` and writes
 outputs using the values in that file.
 
@@ -110,6 +134,12 @@ You can also pass a different YAML file:
 
 ```bash
 python -m m3resp.synthetic.generator path/to/custom_config.yaml
+```
+
+With uv:
+
+```bash
+uv run python -m m3resp.synthetic.generator path/to/custom_config.yaml
 ```
 
 For the same YAML-driven run from Python:
@@ -321,7 +351,13 @@ write_native_outputs: true
 If EMG or ventilator generation says ReSurfEMG is missing, install:
 
 ```bash
-pip install -e ".[emg]"
+python -m pip install -e ".[emg]"
+```
+
+With uv:
+
+```bash
+uv sync --extra emg
 ```
 
 If a ReSurfEMG version produces ECG/EMG length mismatch errors internally, this

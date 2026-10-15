@@ -322,15 +322,35 @@ def load_custom(
     }
 
 
-def _loaded_recording_outputs(session: M3Session) -> dict[str, Any]:
+#: Channels of the raw EIT signals that the loading steps add to
+#: `session.signals`.
+_RAW_EIT_CHANNELS = ("global_impedance", "pixel_impedance")
+
+
+def _loaded_recording_outputs(
+    session: M3Session, *, replace_raw_signals: bool = False
+) -> dict[str, Any]:
     """The outputs shared by both loading steps, from the session's new recording.
 
     Adds the raw global impedance (when present) and the raw pixel impedance
-    to `session.signals` as m3resp `Signal`s.
+    to `session.signals` as m3resp `Signal`s. With `replace_raw_signals`, the
+    raw EIT signals already in `session.signals` are removed first; the slicing
+    step uses this so only the cut signals remain.
     """
 
     recording = session.eit
     assert recording is not None
+
+    if replace_raw_signals:
+        session.signals.items[:] = [
+            existing
+            for existing in session.signals.items
+            if not (
+                existing.modality == "eit"
+                and existing.processing_state == "raw"
+                and existing.channel in _RAW_EIT_CHANNELS
+            )
+        ]
 
     raw_global_impedance_signal = None
     if recording.global_impedance is not None:

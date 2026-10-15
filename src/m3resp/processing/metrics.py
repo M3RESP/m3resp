@@ -22,7 +22,8 @@ Modified for M3RESP:
 Portions of this module are derived from eitprocessing.
 
     Source:     https://github.com/EIT-ALIVE/eitprocessing
-    Revision:   1.8.7
+    Revision:   m3resp-integration (6d6da6a825a08201ad01c0a7b68f4de07d4501f3),
+                version 1.8.7
     Original:   eitprocessing/parameters/tidal_impedance_variation.py::
                 TIV._calculate_tiv_values
     Copyright:  Copyright (c) Netherlands eScience Center and Erasmus MC
