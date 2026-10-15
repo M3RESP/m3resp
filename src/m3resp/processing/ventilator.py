@@ -45,8 +45,8 @@ def estimate_peep(
     signal; PEEP is the median airway pressure at those samples, rounded to
     the nearest integer because ventilators are set in whole cmH2O.
 
-    This is deliberately *not* the median of the whole pressure trace: that
-    median includes inspiration and therefore sits above PEEP, which biases
+    Only end-expiratory samples are used: the median of the whole pressure
+    trace includes inspiration and therefore sits above PEEP, which biases
     every threshold derived from it (see `detect_occluded_breath_peaks`).
 
     Matches ReSurfEMG's `VentilatorDataGroup.find_peep`. Note that Warnaar et

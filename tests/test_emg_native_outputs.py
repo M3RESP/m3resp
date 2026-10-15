@@ -13,25 +13,19 @@ import pytest
 from m3resp.core.session import M3Session
 from m3resp.data import Signal
 from m3resp.data.units import normalize_unit
-from m3resp.workflows import run_pipeline
+from m3resp.workflows import run_workflow
 from m3resp.workflows.steps.emg import moving_baseline, slopesum_baseline
 
 pytest.importorskip("resurfemg")
 np = pytest.importorskip("numpy")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EMG_PATH = (
-    REPO_ROOT
-    / "data"
-    / "source"
-    / "data_from_repo"
-    / "emg_data_synth_quiet_breathing.Poly5"
-)
+EMG_PATH = REPO_ROOT / "tests" / "data" / "emg_data_synth_quiet_breathing.Poly5"
 
 
 class TestEmgLoad:
     def test_writes_channel_major_native_signals_with_labels_units_and_fs(self):
-        result = run_pipeline(
+        result = run_workflow(
             {
                 "name": "emg-load",
                 "inputs": {"emg_file": str(EMG_PATH)},
@@ -61,10 +55,10 @@ class TestEmgLoad:
     def test_loader_options_must_be_a_mapping(self):
         # Caught by Phase 3.3 static parameter-type validation before
         # execution ever reaches emg.load's own runtime TypeError check.
-        from m3resp.core.exceptions import PipelineSpecError
+        from m3resp.core.exceptions import WorkflowSpecError
 
-        with pytest.raises(PipelineSpecError, match="loader_options"):
-            run_pipeline(
+        with pytest.raises(WorkflowSpecError, match="loader_options"):
+            run_workflow(
                 {
                     "name": "emg-load-bad-options",
                     "inputs": {"emg_file": str(EMG_PATH)},
@@ -97,7 +91,7 @@ class TestEmgLoad:
             }
 
         session = M3Session(emg_adapter=ReSurfEMGAdapter(loader=fake_loader))
-        result = run_pipeline(
+        result = run_workflow(
             {
                 "name": "emg-load-injected",
                 "inputs": {"emg_file": "unused.Poly5"},

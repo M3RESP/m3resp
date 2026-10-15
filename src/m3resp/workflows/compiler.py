@@ -1,12 +1,8 @@
-"""Compile a validated spec into a read-only execution plan (Phase 3.1 of
-the pipeline-structure plan), and provide structural-vs-readiness validation
-reports (Phase 3.5) on top of the diagnostics collected in ``engine.py``.
+"""Resolve workflow operations, input/output names and processing settings.
 
-Compilation never imports optional scientific packages, opens data files,
-creates output directories, or mutates a session - it only resolves names,
-context bindings, and static parameter values (including ``@ref``
-substitution and spec-root path resolution) that are already fully knowable
-from the spec and the registry.
+Compilation describes steps in execution order, resolving input references
+and paths relative to the spec root. Validation reports structural problems
+and, when requested, package availability and missing input files.
 """
 
 from __future__ import annotations
@@ -14,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from m3resp.core.exceptions import PipelineSpecError, UnknownStepError
+from m3resp.core.exceptions import UnknownStepError, WorkflowSpecError
 from m3resp.core.path_helper import resolve_optional_path
 from m3resp.workflows.context import resolve_value
 from m3resp.workflows.diagnostics import Diagnostic
@@ -25,7 +21,7 @@ from m3resp.workflows.registry import (
     get_step,
     step_capability_state,
 )
-from m3resp.workflows.spec import PipelineSpec, StepSpec
+from m3resp.workflows.spec import StepSpec, WorkflowSpec
 
 
 @dataclass(frozen=True)
@@ -71,16 +67,22 @@ class CompiledStep:
 
 
 @dataclass(frozen=True)
-class CompiledPipeline:
-    """A read-only, ordered execution plan. What provenance and a future GUI
-    display - not the raw spec, which may still contain unresolved ``@ref``
-    values and cwd-relative-looking path strings."""
+class CompiledWorkflow:
+    """An ordered description of workflow steps with resolved settings.
+
+    Attributes:
+        name: Workflow name copied from the spec.
+        schema_version: Spec format version, or None for an unversioned spec.
+        steps: Compiled steps in execution order.
+    """
 
     name: str
     schema_version: int | None
     steps: tuple[CompiledStep, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
+        """Return the workflow name, format version and step descriptions as a dict."""
+
         return {
             "name": self.name,
             "schema_version": self.schema_version,
@@ -88,14 +90,24 @@ class CompiledPipeline:
         }
 
 
-def compile_pipeline(
-    spec: PipelineSpec, *, available: set[str] | None = None
-) -> CompiledPipeline:
-    """Compile ``spec`` into a read-only, fully-resolved execution plan.
+def compile_workflow(
+    spec: WorkflowSpec, *, available: set[str] | None = None
+) -> CompiledWorkflow:
+    """Validate a workflow and resolve the settings needed to run its steps.
 
-    Raises ``PipelineSpecError``/``UnknownStepError`` for the first
-    structural problem found - call :func:`validate_pipeline` first to get
-    every independent problem in one pass instead of just the first.
+    Args:
+        spec: Parsed workflow with ordered steps and a path-resolution root.
+        available: Extra context keys supplied by the caller before execution.
+
+    Returns:
+        CompiledWorkflow: Steps in spec order with operation names, input/output
+            bindings, defaults and settings resolved. ``@name`` references use
+            spec.inputs; path settings are resolved relative to spec.root.
+
+    Raises:
+        UnknownStepError: If the first structural error names an unknown step.
+        WorkflowSpecError: If the first structural error concerns bindings,
+            parameters or other workflow structure.
     """
 
     diagnostics = collect_diagnostics(spec, available=available)
@@ -104,13 +116,13 @@ def compile_pipeline(
         first = errors[0]
         if first.code == "unknown_step":
             raise UnknownStepError(first.message)
-        raise PipelineSpecError(first.message)
+        raise WorkflowSpecError(first.message)
 
     compiled_steps = tuple(
         _compile_step(step_spec, get_step(step_spec.uses), spec, position)
         for position, step_spec in enumerate(spec.steps)
     )
-    return CompiledPipeline(
+    return CompiledWorkflow(
         name=spec.name, schema_version=spec.schema_version, steps=compiled_steps
     )
 
@@ -118,9 +130,11 @@ def compile_pipeline(
 def _compile_step(
     step_spec: StepSpec,
     definition: StepDefinition,
-    spec: PipelineSpec,
+    spec: WorkflowSpec,
     position: int,
 ) -> CompiledStep:
+    """Resolve one step's input/output names, defaults, references and paths."""
+
     input_bindings: dict[str, str] = {}
     optional_bindings: set[str] = set()
     for param, default in definition.reads.items():
@@ -157,9 +171,7 @@ def _compile_step(
             # collect_diagnostics above, so reaching this branch means
             # either optional-with-a-default or optional-and-unset (None).
             resolved_parameters[parameter.name] = parameter.default
-    # Static parameters without declared metadata still need to reach the
-    # function - pass them through resolved but unvalidated (full metadata
-    # coverage is Phase 8.4, not this phase).
+    # Resolve supplied settings that have no declared parameter metadata.
     for name, raw_value in step_spec.params.items():
         if name not in resolved_parameters:
             resolved_parameters[name] = _resolve(name, raw_value)
@@ -183,17 +195,17 @@ def _compile_step(
 
 @dataclass(frozen=True)
 class ValidationReport:
-    """Phase 3.5: structural validation is always run; readiness (optional
-    packages, file existence) is opt-in, since it needs the local machine's
-    installed packages and filesystem, not just the spec."""
+    """Structural diagnostics and optional checks for running a workflow locally."""
 
     structural: tuple[Diagnostic, ...] = ()
     readiness: tuple[Diagnostic, ...] = ()
 
     @property
     def is_valid(self) -> bool:
-        """Whether the spec is structurally sound and could compile - not
-        whether it's ready to run on this machine (see ``readiness``)."""
+        """Whether the structural diagnostics contain no errors.
+
+        Readiness diagnostics are assessed separately.
+        """
 
         return not any(d.severity == "error" for d in self.structural)
 
@@ -205,19 +217,24 @@ class ValidationReport:
         }
 
 
-def validate_pipeline(
-    spec: PipelineSpec,
+def validate_workflow(
+    spec: WorkflowSpec,
     *,
     available: set[str] | None = None,
     readiness: bool = False,
 ) -> ValidationReport:
-    """Return a full structural (and, if requested, readiness) report.
+    """Check workflow structure and optionally its readiness on this machine.
 
-    Structural validation never imports optional packages or touches the
-    filesystem, so a GUI can validate a pipeline on a machine without the
-    optional backend installed. Readiness additionally reports missing
-    optional dependencies and missing input files - set ``readiness=True``
-    when you also want to know whether the spec can actually run *here*.
+    Args:
+        spec: Parsed workflow to inspect.
+        available: Extra context keys supplied by the caller before execution.
+        readiness: Also check optional package availability and file paths.
+
+    Returns:
+        ValidationReport: Structural errors and warnings, plus readiness
+            diagnostics when requested. Missing packages give warnings and
+            missing input files give errors in the readiness section.
+            is_valid reflects structural errors only.
     """
 
     structural = collect_diagnostics(spec, available=available)
@@ -239,9 +256,11 @@ def validate_pipeline(
 def _readiness_diagnostics_for_step(
     step_spec: StepSpec,
     definition: StepDefinition,
-    spec: PipelineSpec,
+    spec: WorkflowSpec,
     position: int,
 ) -> list[Diagnostic]:
+    """Report one step's package availability and missing file-path parameters."""
+
     diagnostics: list[Diagnostic] = []
     step_label = f"step #{position} '{step_spec.uses}'"
 
@@ -273,7 +292,7 @@ def _readiness_diagnostics_for_step(
             continue
         try:
             value = resolve_value(raw_value, spec.inputs)
-        except PipelineSpecError:
+        except WorkflowSpecError:
             continue  # already reported structurally
         if not isinstance(value, str):
             continue

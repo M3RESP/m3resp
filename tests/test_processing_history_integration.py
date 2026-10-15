@@ -1,7 +1,7 @@
 """Tests for Phase 5 of the pipeline-structure plan: recording every
 executed step onto ``M3Session.processing_history`` regardless of whether a
 ``DataModelRecorder`` is attached (5.1), recursively recording nested native
-results (5.2), and linking input files onto the pipeline's ``ProcessingRun``
+results (5.2), and linking input files onto the workflow's ``ProcessingRun``
 (5.3). See plan/stage2/3_pipeline_structure_implementation_plan.md.
 """
 
@@ -15,7 +15,7 @@ import pytest
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult, QualityFlag, Signal
 from m3resp.datamodel.recorder import DataModelRecorder
-from m3resp.workflows import PipelineExecutionError, register_step, run_pipeline
+from m3resp.workflows import WorkflowExecutionError, register_step, run_workflow
 from m3resp.workflows.registry import STEP_REGISTRY
 
 
@@ -44,7 +44,7 @@ def test_successful_step_is_recorded_without_any_datamodel_attached(_history_ste
     in-memory provenance" - here there isn't even a recorder attached."""
 
     session = M3Session()
-    run_pipeline(
+    run_workflow(
         {"name": "p", "steps": [{"uses": "history_test.ok", "with": {"n": 7}}]},
         session=session,
     )
@@ -58,8 +58,8 @@ def test_successful_step_is_recorded_without_any_datamodel_attached(_history_ste
 
 def test_failed_step_is_still_recorded_with_failed_status(_history_steps):
     session = M3Session()
-    with pytest.raises(PipelineExecutionError):
-        run_pipeline(
+    with pytest.raises(WorkflowExecutionError):
+        run_workflow(
             {"name": "p", "steps": [{"uses": "history_test.fail"}]}, session=session
         )
     assert len(session.processing_history) == 1
@@ -70,8 +70,8 @@ def test_only_executed_steps_are_recorded_not_the_one_that_failed_after(
     _history_steps,
 ):
     session = M3Session()
-    with pytest.raises(PipelineExecutionError):
-        run_pipeline(
+    with pytest.raises(WorkflowExecutionError):
+        run_workflow(
             {
                 "name": "p",
                 "steps": [
@@ -91,11 +91,11 @@ def test_only_executed_steps_are_recorded_not_the_one_that_failed_after(
 def test_processing_history_does_not_create_a_second_processing_run(_history_steps):
     """Phase 5.1: "avoid duplicate processing runs" - the per-step
     ProcessingHistory log must not add extra ProcessingRun rows beyond the
-    one record_pipeline_result already creates for the whole pipeline."""
+    one record_workflow_result already creates for the whole workflow."""
 
     session = M3Session()
     session.datamodel = DataModelRecorder(session)
-    run_pipeline(
+    run_workflow(
         {
             "name": "p",
             "steps": [
@@ -106,7 +106,7 @@ def test_processing_history_does_not_create_a_second_processing_run(_history_ste
         session=session,
     )
     assert len(session.processing_history) == 2  # one per step
-    assert len(session.datamodel.store.processing_runs) == 1  # one per pipeline
+    assert len(session.datamodel.store.processing_runs) == 1  # one per workflow
 
 
 # --------------------------------------------------------------------------- #
@@ -142,7 +142,7 @@ def _nested_result_step():
 def test_dict_of_lists_of_native_results_is_recorded_recursively(_nested_result_step):
     session = M3Session()
     session.datamodel = DataModelRecorder(session)
-    result = run_pipeline(
+    result = run_workflow(
         {"name": "p", "steps": [{"uses": "history_test.nested"}]}, session=session
     )
 
@@ -167,14 +167,14 @@ def test_a_lone_quality_flag_still_records_without_a_provenance_entry(
 
     session = M3Session()
     session.datamodel = DataModelRecorder(session)
-    run_pipeline(
+    run_workflow(
         {"name": "p", "steps": [{"uses": "history_test.nested"}]}, session=session
     )
     assert len(session.datamodel.store.quality_annotations) == 2
 
 
 # --------------------------------------------------------------------------- #
-# 5.3: input files linked onto the pipeline's ProcessingRun                  #
+# 5.3: input files linked onto the workflow's ProcessingRun                  #
 # --------------------------------------------------------------------------- #
 
 
@@ -195,7 +195,7 @@ def _signal_producing_step():
     STEP_REGISTRY.pop("history_test.load_like", None)
 
 
-def test_pipeline_result_links_produced_signal_files_to_the_run(
+def test_workflow_result_links_produced_signal_files_to_the_run(
     _signal_producing_step, tmp_path
 ):
     session = M3Session()
@@ -209,22 +209,22 @@ def test_pipeline_result_links_produced_signal_files_to_the_run(
     )
     assert result is not None
 
-    pipeline_result = run_pipeline(
+    workflow_result = run_workflow(
         {"name": "p", "steps": [{"uses": "history_test.load_like"}]}, session=session
     )
-    run = session.datamodel.store.processing_runs[pipeline_result.processing_run_id]
+    run = session.datamodel.store.processing_runs[workflow_result.processing_run_id]
     expected_file_id = session.datamodel.store.files_for_signal(result.signal_id)[
         0
     ].file_id
     assert expected_file_id in run.input_file_ids
 
 
-def test_pipeline_result_has_empty_input_file_ids_when_nothing_was_loaded(
+def test_workflow_result_has_empty_input_file_ids_when_nothing_was_loaded(
     _history_steps,
 ):
     session = M3Session()
     session.datamodel = DataModelRecorder(session)
-    result = run_pipeline(
+    result = run_workflow(
         {"name": "p", "steps": [{"uses": "history_test.ok"}]}, session=session
     )
     run = session.datamodel.store.processing_runs[result.processing_run_id]

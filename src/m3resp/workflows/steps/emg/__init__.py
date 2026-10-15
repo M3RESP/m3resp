@@ -1,4 +1,4 @@
-"""Registered EMG pipeline steps.
+"""Registered EMG workflow steps.
 
 Loading/preprocessing steps wrap the ``M3Session`` EMG stage methods.
 Postprocessing steps keep the one-step-per-operation structure used by
@@ -14,7 +14,7 @@ EMG ones (``emg.evaluate_event_timing``, ``emg.evaluate_respiratory_rates``):
 those stay in this package because they are genuinely cross-modal, scoring
 *EMG* detection quality against a ventilator reference.
 
-This package mirrors the former single ``emg.py`` module, split by pipeline
+This package mirrors the former single ``emg.py`` module, split by workflow
 stage for readability. Importing it registers every step below (each
 submodule's ``@register_step`` decorators run on import), and every public
 step function is re-exported here so ``from m3resp.workflows.steps.emg
@@ -58,6 +58,7 @@ from .quality_snr import (
     snr_pseudo,
 )
 from .selection import remove_invalid_breaths
+from .slicing import slice_recording
 
 __all__ = [
     "amplitude",
@@ -82,6 +83,7 @@ __all__ = [
     "pseudo_slope",
     "remove_invalid_breaths",
     "respiratory_rate",
+    "slice_recording",
     "slopesum_baseline",
     "snr_pseudo",
     "time_product",

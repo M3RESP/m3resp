@@ -15,11 +15,14 @@ from m3resp.workflows.registry import describe_step, describe_steps
 
 _EIT_STEP_NAMES = [
     "eit.load",
-    "eit.slice",
+    "eit.slice_signal",
+    "eit.slice_recording",
     "eit.detect_rates",
     "eit.mdn_filter",
     "eit.butterworth_filter",
     "eit.global_impedance",
+    "eit.regional_impedance",
+    "eit.functional_impedance",
     "eit.detect_breaths",
     "eit.normalize_breaths",
     "eit.continuous_tiv",
@@ -33,7 +36,7 @@ _EIT_STEP_NAMES = [
 ]
 
 
-def test_all_sixteen_eit_steps_are_registered_and_described():
+def test_all_nineteen_eit_steps_are_registered_and_described():
     descriptions = describe_steps(prefix="eit.")
     assert {d.name for d in descriptions} == set(_EIT_STEP_NAMES)
 
@@ -62,12 +65,12 @@ def test_eit_load_vendor_choices_match_adapter_error_message():
 
 
 def test_eit_slice_mode_choices_match_slice_signal_by_mode():
-    description = describe_step("eit.slice")
+    description = describe_step("eit.slice_signal")
     mode = next(p for p in description.parameters if p.name == "mode")
     assert mode.choices == ("index", "time")
     assert mode.default == "index"
 
-    from m3resp.workflows.utils import slice_signal_by_mode
+    from m3resp.processing.slicing import slice_signal_by_mode
 
     for choice in mode.choices:
         try:

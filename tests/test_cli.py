@@ -201,17 +201,17 @@ def test_steps_details_shows_parameters(capsys):
     exit_code = _run_cli(["steps", "--details"])
     assert exit_code == EXIT_SUCCESS
     out = capsys.readouterr().out
-    assert "session.sync_raw" in out
+    assert "sync.raw_modalities" in out
     assert "with: method (choice)" in out
 
 
 def test_run_debug_flag_reraises_instead_of_printing_short_message(_cli_step, tmp_path):
-    from m3resp.workflows import PipelineExecutionError
+    from m3resp.workflows import WorkflowExecutionError
 
     spec_path = _write_spec(
         tmp_path, {"name": "p", "steps": [{"uses": "cli_test.fail"}]}
     )
-    with pytest.raises(PipelineExecutionError):
+    with pytest.raises(WorkflowExecutionError):
         main(["run", str(spec_path), "--debug"])
 
 

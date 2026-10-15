@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from m3resp.core.exceptions import PipelineSpecError
+from m3resp.core.exceptions import WorkflowSpecError
 from m3resp.workflows.spec import load_spec
 
 _MINIMAL_STEPS = [{"uses": "t.make", "with": {"value": 1}}]
@@ -65,7 +65,7 @@ def test_versioned_spec_is_not_legacy():
 
 
 def test_versioned_spec_rejects_unknown_top_level_key():
-    with pytest.raises(PipelineSpecError, match="bogus"):
+    with pytest.raises(WorkflowSpecError, match="bogus"):
         load_spec(
             {
                 "schema_version": 1,
@@ -77,7 +77,7 @@ def test_versioned_spec_rejects_unknown_top_level_key():
 
 
 def test_versioned_spec_rejects_unknown_step_key():
-    with pytest.raises(PipelineSpecError, match="bogus"):
+    with pytest.raises(WorkflowSpecError, match="bogus"):
         load_spec(
             {
                 "schema_version": 1,
@@ -88,7 +88,7 @@ def test_versioned_spec_rejects_unknown_step_key():
 
 
 def test_versioned_spec_rejects_non_boolean_output_field():
-    with pytest.raises(PipelineSpecError, match="timestamped"):
+    with pytest.raises(WorkflowSpecError, match="timestamped"):
         load_spec(
             {
                 "schema_version": 1,
@@ -100,12 +100,12 @@ def test_versioned_spec_rejects_non_boolean_output_field():
 
 
 def test_versioned_spec_rejects_unsupported_schema_version():
-    with pytest.raises(PipelineSpecError, match="Unsupported schema_version"):
+    with pytest.raises(WorkflowSpecError, match="Unsupported schema_version"):
         load_spec({"schema_version": 2, "name": "p", "steps": _MINIMAL_STEPS})
 
 
 def test_versioned_spec_rejects_non_fail_fast_error_policy():
-    with pytest.raises(PipelineSpecError):
+    with pytest.raises(WorkflowSpecError):
         load_spec(
             {
                 "schema_version": 1,
@@ -132,7 +132,7 @@ def test_versioned_spec_accepts_metadata_and_execution_seed():
 
 
 def test_versioned_spec_requires_non_empty_steps():
-    with pytest.raises(PipelineSpecError):
+    with pytest.raises(WorkflowSpecError):
         load_spec({"schema_version": 1, "name": "p", "steps": []})
 
 
@@ -171,7 +171,7 @@ def test_duplicate_explicit_step_ids_are_rejected(schema_version):
     }
     if schema_version is not None:
         raw["schema_version"] = schema_version
-    with pytest.raises(PipelineSpecError, match="Duplicate step id"):
+    with pytest.raises(WorkflowSpecError, match="Duplicate step id"):
         load_spec(raw)
 
 

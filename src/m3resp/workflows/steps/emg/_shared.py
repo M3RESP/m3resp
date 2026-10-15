@@ -1,4 +1,4 @@
-"""Shared helpers for the registered EMG pipeline step modules."""
+"""Shared helpers for the registered EMG workflow step modules."""
 
 from __future__ import annotations
 
@@ -8,8 +8,6 @@ from typing import Any
 import numpy as np
 
 from m3resp.core.session import M3Session
-from m3resp.data import ParameterResult, QualityFlag
-from m3resp.data.quality import Severity
 from m3resp.workflows.registry import StepArtifact
 
 #: Steps that call resurfemg directly or through ReSurfEMGAdapter declare this.
@@ -66,9 +64,8 @@ def _upstream_metadata(
 def _record_step(
     session: M3Session, step_name: str, *, metadata: dict[str, Any]
 ) -> None:
-    """Record per-step EMG provenance through the existing
-    `M3Session._record()` seam, reusing the step's declared reads/writes
-    from the registry rather than a second EMG-only history mechanism."""
+    """Record per-step EMG provenance through `M3Session._record()`, using
+    the step's declared reads/writes from the registry."""
 
     from m3resp.workflows.registry import get_step
 
@@ -161,90 +158,3 @@ def _processed_channel_label_and_unit(processed_emg: Any) -> tuple[str, str | No
         else None
     )
     return label, unit
-
-
-def _require_equal_length(**named_arrays: Any) -> None:
-    """Raise a clear error instead of silently truncating with
-    `min(len(...))` when paired arrays disagree in length (plan Phase 5.4:
-    "Do not truncate arrays... without reporting unmatched events")."""
-
-    lengths = {name: len(array) for name, array in named_arrays.items()}
-    if len(set(lengths.values())) > 1:
-        raise ValueError(f"Arrays must have equal length; got {lengths}.")
-
-
-def _breath_metadata(peak_index: Any, *, fs: float | None = None) -> dict[str, Any]:
-    metadata: dict[str, Any] = {"peak_sample_index": int(peak_index)}
-    if fs is not None:
-        metadata["peak_time"] = float(peak_index) / fs
-    return metadata
-
-
-def _per_breath_flags(
-    name: str,
-    valid: Any,
-    *,
-    modality: str,
-    category: str | None = None,
-    peak_indices: Any,
-    severity: Severity = "info",
-    fs: float | None = None,
-    threshold: float | None = None,
-    extra_metadata: dict[str, Any] | None = None,
-) -> list[QualityFlag]:
-    """One `QualityFlag` per breath - `breath_id=str(position)` until a
-    stable event ID is available, with the source peak sample index
-    recorded in metadata (plan Phase 5.4)."""
-
-    _require_equal_length(valid=valid, peak_indices=peak_indices)
-    flags = []
-    for position, (is_valid, peak_index) in enumerate(zip(valid, peak_indices)):
-        metadata = _breath_metadata(peak_index, fs=fs)
-        if extra_metadata:
-            metadata.update(extra_metadata)
-        flags.append(
-            QualityFlag(
-                name=name,
-                passed=bool(is_valid),
-                severity=severity,
-                modality=modality,
-                category=category,
-                breath_id=str(position),
-                threshold=threshold,
-                metadata=metadata,
-            )
-        )
-    return flags
-
-
-def _per_breath_results(
-    name: str,
-    values: Any,
-    *,
-    modality: str,
-    category: str | None = None,
-    peak_indices: Any,
-    unit: str | None = None,
-    method: str | None = None,
-    fs: float | None = None,
-    extra_metadata_per_item: list[dict[str, Any]] | None = None,
-) -> list[ParameterResult]:
-    _require_equal_length(values=values, peak_indices=peak_indices)
-    results = []
-    for position, (value, peak_index) in enumerate(zip(values, peak_indices)):
-        metadata = _breath_metadata(peak_index, fs=fs)
-        if extra_metadata_per_item is not None:
-            metadata.update(extra_metadata_per_item[position])
-        results.append(
-            ParameterResult(
-                name=name,
-                value=value if np.ndim(value) > 0 else float(value),
-                modality=modality,
-                category=category,
-                unit=unit,
-                breath_id=str(position),
-                method=method,
-                metadata=metadata,
-            )
-        )
-    return results

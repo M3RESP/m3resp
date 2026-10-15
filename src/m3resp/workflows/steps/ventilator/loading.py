@@ -1,4 +1,4 @@
-"""Registered ventilator loading/channel-splitting pipeline steps."""
+"""Registered ventilator loading/channel-splitting workflow steps."""
 
 from __future__ import annotations
 
@@ -23,7 +23,13 @@ from ._shared import _RESURFEMG, _SESSION_ARTIFACT
     category="loading",
     modality="ventilator",
     optional_packages=_RESURFEMG,
-    session_writes=("session.raw.ventilator",),
+    session_writes=(
+        "session.raw.ventilator",
+        # A new standalone recording is not synchronized: its start time is
+        # cleared.
+        "session.start_times",
+        "session.sync_methods",
+    ),
     input_artifacts=(_SESSION_ARTIFACT,),
     parameters=(
         StepParameter(
@@ -32,6 +38,34 @@ from ._shared import _RESURFEMG, _SESSION_ARTIFACT
             required=True,
             path_kind="file",
             description="Ventilator recording file to load.",
+        ),
+        StepParameter(
+            name="source",
+            value_type="choice",
+            required=False,
+            default=None,
+            choices=("ventilator", "emg", "eit"),
+            description=(
+                "Which device's file this is, which decides its clock. "
+                "'ventilator': a standalone ventilator or monitor export with "
+                "its own clock. 'emg' / 'eit': ventilator channels recorded "
+                "inside the EMG or EIT file, on that file's clock. Left "
+                "empty, a .bin file is taken as EIT and anything else as the "
+                "EMG device's export."
+            ),
+        ),
+        StepParameter(
+            name="name",
+            value_type="string",
+            required=False,
+            default=None,
+            description=(
+                "Name to file this recording under, when more than one "
+                "ventilator recording is loaded (e.g. 'monitor'). Left empty, "
+                "it is the main ventilator recording, and loading another "
+                "one without a name replaces it."
+            ),
+            advanced=True,
         ),
     ),
     output_artifacts=(
@@ -43,14 +77,22 @@ from ._shared import _RESURFEMG, _SESSION_ARTIFACT
         ),
     ),
 )
-def load(session: M3Session, *, file_path: str) -> dict[str, Any]:
+def load(
+    session: M3Session,
+    *,
+    file_path: str,
+    source: str | None = None,
+    name: str | None = None,
+) -> dict[str, Any]:
     # Delegates to the session method - the same shape as `emg.load` calling
     # `session.load_emg` - so provenance and `session.raw` bookkeeping happen
     # in one place. The step still emits the raw payload dict, which is what
     # `ventilator.channels` downstream expects.
-    session.load_ventilator(file_path, verbose=False)
-    recording = session.ventilator
-    assert recording is not None
+    options: dict[str, Any] = {"verbose": False}
+    if source is not None:
+        options["source"] = source
+    session.load_ventilator(file_path, name=name, **options)
+    recording = session.get_ventilator(name)
     return {"ventilator_raw": recording.data}
 
 
@@ -79,7 +121,7 @@ def load(session: M3Session, *, file_path: str) -> dict[str, Any]:
             description="Quantities to extract, found by channel label. Beyond the three standard ones a pressure pod can also supply 'esophageal_pressure', 'transpulmonary_pressure' or 'gastric_pressure'.",
         ),
         StepParameter(
-            name="pressure_channel",
+            name="airway_pressure_channel",
             value_type="integer",
             required=False,
             default=None,
@@ -119,7 +161,7 @@ def load(session: M3Session, *, file_path: str) -> dict[str, Any]:
         StepArtifact(
             name="ventilator_signals",
             artifact_type="ventilator_channel_bundle",
-            description="Mapping of 'pressure'/'flow'/'volume' arrays plus 'fs'.",
+            description="Mapping of 'airway_pressure'/'flow'/'volume' arrays plus 'fs'.",
         ),
     ),
 )
@@ -127,25 +169,39 @@ def channels(
     ventilator_raw: Any,
     *,
     channels: Sequence[str] = DEFAULT_CHANNELS,
-    pressure_channel: int | None = None,
+    airway_pressure_channel: int | None = None,
     flow_channel: int | None = None,
     volume_channel: int | None = None,
     fs: float | None = None,
 ) -> dict[str, Any]:
-    """Split a ventilator recording into channels found by name.
+    """Extract selected ventilator channels by label or explicit index.
 
-    `channels` selects which quantities to extract - the three standard ones
-    by default, but a recording from a pressure pod can also be asked for
-    ``esophageal_pressure``, ``transpulmonary_pressure`` or
-    ``gastric_pressure``. The per-channel index parameters override the name
-    match with an explicit column, and remain the way to read an unlabelled
-    recording whose columns are not in the default order.
+    Args:
+        ventilator_raw (Any): Recording dict or numeric (channels, samples) array.
+        channels (Sequence[str]): Requested quantities. Defaults to
+            airway_pressure, flow and volume. Additional options include
+            esophageal_pressure, transpulmonary_pressure and gastric_pressure.
+        airway_pressure_channel (int | None): Explicit zero-based pressure index.
+        flow_channel (int | None): Explicit zero-based flow index.
+        volume_channel (int | None): Explicit zero-based volume index. Indices
+            override labels and must refer to requested channels.
+        fs (float | None): Sampling rate in Hz; overrides recording metadata.
+
+    Returns:
+        dict[str, Any]: ventilator_signals channel bundle with arrays, per-channel
+            labels and units, the primary channel mapping, and fs in Hz.
+
+    Raises:
+        TypeError: If the array or sampling rate is missing.
+        ValueError: If a channel name or index selection is invalid.
+        UnresolvedChannelError: If a requested channel cannot be found.
+        IndexError: If a resolved index exceeds the available channels.
     """
 
     signals = ventilator_signals(
         ventilator_raw,
         channels=tuple(channels),
-        pressure_channel=pressure_channel,
+        airway_pressure_channel=airway_pressure_channel,
         flow_channel=flow_channel,
         volume_channel=volume_channel,
         fs=fs,

@@ -24,7 +24,7 @@ import pytest
 
 import m3resp.workflows.steps  # noqa: F401 - ensure built-in steps are registered
 from m3resp.__main__ import EXIT_SUCCESS, main
-from m3resp.workflows.compiler import compile_pipeline, validate_pipeline
+from m3resp.workflows.compiler import compile_workflow, validate_workflow
 from m3resp.workflows.registry import (
     describe_step,
     describe_steps,
@@ -84,9 +84,9 @@ def test_describe_step_reports_capability_state_for_a_single_operation():
     assert description.capability == "missing_optional_dependency"
 
 
-def test_compile_pipeline_succeeds_without_the_optional_package():
+def test_compile_workflow_succeeds_without_the_optional_package():
     spec = load_spec(_eit_emg_spec())
-    compiled = compile_pipeline(spec)
+    compiled = compile_workflow(spec)
     assert compiled.steps
 
 
@@ -95,7 +95,7 @@ def test_validate_readiness_reports_a_warning_not_a_hard_failure():
     structural error - the spec is still valid, just not runnable here."""
 
     spec = load_spec(_eit_emg_spec())
-    report = validate_pipeline(spec, readiness=True)
+    report = validate_workflow(spec, readiness=True)
     assert report.is_valid
     codes = {d.code for d in report.readiness}
     assert "capability_missing_optional_dependency" in codes

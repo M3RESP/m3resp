@@ -31,8 +31,10 @@ string key such as `"eit"` or `"emg_breaths"`, with no fixed shape, so EIT
 and EMG results can look completely different from each other.
 
 Stage 2 adds a second, parallel set of attributes (`signals`,
-`parameter_results`, `quality`, `linked_breaths`) built from fixed, shared
-types (`Signal`, `ParameterResult`, `QualityFlag`, `BreathEvent`), so EIT and
+`parameter_results`, `interval_data`, `pixel_masks`, `quality`,
+`linked_breaths`) built from fixed, shared types (`Signal`,
+`ParameterResult`, `IntervalData`, `PixelMask`, `QualityFlag`,
+`BreathEvent`), so EIT and
 EMG data can be compared and displayed using the same shape. These are
 populated by each adapter's `to_signals`/`to_parameters`/`to_quality_flags`
 conversion methods and are additive: the Stage 1 dicts keep working exactly
@@ -62,9 +64,11 @@ happens underneath it without anything downstream needing to change.
 |---|---|---|
 | `session.signals` | `preprocess_eit`/`preprocess_emg`/`preprocess_ventilator` (default adapter path) | [`Signal`](signals.md) |
 | `session.events` | `detect_eit_breaths`/`detect_emg_breaths`/`detect_ventilator_breaths`/`add_events` | [`BreathEvent`/`Event`](events-and-breaths.md) lists, keyed by name |
-| `session.parameter_results` | `preprocess_eit`/`postprocess_emg`/`compute_multimodal_parameters` | [`ParameterResult`](parameters.md) |
+| `session.parameter_results` | `preprocess_eit`/`postprocess_emg`/`compute_breath_timing_parameters` | [`ParameterResult`](parameters.md) |
 | `session.quality` | `preprocess_eit`/`postprocess_emg` | [`QualityFlag`](quality.md) |
 | `session.linked_breaths` | `session.link_breaths()` | [`LinkedBreath`](synchronization.md) |
+| `session.start_times` | `synchronize_raw_modalities`, the `slice_*` methods | each recording's start time on the shared clock, in seconds; see [synchronization.md](synchronization.md) |
+| `session.sync_methods` | `synchronize_raw_modalities`, `synchronize_multimodal_breaths`, `skip_synchronization` | how each recording was synchronized (`"manual"`, `"none"`); see [synchronization.md](synchronization.md) |
 | `session.provenance` | every instrumented session method | [`ProvenanceRecord`](provenance.md) |
 | `session.processing_history` | every step run through `m3resp.workflows` | [`ProcessingStep`](provenance.md) |
 | `session.datamodel` | opt-in: `session.datamodel = DataModelRecorder(session)` | Layer 2 entities, see [provenance.md](provenance.md) |
@@ -92,8 +96,7 @@ ventilator path is already where Stage 3 is taking the other two.
 and low-passes each channel (20 Hz by default, clamped below Nyquist; pass
 `lowpass_hz=None` to disable). The unfiltered arrays stay available under
 `"raw"`, mirroring how the EMG bundle keeps `raw_channel` alongside `filtered`
-and `envelope`. The cutoff is a conservative anti-noise default rather than a
-clinical parameter: respiratory content sits below roughly 5 Hz, so 20 Hz
+and `envelope`. The cutoff removes noise: respiratory content sits below roughly 5 Hz, so 20 Hz
 leaves breath morphology - including the sharp pressure upstroke that Pocc
 quality assessment measures - untouched.
 
@@ -133,7 +136,10 @@ as before.
 | `preprocess_eit(variant=None, **kwargs)` | Filter/derive EIT signals; populates `signals`/`parameter_results`/`quality`. |
 | `preprocess_emg(variant=None, **kwargs)` | Filter/derive EMG signals; populates `signals`. |
 | `preprocess_ventilator(variant=None, **kwargs)` | Split and filter ventilator pressure/flow/volume; populates `signals`. |
-| `synchronize_raw_modalities(...)` | Align raw signals across modalities before processing. |
+| `slice_ventilator(start_seconds, end_seconds=None)` | Keep only a time window of every standalone ventilator recording (loaded with `source="ventilator"`); run before `preprocess_ventilator`. |
+| `slice_eit(start_seconds, end_seconds=None)` | Keep only a time window of the loaded EIT recording (and any ventilator data from the same file); run before `preprocess_eit`. |
+| `synchronize_raw_modalities(...)` | Set each recording's start time on a shared clock (`session.start_times`); no samples are removed. |
+| `skip_synchronization()` | Use the recordings as they are, taken to have started together; records `"none"` so steps that compare recordings do not warn. |
 | `detect_eit_breaths(variant=None, **kwargs)` | Detect EIT breaths -> `session.events["eit_breaths"]`. |
 | `detect_emg_breaths(variant=None, **kwargs)` | Detect EMG breaths -> `session.events["emg_breaths"]`. |
 | `detect_ventilator_breaths(variant=None, **kwargs)` | Detect ventilator breaths -> `session.events["ventilator_breaths"]`. |
@@ -141,8 +147,8 @@ as before.
 | `postprocess_emg(**kwargs)` | Compute EMG features/quality; populates `parameter_results`/`quality`. |
 | `synchronize_multimodal_breaths(method="manual_offset", offset_seconds=..., reference_modality=...)` | Shift already-detected event lists onto a common time axis. |
 | `link_breaths(time_tolerance=0.5)` | Match breaths across modalities into [`LinkedBreath`](synchronization.md) objects. |
-| `compute_multimodal_parameters(...)` | Compute timing-delay/duration-difference/event-agreement [`ParameterResult`](parameters.md)s from `session.linked_breaths`. |
-| `run_pipeline(name, config=...)` | Run a built-in `"eit"`/`"emg"`/`"multimodal"` preset - see [pipeline-contracts.md](../developer/pipeline-contracts.md). |
+| `compute_breath_timing_parameters(...)` | Compute timing-delay/duration-difference/event-agreement [`ParameterResult`](parameters.md)s from `session.linked_breaths`. |
+| `run_preset(name, config=...)` | Run a built-in `"eit"`/`"emg"`/`"multimodal"` preset - see [preset-contracts.md](../developer/preset-contracts.md). |
 | `export_summary(output_dir)` | Write the structured export - see [export-results tutorial](../tutorials/export-results.md). |
 
 ## See also

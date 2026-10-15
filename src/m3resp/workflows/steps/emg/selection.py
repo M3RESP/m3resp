@@ -8,6 +8,7 @@ import numpy as np
 
 from m3resp.core.session import M3Session
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
+from m3resp.workflows.steps._per_breath import extremum_sample_index
 
 from ._shared import _SESSION_ARTIFACT, _record_step, _upstream_metadata
 
@@ -95,6 +96,44 @@ def remove_invalid_breaths(
     area_under_baseline: Any = None,
     flag_names: Any = ("start_end_validity",),
 ) -> dict[str, Any]:
+    """Remove EMG breaths that do not pass the selected quality checks.
+
+    Checks are matched by turning-point sample position. For each check and
+    sample, the latest flag in session.quality is used. A breath is removed
+    if any selected check failed; breaths a check did not assess are kept.
+    Reading older ``peak_sample_index`` metadata emits a UserWarning.
+    Records the selection settings in the session's processing history.
+
+    Args:
+        session: Session holding per-breath EMG quality flags.
+        peak_indices: EMG envelope peak positions, one per breath.
+        start_indices: Optional onset positions, in the same breath order.
+        end_indices: Optional offset positions, in the same breath order.
+        time_to_peak: Optional pair of per-breath arrays, in seconds and percent.
+        pseudo_slope: Optional per-breath pseudo-slopes, in envelope units
+            per sample.
+        amplitude: Optional per-breath amplitudes, in envelope units.
+        time_product: Optional per-breath integrals, in envelope units times seconds.
+        area_under_baseline: Optional pair of per-breath arrays containing
+            areas in envelope units times seconds and reference signal
+            nadir values in envelope units.
+        flag_names: Names of the quality checks used to decide which breaths
+            to keep; must contain at least one name.
+
+    Returns:
+        dict[str, Any]: A ``valid_breaths`` mapping containing original zero-based
+            ``breath_numbers``, kept peak/start/end indices, kept feature arrays
+            and flag names. Missing start/end arrays remain None. Each removed
+            breath is listed with its original number, ``extremum_sample_index``
+            and failed flag names. Supplied arrays and session events are
+            preserved.
+
+    Raises:
+        ValueError: If flag_names is empty, a selected EMG check is missing or
+            has a flag without a turning-point sample, or a supplied array has
+            a different number of rows from peak_indices.
+    """
+
     peaks = np.asarray(peak_indices, dtype=int)
     names = [str(name) for name in flag_names]
     if not names:
@@ -128,7 +167,7 @@ def remove_invalid_breaths(
         "removed": [
             {
                 "breath_number": int(position),
-                "peak_sample_index": int(peaks[position]),
+                "extremum_sample_index": int(peaks[position]),
                 "failed_flags": failed_flags[position],
             }
             for position in np.flatnonzero(~keep)
@@ -152,13 +191,13 @@ def remove_invalid_breaths(
 def _failed_flags_per_breath(
     session: M3Session, peaks: np.ndarray, names: list[str]
 ) -> list[list[str]]:
-    """For each breath, the names of the chosen flags it failed.
+    """Return the selected failed check names for each breath in input order.
 
-    Flags are matched to breaths by the peak sample they were computed for,
-    not by their position, because some checks (e.g. event timing) only
-    cover the breaths that could be paired with another signal. A breath
-    without a flag of a given name was not tested by that check and is kept.
-    When a check was run more than once, its most recent result counts.
+    Match EMG flags by ``extremum_sample_index``, reading the older
+    ``peak_sample_index`` with a UserWarning when needed. The latest flag for
+    each check and sample is used. Breaths missing a check's flag are kept.
+    Raises ValueError if a selected check is missing or has a flag without
+    a turning-point sample.
     """
 
     position_of_peak = {int(peak): position for position, peak in enumerate(peaks)}
@@ -168,7 +207,7 @@ def _failed_flags_per_breath(
         for flag in session.quality:
             if flag.name != name or flag.modality != "emg":
                 continue
-            peak = flag.metadata.get("peak_sample_index")
+            peak = extremum_sample_index(flag.metadata)
             if peak is None:
                 raise ValueError(
                     f"Quality flag '{name}' is not a per-breath flag, so it "

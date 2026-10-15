@@ -1,10 +1,10 @@
-"""Registered EIT pipeline steps.
+"""Registered EIT workflow steps.
 
 Each step wraps a single ``eitprocessing`` operation. Upstream imports are
 deferred to call time so the package installs without the optional
 ``eitprocessing`` dependency.
 
-This package mirrors the former single ``eit.py`` module, split by pipeline
+This package mirrors the former single ``eit.py`` module, split by workflow
 stage for readability. Importing it registers every step below (each
 submodule's ``@register_step`` decorators run on import), and every public
 step function is re-exported here so ``from m3resp.workflows.steps.eit
@@ -30,7 +30,7 @@ from .signals import (
     global_impedance,
     normalize_breaths,
 )
-from .slicing import slice_signal
+from .slicing import slice_recording, slice_signal
 
 __all__ = [
     "_ALLOWED_PIXEL_BREATH_PHASE_MODES",
@@ -49,5 +49,6 @@ __all__ = [
     "roi_filter_by_size",
     "roi_tiv_lungspace",
     "roi_watershed",
+    "slice_recording",
     "slice_signal",
 ]

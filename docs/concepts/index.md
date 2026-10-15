@@ -11,7 +11,10 @@ session
 signals
 events-and-breaths
 parameters
+pixel-maps
 quality
 synchronization
+synchronization-overview
+slicing
 provenance
 ```

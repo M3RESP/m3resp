@@ -1,4 +1,4 @@
-"""Utility helpers used by pipeline steps and the engine."""
+"""Utility helpers used by workflow steps and the engine."""
 
 from __future__ import annotations
 
@@ -6,29 +6,33 @@ import json
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from loguru import logger
+
+# The signal-cutting helpers moved to `m3resp.processing.slicing`; they stay
+# importable from here so existing imports keep working.
+from m3resp.processing.slicing import (  # noqa: F401
+    slice_by_index,
+    slice_by_time,
+    slice_signal_by_mode,
+)
 
 
 def resolve_output_dir(
     base_dir: str | Path, *, timestamped: bool, timestamp: str | None = None
 ) -> Path:
-    """Resolve ``outputs.dir`` into a concrete directory, honoring ``timestamped``.
+    """Return the shared output path, optionally with a timestamp subdirectory.
 
-    This is the one place a "run's output directory" should be computed.
-    ``run_spec`` calls it once per run and seeds the result into the pipeline
-    context under the ``_resolved_output_dir`` key (with the raw stamp under
-    ``_run_timestamp``), so every export step in that run - built-in or
-    custom - lands in the same folder instead of each one minting its own
-    ``datetime.now()`` a few steps apart. A custom export step can opt into
-    this by reading ``_resolved_output_dir`` from context, e.g.::
+    Args:
+        base_dir: Base output path.
+        timestamped: Append a timestamp subdirectory when True.
+        timestamp: Subdirectory name; an unset or empty value uses the current
+            local time in YYYYMMDD_HHMMSS format when timestamped is True.
 
-        @register_step(
-            "export.my_thing",
-            reads={"output_dir": "_resolved_output_dir", ...},
-            ...,
-        )
+    Returns:
+        Path: Base path with the optional timestamp appended. run_spec supplies
+            this path as ``_resolved_output_dir`` for export steps to share.
     """
 
     output_dir = Path(base_dir)
@@ -41,30 +45,6 @@ def default_run_timestamp() -> str:
     """The default timestamp format used for timestamped output directories."""
 
     return datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
-
-
-def slice_by_index(data: Any, *, start: int, end: int) -> Any:
-    return data[slice(start, end)]
-
-
-def slice_by_time(data: Any, *, start: float, end: float) -> Any:
-    return data.t[slice(start, end)]
-
-
-def slice_signal_by_mode(
-    data: Any,
-    *,
-    start: float,
-    end: float,
-    slicing_mode: Literal["index", "time"],
-) -> Any:
-    """Slice a signal by sample index or time selector."""
-
-    if slicing_mode == "index":
-        return slice_by_index(data, start=int(start), end=int(end))
-    if slicing_mode == "time":
-        return slice_by_time(data, start=float(start), end=float(end))
-    raise ValueError("slicing_mode must be 'index' or 'time'.")
 
 
 def subject_result_filename(
