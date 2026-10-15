@@ -67,9 +67,9 @@ settings are mutually exclusive and raise `TypeError` when combined.
   [Workflows](../workflows.md).
   Most of these steps take a `session` binding and populate the typed
   collections and record provenance through the same `M3Session._record()`
-  session method the presets use (see `_record_step` in each modality's
-  `_shared.py`) - `eit.roi_amplitude_lungspace`, `emg.ecg_gating`, and so on
-  all do this. The exception is the small set of pure per-breath feature
+  session method the presets use (steps registered with
+  `register_step(..., record=True)`) - `eit.roi_amplitude_lungspace`,
+  `emg.ecg_gating`, and so on all do this. The exception is the small set of pure per-breath feature
   steps (e.g. `emg.time_to_peak`, `emg.amplitude`) that operate on
   extracted arrays and return calculated values. Use this for custom or
   batch workflows where the sequence of operations varies per project.

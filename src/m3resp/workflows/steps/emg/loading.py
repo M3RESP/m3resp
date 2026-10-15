@@ -15,7 +15,6 @@ from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _record_step,
     _upstream_metadata,
 )
 
@@ -67,6 +66,7 @@ from ._shared import (
             description="Native Signal per raw EMG channel.",
         ),
     ),
+    record=True,
 )
 def load(
     session: M3Session,
@@ -112,16 +112,15 @@ def load(
             session.signals.add(signal)
             raw_emg_signals.append(signal)
 
-    _record_step(
-        session,
-        "emg.load",
-        metadata=_upstream_metadata(
+    return {
+        "emg_recording": recording,
+        "raw_emg_signals": raw_emg_signals,
+        "_provenance": _upstream_metadata(
             source_function="resurfemg.data_connector.converter_functions.load_file",
             operation="emg.load",
             parameters={"loader_options": dict(loader_options or {})},
         ),
-    )
-    return {"emg_recording": recording, "raw_emg_signals": raw_emg_signals}
+    }
 
 
 @register_step(

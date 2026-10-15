@@ -662,3 +662,30 @@ def reuse_matching_breaths(
         by_times.get((breath.modality, breath.start_time, breath.end_time), breath)
         for breath in breaths
     ]
+
+
+def check_breath_scope(
+    breath_id: str | None, breath_ids: list[str] | None, owner: str
+) -> None:
+    """Check that a result names either one breath or a list of breaths.
+
+    Args:
+        breath_id: Identifier of the single breath, or None.
+        breath_ids: Identifiers of several breaths, or None.
+        owner: Class name used in the error message.
+
+    Raises:
+        ValueError: If both are set, or if ``breath_ids`` is an empty list.
+    """
+
+    if breath_id is not None and breath_ids is not None:
+        raise ValueError(
+            f"{owner} got both breath_id={breath_id!r} and "
+            f"breath_ids={breath_ids!r}; set breath_id for one breath or "
+            "breath_ids for several breaths."
+        )
+    if breath_ids is not None and len(breath_ids) == 0:
+        raise ValueError(
+            f"{owner}.breath_ids is an empty list; leave it as None when the "
+            "result covers no specific breaths."
+        )

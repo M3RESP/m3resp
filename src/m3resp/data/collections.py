@@ -9,7 +9,7 @@ Events and breaths are kept in `session.events` (see
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from typing import Any
 
 from m3resp.data.categories import normalize_category
@@ -131,7 +131,7 @@ class QualityReport:
         return [flag for flag in self.items if flag.signal_name == signal_name]
 
     def to_rows(self) -> list[dict[str, Any]]:
-        return [asdict(flag) for flag in self.items]
+        return [flag.to_dict() for flag in self.items]
 
     def __iter__(self) -> Iterator[QualityFlag]:
         return iter(self.items)

@@ -121,6 +121,29 @@ def test_validate_store_flags_a_dangling_quality_annotation():
     )
 
 
+def test_validate_store_flags_a_quality_annotation_that_ends_before_it_starts():
+    store = DataModelStore()
+    session = store.add_session(
+        RecordingSession(case_id=store.add_case(Case()).case_id)
+    )
+    annotation = store.add_quality_annotation(
+        QualityAnnotation(
+            target_type="session",
+            target_id=session.session_id,
+            time_window_start=5.0,
+            time_window_end=2.0,
+            quality_label="suspect",
+        )
+    )
+
+    problems = validate_store(store)
+
+    assert any(
+        annotation.quality_annotation_id in problem and "negative-duration" in problem
+        for problem in problems
+    )
+
+
 def test_store_builds_case_session_stream_file_run_feature_chain():
     store = DataModelStore()
 

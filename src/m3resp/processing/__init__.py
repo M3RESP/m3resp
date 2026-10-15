@@ -14,6 +14,7 @@ from m3resp.processing.filters import (
     lowpass_filter,
     notch_filter,
 )
+from m3resp.processing.interpolation import interpolate_to_time
 from m3resp.processing.intervals import (
     baseline_crossings,
     onoff_from_baseline_crossings,
@@ -89,6 +90,7 @@ __all__ = [
     "fraction_flag",
     "harmonic_notch_filter",
     "highpass_filter",
+    "interpolate_to_time",
     "lowpass_filter",
     "merge_close_peaks",
     "moving_average",

@@ -46,6 +46,7 @@ internal and may change without notice.
    m3resp.TimeSeries
    m3resp.Signal
    m3resp.SignalCollection
+   m3resp.interpolate_to_time
    m3resp.ParameterResult
    m3resp.ParameterResultCollection
    m3resp.QualityFlag
@@ -81,7 +82,6 @@ internal and may change without notice.
    m3resp.event_to_dict
    m3resp.compute_offsets_from_timestamps
    m3resp.link_breaths_by_time
-   m3resp.resample_signal
 ```
 
 ## Persisted data model

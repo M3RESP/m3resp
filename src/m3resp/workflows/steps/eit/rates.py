@@ -16,7 +16,6 @@ from m3resp.workflows.registry import (
 from ._shared import (
     _EITPROCESSING,
     _SESSION_ARTIFACT,
-    _record_step,
     _upstream_metadata,
 )
 
@@ -115,6 +114,7 @@ from ._shared import (
             description="Native ParameterResult for the heart rate.",
         ),
     ),
+    record=True,
 )
 def detect_rates(
     signal: Any,
@@ -187,7 +187,6 @@ def detect_rates(
     session.parameter_results.add(respiratory_rate_result)
     session.parameter_results.add(heart_rate_result)
 
-    _record_step(session, "eit.detect_rates", metadata=metadata)
     return {
         "respiratory_rate_hz": respiratory_rate_hz,
         "heart_rate_hz": heart_rate_hz,
@@ -195,4 +194,5 @@ def detect_rates(
         "rate_captures": rates["rate_captures"],
         "respiratory_rate_result": respiratory_rate_result,
         "heart_rate_result": heart_rate_result,
+        "_provenance": metadata,
     }

@@ -25,7 +25,6 @@ from m3resp.workflows.registry import (
 from ._shared import (
     _EITPROCESSING,
     _SESSION_ARTIFACT,
-    _record_step,
     _upstream_metadata,
 )
 
@@ -101,6 +100,7 @@ from ._shared import (
             description="Native Signal wrapping the filtered pixel impedance.",
         ),
     ),
+    record=True,
 )
 def mdn_filter(
     signal: Any,
@@ -148,11 +148,11 @@ def mdn_filter(
     )
     session.signals.add(filtered_eit_signal)
 
-    _record_step(session, "eit.mdn_filter", metadata=metadata)
     return {
         "filtered_eit": filtered_eit,
         "filter_captures": filter_captures,
         "filtered_eit_signal": filtered_eit_signal,
+        "_provenance": metadata,
     }
 
 
@@ -243,6 +243,7 @@ def mdn_filter(
             description="Native Signal wrapping the filtered pixel impedance.",
         ),
     ),
+    record=True,
 )
 def butterworth_filter(
     signal: Any,
@@ -340,9 +341,9 @@ def butterworth_filter(
     )
     session.signals.add(filtered_eit_signal)
 
-    _record_step(session, "eit.butterworth_filter", metadata=metadata)
     return {
         "filtered_eit": filtered_eit,
         "filter_captures": captures,
         "filtered_eit_signal": filtered_eit_signal,
+        "_provenance": metadata,
     }

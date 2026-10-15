@@ -108,6 +108,13 @@ def _check_time_windows(store: DataModelStore) -> list[str]:
             problems.append(
                 f"ClinicalEvent {event.event_id!r} has a negative-duration time window"
             )
+    for annotation in store.quality_annotations.values():
+        start, end = annotation.time_window_start, annotation.time_window_end
+        if start is not None and end is not None and end < start:
+            problems.append(
+                f"QualityAnnotation {annotation.quality_annotation_id!r} has a "
+                "negative-duration time window"
+            )
     return problems
 
 
