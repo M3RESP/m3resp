@@ -1,182 +1,157 @@
-# M3Resp <!-- omit in toc -->
+# M3Resp: multimodal respiratory signal analysis
 
-## Introduction
+| | |
+| --- | --- |
+| Testing | [![Tests](https://github.com/M3RESP/m3resp/actions/workflows/tests.yml/badge.svg)](https://github.com/M3RESP/m3resp/actions/workflows/tests.yml) [![Lint](https://github.com/M3RESP/m3resp/actions/workflows/lint.yml/badge.svg)](https://github.com/M3RESP/m3resp/actions/workflows/lint.yml) [![Documentation](https://github.com/M3RESP/m3resp/actions/workflows/docs.yml/badge.svg)](https://github.com/M3RESP/m3resp/actions/workflows/docs.yml) |
+| Package | ![Python 3.12, 3.13, 3.14](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue.svg) [![Apache-2.0 license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE) |
+| Meta | [![Citation](https://img.shields.io/badge/citation-CITATION.cff-blue)](CITATION.cff) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) |
 
-M3Resp provides reproducible workflows for processing multimodal respiratory recordings. It brings together electrical impedance tomography (EIT), respiratory electromyography (EMG), and ventilator signals through one scientist-friendly interface.
+M3Resp is a Python package for the analysis of respiratory recordings from three modalities: electrical impedance tomography (EIT), electromyography of the respiratory muscles (EMG) and ventilator signals (airway pressure, flow and volume). It puts the recordings on one shared clock, processes each modality, finds the breaths, and matches each breath across the modalities. Each analysis is a workflow file that lists every step and every setting. You can run the same file again and get the same results.
 
-M3Resp is an integration layer on top of [`eitprocessing`](https://github.com/M3RESP/eitprocessing) and [`resurfemg`](https://github.com/M3RESP/ReSurfEMG). The modality packages remain independent: their code is not copied into M3Resp, and they can still be installed and used directly. M3Resp adds shared data structures, cross-modality synchronization, reproducible YAML/JSON workflows, quality and provenance records, and structured exports.
+- Documentation: [docs/](docs/index.md)
+- Source code: https://github.com/M3RESP/m3resp
+- Bug reports and questions: https://github.com/M3RESP/m3resp/issues
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Citation: [CITATION.cff](CITATION.cff)
 
-| Badges | |
-| :-- | :-- |
-| Repository | [![GitHub repository](https://img.shields.io/badge/github-repo-blue?logo=github)](https://github.com/M3RESP/m3resp) |
-| License | [![Apache-2.0 license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE) |
-| Citation | [![CITATION.cff](https://img.shields.io/badge/citation-CITATION.cff-blue)](CITATION.cff) |
-| GitHub Actions | [![Tests](https://github.com/M3RESP/m3resp/actions/workflows/tests.yml/badge.svg)](https://github.com/M3RESP/m3resp/actions/workflows/tests.yml) [![Lint](https://github.com/M3RESP/m3resp/actions/workflows/lint.yml/badge.svg)](https://github.com/M3RESP/m3resp/actions/workflows/lint.yml) [![Documentation](https://github.com/M3RESP/m3resp/actions/workflows/docs.yml/badge.svg)](https://github.com/M3RESP/m3resp/actions/workflows/docs.yml) |
-| Python support | ![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg) ![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg) |
-| Linting | [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) |
+## Main features
 
-## Contents <!-- omit in toc -->
+- One `M3Session` object that holds the recordings, signals, breaths, parameters, quality flags and processing history of one analysis.
+- Loaders for EIT files (for example Dräger `.bin`), EMG files (`.Poly5` and Biopac `.txt`) and ventilator files.
+- EMG processing: filters, ECG removal, envelope, baseline and breath detection.
+- EIT processing: filters, global impedance, breath detection, tidal impedance variation (TIV), end-expiratory lung impedance (EELI) and pixel maps.
+- Ventilator processing: breath detection and occlusion manoeuvres (Pocc).
+- Synchronization of recordings with an offset that you enter, and matching of breaths across modalities.
+- Workflows in YAML or JSON, with a command-line tool to list the steps and run a workflow.
+- Three presets for a fast start: EIT only, EMG only and multimodal.
+- Export of breaths, parameters, quality flags and figures to CSV, JSON and PNG files, with a record of each processing step.
 
-- [Introduction](#introduction)
-- [Installation](#installation)
-  - [Install from source](#install-from-source)
-  - [Optional modality support](#optional-modality-support)
-  - [Developer install](#developer-install)
-- [Quick start](#quick-start)
-  - [Command-line workflows](#command-line-workflows)
-  - [Python API](#python-api)
-- [What M3Resp provides](#what-m3resp-provides)
-- [Documentation](#documentation)
-- [Contributing](#contributing)
-- [Citation](#citation)
-- [Package relationships](#package-relationships)
+## Quick example
 
-## Installation
-
-We recommend installing M3Resp in a dedicated virtual environment. See the Python Packaging Authority's guide to [installing packages with `venv`](https://packaging.python.org/en/latest/guides installing-using-pip-and-virtual-environments/) or the conda documentation on [getting started](https://docs.conda.io/projects/conda/en/stable/user-guide/getting-started.html).
-
-M3Resp is not yet published on PyPI. Install it from the repository as described below.
-
-### Install from source
-
-The base package supports ventilator data, the shared data model, and the workflow engine:
-
-```bash
-git clone https://github.com/M3RESP/m3resp.git
-cd m3resp
-python -m pip install -e .  # or `uv sync`
-```
-
-### Optional modality support
-
-Install only the integrations needed for your recordings:
-
-```bash
-python -m pip install -e ".[eit]"  # or `uv sync --extra eit`, add eitprocessing
-python -m pip install -e ".[emg]"  # or `uv synx --extra emg`, add resurfemg
-python -m pip install -e ".[all]"  # or `uv synx --extra all`, add both modalities
-```
-
-The modality extras currently use the M3Resp integration branches of the upstream packages. See [pyproject.toml](pyproject.toml) for the exact versions.
-
-### Developer install
-
-For tests, linting, formatting, and type checking:
-
-```bash
-git clone https://github.com/M3RESP/m3resp.git
-cd m3resp
-python -m pip install -e ".[all,dev]"  # or `uv sync --extra all --extra dev`
-pre-commit install
-```
-
-## Quick start
-
-### Command-line workflows
-
-M3Resp workflows are described in YAML or JSON. List the available processing steps and run a workflow with:
-
-```bash
-m3resp steps
-m3resp run path/to/workflow.yaml
-```
-
-For example, the multimodal workflow included in this repository loads EIT, EMG, and ventilator signals, synchronizes them, processes each modality, and exports session summaries:
+The repository has synthetic EIT, EMG and ventilator recordings in `tests/data`. This command runs a full multimodal workflow on them:
 
 ```bash
 m3resp run examples/multimodal_example/multimodal.workflow.yaml
 ```
 
-Paths in `outputs.dir` are resolved relative to the workflow file. Input files, sampling rates, synchronization choices, and all other scientific settings remain explicit in the workflow.
+The workflow loads the three recordings and synchronizes them. Then it finds the breaths in each modality and calculates the parameters. The results go to a new folder in `output/multimodal-summary/`, with one CSV file for each breath list, a `parameters.csv` file, a `summary.json` file and figures.
 
-### Python API
-
-The same workflow can be run from Python:
-
-```python
-from m3resp import run_spec
-
-result = run_spec("examples/multimodal_example/multimodal.workflow.yaml")
-print(result.outputs)
-```
-
-For interactive or lower-level use, work with an `M3Session`:
+You can do the same analysis step by step in Python:
 
 ```python
 import os
 
 from m3resp import M3Session
 
-session = M3Session()
-session.load_eit(os.path.join("path", "to", "eit_file"), vendor="sentec")
-session.load_emg(os.path.join("path", "to", "emg_file"))
+data = os.path.join("tests", "data")
 
-session.synchronize_raw_modalities(
-    method="manual_offset",
-    offset_seconds={"eit": 0.0, "emg": 2.0},
-    reference_modality="eit",
-)
+session = M3Session()
+session.load_eit(os.path.join(data, "m3resp_multimodal_1_eit_draeger.bin"), vendor="draeger")
+session.load_emg(os.path.join(data, "m3resp_multimodal_1_emg.Poly5"))
+
+# The EMG recording started 2 s before the EIT recording.
+session.synchronize_raw_modalities(offset_seconds={"emg": -2.0})
+
 session.preprocess_eit()
-session.preprocess_emg()
+session.preprocess_emg(channel=1)
 session.detect_eit_breaths()
 session.detect_emg_breaths()
-session.export_summary(os.path.join("path", "to", "results"))
+session.export_summary(os.path.join("output", "my-first-analysis"))
 ```
 
-## What M3Resp provides
+To see all workflow steps, run `m3resp steps`.
 
-- A common `M3Session` interface for loading, processing, and exporting
-  multimodal respiratory recordings.
-- Thin adapters around `eitprocessing` and `resurfemg`, with regression tests
-  that check numerical agreement with the upstream packages.
-- Shared, validated representations of signals, parameters, breaths, quality
-  flags, and processing history.
-- Manual-offset and timestamp-derived synchronization, signal resampling, and
-  breath matching across modalities.
-- Reproducible YAML/JSON workflows, a command-line interface, and named
-  EIT-only, EMG-only, and multimodal presets.
-- CSV, JSON, figure, and full-session structured exports with provenance.
+## Installation
+
+M3Resp is not on PyPI yet. Install it from this repository, in a new virtual environment (see the guides for [venv](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) or [conda](https://docs.conda.io/projects/conda/en/stable/user-guide/getting-started.html)).
+
+The example recordings in `tests/data` are stored with [Git LFS](https://git-lfs.com). Install `git-lfs` and run `git lfs install` once, before you clone the repository.
+
+```bash
+git clone https://github.com/M3RESP/m3resp.git
+cd m3resp
+python -m pip install -e ".[all]"    # or: uv sync --extra all
+```
+
+The `[all]` option installs the EIT and EMG packages. To install only the part that you need, use one of these options:
+
+| Command | Adds | Use it for |
+| --- | --- | --- |
+| `python -m pip install -e .` | nothing | the data objects, workflows, synchronization, export, and ventilator data in Biopac `.txt` files |
+| `python -m pip install -e ".[eit]"` | `eitprocessing` | EIT recordings, and the ventilator data in EIT `.bin` files |
+| `python -m pip install -e ".[emg]"` | `resurfemg` | EMG processing, and EMG or ventilator recordings in `.Poly5` files |
+| `python -m pip install -e ".[all]"` | both | all of the above |
+
+### Development version
+
+To change the code or run the tests, install the development tools too:
+
+```bash
+python -m pip install -e ".[all,dev]"    # or: uv sync --extra all --extra dev
+pre-commit install
+```
+
+## Dependencies
+
+M3Resp needs Python 3.12 or newer. The tests run on Python 3.12, 3.13 and 3.14.
+
+The base package needs:
+
+- [NumPy](https://numpy.org)
+- [SciPy](https://scipy.org)
+- [pandas](https://pandas.pydata.org)
+- [pydantic](https://docs.pydantic.dev) 2 or newer
+- [PyYAML](https://pyyaml.org)
+- [loguru](https://github.com/Delgan/loguru)
+
+The EIT and EMG options also need:
+
+- [eitprocessing](https://github.com/M3RESP/eitprocessing), for EIT
+- [ReSurfEMG](https://github.com/M3RESP/ReSurfEMG), for EMG
+
+The options install both packages from their `m3resp-integration` branch. [pyproject.toml](pyproject.toml) gives the exact sources.
 
 ## Documentation
 
-The [M3Resp documentation](docs/index.md) contains:
+The documentation is in the [docs](docs/index.md) folder:
 
-- [getting-started instructions](docs/getting-started.md);
-- [EIT, EMG, multimodal, and export tutorials](docs/tutorials/index.md);
-- [scientific concept guides](docs/concepts/index.md);
-- the [workflow specification and built-in steps](docs/workflows.md);
-- the [public Python API](docs/api/index.md); and
-- [migration guidance](docs/migration.md) for existing `eitprocessing` and
-  `resurfemg` users.
+- [Getting started](docs/getting-started.md): installation and a first workflow.
+- [Tutorials](docs/tutorials/index.md): EIT only, EMG only, multimodal analysis and export of results.
+- [Concepts](docs/concepts/index.md): the scientific data objects, their units and time axes, and a [glossary](docs/concepts/glossary.md).
+- [Workflows](docs/workflows.md): the workflow file format and the list of steps.
+- [API reference](docs/api/index.md): the Python functions and classes.
+- [Migration guide](docs/migration.md): how to move from `eitprocessing` or `resurfemg` code to M3Resp.
 
-The documentation website is configured for Read the Docs. Its hosted address will be added here when the project is published.
+## Relation to eitprocessing and ReSurfEMG
+
+M3Resp is part of the M3RESP project, together with two packages for one modality each:
+
+```text
+M3RESP/
+├── eitprocessing   EIT methods
+├── ReSurfEMG       respiratory EMG methods
+└── m3resp          synchronization, multimodal analysis and workflows
+```
+
+M3Resp uses `eitprocessing` for EIT and `resurfemg` for EMG. Both packages are independent: you can install and use them without M3Resp. Some processing functions in M3Resp come from ReSurfEMG code; [NOTICE.md](NOTICE.md) lists them.
+
+New methods for one modality go into `eitprocessing` or `resurfemg`. Synchronization, the shared data objects, workflows and export go into M3Resp.
 
 ## Contributing
 
-Contributions, questions, and suggestions are welcome. Please read the
-[contribution guidelines](CONTRIBUTING.md) and
-[Code of Conduct](CODE_OF_CONDUCT.md) before contributing.
+We welcome contributions, questions and suggestions. Read the [contribution guide](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) before you start.
 
-Run the local checks with:
+To run the tests and the code checks:
 
 ```bash
 pytest
 pre-commit run --all-files
 ```
 
-Changes to modality-specific scientific processing generally belong in `eitprocessing` or `resurfemg`; synchronization, shared data, workflow, and export changes belong in M3Resp. The contribution guide explains this boundary in more detail.
-
 ## Citation
 
-If you use M3Resp in research, please cite the software using [CITATION.cff](CITATION.cff). Also cite the underlying modality packages used in your workflow.
+If you use M3Resp in your research, cite the software with the data in [CITATION.cff](CITATION.cff). Also cite `eitprocessing` and `resurfemg` if your analysis uses EIT or EMG.
 
-## Package relationships
+## License
 
-```text
-M3RESP/
-├── eitprocessing   EIT processing algorithms
-├── ReSurfEMG       Respiratory EMG algorithms
-└── m3resp          Multimodal integration and workflow layer
-```
-
-`eitprocessing` and `resurfemg` do not depend on `m3resp`.
+M3Resp is released under the [Apache License 2.0](LICENSE). [NOTICE.md](NOTICE.md) lists the third-party code in M3Resp and its licenses.
