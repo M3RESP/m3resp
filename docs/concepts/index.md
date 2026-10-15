@@ -1,8 +1,6 @@
 # Concepts
 
-These guides explain the scientific objects that move between M3Resp workflow
-steps, including their units, time axes, labels, quality information, and
-provenance.
+These pages explain the scientific objects of M3Resp: what each object holds, its units and time axis, and where it comes from. Each page has short examples.
 
 ```{toctree}
 :maxdepth: 1

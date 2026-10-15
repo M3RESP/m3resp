@@ -38,7 +38,7 @@ Explore tutorials
 ::::::{div} m3-hero-visual
 ```{image} _static/m3-signal-monitor.svg
 :alt: Schematic of three respiratory signals on one shared time axis. EIT global impedance, respiratory muscle EMG and ventilator airway pressure each show four breaths, and dashed lines mark the start of each breath in all three signals.
-:class: m3-monitor
+:class: m3-monitor dark-light
 ```
 ::::::
 
@@ -137,7 +137,7 @@ Calculate breath parameters and write the results to files.
 
 ## Choose your path
 
-Start with a guided workflow or go directly to the workflow and API references.
+Start with the installation, a tutorial or the workflow reference.
 
 ::::{grid} 1 2 3 3
 :gutter: 3
@@ -148,7 +148,7 @@ Start with a guided workflow or go directly to the workflow and API references.
 :link-type: doc
 :class-card: m3-path-card
 
-Install the package, understand optional modality integrations, and run your first workflow.
+Install M3Resp and its EIT and EMG packages, and run your first workflow.
 
 **Start here →**
 :::
@@ -158,7 +158,7 @@ Install the package, understand optional modality integrations, and run your fir
 :link-type: doc
 :class-card: m3-path-card
 
-Follow focused EIT, EMG, multimodal, and result-export walkthroughs.
+Follow a complete EIT, EMG or multimodal analysis of the synthetic recordings.
 
 **View tutorials →**
 :::
@@ -168,17 +168,29 @@ Follow focused EIT, EMG, multimodal, and result-export walkthroughs.
 :link-type: doc
 :class-card: m3-path-card
 
-Define reproducible workflows in YAML, inspect available steps, and validate inputs before processing.
+Write a workflow file, list the processing steps and check the file before a run.
 
 **Workflow reference →**
 :::
 ::::
 
+## How these pages are organized
+
+- {doc}`Tutorials <tutorials/index>` take you step by step through one complete analysis. Start here if you are new to M3Resp.
+- {doc}`How-to guides <how-to/index>` show how to do one task, for example to change the EMG filter or to export the results.
+- {doc}`Concepts <concepts/index>` explain what each scientific object is and why M3Resp works the way it does.
+- The {doc}`workflow reference <workflows>` and the {doc}`API reference <api/index>` describe each workflow step and each Python function and class.
+
+## Help and citation
+
+- {doc}`get-help` shows how to read an error message and where to ask a question or report a problem.
+- {doc}`cite` gives the citation data of M3Resp and of the EIT and EMG packages.
+
 ::::::{div} m3-next-step
 :::::{div} m3-next-copy
 ### From first recording to structured results
 
-Use the tutorials for complete workflows, the concept guides to understand each scientific object, and the public API when you use M3Resp inside your own analysis software.
+The concept guides explain each scientific object. Use the public API to call M3Resp from your own analysis code.
 
 ::::{div} m3-next-actions
 :::{button-ref} concepts/index
@@ -224,6 +236,7 @@ m3resp run examples/multimodal_example/multimodal.workflow.yaml
 
 getting-started
 tutorials/index
+how-to/index
 concepts/index
 workflows
 ```
@@ -233,8 +246,16 @@ workflows
 :maxdepth: 2
 :caption: Reference
 
-migration
 api/index
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 2
+:caption: Help
+
+get-help
+cite
 ```
 
 ```{toctree}
@@ -243,5 +264,4 @@ api/index
 :caption: Contributing
 
 developer/index
-project-history
 ```

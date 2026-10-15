@@ -119,11 +119,12 @@ The options install both packages from their `m3resp-integration` branch. [pypro
 The documentation is in the [docs](docs/index.md) folder:
 
 - [Getting started](docs/getting-started.md): installation and a first workflow.
-- [Tutorials](docs/tutorials/index.md): EIT only, EMG only, multimodal analysis and export of results.
+- [Tutorials](docs/tutorials_src/): EIT only, EMG only, and EIT, EMG and ventilator together. Each tutorial is a Python script that you can run.
+- [How-to guides](docs/how-to/index.md): the processing settings, synchronization, breath timing and export of results.
 - [Concepts](docs/concepts/index.md): the scientific data objects, their units and time axes, and a [glossary](docs/concepts/glossary.md).
 - [Workflows](docs/workflows.md): the workflow file format and the list of steps.
 - [API reference](docs/api/index.md): the Python functions and classes.
-- [Migration guide](docs/migration.md): how to move from `eitprocessing` or `resurfemg` code to M3Resp.
+- [Migration guide](docs/developer/migration.md): how to move from `eitprocessing` or `resurfemg` code to M3Resp.
 
 ## Relation to eitprocessing and ReSurfEMG
 

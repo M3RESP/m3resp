@@ -22,7 +22,10 @@ tests/data/TestPS3.txt
 # Documentation build products
 docs/_build/
 docs/api/generated/
+docs/api/backreferences/
 docs/generated/
+docs/tutorials/
+docs/sg_execution_times.rst
 
 # agentics
 AGENTS.md

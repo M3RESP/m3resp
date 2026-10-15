@@ -1,10 +1,12 @@
 # Public API
 
-This reference covers names intentionally exported for researchers and
-application authors. Modules and helpers that are not listed here remain
-internal and may change without notice.
+This page lists the classes and functions that you import from `m3resp`. Each name links to a page with its arguments, its return value and the units. The page of a class or function also lists the tutorials that use it.
+
+See the {doc}`../concepts/index` for what the objects mean.
 
 ## Sessions and workflows
+
+An `M3Session` holds the recordings and the results of one analysis. The presets and the workflow functions run the processing steps.
 
 ```{eval-rst}
 .. autosummary::
@@ -36,7 +38,9 @@ internal and may change without notice.
    m3resp.workflows.validate_spec
 ```
 
-## Signals, results, and quality
+## Signals, results and quality
+
+These objects hold the processed signals, the calculated parameters, the quality checks and the record of each processing step.
 
 ```{eval-rst}
 .. autosummary::
@@ -55,6 +59,8 @@ internal and may change without notice.
 ```
 
 ## Events and synchronization
+
+These objects and functions hold breaths, events and values per breath, and put the recordings on one clock.
 
 ```{eval-rst}
 .. autosummary::
@@ -84,7 +90,9 @@ internal and may change without notice.
    m3resp.resample_signal
 ```
 
-## Persisted data model
+## Data model
+
+The data model is a set of checked records of a finished analysis. See {doc}`../concepts/provenance`.
 
 ```{eval-rst}
 .. autosummary::
@@ -106,7 +114,21 @@ internal and may change without notice.
    m3resp.validate_store
 ```
 
-## Modality loaders
+## Export
+
+This function writes the results of a session to CSV, JSON and array files.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   m3resp.export.export_session_summary
+```
+
+## Load a recording
+
+These functions load one recording without a session.
 
 ```{eval-rst}
 .. autosummary::
@@ -117,7 +139,23 @@ internal and may change without notice.
    m3resp.io.load_emg
 ```
 
+## Plots
+
+These functions make figures with Matplotlib.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   m3resp.visualization.plot_eit_processing_summary
+   m3resp.visualization.plot_session_overview
+   m3resp.visualization.plot_synchronization_comparison
+```
+
 ## Synthetic data
+
+These classes and functions make synthetic EIT, EMG and ventilator recordings for tests and examples.
 
 ```{eval-rst}
 .. autosummary::

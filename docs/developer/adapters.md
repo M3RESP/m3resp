@@ -1,93 +1,86 @@
 # Adapters
 
-`m3resp` does not reimplement EIT/EMG algorithms - it calls
-`eitprocessing`/`resurfemg` and converts their output into the Layer 1
-objects described in the [concept guides](../concepts/index.md). The adapter is the
-conversion boundary: everything on the near side of it (`M3Session`,
-`m3resp.data`, exports) only ever sees `Signal`/`ParameterResult`/
-`QualityFlag`/`BreathEvent`, never a raw `eitprocessing`/`resurfemg` object.
+An adapter connects M3Resp to an outside package. It calls `eitprocessing` or `resurfemg`, and changes the results into the Layer 1 objects of the {doc}`concept guides <../concepts/index>`. The session, the workflow steps and the export read only these M3Resp objects.
 
 ```text
-eitprocessing output
+eitprocessing or resurfemg result
     |
     v
-EITProcessingAdapter
-    |
+EITProcessingAdapter, ReSurfEMGAdapter or VentilatorAdapter
+    |   to_signals, to_parameters, to_interval_data, to_quality_flags
     v
-m3resp Signal / BreathEvent / ParameterResult / QualityFlag
+Signal, BreathEvent, ParameterResult, IntervalData, QualityFlag
 ```
 
-```text
-resurfemg output
-    |
-    v
-ReSurfEMGAdapter
-    |
-    v
-m3resp Signal / BreathEvent / ParameterResult / QualityFlag
-```
+The session has one adapter of each type: `session.eit_adapter`, `session.emg_adapter` and `session.ventilator_adapter`.
 
-## `EITProcessingAdapter` (`src/m3resp/adapters/eitprocessing_adapter/`)
+## The conversion methods
 
-| Method | Responsibility |
+Each adapter has the same conversion methods. They read the result of `preprocess` or `postprocess` and give lists of M3Resp objects:
+
+| Method | Gives |
 |---|---|
-| `load(path, vendor, **kwargs)` | Load a vendor EIT file into an `eitprocessing` sequence. |
-| `get_raw_eit` / `get_global_impedance` | Extract pixel/global impedance from a loaded sequence. |
-| `detect_rates`, `apply_mdn`, `find_pixel_breaths`, `compute_eeli`, `compute_pixel_tiv`, `compute_tiv_lungspace`, `compute_amplitude_lungspace`, `compute_watershed_lungspace`, `filter_roi_by_size` | Individual `eitprocessing` operations, exposed one-to-one so a caller can compose a custom sequence. |
-| `preprocess(...)` | Chains the operations above into one call - what `session.preprocess_eit()` uses by default. |
-| `detect_breaths(data, **kwargs)` | Returns `list[BreathEvent]` directly - already converted. |
-| `compute_tiv(sequence, **kwargs)` | Runs TIV computation on a loaded sequence. |
-| `to_signals(preprocessed)` | **Conversion boundary.** Turns a `preprocess()` result into `list[Signal]`. |
-| `to_parameters(preprocessed)` | **Conversion boundary.** Turns a `preprocess()` result into `list[ParameterResult]` (respiratory and heart rate). |
-| `to_interval_data(preprocessed)` | **Conversion boundary.** Turns the per-breath TIV, EELI and pixel TIV of a `preprocess()` result into `list[IntervalData]`, each value next to the breath it was computed over. |
-| `to_quality_flags(preprocessed)` | **Conversion boundary.** Turns a `preprocess()` result into `list[QualityFlag]`. |
+| `to_signals(result)` | `list[Signal]` |
+| `to_parameters(result)` | `list[ParameterResult]` |
+| `to_interval_data(result)` (EIT only) | `list[IntervalData]`: TIV, EELI and pixel TIV, each value next to its breath |
+| `to_quality_flags(result)` | `list[QualityFlag]` |
+| `detect_breaths(data)` | `list[BreathEvent]` |
 
-## `ReSurfEMGAdapter` (`src/m3resp/adapters/resurfemg_adapter/`)
+## EITProcessingAdapter
 
-| Method | Responsibility |
+The code is in `src/m3resp/adapters/eitprocessing_adapter/`.
+
+| Methods | What they do |
 |---|---|
-| `load(path, **kwargs)` | Load an EMG file (also used by `VentilatorAdapter` for ventilator channels stored in the same file as the EMG). |
-| `preprocess(signal, **kwargs)` | Filtering + envelope, matching `resurfemg.preprocessing`. |
-| `detect_breaths(signal, **kwargs)` | Returns `list[BreathEvent]` directly - already converted. |
-| `compute_features(...)` | Amplitude/AUC/pseudo-slope/time-to-peak and related per-breath features. |
-| `to_signals(processed_emg)` | **Conversion boundary.** Turns a `preprocess()`/`postprocess()` result into `list[Signal]`. |
-| `to_parameters(postprocessed)` | **Conversion boundary.** Turns a `postprocess()` result into `list[ParameterResult]`. |
-| `to_quality_flags(postprocessed)` | **Conversion boundary.** Turns a `postprocess()` result into `list[QualityFlag]` (native `resurfemg` clinical quality checks). |
-| `available_postprocessing()` / `postprocess(...)` / `run_postprocessing_function(category, function_name, ...)` | Discover and call `resurfemg.postprocessing` functions not covered by a named wrapper above, without leaving the adapter boundary. |
-| `detect_ecg_peaks`, `gate_ecg`, `wavelet_denoise_ecg`, `moving_baseline`, `slopesum_baseline`, `snr_pseudo`, `pocc_quality`, `interpeak_distance`, `percentage_under_baseline`, `detect_local_high_aub`, `detect_extreme_time_products`, `detect_non_consecutive_manoeuvres`, `evaluate_bell_curve_error`, `evaluate_event_timing`, `evaluate_respiratory_rates` | Individual ECG-removal, baseline, and clinical quality operations, exposed one-to-one for the declarative workflow engine (`workflows/steps/emg/` and `workflows/steps/ventilator/`) and custom composition. |
+| `load(path, vendor)` | Load a vendor EIT file into an `eitprocessing` sequence |
+| `get_raw_eit`, `get_global_impedance`, `get_regional_impedance` | Get the pixel, global or regional impedance from a sequence |
+| `slice_sequence` | Cut a sequence to a range of frames |
+| `detect_rates`, `apply_mdn`, `find_breaths`, `find_pixel_breaths`, `compute_eeli`, `compute_pixel_tiv` | Run one `eitprocessing` operation each |
+| `compute_tiv_lungspace`, `compute_amplitude_lungspace`, `compute_watershed_lungspace`, `filter_roi_by_size`, `as_pixel_mask` | Make and filter regions of interest |
+| `preprocess(sequence, ...)` | Run rate detection, filter, breath detection, TIV, EELI and pixel TIV in one call. `session.preprocess_eit()` uses it. |
+| `compute_tiv(sequence, compute=...)` | Run a TIV function that you give |
 
-## `VentilatorAdapter` (`src/m3resp/adapters/ventilator_adapter/`)
+## ReSurfEMGAdapter
 
-Ventilator pressure/flow/volume data has its own adapter, available on the
-session as `session.ventilator_adapter`. It does not read files itself: it
-hands each file to the adapter that already knows the format.
+The code is in `src/m3resp/adapters/resurfemg_adapter/`, with one file per task: `_core.py`, `_ecg.py`, `_baseline.py`, `_quality.py` and `_defaults.py`.
 
-| Method | Responsibility |
+| Methods | What they do |
 |---|---|
-| `load(path, **kwargs)` | Load a ventilator recording from one of three sources: a file shared with the EMG (read by `ReSurfEMGAdapter`), an EIT `.bin` file that stores ventilator waveforms next to the impedance frames (read by `EITProcessingAdapter`), or any other format with a reader registered for its file extension. `source="eit"`/`"emg"`/`"ventilator"` picks the source explicitly; otherwise `.bin` is read as EIT and everything else as EMG. |
-| `preprocess(recording, **kwargs)` | Split the recording into pressure/flow/volume channels and filter them. |
-| `detect_breaths(processed, **kwargs)` | Returns `list[BreathEvent]` directly - already converted. |
-| `to_signals(processed_ventilator)` | **Conversion boundary.** Turns a `preprocess()` result into `list[Signal]`. |
-| `to_parameters` / `to_quality_flags` | Return empty lists: ventilator preprocessing computes no parameters or quality checks. Pocc and ventilator quality results come from the `ventilator.*` steps instead. |
+| `load(path)` | Load an EMG file. Biopac `.txt` files are read by M3Resp, all other files by `resurfemg`. |
+| `preprocess(recording, ...)` | Band-pass filter, notch filter and envelope |
+| `detect_breaths(processed, ...)` | Find the breaths in the envelope |
+| `postprocess(processed, events, ...)` | Calculate the parameters and run the quality checks of each breath |
+| `detect_ecg_peaks`, `gate_ecg`, `wavelet_denoise_ecg` | Find and remove the ECG |
+| `moving_baseline`, `slopesum_baseline` | Calculate the baseline of the envelope |
+| `snr_pseudo`, `pocc_quality`, `interpeak_distance`, `percentage_under_baseline`, `detect_local_high_aub`, `detect_extreme_time_products`, `detect_non_consecutive_manoeuvres`, `evaluate_bell_curve_error`, `evaluate_event_timing`, `evaluate_respiratory_rates` | Run one quality check each |
+| `available_postprocessing()`, `run_postprocessing_function(category, name, ...)` | List and call 23 functions of `resurfemg.postprocessing` by name |
+| `compute_features(signal, events, compute=...)` | Run a feature function that you give |
 
-## Regression guarantee
+The workflow steps in `workflows/steps/emg/` and `workflows/steps/ventilator/` call these methods.
 
-`tests/regression/` pins down that the adapters are still thin wrappers:
-each test drives the adapter's public API on synthetic data and asserts the
-result is identical to calling the underlying `eitprocessing`/`resurfemg`
-function directly with the same arguments. If one of these starts failing,
-the adapter output now differs from the upstream output - check the diff against the adapter method involved before assuming
-the test is wrong. See [testing.md](testing.md).
+## VentilatorAdapter
 
-## Adding a new upstream algorithm
+The code is in `src/m3resp/adapters/ventilator_adapter/`. The adapter reads ventilator data from three sources:
 
-1. Add a thin wrapper method on the relevant adapter that calls the upstream
-   function with the same argument names/defaults it has.
-2. If the result should be visible on `M3Session`'s typed collections, extend
-   `to_signals`/`to_parameters`/`to_quality_flags` (or add a new `to_*`
-   method if the shape doesn't fit those three).
-3. Add a regression test asserting your wrapper's output matches calling the
-   upstream function directly.
-4. Optionally register a step under `workflows/steps/` so the operation is also
-   reachable from a declarative YAML/JSON workflow (see
-   [preset-contracts.md](preset-contracts.md)).
+| Source | Read by |
+|---|---|
+| An EMG file with ventilator channels | `ReSurfEMGAdapter` |
+| An EIT `.bin` file with ventilator waveforms | `EITProcessingAdapter` |
+| A file type with a reader of its own | The reader registered for its file extension |
+
+`source="eit"`, `"emg"` or `"ventilator"` selects the source. Without `source`, the adapter uses the reader registered for the file extension. Without a registered reader, it reads `.bin` files as EIT and all other files as EMG.
+
+`preprocess` splits the recording into pressure, flow and volume channels. With `lowpass_hz`, it also filters them with a low-pass filter. `to_parameters` and `to_quality_flags` give empty lists. The `ventilator.*` workflow steps calculate the ventilator parameters and quality checks.
+
+## Comparison tests
+
+The tests in `tests/regression/` compare the result of each adapter method with the direct call of `eitprocessing` or `resurfemg`, with the same settings. Most tests require exactly equal values. If one of these tests fails, look at the adapter method first. See {doc}`testing`.
+
+## Add a function of eitprocessing or resurfemg
+
+1. Add a method to the adapter. Give it the same argument names and defaults as the original function.
+2. To store the result in the session, change it into M3Resp objects in a `to_*` method.
+3. Add a test in `tests/regression/` that compares the method with the original function.
+4. To use the method in workflow files, add a step. See {doc}`../how-to/add-a-step`.
+
+Continue with {doc}`preset-contracts`.
