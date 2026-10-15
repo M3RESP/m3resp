@@ -21,10 +21,21 @@ function goToView(name){
   if(name==='design' && !designViewFitted && typeof fitCanvasToView==='function'){
     designViewFitted = true;
     fitCanvasToView(1);
-    if(typeof openWelcome==='function' && welcomeAtStart()) openWelcome();
+    // the welcome card opens once per session (js/core/session.js keeps this)
+    if(!designWelcomeSeen && typeof openWelcome==='function' && welcomeAtStart()) openWelcome();
+    designWelcomeSeen = true;
   }
 }
 let designViewFitted = false;
+let designWelcomeSeen = false;
+// a locked tab opens after its step: 3 · Check after a run of the pipeline on
+// 2 · Design (js/design/run-state.js), 4 · Results after the confirm on 3 · Check
+function unlockTab(btn){
+  btn.classList.remove('locked');
+  btn.title = '';
+  const lock = btn.querySelector('.tab-lock');
+  if(lock) lock.remove();
+}
 document.getElementById('tabs').addEventListener('click', e=>{
   const btn = e.target.closest('.tab-btn'); if(!btn) return;
   goToView(btn.dataset.view);
@@ -37,18 +48,20 @@ document.getElementById('confirmResultsBtn').addEventListener('click', e=>{
   btn.disabled = true;
   btn.textContent = 'Making parameters and plots…';
   setTimeout(()=>{
-    const resultsTab = document.getElementById('resultsTab');
-    resultsTab.classList.remove('locked');
-    resultsTab.textContent = '4 · Results';
-    resultsTab.title = '';
-    btn.disabled = false;
-    btn.dataset.confirmed = '1';
-    btn.textContent = 'Open 4 · Results';
-    document.getElementById('checkConfirmBar').classList.add('confirmed');
-    if(typeof checkConfirmed==='function') checkConfirmed();
+    markResultsConfirmed();
     goToView('results');
   }, 650);
 });
+// the confirm on 3 · Check is done: 4 · Results opens
+function markResultsConfirmed(){
+  const btn = document.getElementById('confirmResultsBtn');
+  unlockTab(document.getElementById('resultsTab'));
+  btn.disabled = false;
+  btn.dataset.confirmed = '1';
+  btn.textContent = 'Open 4 · Results';
+  document.getElementById('checkConfirmBar').classList.add('confirmed');
+  if(typeof checkConfirmed==='function') checkConfirmed();
+}
 
 // generic dock-tab wiring: works for any number of .dock instances on the page
 document.querySelectorAll('.dock').forEach(dock=>{

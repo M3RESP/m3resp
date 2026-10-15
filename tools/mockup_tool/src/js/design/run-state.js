@@ -1,9 +1,10 @@
 // ---- run state on the canvas ----
-// "▶ Run pipeline" plays a fake run: the steps run one at a time in graph
+// "▶ Run workflow" plays a fake run: the steps run one at a time in graph
 // order, each with a progress ring, and the Run log fills line by line. A
 // step with no linked input fails, and the steps after it are skipped. A
 // change to a step's settings or links marks it and every step after it
-// "out of date"; with Auto-run on, those steps run again at once.
+// "out of date"; with Auto-run on, those steps run again at once. The first
+// run of the whole pipeline to its end opens the 3 · Check tab.
 let runStepScale = 1;      // multiplies the time each fake step takes
 let autoRun = false;
 let currentRun = null;     // {stop} while a run is going on
@@ -210,6 +211,12 @@ async function runPipeline(ids){
   currentRun = null;
   runBtn.textContent = RUN_BTN_TEXT;
   runBtn.title = 'Run all steps in graph order';
+  const checkTab = document.getElementById('checkTab');
+  if(full && !stopped && checkTab.classList.contains('locked')){
+    unlockTab(checkTab);
+    logLine('3 · Check is open: the quality checks and the report of this run', 'ok');
+    showEdgeNote(runBtn, 'Run finished. 3 · Check is now open.');
+  }
 }
 
 // ---- toolbar ----

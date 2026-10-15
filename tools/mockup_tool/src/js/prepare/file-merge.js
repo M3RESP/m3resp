@@ -25,24 +25,28 @@ const SECTION_MIN = 0.5;                       // s
 const snap01 = t=> Math.round(t*10)/10;
 
 // one lane: signals over `dur` seconds from file time t0. Several signals sit
-// below each other, each scaled to its own row; a label names each row.
-function fileLaneSvg(traces, dur, t0=0){
+// below each other, each scaled to its own row; a label names each row and
+// sits in the space above its signal. The merged preview has no labels.
+function fileLaneSvg(traces, dur, t0=0, {labels:showLabels=true}={}){
   const N=700, W=1000, H=60*Math.max(1, traces.length), PAD=5, rowH=H/Math.max(1, traces.length);
+  const TOP = showLabels && traces.length>1 ? 20 : PAD;   // room for the row label
   const lines = traces.map(({fn, color}, k)=>{
     const vals=[];
     for(let i=0;i<N;i++) vals.push(fn(t0 + (i/(N-1))*dur));
     const lo=Math.min(...vals), hi=Math.max(...vals), span=(hi-lo)||1, y0=k*rowH;
     let pts='';
-    for(let i=0;i<N;i++) pts+=`${((i/(N-1))*W).toFixed(1)},${(y0+PAD+(1-(vals[i]-lo)/span)*(rowH-2*PAD)).toFixed(1)} `;
+    for(let i=0;i<N;i++) pts+=`${((i/(N-1))*W).toFixed(1)},${(y0+TOP+(1-(vals[i]-lo)/span)*(rowH-TOP-PAD)).toFixed(1)} `;
     const sep = k ? `<line x1="0" y1="${y0}" x2="${W}" y2="${y0}" stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>` : '';
     return sep + `<polyline points="${pts.trim()}" fill="none" stroke="${color}" stroke-width="1.4" vector-effect="non-scaling-stroke"/>`;
   }).join('');
-  const labels = traces.length>1 ? traces.map((tr, k)=>
+  const labels = showLabels && traces.length>1 ? traces.map((tr, k)=>
     `<span class="ef-lane-label" style="top:${(k/traces.length*100).toFixed(2)}%">${tr.label || ''}</span>`).join('') : '';
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${lines}</svg>${labels}`;
 }
-// lane height in px for n signals below each other
-const fileLaneHeight = n=> 56 + 30*Math.max(0, n-1);
+// lane height in px for n signals below each other: 52 px for each signal
+const fileLaneHeight = n=> n<=1 ? 56 : 52*n;
+// height of the merged preview in px: 28 px for each signal
+const previewHeight = n=> n<=1 ? 44 : 28*n;
 
 function makeFileMerger(cfg){
   const $ = id=> document.getElementById(cfg.prefix + id);
@@ -274,13 +278,14 @@ function makeFileMerger(cfg){
     preview.innerHTML = '';
     preview.hidden = !M.sections.length;
     preview.classList.toggle('shown', M.shown==='merged');
+    if(M.sections.length) preview.style.height = previewHeight(tracesOf(M.file(M.sections[0].fileId)).length)+'px';
     M.sections.forEach((s, i)=>{
       const f = M.file(s.fileId);
       const seg = document.createElement('div');
       seg.className = 'ef-seg';
       seg.style.flex = String(s.end-s.start);
       seg.title = `Section ${i+1}: file ${M.fileNo(f.id)}, ${fmtRange(s.start, s.end)}`;
-      seg.innerHTML = `<span class="ef-seg-no">${i+1}</span>` + fileLaneSvg(tracesOf(f), s.end-s.start, s.start);
+      seg.innerHTML = `<span class="ef-seg-no">${i+1}</span>` + fileLaneSvg(tracesOf(f), s.end-s.start, s.start, {labels:false});
       preview.appendChild(seg);
     });
 
@@ -347,6 +352,37 @@ function makeFileMerger(cfg){
   M.mergedPieces = ()=>{
     let from = 0;
     return M.sections.map(s=>{ const p = {file:M.file(s.fileId), start:s.start, end:s.end, from}; from += s.end-s.start; return p; });
+  };
+
+  // ---- the state of the Files block, kept with the session (js/core/session.js) ----
+  // A file is kept as its id and name. An example file of the start list
+  // comes back as it was; any other file gets its example signal again from
+  // cfg.newFile(name, n), with n the number in its id ('f3' → 3).
+  const startFiles = [...cfg.files];
+  M.snapshot = ()=>({
+    files: M.files.map(f=>({id:f.id, name:f.name})),
+    sections: M.sections.map(s=>({id:s.id, fileId:s.fileId, start:s.start, end:s.end})),
+    shown: M.shown, merged: M.merged, active: M.active,
+    sectionSeq: M.sectionSeq, fileSeq: M.fileSeq,
+  });
+  M.restore = st=>{
+    if(!Array.isArray(st.files) || !st.files.length) throw new Error(`${cfg.name}: the session has no files`);
+    const files = st.files.map(sf=>{
+      const known = startFiles.find(f=>f.id===sf.id && f.name===sf.name);
+      if(known) return known;
+      const n = Number(String(sf.id).replace(/^f/, ''));
+      if(!Number.isInteger(n) || n<1) throw new Error(`${cfg.name}: file id "${sf.id}" is not f1, f2, …`);
+      return cfg.newFile(String(sf.name), n);
+    });
+    M.files.splice(0, M.files.length, ...files);   // the same list as cfg.files
+    M.sections = (st.sections || []).filter(s=> M.file(s.fileId))
+      .map(s=>({id:String(s.id), fileId:s.fileId, start:+s.start, end:+s.end}));
+    M.active = st.active || null;
+    M.merged = !!st.merged && M.sections.length>0;
+    M.sectionSeq = +st.sectionSeq || M.sections.length;
+    M.fileSeq = +st.fileSeq || M.files.length;
+    render();
+    showSource(st.shown);
   };
 
   M.render = render;

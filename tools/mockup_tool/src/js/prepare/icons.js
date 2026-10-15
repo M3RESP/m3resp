@@ -4,6 +4,7 @@
 // An element with data-icon="name" gets the icon put in front of its text.
 const PREP_ICONS = {
   folder:  'M3 6v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1H9.5L8 5H4a1 1 0 0 0-1 1z',
+  save:    'M10 3.5v8.5M6.5 8.5L10 12l3.5-3.5M4 15.5h12',
   start:   'M5 4v12M15 4.5l-7 5.5 7 5.5z',
   back:    'M12.5 4.5L7 10l5.5 5.5',
   play:    'M6.5 4.5l9 5.5-9 5.5z',

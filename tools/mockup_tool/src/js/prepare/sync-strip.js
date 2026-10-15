@@ -128,10 +128,10 @@ function updateSyncRow(mod){
 }
 
 // ---- alignment check: reference Flow, EIT and the EMG envelope on one time line ----
-let syncViewFrom = 0;
-const SYNC_VIEW_LEN = 20;
+// The lanes show the whole recording at first; the zoom view 'sync'
+// (js/prepare/zoom-engine.js) sets the time range shown.
 function syncLaneSvg(fn, t0, t1, color){
-  const N=500, W=1000, H=54, PAD=5, vals=[];
+  const N=1200, W=1000, H=54, PAD=5, vals=[];
   for(let i=0;i<N;i++) vals.push(fn(t0+(i/(N-1))*(t1-t0)));
   const lo=Math.min(...vals), hi=Math.max(...vals), span=(hi-lo)||1;
   let pts='';
@@ -142,8 +142,7 @@ function syncLaneSvg(fn, t0, t1, color){
   }).join('');
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${lines}<polyline points="${pts.trim()}" fill="none" stroke="${color}" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`;
 }
-function renderSyncCheck(){
-  const t0 = syncViewFrom, t1 = syncViewFrom + SYNC_VIEW_LEN;
+function renderSyncWindow(t0, t1){
   const oEit = syncOffsetOf('eit'), oEmg = syncOffsetOf('emg');
   const hasEmg = EMG_CHANNELS.length>0;
   // one reference lane for each ventilator signal in use
@@ -155,21 +154,20 @@ function renderSyncCheck(){
   });
   lanes.push({mod:'eit', label:'EIT', sig:`${syncSigName('eit')} · ${fmtOffset(oEit)}`, fn:t=>SYNC_MODS.eit.at(t-oEit, SYNC_STATE.eit.sig)});
   if(hasEmg) lanes.push({mod:'emg', label:'EMG', sig:`${syncSigName('emg')}, ECG removed · ${fmtOffset(oEmg)}`, fn:t=>SYNC_MODS.emg.at(t-oEmg, SYNC_STATE.emg.sig)});
-  document.getElementById('syncCheckPlot').innerHTML = lanes.map(l=>`
+  const plot = document.getElementById('syncCheckPlot');
+  const band = plot.querySelector('.zoom-band');
+  plot.innerHTML = lanes.map(l=>`
     <div class="sync-lane mod-${l.mod}">
       <span class="slice-panel-label"><span class="src">${l.label}</span>${l.sig}</span>
       ${syncLaneSvg(l.fn, t0, t1, `var(--${l.mod})`)}
     </div>`).join('');
-  let axis = '';
-  for(let k=0;k<=4;k++) axis += `<span>${fmtSec(t0 + SYNC_VIEW_LEN*k/4)}</span>`;
-  document.getElementById('syncCheckAxis').innerHTML = axis;
+  if(band) plot.appendChild(band);
 }
-document.getElementById('syncViewSeg').addEventListener('click', e=>{
-  const btn = e.target.closest('button[data-from]'); if(!btn) return;
-  syncViewFrom = +btn.dataset.from;
-  document.querySelectorAll('#syncViewSeg button').forEach(b=> b.classList.toggle('on', b===btn));
-  renderSyncCheck();
-});
+// draws the lanes again for the time range shown; the zoom view draws them
+// the first time when js/prepare/zoom-engine.js loads
+function renderSyncCheck(){
+  if(ZOOM.sync) ZOOM.sync.refresh();
+}
 
 // one change of an offset updates the bar, the match, the check and the lanes
 function syncChanged(mod){

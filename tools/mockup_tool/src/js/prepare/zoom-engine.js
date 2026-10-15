@@ -106,6 +106,7 @@ function makeZoomView(name, fullDur, render, {minSpan=0.2, onCursorClick=null}={
 makeZoomView('eit',  DET.dur,      renderEitWindow,  {minSpan:0.4, onCursorClick:cx=>setEitTime(timeAtClientX(cx))});
 makeZoomView('vent', VENT_DUR,     renderVentWindow, {minSpan:0.5});
 makeZoomView('emg',  EMG_FULL_DUR, renderEmgWindow,  {minSpan:1.0});
+makeZoomView('sync', REC_SECONDS,  renderSyncWindow, {minSpan:1.0});
 
 // crop-strip lanes last: they read VENT_CHANNELS from js/prepare/vent-stack.js
 renderSliceLanes();

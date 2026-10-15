@@ -10,7 +10,7 @@ function defaultSequenceName(){
 })();
 
 let lastSavedSeqId = null;   // the row of the newest sequence lights up once
-// one list in the side panel and one under the Save bar of the working window
+// one list in the side panel and one at the bottom of the working window
 const SEQ_LISTS = [
   {list:'savedSequencesList', count:'savedSequencesCount', countText:n=> n ? String(n) : '',
    empty:()=> `<div class="seq-empty">${prepIcon('seq', 20)}No sequences yet. Save one from the working window; 2 · Design lists it under Available data.</div>`},
@@ -29,6 +29,9 @@ function seqRow(seq){
   row.querySelector('[data-remove-seq]').addEventListener('click', ()=>{
     SAVED_SEQUENCES = SAVED_SEQUENCES.filter(s=>s.id!==seq.id);
     renderSavedSequences();
+    // the windows of a removed sequence are unlocked and can be saved again
+    windows.forEach(w=>{ if(w.seqId===seq.id) delete w.seqId; });
+    renderWindows();
   });
   return row;
 }
@@ -47,9 +50,10 @@ function renderSavedSequences(){
 renderSavedSequences();
 
 document.getElementById('saveSequenceBtn').addEventListener('click', ()=>{
-  // what gets saved is the resolved selection: kept spans minus removed spans
+  // what gets saved is the resolved selection of the windows without a
+  // sequence: kept spans minus removed spans
   const sorted = resolvedSegments();
-  const cutCount = sortedCuts().length;
+  const cutCount = openCuts().length;
   const summary = document.getElementById('saveSummary');
   if(sorted.length===0){ summary.classList.add('hidden'); return; }
   const nameInput = document.getElementById('sequenceNameInput');
@@ -71,6 +75,9 @@ document.getElementById('saveSequenceBtn').addEventListener('click', ()=>{
   lastSavedSeqId = 'seq'+seqSaveSeq;
   renderSavedSequences();
   lastSavedSeqId = null;
+  // the saved windows turn grey and are locked
+  openWindows().forEach(w=>{ w.seqId = 'seq'+seqSaveSeq; });
+  renderWindows();
 
   const rows = sorted.map((w,idx)=>
     `${idx+1}) ${fmtRange(w.start, w.end)} <span style="color:var(--text-dim);">(${fmtDuration(w.end-w.start)})</span>`
@@ -80,7 +87,6 @@ document.getElementById('saveSequenceBtn').addEventListener('click', ()=>{
     <div><b>${sorted.length}</b> segment${sorted.length===1?'':'s'}, <b>${fmtDuration(total)}</b> combined${cutCount?` — after cutting out <b>${cutCount}</b> removed span${cutCount===1?'':'s'}`:''} — concatenated in time order via <code>Sequence.concatenate()</code>. Now listed under <b>Available data</b> on <b>2 · Design</b>, alongside any other sequences you save:</div>
     <div style="margin-top:8px;">${rows}</div>`;
   summary.classList.remove('hidden');
-
   nameInput.value = defaultSequenceName();
 });
 

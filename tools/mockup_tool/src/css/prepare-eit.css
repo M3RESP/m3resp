@@ -64,7 +64,6 @@
 .eit-files{margin-bottom:16px;padding:12px;border:1px solid var(--border);border-radius:var(--r-card);background:var(--surface-2);}
 .ef-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
 .ef-count{font-family:var(--mono);font-size:11px;color:var(--text-dim);}
-.ef-hint{font-size:11px;color:var(--text-dim);margin-left:6px;}
 .ef-list{display:flex;flex-direction:column;gap:8px;}
 /* EMG: the signal chips and "+ Add signal" for the file lanes and the plots */
 .ef-lane-signals{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap;margin:-2px 0 10px;}

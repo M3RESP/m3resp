@@ -82,7 +82,7 @@
         <label class="tb-toggle" title="Run the out-of-date steps again as soon as a setting or a link changes">
           <input type="checkbox" id="autoRunToggle"><span class="tb-toggle-track" aria-hidden="true"></span>Auto-run
         </label>
-        <button class="tb-btn primary" id="runPipelineBtn" title="Run all steps in graph order">▶ Run pipeline</button>
+        <button class="tb-btn primary" id="runPipelineBtn" title="Run all steps in graph order">▶ Run workflow</button>
       </div>
       <div class="canvas-hud">
         <span class="hud-val" id="stepCountPill" title="15 of 45 steps shown · multimodal-full.pipeline.yaml">15/45</span>
@@ -136,8 +136,10 @@
 
     <div class="inspector" id="inspector">
       <div class="side-panel-topbar">
+        <span class="side-panel-topbar-title">
+          <span class="side-panel-topbar-label">Details</span>
+        </span>
         <button class="side-collapse-btn" id="inspectorCollapseBtn" title="Collapse this panel"></button>
-        <span class="side-panel-topbar-label">Details</span>
       </div>
       <!-- the settings of the selected step -->
       <div class="pal-pane" id="inspectorPane" data-pane="inspector" style="--grow:45">

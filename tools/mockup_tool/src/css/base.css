@@ -33,6 +33,8 @@
     repeating-linear-gradient(to right, transparent 0 calc(100%/6 - 1px), var(--plot-grid) calc(100%/6 - 1px) calc(100%/6)),
     var(--surface);
   --ctl-h:30px;            /* height of buttons, fields and switches */
+  --side-w:270px;          /* width of the side panels, line included */
+  --bar-h:47px;            /* height of the canvas toolbar and the side panel top bars, line included */
   --r-ctl:7px;             /* corner radius of controls */
   --r-card:10px;           /* corner radius of cards */
   --r-chip:999px;          /* chips and tags */
@@ -60,6 +62,7 @@ button{font-family:inherit;}
 h1,h2,h3{text-wrap:balance;}
 
 /* ---------- App bar ---------- */
+/* the ☰ menu, brand and tabs on the left, the mockup badge on the right */
 .appbar{
   display:flex;
   align-items:center;
@@ -70,15 +73,43 @@ h1,h2,h3{text-wrap:balance;}
   background:var(--surface);
   border-bottom:1px solid var(--border);
 }
-.brand{display:flex;align-items:baseline;gap:8px;}
+/* Logo font: Orbitron ExtraBold, SIL Open Font License (src/fonts/OFL-Orbitron.txt).
+   The file holds the Latin letters only. */
+@font-face{
+  font-family:"Orbitron";
+  font-weight:800;
+  font-display:block;
+  src:url("../fonts/orbitron-800-latin.woff2") format("woff2");
+}
+/* the brand fills the space above the left side panel, so the tab bar
+   starts at the line of that panel (18 px padding of .appbar + 20 px gap of .appbar-left) */
+.brand{display:flex;align-items:center;gap:10px;flex:none;white-space:nowrap;width:calc(var(--side-w) - 38px);}
 .brand-mark{
-  font-family:var(--mono);
-  font-weight:600;
-  font-size:15px;
-  letter-spacing:0.02em;
+  font-family:"Orbitron", var(--mono);
+  font-weight:800;
+  font-size:16px;
+  line-height:1;
+  letter-spacing:0.08em;
   color:var(--text);
 }
-.brand-mark b{color:var(--accent);}
+.brand-3{color:var(--accent);}
+/* ☰ menu left of the logo; its list uses .menu-pop (css/prepare.css) */
+.app-menu{position:relative;display:flex;}
+.app-menu-btn{
+  appearance:none;border:1px solid transparent;background:transparent;color:var(--text-dim);cursor:pointer;
+  width:30px;height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center;padding:0;
+}
+.app-menu-btn:hover, .app-menu-btn[aria-expanded="true"]{background:var(--surface-2);border-color:var(--border);color:var(--text);}
+.app-menu-pop{top:calc(100% + 8px);z-index:500;min-width:250px;}
+.app-menu-pop button{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;}
+.app-menu-pop button svg{display:block;flex:none;}
+.app-menu-head{
+  display:flex;align-items:flex-start;gap:9px;padding:8px 10px 10px;margin-bottom:4px;
+  border-bottom:1px solid var(--border);font-size:12.5px;color:var(--text-dim);white-space:nowrap;
+}
+.app-menu-head .dot{width:7px;height:7px;margin-top:5px;border-radius:50%;background:var(--ok);flex:none;box-shadow:0 0 0 3px var(--accent-soft);}
+.app-menu-head b{color:var(--text);font-weight:600;}
+.app-menu-sub{font-size:11px;color:var(--text-faint);margin-top:2px;}
 .brand-tag{
   font-size:11px;
   color:var(--text-faint);
@@ -97,16 +128,9 @@ h1,h2,h3{text-wrap:balance;}
 .tab-btn.locked:hover{color:var(--text-faint);}
 .tab-lock{display:inline-block;vertical-align:-1px;margin-left:6px;}
 .hidden{display:none !important;}
-.appbar-spacer{flex:1;}
-.session-chip{
-  display:flex;align-items:center;gap:8px;
-  font-size:12.5px;color:var(--text-dim);
-  border:1px solid var(--border);
-  background:var(--surface-2);
-  padding:5px 10px 5px 8px;border-radius:999px;
-}
-.session-chip .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none;box-shadow:0 0 0 3px var(--accent-soft);}
-.session-chip b{color:var(--text);font-weight:600;}
+.appbar-left{display:flex;align-items:center;gap:20px;flex:none;}
+.appbar-right{display:flex;align-items:center;justify-content:flex-end;flex:1;min-width:0;}
+.appbar-right .mock-badge{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .mock-badge{
   font-size:10.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;
   color:var(--text-faint);border:1px dashed var(--border);border-radius:5px;padding:3px 7px;

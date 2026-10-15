@@ -105,7 +105,7 @@
       <div class="eit-files" id="eitFiles">
         <div class="ef-head">
           <span class="ct-label">Files</span><span class="ef-count" id="eitFileCount"></span>
-          <span class="ef-hint">Drag on a file to select a section. Drag a section to slide it, or its edge to change its length.</span>
+          <span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: files"><span class="help-pop" role="tooltip"><span class="hp-li">Drag on a file to select a section.</span><span class="hp-li">Drag a section to slide it, or drag its edge to change its length. The arrow keys move a selected section by 0.1 s (with Shift: 1.0 s). The × removes it.</span><span class="hp-li"><b>Merge order</b> sets the order of the sections. <b>Merge sections</b> joins them into one recording.</span></span></span>
           <div class="tb-spacer"></div>
           <div class="tb-seg small" role="group" aria-label="Load EIT files">
             <button id="eitAddFilesBtn" title="Choose one or more .bin / .stp / .zip files"><span data-icon="plus"></span>Add files…</button>
@@ -176,7 +176,7 @@
 
         <!-- right: stacked ROI plots on one shared time axis -->
         <div class="eit-plots" id="eitPlots">
-          <div class="eit-img-title eit-plots-title">Impedance signal</div>
+          <div class="eit-img-title eit-plots-title title-help">Impedance signal<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: impedance signal"><span class="help-pop" role="tooltip"><span class="hp-p" id="eitDetailNote"></span></span></span></div>
           <div class="eit-plot-stack zoom-stack" id="eitPlotStack" data-zoom="eit">
             <div class="eit-cursor" id="eitCursor"></div>
           </div>
@@ -194,7 +194,6 @@
             <div class="eit-readout-field"><span class="k">Image No.</span><span class="v" id="eitImageNo">1</span></div>
             <div class="eit-readout-field"><span class="k">Rate</span><span class="v" id="eitRate">— br/min</span></div>
           </div>
-          <p class="slice-note" style="margin-top:12px;" id="eitDetailNote"></p>
         </div>
 
       </div>
@@ -218,7 +217,7 @@
       <div class="eit-files mod-files" id="emgFiles">
         <div class="ef-head">
           <span class="ct-label">Files</span><span class="ef-count" id="emgFileCount"></span>
-          <span class="ef-hint">Drag on a file to select a section. Drag a section to slide it, or its edge to change its length.</span>
+          <span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: files"><span class="help-pop" role="tooltip"><span class="hp-li">Drag on a file to select a section.</span><span class="hp-li">Drag a section to slide it, or drag its edge to change its length. The arrow keys move a selected section by 0.1 s (with Shift: 1.0 s). The × removes it.</span><span class="hp-li"><b>Merge order</b> sets the order of the sections. <b>Merge sections</b> joins them into one recording.</span></span></span>
           <div class="tb-spacer"></div>
           <div class="tb-seg small" role="group" aria-label="Load EMG files">
             <button id="emgAddFilesBtn" title="Choose one or more .Poly5 files"><span data-icon="plus"></span>Add files…</button>
@@ -230,6 +229,7 @@
         <!-- the EMG signals: ticked ones show on the file lanes (envelope) and in the plots below -->
         <div class="ef-lane-signals">
           <span class="ct-label">Signals</span>
+          <span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: EMG signals"><span class="help-pop" role="tooltip"><span class="hp-p">Tick a signal to show it. The file lanes show the envelope of each ticked signal, with the ECG removed. The plots below show the raw signals.</span><span class="hp-p"><b>Add signal</b> adds a signal from a channel of the file, with its muscle and side.</span></span></span>
           <div class="vent-checks" id="emgChecks"></div>
           <div class="pop-wrap">
             <button class="chip-add" id="emgAddOpen" data-icon="plus" aria-haspopup="dialog" aria-expanded="false">Add signal</button>
@@ -261,7 +261,6 @@
               <div class="pop-actions"><button class="tb-btn small quiet" id="emgAddCancel">Cancel</button><button class="tb-btn small primary" id="emgAddBtn">Add</button></div>
             </div>
           </div>
-          <span class="ef-hint">Lanes show the envelope of each ticked signal, ECG removed; the plots below show the raw signals.</span>
         </div>
         <div class="ef-list" id="emgFileList"></div>
         <div class="ef-merge">
@@ -294,11 +293,9 @@
         </div>
       </div>
 
-      <div class="eit-img-title eit-plots-title">EMG signals</div>
+      <div class="eit-img-title eit-plots-title title-help">EMG signals<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: EMG signals"><span class="help-pop" role="tooltip"><span class="hp-p" id="emgSourceNote"></span><span class="hp-p">Each EMG signal is one channel of the loaded Poly5 file, labelled with the muscle it records from. All signals share one time axis, so they line up below each other.</span><span class="hp-p">Channel 1 (<code>EMGdi</code>) is the diaphragm signal. <code>emg.preprocess</code> and <code>emg.ecg_gating</code> use it by default. The raw signals still contain the ECG; <code>emg.ecg_gating</code> removes it before <code>emg.detect_breaths</code> runs.</span></span></span></div>
       <div class="vent-stack zoom-stack" id="emgStack" data-zoom="emg"></div>
       <div class="eit-time-axis" data-zoom-axis="emg"></div>
-      <p class="slice-note" style="margin-top:12px;" id="emgSourceNote"></p>
-      <p class="slice-note">Each EMG signal is one channel of the loaded Poly5 file, labelled with the muscle it records from. All signals share one time axis, so they line up below each other. Channel 1 (<code>EMGdi</code>) is the diaphragm signal that <code>emg.preprocess</code> and <code>emg.ecg_gating</code> work on by default. The raw traces still carry ECG — that is what <code>emg.ecg_gating</code> removes before <code>emg.detect_breaths</code> runs.</p>
     </div>
   </div>
   <!-- Ventilator -->
@@ -319,7 +316,7 @@
       <div class="eit-files mod-files" id="ventFiles">
         <div class="ef-head">
           <span class="ct-label">Files</span><span class="ef-count" id="ventFileCount"></span>
-          <span class="ef-hint">Drag on a file to select a section. Drag a section to slide it, or its edge to change its length.</span>
+          <span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: files"><span class="help-pop" role="tooltip"><span class="hp-li">Drag on a file to select a section.</span><span class="hp-li">Drag a section to slide it, or drag its edge to change its length. The arrow keys move a selected section by 0.1 s (with Shift: 1.0 s). The × removes it.</span><span class="hp-li"><b>Merge order</b> sets the order of the sections. <b>Merge sections</b> joins them into one recording.</span></span></span>
           <div class="tb-spacer"></div>
           <div class="tb-seg small" role="group" aria-label="Load ventilator files">
             <button id="ventAddFilesBtn" title="Choose one or more .Poly5 files"><span data-icon="plus"></span>Add files…</button>
@@ -331,6 +328,7 @@
         <!-- the ventilator channels: ticked ones show on the file lanes and in the plots below -->
         <div class="ef-lane-signals">
           <span class="ct-label">Channels</span>
+          <span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: ventilator channels"><span class="help-pop" role="tooltip"><span class="hp-p">Tick a channel to show it on the file lanes and in the plots below.</span><span class="hp-p">Esophageal, gastric and transpulmonary pressure are also known categories. Tick them to show the extra signals of a recording with an esophageal pressure (P_es) catheter.</span></span></span>
           <div class="vent-checks" id="ventChecks"></div>
         </div>
         <div class="ef-list" id="ventFileList"></div>
@@ -364,11 +362,9 @@
         </div>
       </div>
 
-      <div class="eit-img-title eit-plots-title">Ventilator signals</div>
+      <div class="eit-img-title eit-plots-title title-help">Ventilator signals<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: ventilator signals"><span class="help-pop" role="tooltip"><span class="hp-p" id="ventSourceNote"></span><span class="hp-p">The channel numbers come from <code>ventilator.channels</code> (<code>pressure_channel</code>, <code>flow_channel</code>, <code>volume_channel</code>). Each signal is labelled with its category from <code>m3resp.data.categories</code>.</span></span></span></div>
       <div class="vent-stack zoom-stack" id="ventStack" data-zoom="vent"></div>
       <div class="eit-time-axis" data-zoom-axis="vent"></div>
-      <p class="slice-note" style="margin-top:12px;" id="ventSourceNote"></p>
-      <p class="slice-note">Channel indices come from <code>ventilator.channels</code> (<code>pressure_channel</code>, <code>flow_channel</code>, <code>volume_channel</code>); each trace is labelled with its canonical category from <code>m3resp.data.categories</code>. Esophageal, gastric and transpulmonary pressure are known categories the taxonomy already supports — tick them to show the extra derived traces a Pes-instrumented recording would carry.</p>
     </div>
   </div>
 
@@ -376,7 +372,7 @@
 
   <!-- Sync -->
   <div class="card" id="cardSync">
-    <div class="card-head"><h3>Raw synchronization</h3><span class="hint">session.sync_raw</span></div>
+    <div class="card-head"><h3>Raw synchronization<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: raw synchronization"><span class="help-pop" role="tooltip"><span class="hp-p">The ventilator is the reference. The offset of a recording, in seconds, is where its first sample sits on the ventilator time line. The bar of each row shows it.</span><span class="hp-li"><b>Signal</b> is the signal of the row; <b>Compared with</b> is the ventilator signal it is matched to. EMG signals are compared as their envelope (RMS over 0.3 s, ECG removed).</span><span class="hp-li">An empty offset field uses the estimated offset: the cross-correlation of the two signals, over −5.0 to +5.0 s. A change of signal gives a new estimate.</span><span class="hp-li">Type a value to replace the estimate. <b>Estimate</b> goes back to it.</span><span class="hp-li"><b>Match</b> is the correlation at the offset in use (1 is the same shape).</span><span class="hp-p"><code>session.sync_raw</code> applies the offsets.</span></span></span></h3><span class="hint">session.sync_raw</span></div>
     <div class="card-body">
       <div class="sync-controls">
         <div class="field"><label for="syncMethod">Method</label><select id="syncMethod"><option>manual_offset</option><option>estimate_offset (cross-correlation)</option></select></div>
@@ -423,26 +419,27 @@
 
       <!-- the signals on one time line, with the offsets above applied -->
       <div class="sync-check">
-        <div class="sync-check-head">
+        <div class="sync-check-head" data-zoom-toolbar="sync">
           <span class="ct-label">Check alignment</span>
-          <span class="ef-hint">Dashed lines: breath starts of the reference. With a good offset, each signal starts its breath on a line.</span>
+          <span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: check alignment"><span class="help-pop" role="tooltip"><span class="hp-p">The lanes show each ventilator signal in use, the EIT signal and the EMG envelope on one time line, with the offsets above applied.</span><span class="hp-p">The dashed lines are the breath starts of the reference. With a good offset, each signal starts its breath on a line.</span></span></span>
           <div class="tb-spacer"></div>
-          <div class="tb-seg small" id="syncViewSeg" role="group" aria-label="Part of the recording">
-            <button class="on" data-from="0">0.0–20.0 s</button>
-            <button data-from="20">20.0–40.0 s</button>
-            <button data-from="40">40.0–60.0 s</button>
+          <div class="tb-seg small view-seg" role="group" aria-label="Time range">
+            <button data-z="out" title="Zoom out" aria-label="Zoom out"><span data-icon="minus"></span></button>
+            <span class="tb-seg-readout" data-zoom-readout="sync">—</span>
+            <button data-z="in" title="Zoom in" aria-label="Zoom in"><span data-icon="plus"></span></button>
+            <button data-z="reset" title="Show the whole recording" aria-label="Show the whole recording"><span data-icon="reset"></span></button>
           </div>
+          <button class="tb-btn small icon quiet" data-icon="help" title="Drag across the plots to zoom in on a range · Ctrl-scroll to zoom" aria-label="Mouse actions: Drag across the plots to zoom in on a range · Ctrl-scroll to zoom"></button>
         </div>
-        <div class="sync-check-plot" id="syncCheckPlot"></div>
-        <div class="sync-check-axis" id="syncCheckAxis"></div>
+        <div class="sync-check-plot zoom-stack" id="syncCheckPlot" data-zoom="sync"></div>
+        <div class="sync-check-axis" id="syncCheckAxis" data-zoom-axis="sync"></div>
       </div>
-      <p class="slice-note" style="margin-top:10px;">Each empty field uses the estimated offset: the cross-correlation of the row's signal with the ventilator signal in "Compared with", over −5.0 to +5.0 s. EMG signals are compared as their envelope (RMS over 0.3 s, ECG removed). A change of signal gives a new estimate. Type a value to replace it; "Estimate" goes back to the estimate. <code>session.sync_raw</code> applies the offsets.</p>
     </div>
   </div>
 
   <!-- Working-window slicer -->
   <div class="card" id="cardWindow">
-    <div class="card-head"><h3>Working window</h3><span class="hint">eit.slice — crop the analysis window before pipeline design</span></div>
+    <div class="card-head"><h3>Working window<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: working window"><span class="help-pop wide" role="tooltip"><span class="hp-p">Cut out the part of the recording that 2 · Design analyses.</span><span class="hp-li">Each lane is an overview (minimum and maximum) of the signal in the section of that modality. The ventilator lanes follow the channels ticked there.</span><span class="hp-li"><b>Keep window</b> adds a span to keep. Drag its band to move it, or a handle to change its length. Click a window, on the lanes or in the list, to edit it with the Start and End fields.</span><span class="hp-li"><b>Remove window</b> adds a span to cut out (hatched red). Everything around it is kept. Use it to remove a cough or a disconnection from the middle of a recording.</span><span class="hp-li"><b>Whole signal</b> makes one keep window over the whole recording and joins the other keep windows into it. On its own it saves the recording unchanged. With remove windows, it keeps everything except those spans.</span><span class="hp-li">With only remove windows, the whole recording minus those spans is saved.</span><span class="hp-li">The <b>keep</b>/<b>remove</b> chip of a row changes it between the two.</span><span class="hp-p"><b>Save as new sequence</b> joins the segments, in time order, into one named sequence (<code>eit.slice</code> followed by <code>Sequence.concatenate()</code>). It adds the sequence to <b>Saved sequences</b>, under this card and in the side panel. The saved windows turn grey and are locked. New windows make the next sequence. Remove a sequence to unlock its windows.</span></span></span></h3><span class="hint">eit.slice</span></div>
     <div class="card-body">
       <div class="slice-toolbar">
         <div class="slice-group" role="group" aria-label="Edit the selected window">
@@ -475,16 +472,18 @@
           <span class="hint" id="windowsCount"></span>
         </div>
         <div id="windowsList"></div>
+        <!-- saves the coloured windows above as one sequence; saved windows
+             are grey and locked (js/prepare/window-slicer.js) -->
+        <div class="windows-panel-foot">
+          <label for="sequenceNameInput">Sequence name</label>
+          <input type="text" id="sequenceNameInput" placeholder="e.g. clean_breaths_1">
+          <div class="tb-spacer"></div>
+          <button class="tb-btn small primary" id="saveSequenceBtn" data-icon="check"><span class="save-label">Save as new sequence</span></button>
+        </div>
       </div>
 
       <div class="save-summary hidden" id="saveSummary"></div>
 
-      <p class="slice-note">Each lane is a min/max overview of the same signal shown in that modality's section above — the ventilator lanes follow whichever channels are ticked there. Drag a handle to resize a window, drag its band to move it, or click <b>Keep window</b> to select another range — click a window (on the canvas or in the list) to edit it with the Start/End fields above. <b>Whole signal</b> stretches the keep window across the entire recording (collapsing any others into it), for when you want all of it — on its own that saves the recording unchanged, and combined with remove windows it means "everything except those spans". <b>Remove window</b> adds an <b>inverse</b> (hatched red) span: that stretch is cut out and everything around it is kept — use it to drop a coughing artefact or a disconnect out of the middle of a recording. With only removed spans and no keep windows, the whole recording minus those spans is saved. Any row's <b>keep</b>/<b>remove</b> chip flips it between the two. <b>Save as new sequence</b> concatenates the resulting segments, in time order, into one named sequence — the same effect as chaining <code>eit.slice</code> + <code>Sequence.concatenate()</code> — and adds it to <b>Saved sequences</b> (under the Save bar and in the side panel).</p>
-    </div>
-    <div class="card-foot">
-      <div class="slice-field"><label for="sequenceNameInput">Sequence name</label><input type="text" id="sequenceNameInput" placeholder="e.g. clean_breaths_1"></div>
-      <div class="tb-spacer"></div>
-      <button class="tb-btn primary" id="saveSequenceBtn" data-icon="check">Save as new sequence</button>
     </div>
     <!-- the same list as Saved sequences in the side panel -->
     <div class="card-seqs">

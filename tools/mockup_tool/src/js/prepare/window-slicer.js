@@ -2,17 +2,28 @@
 // type 'keep' selects a span to save; type 'cut' is an INVERSE window — that
 // span is removed and whatever surrounds it is saved instead. With no keep
 // windows at all the whole recording is treated as kept, so cut windows on
-// their own mean "save everything except these". ----
+// their own mean "save everything except these".
+// A saved window has seqId, the id of its sequence: it is grey and locked, and
+// "Save as new sequence" uses only the windows without a sequence. ----
 let winSeq = 1;
 let windows = [{id:'w1', start:4, end:22, type:'keep'}];
 let activeWindowId = 'w1';
 const CUT_COLOR = '#d1554f'; // --crit, needed as a literal for SVG fill/stroke
+const SAVED_COLOR = 'var(--text-faint)';   // windows of a saved sequence
 
 function clampSeconds(v){ return Math.min(Math.max(v,0), REC_SECONDS); }
 function sortedWindows(){ return [...windows].sort((a,b)=>a.start-b.start); }
 function isCut(w){ return w.type==='cut'; }
 function sortedKeeps(){ return sortedWindows().filter(w=>!isCut(w)); }
 function sortedCuts(){ return sortedWindows().filter(isCut); }
+function isLocked(w){ return !!(w && w.seqId); }
+function openWindows(){ return sortedWindows().filter(w=>!isLocked(w)); }
+function openCuts(){ return openWindows().filter(isCut); }
+function openKeeps(){ return openWindows().filter(w=>!isCut(w)); }
+function seqNameOf(w){
+  const seq = SAVED_SEQUENCES.find(s=>s.id===w.seqId);
+  return seq ? seq.name : '';
+}
 function seqIndexOf(id){
   const w = windows.find(x=>x.id===id);
   if(!w) return 0;
@@ -27,10 +38,11 @@ function windowColor(w){
 }
 
 // Merge the keep spans (or the whole recording, if only cuts were drawn), then
-// subtract every cut span. The result is what "Save as new sequence" writes.
+// subtract every cut span. Only the windows without a sequence count. The
+// result is what "Save as new sequence" writes.
 function resolvedSegments(){
-  const keeps = sortedKeeps().map(w=>({start:w.start, end:w.end}));
-  const cuts = sortedCuts().map(w=>({start:w.start, end:w.end}));
+  const keeps = openKeeps().map(w=>({start:w.start, end:w.end}));
+  const cuts = openCuts().map(w=>({start:w.start, end:w.end}));
   if(keeps.length===0 && cuts.length===0) return [];
   let merged = [];
   const base = keeps.length ? keeps : [{start:0, end:REC_SECONDS}];
@@ -51,6 +63,19 @@ function resolvedSegments(){
   return merged.filter(s=>s.end-s.start > 0.05);
 }
 function resolvedTotal(){ return resolvedSegments().reduce((s,x)=>s+(x.end-x.start), 0); }
+
+// ---- Save button: off while there is nothing new to save ----
+function updateSaveState(){
+  const open = openWindows(), locked = windows.filter(isLocked);
+  const btn = document.getElementById('saveSequenceBtn');
+  const allSaved = open.length===0 && locked.length>0;
+  btn.disabled = resolvedSegments().length===0;
+  btn.querySelector('.save-label').textContent = allSaved ? 'Saved' : 'Save as new sequence';
+  btn.title = allSaved
+    ? 'All windows are saved. Add a window to start a new sequence.'
+    : 'Save the coloured windows as one sequence';
+  if(open.length) document.getElementById('saveSummary').classList.add('hidden');
+}
 
 const sliceTrack = document.getElementById('sliceTrack');
 const startInput = document.getElementById('sliceStartInput');
@@ -74,22 +99,23 @@ function updateMasks(){
     const h = vb[3];
     // cut spans first, so a keep window drawn over one still reads on top
     cuts.forEach(w=>{
+      const cutColor = isLocked(w) ? SAVED_COLOR : CUT_COLOR;
       const x1=(w.start/REC_SECONDS)*700, x2=(w.end/REC_SECONDS)*700;
       const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
       rect.setAttribute('class','slice-mask'); rect.setAttribute('x',x1); rect.setAttribute('y',0);
       rect.setAttribute('width', Math.max(0,x2-x1)); rect.setAttribute('height', h);
-      rect.setAttribute('fill', CUT_COLOR); rect.style.opacity = 0.20;
+      rect.setAttribute('fill', cutColor); rect.style.opacity = 0.20;
       svgEl.appendChild(rect);
       [x1,x2].forEach(x=>{
         const ln=document.createElementNS('http://www.w3.org/2000/svg','line');
         ln.setAttribute('class','slice-mask-edge'); ln.setAttribute('x1',x); ln.setAttribute('x2',x);
         ln.setAttribute('y1',0); ln.setAttribute('y2',h);
-        ln.setAttribute('stroke', CUT_COLOR); ln.setAttribute('stroke-dasharray','4 3');
+        ln.setAttribute('stroke', cutColor); ln.setAttribute('stroke-dasharray','4 3');
         svgEl.appendChild(ln);
       });
     });
     keeps.forEach(w=>{
-      const color = windowColor(w);
+      const color = isLocked(w) ? SAVED_COLOR : windowColor(w);
       const x1=(w.start/REC_SECONDS)*700, x2=(w.end/REC_SECONDS)*700;
       const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
       rect.setAttribute('class','slice-mask'); rect.setAttribute('x',x1); rect.setAttribute('y',0);
@@ -128,14 +154,19 @@ function updateActiveFields(){
   const w = windows.find(x=>x.id===activeWindowId);
   if(!w){
     startInput.value=''; endInput.value='';
+    startInput.disabled = endInput.disabled = false;
+    durationChip.classList.remove('locked');
     activeHint.textContent = windows.length ? 'click a window to edit it' : 'no windows selected';
     durationChip.textContent = '—';
     durationChip.classList.remove('cut');
     return;
   }
-  activeHint.textContent = isCut(w)
-    ? 'editing removed span '+seqIndexOf(w.id)
-    : 'editing window '+seqIndexOf(w.id);
+  const locked = isLocked(w);
+  startInput.disabled = endInput.disabled = locked;
+  durationChip.classList.toggle('locked', locked);
+  activeHint.textContent = locked
+    ? `saved in ${seqNameOf(w)}, locked`
+    : isCut(w) ? 'editing removed span '+seqIndexOf(w.id) : 'editing window '+seqIndexOf(w.id);
   if(sliceMode==='time'){ startInput.value=w.start.toFixed(1); endInput.value=w.end.toFixed(1); }
   else { startInput.value=Math.round(w.start*EIT_HZ); endInput.value=Math.round(w.end*EIT_HZ); }
   durationChip.textContent = fmtDuration(w.end-w.start);
@@ -143,6 +174,10 @@ function updateActiveFields(){
 }
 
 function wireWindowDrag(el, w){
+  if(isLocked(w)){
+    el.addEventListener('mousedown', e=>{ e.preventDefault(); activeWindowId=w.id; applyActiveClasses(); });
+    return;
+  }
   function startDrag(mode, startClientX){
     el.classList.add('dragging');
     const handleEl = mode!=='move' ? el.querySelector(`[data-h="${mode}"]`) : null;
@@ -194,8 +229,10 @@ function wireWindowDrag(el, w){
 function buildWindowEl(w, seq){
   const cut = isCut(w);
   const el=document.createElement('div');
-  el.className='slice-select'+(w.id===activeWindowId?' active':'')+(cut?' cut':'');
+  const locked = isLocked(w);
+  el.className='slice-select'+(w.id===activeWindowId?' active':'')+(cut?' cut':'')+(locked?' locked':'');
   el.dataset.id=w.id;
+  if(locked) el.title = `Saved in ${seqNameOf(w)}. Remove the sequence below to edit this window.`;
   el.style.setProperty('--win-color', windowColor(w));
   positionWindowEl(el, w);
   el.innerHTML = `
@@ -204,7 +241,8 @@ function buildWindowEl(w, seq){
     <div class="slice-handle" data-h="left"></div>
     <div class="slice-handle" data-h="right"></div>
   `;
-  el.querySelector('.slice-select-remove').addEventListener('click', e=>{
+  if(locked) el.querySelector('.slice-select-remove').remove();
+  else el.querySelector('.slice-select-remove').addEventListener('click', e=>{
     e.stopPropagation(); removeWindow(w.id);
   });
   wireWindowDrag(el, w);
@@ -213,35 +251,42 @@ function buildWindowEl(w, seq){
 
 function renderWindowsList(sorted){
   const list = document.getElementById('windowsList');
-  const keeps = sortedKeeps(), cuts = sortedCuts();
-  const segs = resolvedSegments();
+  const keeps = openKeeps(), cuts = openCuts();
+  const segs = resolvedSegments(), locked = sorted.filter(isLocked);
   const parts = [];
   if(keeps.length) parts.push(`${keeps.length} kept`);
   if(cuts.length) parts.push(`${cuts.length} removed`);
-  if(segs.length) parts.push(`${segs.length} segment${segs.length===1?'':'s'}, ${fmtDuration(resolvedTotal())} saved`);
+  if(segs.length) parts.push(`${segs.length} segment${segs.length===1?'':'s'}, ${fmtDuration(resolvedTotal())} to save`);
+  if(locked.length) parts.push(`${locked.length} saved`);
   document.getElementById('windowsCount').textContent = parts.join(' · ');
   if(sorted.length===0){
     list.innerHTML = '<div class="windows-empty">Nothing selected. Click "Whole signal" to keep all of it, or "Keep window" or "Remove window", or drag on a lane above.</div>';
     return;
   }
   list.innerHTML = '';
-  sorted.forEach(w=>{
-    const cut = isCut(w);
+  // saved windows first, then the windows the next save uses (just above the Save row)
+  [...locked, ...sorted.filter(w=>!isLocked(w))].forEach(w=>{
+    const cut = isCut(w), lockedRow = isLocked(w);
     const seq = seqIndexOf(w.id);
     const row=document.createElement('div');
-    row.className='window-row'+(w.id===activeWindowId?' active':'')+(cut?' cut':'');
+    row.className='window-row'+(w.id===activeWindowId?' active':'')+(cut?' cut':'')+(lockedRow?' locked':'');
     row.dataset.id=w.id;
     row.style.setProperty('--win-color', windowColor(w));
+    const end = lockedRow
+      ? `<span class="win-seq" title="Remove the sequence below to edit this window">${prepIcon('seq', 12)}${seqNameOf(w)}</span>`
+      : `<button class="tb-btn small icon quiet remove" data-remove title="Delete this ${cut?'removed span':'window'}" aria-label="Delete this ${cut?'removed span':'window'}">${prepIcon('close')}</button>`;
     row.innerHTML = `
       <span class="badge">${cut?'−':seq}</span>
-      <button class="win-kind" data-kind title="Switch this span between kept and removed">${cut?'remove':'keep'}</button>
+      <button class="win-kind" data-kind ${lockedRow?'disabled title="Saved windows are locked"':'title="Switch this span between kept and removed"'}>${cut?'remove':'keep'}</button>
       <span class="range">${fmtRange(w.start, w.end)}</span>
       <span class="dur">${fmtDuration(w.end-w.start)}</span>
-      <button class="tb-btn small icon quiet remove" data-remove title="Delete this ${cut?'removed span':'window'}" aria-label="Delete this ${cut?'removed span':'window'}">${prepIcon('close')}</button>`;
+      ${end}`;
     row.addEventListener('click', e=>{
       if(e.target.closest('button')) return;
       activeWindowId=w.id; applyActiveClasses();
     });
+    list.appendChild(row);
+    if(lockedRow) return;
     row.querySelector('[data-kind]').addEventListener('click', e=>{
       e.stopPropagation();
       w.type = cut ? 'keep' : 'cut';
@@ -251,7 +296,6 @@ function renderWindowsList(sorted){
     row.querySelector('[data-remove]').addEventListener('click', e=>{
       e.stopPropagation(); removeWindow(w.id);
     });
-    list.appendChild(row);
   });
   if(cuts.length && keeps.length===0){
     const note=document.createElement('div');
@@ -271,16 +315,16 @@ function renderWindows(){
   updateMasks();
   // already covering everything → nothing left for "Whole signal" to widen
   const fullBtn = document.getElementById('fullWindowBtn');
-  const isFull = windows.filter(w=>!isCut(w)).length===1 && windows.some(isFullSpan);
+  const isFull = openKeeps().length===1 && openKeeps().some(isFullSpan);
   fullBtn.disabled = isFull;
   fullBtn.title = isFull
-    ? 'The whole recording is already kept'+(sortedCuts().length ? ' — minus the remove windows below.' : '.')
+    ? 'The whole recording is already kept'+(openCuts().length ? ' — minus the remove windows below.' : '.')
     : 'Keep the whole signal — one keep window spanning the entire recording. Any remove windows stay, so this means "everything except the removed spans".';
-  document.getElementById('saveSequenceBtn').disabled = resolvedSegments().length===0;
-  document.getElementById('saveSummary').classList.add('hidden');
+  updateSaveState();
 }
 
 function removeWindow(id){
+  if(isLocked(windows.find(w=>w.id===id))) return;
   const idx = windows.findIndex(w=>w.id===id);
   if(idx>=0) windows.splice(idx,1);
   if(activeWindowId===id) activeWindowId = windows[0]?.id ?? null;
@@ -325,11 +369,11 @@ function isFullSpan(w){ return !isCut(w) && w.start<=FULL_SPAN_EPS && w.end>=REC
 function keepWholeSignal(){
   // several keep windows would merge into the full span anyway, so widen one and
   // drop the rest instead of leaving redundant rows in the list
-  const cuts = windows.filter(isCut);
-  let full = windows.find(w=>!isCut(w));
+  const locked = windows.filter(isLocked), cuts = openCuts();
+  let full = openKeeps()[0];
   if(full){ full.start = 0; full.end = REC_SECONDS; }
   else { winSeq++; full = {id:'w'+winSeq, start:0, end:REC_SECONDS, type:'keep'}; }
-  windows = [full, ...cuts];
+  windows = [...locked, full, ...cuts];
   activeWindowId = full.id;
   renderWindows();
 }
@@ -347,14 +391,14 @@ document.getElementById('sliceMode').addEventListener('click', e=>{
 });
 
 startInput.addEventListener('input', ()=>{
-  const w = windows.find(x=>x.id===activeWindowId); if(!w) return;
+  const w = windows.find(x=>x.id===activeWindowId); if(!w || isLocked(w)) return;
   const raw = parseFloat(startInput.value)||0;
   const sec = sliceMode==='index' ? raw/EIT_HZ : raw;
   w.start = clampSeconds(Math.min(sec, w.end-1));
   renderWindows();
 });
 endInput.addEventListener('input', ()=>{
-  const w = windows.find(x=>x.id===activeWindowId); if(!w) return;
+  const w = windows.find(x=>x.id===activeWindowId); if(!w || isLocked(w)) return;
   const raw = parseFloat(endInput.value)||0;
   const sec = sliceMode==='index' ? raw/EIT_HZ : raw;
   w.end = clampSeconds(Math.max(sec, w.start+1));

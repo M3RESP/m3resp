@@ -96,6 +96,8 @@ const JS_FILES = [
   // after 3 · Check: the values link to its checks and use its breath times
   'js/results/results-data.js',
   'js/results/results-page.js',
+  // last: it reads the state of all tabs, and on a reload puts the kept state back
+  'js/core/session.js',
 ];
 
 function read(relPath) {

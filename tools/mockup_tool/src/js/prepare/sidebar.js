@@ -1,7 +1,7 @@
 // ================= Sidebar: modality overview, load/remove, add-custom =================
 const BUILTIN_CARD_ID = {eit:'cardEit', emg:'cardEmg', vent:'cardVent'};
 let customSeq = 0;
-const customModalities = {}; // id -> {name}
+const customModalities = {}; // id -> {name, vendor}
 
 // Real native file picker per modality card — lets the team see browsing/selecting
 // a file per modality, even though this mockup has no backend to actually parse it.
@@ -33,8 +33,8 @@ wireLoadFileButton(document.getElementById('cardEmg'), 'emg');
 wireLoadFileButton(document.getElementById('cardVent'), 'vent');
 
 function refreshModCount(){
-  const rows = document.querySelectorAll('.mod-list-row');
-  const loaded = document.querySelectorAll('.mod-list-row:not(.unloaded)').length;
+  const rows = document.querySelectorAll('#modList .mod-list-row');
+  const loaded = document.querySelectorAll('#modList .mod-list-row:not(.unloaded)').length;
   document.getElementById('modCount').textContent = `${loaded} of ${rows.length}`;
 }
 
@@ -101,8 +101,14 @@ document.getElementById('addCustomModBtn').addEventListener('click', ()=>{
   const name = nameInput.value.trim();
   if(!name) return;
   const vendor = vendorInput.value.trim() || 'custom file';
-  const id = nameToSlug(name) + '_' + (++customSeq);
-  customModalities[id] = {name};
+  addCustomModality(nameToSlug(name) + '_' + (++customSeq), name, vendor);
+  nameInput.value=''; vendorInput.value='';
+  closeAddModality();
+});
+
+// a custom modality: a row in the side panel and a card in the main column
+function addCustomModality(id, name, vendor){
+  customModalities[id] = {name, vendor};
 
   // sidebar row
   const row = document.createElement('div');
@@ -149,12 +155,11 @@ document.getElementById('addCustomModBtn').addEventListener('click', ()=>{
           </div>
         </div>
         <div class="aux-panel">
-          <div class="card-head" style="padding:0 0 8px;border:none;"><h3 style="font-size:11.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;">Channel setup</h3><span class="hint">unregistered step</span></div>
+          <div class="card-head" style="padding:0 0 8px;border:none;"><h3 style="font-size:11.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;">Channel setup<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: channel setup"><span class="help-pop end" role="tooltip"><span class="hp-p">No step in the registry reads this modality yet. Add a <code>StepDefinition</code> for it to use it in <b>2 · Design</b>.</span></span></span></h3><span class="hint">unregistered step</span></div>
           <div class="field-grid">
             <div class="field"><label>Channels</label><input type="text" placeholder="e.g. 1"></div>
             <div class="field"><label>Sample rate</label><input type="text" placeholder="e.g. 100 Hz"></div>
           </div>
-          <p class="slice-note" style="margin-top:10px;">No step in the registry reads this modality yet — add a <code>StepDefinition</code> for it before it can be wired into <b>2 · Design</b>.</p>
         </div>
       </div>
     </div>
@@ -168,12 +173,9 @@ document.getElementById('addCustomModBtn').addEventListener('click', ()=>{
   buildSignalSvg(svgEl, {stroke:'var(--custom)', freqHz:(14+seed%6)/60, amp:38+((seed*7)%26), baseline:93, noise:4, wobble:0.2, rectify:(seed%2===0), seed, h:172});
   MASK_SVGS[maskId] = svgEl;
   updateMasks();
-
-  nameInput.value=''; vendorInput.value='';
-  closeAddModality();
   refreshModCount();
   showSection(card.id);
-});
+}
 
 // "+ Add modality" opens the small form under the list
 const addModalityForm = document.getElementById('addModalityForm');

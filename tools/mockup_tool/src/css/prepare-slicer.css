@@ -22,14 +22,7 @@
 .win-mark.cut{border-color:var(--crit);background:repeating-linear-gradient(45deg, color-mix(in srgb, var(--crit) 55%, transparent) 0 2px, transparent 2px 4px);}
 .add-seg button[disabled]{opacity:0.5;}
 
-/* card footer: the sequence name and the Save button */
-.card-foot{
-  display:flex;align-items:flex-end;gap:14px;padding:12px 16px;border-top:1px solid var(--border);
-  background:var(--surface-2);border-radius:0 0 var(--r-card) var(--r-card);
-}
-.card-foot .slice-field input{width:240px;background:var(--surface);font-family:var(--mono);}
-/* saved sequences under the Save bar: a panel like "Selected windows" */
-.card:has(.card-seqs) > .card-foot{border-radius:0;}
+/* saved sequences under the working window: a panel like "Selected windows" */
 .card-seqs{padding:0 16px 16px;}
 .card-seqs .seq-row{padding:8px 12px;border-radius:0;border-bottom:1px solid var(--surface-2);font-size:12px;}
 .card-seqs .seq-row:last-child{border-bottom:none;}
@@ -119,6 +112,32 @@
 }
 .windows-panel-head h4{margin:0;font-size:11.5px;font-weight:700;}
 .windows-panel-head .hint{font-size:11px;color:var(--text-faint);}
+/* sequence name and Save button at the foot of "Selected windows" */
+.windows-panel-foot{
+  display:flex;align-items:center;gap:10px;padding:8px 12px;
+  border-top:1px solid var(--border);background:var(--surface-2);
+}
+.windows-panel-foot label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;}
+.windows-panel-foot input{
+  font-family:var(--mono);font-size:12px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-ctl);height:26px;padding:0 8px;color:var(--text);width:220px;
+}
+/* a window of a saved sequence: grey and locked */
+.slice-select.locked, .window-row.locked{--win-color:var(--text-faint) !important;}
+.slice-select.locked{cursor:default;}
+.slice-select.locked .slice-handle{display:none;}
+.slice-select.locked.cut{
+  background:repeating-linear-gradient(45deg, color-mix(in srgb, var(--text-faint) 26%, transparent) 0 5px, transparent 5px 10px);
+}
+.window-row.locked{color:var(--text-dim);}
+.window-row.locked .win-kind, .window-row.locked button.win-kind:hover{
+  color:var(--text-faint);border-color:var(--border);background:var(--surface-2);cursor:default;filter:none;
+}
+.window-row.locked.cut .range{text-decoration-color:var(--text-faint);}
+.window-row.locked:not(.active){background:var(--surface-2);}
+.win-seq{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;color:var(--text-faint);flex:none;}
+.slice-duration.locked{background:var(--surface-2);border-color:var(--border);}
+.slice-field input:disabled{color:var(--text-faint);}
 .windows-empty{padding:16px 12px;text-align:center;font-size:12px;color:var(--text-faint);}
 .window-row{
   display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--surface-2);font-size:12px;cursor:pointer;

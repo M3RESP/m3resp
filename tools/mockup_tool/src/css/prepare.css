@@ -185,6 +185,36 @@
 .ct-right{flex:none;display:flex;align-items:center;gap:4px;}
 .ct-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim);margin-right:2px;}
 .view-seg .tb-seg-readout{min-width:132px;justify-content:center;}
+
+/* "?" next to a title: the mouse over it, or a click on it, opens a panel
+   with the help text of that part of the page */
+.help-tip{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;flex:none;
+  width:20px;height:20px;border-radius:5px;margin:-3px 0;color:var(--text-faint);cursor:help;
+  font-size:11.5px;font-weight:400;text-transform:none;letter-spacing:normal;
+}
+.help-tip:hover, .help-tip:focus{color:var(--accent-strong);background:var(--surface-2);outline:none;}
+.help-tip:focus-visible{box-shadow:0 0 0 2px var(--accent);}
+.help-pop{
+  display:none;position:absolute;z-index:60;top:calc(100% + 6px);left:-6px;
+  width:400px;max-width:70vw;padding:10px 12px;border:1px solid var(--border);border-radius:8px;
+  background:var(--surface);box-shadow:var(--shadow);
+  color:var(--text-dim);line-height:1.5;text-align:left;white-space:normal;cursor:auto;
+}
+/* covers the gap under the "?", so the panel stays open on the way to it */
+.help-pop::before{content:"";position:absolute;left:0;right:0;top:-8px;height:8px;}
+.help-tip:hover > .help-pop, .help-tip:focus > .help-pop{display:block;}
+.help-pop.end{left:auto;right:-6px;}
+.help-pop.wide{width:480px;}
+.help-pop b{color:var(--text);}
+.help-pop code{font-family:var(--mono);font-size:10.5px;}
+.hp-p{display:block;}
+.hp-p + .hp-p, .hp-p + .hp-li, .hp-li + .hp-p{margin-top:6px;}
+.hp-li{display:block;position:relative;padding-left:12px;}
+.hp-li + .hp-li{margin-top:3px;}
+.hp-li::before{content:"";position:absolute;left:2px;top:0.65em;width:4px;height:4px;border-radius:50%;background:var(--text-faint);}
+/* a title with its "?" on one line */
+.title-help{display:flex;align-items:center;gap:6px;}
 .view-seg button{width:28px;padding:0;}
 
 /* "+ Add signal": a dashed chip at the end of the chips, with a small panel under it */
