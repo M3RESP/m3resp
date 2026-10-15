@@ -372,11 +372,12 @@
 
   <!-- Sync -->
   <div class="card" id="cardSync">
-    <div class="card-head"><h3>Raw synchronization<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: raw synchronization"><span class="help-pop" role="tooltip"><span class="hp-p">The ventilator is the reference. The offset of a recording, in seconds, is where its first sample sits on the ventilator time line. The bar of each row shows it.</span><span class="hp-li"><b>Signal</b> is the signal of the row; <b>Compared with</b> is the ventilator signal it is matched to. EMG signals are compared as their envelope (RMS over 0.3 s, ECG removed).</span><span class="hp-li">An empty offset field uses the estimated offset: the cross-correlation of the two signals, over −5.0 to +5.0 s. A change of signal gives a new estimate.</span><span class="hp-li">Type a value to replace the estimate. <b>Estimate</b> goes back to it.</span><span class="hp-li"><b>Match</b> is the correlation at the offset in use (1 is the same shape).</span><span class="hp-p"><code>session.sync_raw</code> applies the offsets.</span></span></span></h3><span class="hint">session.sync_raw</span></div>
+    <div class="card-head"><h3>Raw synchronization<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: raw synchronization"><span class="help-pop" role="tooltip"><span class="hp-p">The ventilator is the reference. The offset of a recording, in seconds, is where its first sample sits on the ventilator time line. The bar of each row shows it.</span><span class="hp-li"><b>Signal</b> is the signal of the row; <b>Compared with</b> is the ventilator signal it is matched to. EMG signals are compared as their envelope (RMS over 0.3 s, ECG removed).</span><span class="hp-li">An empty offset field uses the estimated offset: the cross-correlation of the two signals, over −5.0 to +5.0 s. A change of signal gives a new estimate.</span><span class="hp-li">Type a value to replace the estimate. With the method <code>estimate_offset</code>, <b>Estimate</b> finds the offsets of all rows again and clears the typed values.</span><span class="hp-li"><b>Match</b> is the correlation at the offset in use (1 is the same shape).</span><span class="hp-p"><code>session.sync_raw</code> applies the offsets.</span></span></span></h3><span class="hint">session.sync_raw</span></div>
     <div class="card-body">
       <div class="sync-controls">
         <div class="field"><label for="syncMethod">Method</label><select id="syncMethod"><option>manual_offset</option><option>estimate_offset (cross-correlation)</option></select></div>
         <div class="field"><label for="syncReference">Reference modality</label><select id="syncReference"><option>ventilator</option><option>eit</option><option>emg</option></select></div>
+        <button class="tb-btn" id="syncEstimate" disabled title="Find the offset where each recording matches the ventilator best, and use it">Estimate</button>
       </div>
       <!-- each bar is one recording on the time line of the reference; the
            offset moves it left or right (js/prepare/sync-strip.js) -->
@@ -387,7 +388,7 @@
           <span class="sync-col-head sync-vs">Compared with</span>
           <span class="sync-col-head sync-field">Offset</span>
           <div class="sync-ruler" id="syncRuler"></div>
-          <span class="sync-match-head">Match</span><span class="sync-est"></span>
+          <span class="sync-match-head">Match</span>
         </div>
         <div class="sync-row mod-vent">
           <span class="sync-name"><i></i>Ventilator</span>
@@ -395,7 +396,7 @@
           <span class="sync-vs"></span>
           <span class="sync-field"></span>
           <div class="sync-track"><div class="sync-bar" id="syncBarVent" data-offset="0"><span class="v">0.0 s</span></div></div>
-          <span class="sync-match"></span><span class="sync-est"></span>
+          <span class="sync-match"></span>
         </div>
         <div class="sync-row mod-eit">
           <span class="sync-name"><i></i>EIT</span>
@@ -404,7 +405,6 @@
           <label class="sync-field sync-offset-wrap"><input class="sync-offset" type="number" step="0.1" id="syncOffsetEit" aria-label="EIT offset in seconds"><span class="unit">s</span></label>
           <div class="sync-track"><div class="sync-bar" id="syncBarEit"><span class="v"></span><span class="tag"></span></div></div>
           <span class="sync-match" id="syncMatchEit"></span>
-          <span class="sync-est"><button class="tb-btn small" data-estimate="eit" title="Find the offset where EIT matches the ventilator best, and use it">Estimate</button></span>
         </div>
         <div class="sync-row mod-emg">
           <span class="sync-name"><i></i>EMG</span>
@@ -413,7 +413,6 @@
           <label class="sync-field sync-offset-wrap"><input class="sync-offset" type="number" step="0.1" id="syncOffsetEmg" aria-label="EMG offset in seconds"><span class="unit">s</span></label>
           <div class="sync-track"><div class="sync-bar" id="syncBarEmg"><span class="v"></span><span class="tag"></span></div></div>
           <span class="sync-match" id="syncMatchEmg"></span>
-          <span class="sync-est"><button class="tb-btn small" data-estimate="emg" title="Find the offset where EMG matches the ventilator best, and use it">Estimate</button></span>
         </div>
       </div>
 

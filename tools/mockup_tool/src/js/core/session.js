@@ -137,6 +137,7 @@ function restorePrepare(p){
   });
   document.getElementById('syncMethod').value = p.syncMethod;
   document.getElementById('syncReference').value = p.syncReference;
+  updateSyncEstimateButton();
   renderSyncSelects();
   Object.keys(SYNC_IDS).forEach(updateSyncRow);
   renderSyncCheck();

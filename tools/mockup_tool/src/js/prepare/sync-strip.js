@@ -183,14 +183,22 @@ Object.keys(SYNC_IDS).forEach(mod=>{
     syncChanged(mod);
   });
 });
-document.getElementById('syncStrip').addEventListener('click', e=>{
-  const btn = e.target.closest('[data-estimate]'); if(!btn) return;
-  const mod = btn.dataset.estimate;
-  SYNC_STATE[mod].est = estimateOffset(mod);
-  SYNC_STATE[mod].typed = null;
-  document.getElementById(SYNC_IDS[mod].input).value = '';
-  syncChanged(mod);
-  showEdgeNote(btn, `${SYNC_MODS[mod].name} ${syncSigName(mod)} against ${ventChan(SYNC_STATE[mod].ref).name}: best match at ${fmtOffset(SYNC_STATE[mod].est)} (correlation ${syncMatch(mod, SYNC_STATE[mod].est).toFixed(2)}).`);
+// "Estimate" is active with the method estimate_offset; it finds the offset
+// of each row again and clears the typed values
+const syncEstimateBtn = document.getElementById('syncEstimate');
+function updateSyncEstimateButton(){
+  syncEstimateBtn.disabled = !document.getElementById('syncMethod').value.startsWith('estimate_offset');
+}
+document.getElementById('syncMethod').addEventListener('change', updateSyncEstimateButton);
+syncEstimateBtn.addEventListener('click', ()=>{
+  const mods = Object.keys(SYNC_IDS).filter(mod=> mod!=='emg' || EMG_CHANNELS.length);
+  mods.forEach(mod=>{
+    SYNC_STATE[mod].est = estimateOffset(mod);
+    SYNC_STATE[mod].typed = null;
+    document.getElementById(SYNC_IDS[mod].input).value = '';
+    syncChanged(mod);
+  });
+  showEdgeNote(syncEstimateBtn, mods.map(mod=> `${SYNC_MODS[mod].name} ${syncSigName(mod)} against ${ventChan(SYNC_STATE[mod].ref).name}: best match at ${fmtOffset(SYNC_STATE[mod].est)} (correlation ${syncMatch(mod, SYNC_STATE[mod].est).toFixed(2)}).`).join(' '));
 });
 
 // ---- the signal of each row and the ventilator signal it is compared with ----
@@ -236,4 +244,5 @@ function syncEmgChannelsChanged(){
 placeSyncBar(document.getElementById('syncBarVent'), 0);
 renderSyncSelects();
 Object.keys(SYNC_STATE).forEach(mod=>{ SYNC_STATE[mod].est = estimateOffset(mod); updateSyncRow(mod); });
+updateSyncEstimateButton();
 renderSyncCheck();

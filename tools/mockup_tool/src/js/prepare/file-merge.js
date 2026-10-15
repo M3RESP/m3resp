@@ -7,6 +7,9 @@
 // join into one recording ("Merge sections"). The plots under the Files block
 // show one file or the merged recording ("Show" in the toolbar, or a click on
 // a file name or on the merged preview).
+// A click on the "Merge order" head opens or closes the merge block;
+// "Merge sections" closes it, and a change of the sections after a merge
+// opens it again.
 //
 // makeFileMerger(cfg) reads these settings:
 //   prefix      start of the element ids: <prefix>FileList, <prefix>MergeBtn, …
@@ -24,12 +27,18 @@
 const SECTION_MIN = 0.5;                       // s
 const snap01 = t=> Math.round(t*10)/10;
 
+// height of the name strip above each signal, in the units of the drawing
+const LABEL_ROOM = 15;
+
 // one lane: signals over `dur` seconds from file time t0. Several signals sit
 // below each other, each scaled to its own row; a label names each row and
 // sits in the space above its signal. The merged preview has no labels.
 function fileLaneSvg(traces, dur, t0=0, {labels:showLabels=true}={}){
-  const N=700, W=1000, H=60*Math.max(1, traces.length), PAD=5, rowH=H/Math.max(1, traces.length);
-  const TOP = showLabels && traces.length>1 ? 20 : PAD;   // room for the row label
+  const n=Math.max(1, traces.length), named = showLabels && traces.length>1;
+  // each row has 60 units for its signal (the same as a one-signal lane),
+  // plus LABEL_ROOM units above it for the signal name
+  const N=700, W=1000, PAD=5, rowH = 60 + (named ? LABEL_ROOM : 0), H=rowH*n;
+  const TOP = named ? LABEL_ROOM + PAD : PAD;
   const lines = traces.map(({fn, color}, k)=>{
     const vals=[];
     for(let i=0;i<N;i++) vals.push(fn(t0 + (i/(N-1))*dur));
@@ -43,10 +52,12 @@ function fileLaneSvg(traces, dur, t0=0, {labels:showLabels=true}={}){
     `<span class="ef-lane-label" style="top:${(k/traces.length*100).toFixed(2)}%">${tr.label || ''}</span>`).join('') : '';
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${lines}</svg>${labels}`;
 }
-// lane height in px for n signals below each other: 52 px for each signal
-const fileLaneHeight = n=> n<=1 ? 56 : 52*n;
-// height of the merged preview in px: 28 px for each signal
-const previewHeight = n=> n<=1 ? 44 : 28*n;
+// lane height in px for n signals below each other: each signal is drawn as
+// tall as the signal in a one-signal lane (56 px), and its name gets a strip
+// of LABEL_ROOM units above it
+const fileLaneHeight = n=> n<=1 ? 56 : n*56*(60+LABEL_ROOM)/60;
+// height of the merged preview in px: 44 px for each signal
+const previewHeight = n=> 44*Math.max(1, n);
 
 function makeFileMerger(cfg){
   const $ = id=> document.getElementById(cfg.prefix + id);
@@ -54,12 +65,14 @@ function makeFileMerger(cfg){
     files: cfg.files, sections: cfg.sections,
     shown: cfg.files[0].id,        // file id or 'merged'
     merged: false,                 // true after "Merge sections", until the next change
+    collapsed: false,              // true when the merge block is closed
     active: cfg.sections[0] ? cfg.sections[0].id : null,
     sectionSeq: cfg.sections.length, fileSeq: cfg.files.length,
   };
   const list = $('FileList'), secList = $('SectionList'), preview = $('MergePreview');
   const summary = $('MergeSummary'), warn = $('MergeWarn'), mergeBtn = $('MergeBtn');
   const sourceSelect = $('SourceSelect');
+  const mergeBox = mergeBtn.closest('.ef-merge'), mergeHead = mergeBox.querySelector('.ef-merge-head');
 
   M.file = id=> M.files.find(f=>f.id===id);
   const tracesOf = f=>{ const r = cfg.laneFn(f); return Array.isArray(r) ? r : [{fn:r, color:cfg.color}]; };
@@ -69,6 +82,7 @@ function makeFileMerger(cfg){
   const pl = n=> n===1 ? '' : 's';
 
   function changed(){
+    if(M.merged) setCollapsed(false);
     M.merged = false;
     render();
     // the merged recording on screen follows the sections
@@ -290,7 +304,7 @@ function makeFileMerger(cfg){
     });
 
     const n = M.sections.length, files = M.fileCount();
-    summary.textContent = n ? `${n} section${pl(n)} from ${files} file${pl(files)} → ${fmtSec(M.mergedLength())}` : '';
+    summary.textContent = n ? `${n} section${pl(n)} from ${files} file${pl(files)} → ${fmtSec(M.mergedLength())}${M.merged ? ' · merged' : ''}` : '';
     const rates = [...new Set(M.sections.map(s=>M.file(s.fileId).fs))];
     warn.hidden = rates.length<2;
     warn.textContent = rates.length<2 ? '' : `Sampling rates differ (${rates.join(' Hz, ')} Hz). Merged sections need one rate.`;
@@ -320,7 +334,24 @@ function makeFileMerger(cfg){
     sourceSelect.value = id;
   }
 
-  // "Merge sections": the card head and the side panel show the merged recording
+  // ---- open and close the merge block ----
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'ef-merge-toggle';
+  toggle.innerHTML = prepIcon('chevron-down');
+  mergeHead.prepend(toggle);
+  function setCollapsed(c){
+    M.collapsed = c;
+    mergeBox.classList.toggle('collapsed', c);
+    toggle.setAttribute('aria-expanded', String(!c));
+    toggle.setAttribute('aria-label', c ? 'Open merge order' : 'Close merge order');
+    mergeHead.title = c ? 'Show the merge order' : 'Hide the merge order';
+  }
+  mergeHead.addEventListener('click', ()=> setCollapsed(!M.collapsed));
+  setCollapsed(false);
+
+  // "Merge sections": the card head and the side panel show the merged recording,
+  // and the merge block closes
   mergeBtn.addEventListener('click', ()=>{
     M.merged = true;
     const total = M.mergedLength(), files = M.fileCount(), card = document.getElementById(cfg.cardId);
@@ -330,7 +361,8 @@ function makeFileMerger(cfg){
     document.querySelector(`#${cfg.modRowId} .file`).textContent = `${cfg.mergedName} · ${fmtSec(total)}`;
     renderSections();
     showSource('merged');
-    showEdgeNote(mergeBtn, `Merged ${M.sections.length} sections into one ${cfg.name} recording of ${fmtSec(total)}. The plots below show it now.`);
+    setCollapsed(true);
+    showEdgeNote(summary, `Merged ${M.sections.length} sections into one ${cfg.name} recording of ${fmtSec(total)}. The plots below show it now.`);
   });
 
   // "Add files…" and "Add folder…": each chosen file becomes a row
@@ -362,7 +394,7 @@ function makeFileMerger(cfg){
   M.snapshot = ()=>({
     files: M.files.map(f=>({id:f.id, name:f.name})),
     sections: M.sections.map(s=>({id:s.id, fileId:s.fileId, start:s.start, end:s.end})),
-    shown: M.shown, merged: M.merged, active: M.active,
+    shown: M.shown, merged: M.merged, active: M.active, collapsed: M.collapsed,
     sectionSeq: M.sectionSeq, fileSeq: M.fileSeq,
   });
   M.restore = st=>{
@@ -383,6 +415,7 @@ function makeFileMerger(cfg){
     M.fileSeq = +st.fileSeq || M.files.length;
     render();
     showSource(st.shown);
+    setCollapsed(!!st.collapsed);
   };
 
   M.render = render;
