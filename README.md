@@ -1,10 +1,13 @@
 # M3Resp: multimodal respiratory signal analysis
 
-| | |
-| --- | --- |
-| Testing | [![Tests](https://github.com/M3RESP/m3resp/actions/workflows/tests.yml/badge.svg)](https://github.com/M3RESP/m3resp/actions/workflows/tests.yml) [![Lint](https://github.com/M3RESP/m3resp/actions/workflows/lint.yml/badge.svg)](https://github.com/M3RESP/m3resp/actions/workflows/lint.yml) [![Documentation](https://github.com/M3RESP/m3resp/actions/workflows/docs.yml/badge.svg)](https://github.com/M3RESP/m3resp/actions/workflows/docs.yml) |
-| Package | ![Python 3.12, 3.13, 3.14](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue.svg) [![Apache-2.0 license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE) |
-| Meta | [![Citation](https://img.shields.io/badge/citation-CITATION.cff-blue)](CITATION.cff) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) |
+| Badges | |
+| :-- | :-- |
+| Repository | [![GitHub repository](https://img.shields.io/badge/github-repo-blue?logo=github)](https://github.com/M3RESP/m3resp) |
+| License | [![Apache-2.0 license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE) |
+| Citation | [![CITATION.cff](https://img.shields.io/badge/citation-CITATION.cff-blue)](CITATION.cff) |
+| GitHub Actions | [![Tests](https://github.com/M3RESP/m3resp/actions/workflows/tests.yml/badge.svg)](https://github.com/M3RESP/m3resp/actions/workflows/tests.yml) [![Lint](https://github.com/M3RESP/m3resp/actions/workflows/lint.yml/badge.svg)](https://github.com/M3RESP/m3resp/actions/workflows/lint.yml) [![Documentation](https://github.com/M3RESP/m3resp/actions/workflows/docs.yml/badge.svg)](https://github.com/M3RESP/m3resp/actions/workflows/docs.yml) |
+| Python support | ![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg) ![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg) |
+| Linting | [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) |
 
 M3Resp is a Python package for the analysis of respiratory recordings from three modalities: electrical impedance tomography (EIT), electromyography of the respiratory muscles (EMG) and ventilator signals (airway pressure, flow and volume). It puts the recordings on one shared clock, processes each modality, finds the breaths, and matches each breath across the modalities. Each analysis is a workflow file that lists every step and every setting. You can run the same file again and get the same results.
 
