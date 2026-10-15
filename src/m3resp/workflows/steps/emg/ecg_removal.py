@@ -1,4 +1,4 @@
-"""Registered ECG-artifact estimated-subtraction pipeline step."""
+"""Registered ECG-artifact estimated-subtraction workflow step."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.core.events import Event
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult, Signal
+from m3resp.data.events import Event
 from m3resp.processing.ecg import (
     OutputBandpassStage,
 )

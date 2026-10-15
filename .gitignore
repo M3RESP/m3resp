@@ -8,6 +8,7 @@ plan/*
 .*
 !.pre-commit-config.yaml
 !.readthedocs.yaml
+!.gitattributes
 # !.github/
 # !.github/**
 graphify-out/
@@ -15,10 +16,16 @@ tools/visualization_tools/__marimo__
 tools/
 analysis/
 
+# Real recordings: keep them on your own disk only
+tests/data/TestPS3.txt
+
 # Documentation build products
 docs/_build/
 docs/api/generated/
+docs/api/backreferences/
 docs/generated/
+docs/tutorials/
+docs/sg_execution_times.rst
 
 # agentics
 AGENTS.md

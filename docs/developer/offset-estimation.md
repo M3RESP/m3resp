@@ -5,8 +5,8 @@ time offset that aligns two devices recording the same subject on
 **independent clocks** — e.g. a Draeger EIT device (~50 Hz frame rate) and a
 Biopac amplifier (2 kHz) carrying airway pressure (Paw) and diaphragm sEMG.
 The two files share no common timestamp, so the offset between them has to be
-recovered from the signals themselves before the recordings can be cropped
-onto a common window.
+recovered from the signals themselves before the recordings can be placed
+on a common clock.
 
 **This is a marimo-viewer utility, not part of the installable `m3resp`
 package.** The estimators here are protocol-specific — they were tuned
@@ -15,10 +15,11 @@ not a robust, general-purpose automatic sync method. `m3resp.synchronization`
 itself only supports a manual offset (`sync.estimate_offset`'s `method`
 defaults to `"manual"`); use `2_annemijn_multimodal_vis.py` interactively to
 find an offset by hand for a given recording, then hardcode the result as
-`manual_offset_seconds` in your pipeline spec (see the Annemijn example).
+`manual_offset_seconds` in your workflow spec (see the Annemijn example).
 
 > **Estimate vs. apply.** `M3Session.synchronize_raw_modalities`
-> (`session.sync_raw`) *applies* a known offset by cropping. This module
+> (`sync.raw_modalities`) *applies* a known offset by setting each recording's
+> start time. This module
 > *finds* the offset, for interactive/manual use only. They are complementary.
 
 ---
@@ -198,7 +199,7 @@ The returned `lag_seconds` is the correction to apply to the base offset. A
 negative lag means "start the Biopac crop earlier relative to the EIT start";
 a positive lag means "start it later".
 
-For the Annemijn multimodal example, the current pipeline configuration gives:
+For the Annemijn multimodal example, the current workflow configuration gives:
 
 - interference edge: `1697.20 s` on the Biopac clock
 - EIT duration: `640.98 s`
@@ -257,7 +258,7 @@ print(refined.refined_offset_seconds)
 
 Once you've confirmed the fit against the power/correlation traces (see
 `2_annemijn_multimodal_vis.py`), hardcode the resulting offset as
-`manual_offset_seconds` in your pipeline spec's `sync.estimate_offset` step.
+`manual_offset_seconds` in your workflow spec's `sync.estimate_offset` step.
 For the `eit_emg_annemijn` dataset (EIT registration 03 against the Biopac
 file) the value found this way was 1050.62 s.
 
@@ -284,4 +285,4 @@ knob (`detection_rate_hz`, `search_window_seconds`, `plateau_guard_seconds`,
 - **Constant offset only.** Both estimators assume a single constant offset (plus
   an optional linear `stretch`). They do not model non-linear drift.
 - **Needs the un-cropped sEMG.** When this artifact exists, the edge lives in the
-  EIT-off tail; estimate before any synchronization crop removes it.
+  EIT-off tail; estimate before any `slice_emg` call removes it.

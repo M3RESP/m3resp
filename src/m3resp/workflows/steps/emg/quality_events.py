@@ -1,4 +1,4 @@
-"""Registered EMG event-quality pipeline steps (manoeuvre/timing/rate checks)."""
+"""Registered EMG event-quality workflow steps (manoeuvre/timing/rate checks)."""
 
 from __future__ import annotations
 
@@ -8,13 +8,16 @@ import numpy as np
 
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult, QualityFlag
+from m3resp.modalities.names import VENTILATOR
+from m3resp.modalities.ventilator import ventilator_recordings
+from m3resp.synchronization.start_times import shared_clock_shift
+from m3resp.synchronization.sync_methods import warn_if_not_synchronized
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
+from m3resp.workflows.steps._per_breath import _per_breath_flags, _per_breath_results
 
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _per_breath_flags,
-    _per_breath_results,
     _record_step,
     _upstream_metadata,
 )
@@ -115,7 +118,7 @@ def evaluate_bell_curve_error(
         "evaluate_bell_curve_error",
         percentage_bell_error,
         modality="emg",
-        peak_indices=peak_indices,
+        extremum_indices=peak_indices,
         unit="%",
         method="resurfemg.evaluate_bell_curve_error",
         fs=fs,
@@ -125,15 +128,14 @@ def evaluate_bell_curve_error(
         ],
     )
     # Array-valued (one fitted bell-curve parameter vector per breath), so
-    # this is its own ParameterResult rather than buried in metadata - it
-    # then reuses the shared parameter_result_arrays.npz exporter (plan
-    # Phase 6.3) instead of a competing EMG-specific array format.
+    # this is its own ParameterResult, which session.export_summary() writes
+    # to the shared parameter_result_arrays.npz file.
     results.extend(
         _per_breath_results(
             "evaluate_bell_curve_error_fitted_parameters",
             list(np.asarray(fitted_parameters)),
             modality="emg",
-            peak_indices=peak_indices,
+            extremum_indices=peak_indices,
             method="resurfemg.evaluate_bell_curve_error",
             fs=fs,
         )
@@ -142,7 +144,7 @@ def evaluate_bell_curve_error(
         "evaluate_bell_curve_error",
         valid_peak,
         modality="emg",
-        peak_indices=peak_indices,
+        extremum_indices=peak_indices,
         fs=fs,
     )
 
@@ -183,10 +185,11 @@ def evaluate_bell_curve_error(
         "evaluate_event_timing_unmatched_count",
     ),
     summary="Score the timing agreement between EMG and ventilator breaths.",
-    description="Pair EMG and ventilator breaths index-by-index and score their timing agreement. Any unpaired breaths at the end (from unequal counts) are reported as a separate warning flag, not silently dropped.",
+    description="Pair EMG and ventilator breaths index-by-index and score their timing agreement, comparing their times on the shared clock (each recording's start time is added). Any unpaired breaths at the end (from unequal counts) are reported as a separate warning flag, not silently dropped. Warns when a standalone ventilator recording and the EMG were never synchronized.",
     category="quality",
     modality="emg",
     optional_packages=_RESURFEMG,
+    session_reads=("session.start_times", "session.sync_methods"),
     session_writes=("session.quality", "session.parameter_results"),
     parameters_reviewed=True,
     input_artifacts=(
@@ -246,16 +249,24 @@ def evaluate_event_timing(
 ) -> dict[str, Any]:
     fs = float(processed_emg["fs"])
     vent_fs = float(ventilator_signals["fs"])
-    # Keep the raw output's existing truncation behavior (Phase 5.1: "existing
-    # pipeline consumers do not break"), but report the truncation instead of
-    # silently dropping the unmatched events (Phase 5.4).
+    # The raw output keeps only the paired events (the shorter list); the
+    # number of unmatched events is reported.
     paired_count = min(len(peak_indices), len(ventilator_breath_indices))
     unmatched_count = abs(len(peak_indices) - len(ventilator_breath_indices))
     paired_emg_peaks = peak_indices[:paired_count]
     paired_vent_peaks = ventilator_breath_indices[:paired_count]
+    # Each sample index counts from its own recording's first sample; adding
+    # the recording's start time puts both on the shared clock. For airway
+    # pressure recorded in the EMG file the two shifts are equal.
+    if ventilator_recordings(session):
+        warn_if_not_synchronized(
+            session, ["emg", VENTILATOR], action="emg.evaluate_event_timing"
+        )
+    emg_shift = shared_clock_shift(session, "emg")
+    ventilator_shift = shared_clock_shift(session, VENTILATOR)
     result = session.emg_adapter.evaluate_event_timing(
-        paired_emg_peaks / fs,
-        paired_vent_peaks / vent_fs,
+        paired_emg_peaks / fs + emg_shift,
+        paired_vent_peaks / vent_fs + ventilator_shift,
     )
     correct_timing, delta_time = result
 
@@ -263,7 +274,7 @@ def evaluate_event_timing(
         "evaluate_event_timing_delta",
         delta_time,
         modality="emg",
-        peak_indices=paired_emg_peaks,
+        extremum_indices=paired_emg_peaks,
         unit="s",
         method="resurfemg.evaluate_event_timing",
         fs=fs,
@@ -281,7 +292,7 @@ def evaluate_event_timing(
         "evaluate_event_timing",
         correct_timing,
         modality="emg",
-        peak_indices=paired_emg_peaks,
+        extremum_indices=paired_emg_peaks,
         fs=fs,
     )
     if unmatched_count:

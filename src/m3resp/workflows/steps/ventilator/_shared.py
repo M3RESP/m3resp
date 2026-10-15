@@ -1,12 +1,4 @@
-"""Shared helpers for the registered ventilator pipeline step modules.
-
-Mirrors `m3resp.workflows.steps.eit._shared`/`m3resp.workflows.steps.emg._shared`:
-each modality's step package keeps its own small copy of these helpers rather
-than importing another package's private module, so `_record_step` can
-hardcode the right modality string for its own steps without a cross-package
-dependency. Before this package existed, ventilator steps used the EMG copy of
-`_record_step`, which recorded their provenance under `modality="emg"`.
-"""
+"""Helpers for recording ventilator calculations and per-breath quality flags."""
 
 from __future__ import annotations
 
@@ -14,9 +6,9 @@ from typing import Any
 
 import numpy as np
 
+from m3resp.adapters.ventilator_adapter import primary_channel
+from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.core.session import M3Session
-from m3resp.data import ParameterResult, QualityFlag
-from m3resp.data.quality import Severity
 from m3resp.workflows.registry import StepArtifact
 
 #: Ventilator loading/quality steps currently go through ReSurfEMGAdapter
@@ -95,87 +87,31 @@ def _record_step(
     )
 
 
-def _require_equal_length(**named_arrays: Any) -> None:
-    """Raise a clear error instead of silently truncating with
-    `min(len(...))` when paired arrays disagree in length."""
+def _airway_pressure(ventilator_signals: Any, step_name: str) -> tuple[np.ndarray, str]:
+    """Read the bundle's main airway-pressure array and its unit.
 
-    lengths = {name: len(array) for name, array in named_arrays.items()}
-    if len(set(lengths.values())) > 1:
-        raise ValueError(f"Arrays must have equal length; got {lengths}.")
+    Uses the primary channel mapping, including qualified channel keys. Units
+    come from the per-channel units mapping, then the bundle's unit field, then
+    "cmH2O". Values are converted to a float array in those units.
 
+    Args:
+        ventilator_signals (Any): Ventilator channel bundle.
+        step_name (str): Workflow step name included in error messages.
 
-def _breath_metadata(peak_index: Any, *, fs: float | None = None) -> dict[str, Any]:
-    metadata: dict[str, Any] = {"peak_sample_index": int(peak_index)}
-    if fs is not None:
-        metadata["peak_time"] = float(peak_index) / fs
-    return metadata
+    Returns:
+        tuple[numpy.ndarray, str]: Pressure samples and their unit.
 
+    Raises:
+        MissingModalityDataError: If the bundle lacks airway-pressure values.
+    """
 
-def _per_breath_flags(
-    name: str,
-    valid: Any,
-    *,
-    modality: str,
-    category: str | None = None,
-    peak_indices: Any,
-    severity: Severity = "info",
-    fs: float | None = None,
-    threshold: float | None = None,
-    extra_metadata: dict[str, Any] | None = None,
-) -> list[QualityFlag]:
-    """One `QualityFlag` per breath - `breath_id=str(position)` until a
-    stable event ID is available, with the source peak sample index recorded
-    in metadata."""
-
-    _require_equal_length(valid=valid, peak_indices=peak_indices)
-    flags = []
-    for position, (is_valid, peak_index) in enumerate(zip(valid, peak_indices)):
-        metadata = _breath_metadata(peak_index, fs=fs)
-        if extra_metadata:
-            metadata.update(extra_metadata)
-        flags.append(
-            QualityFlag(
-                name=name,
-                passed=bool(is_valid),
-                severity=severity,
-                modality=modality,
-                category=category,
-                breath_id=str(position),
-                threshold=threshold,
-                metadata=metadata,
-            )
+    key = primary_channel(ventilator_signals, "airway_pressure")
+    values = ventilator_signals.get(key) if key is not None else None
+    if values is None:
+        raise MissingModalityDataError(
+            f"{step_name} needs an 'airway_pressure' channel; ask "
+            "ventilator.channels for it (e.g. airway_pressure_channel=0)."
         )
-    return flags
-
-
-def _per_breath_results(
-    name: str,
-    values: Any,
-    *,
-    modality: str,
-    category: str | None = None,
-    peak_indices: Any,
-    unit: str | None = None,
-    method: str | None = None,
-    fs: float | None = None,
-    extra_metadata_per_item: list[dict[str, Any]] | None = None,
-) -> list[ParameterResult]:
-    _require_equal_length(values=values, peak_indices=peak_indices)
-    results = []
-    for position, (value, peak_index) in enumerate(zip(values, peak_indices)):
-        metadata = _breath_metadata(peak_index, fs=fs)
-        if extra_metadata_per_item is not None:
-            metadata.update(extra_metadata_per_item[position])
-        results.append(
-            ParameterResult(
-                name=name,
-                value=value if np.ndim(value) > 0 else float(value),
-                modality=modality,
-                category=category,
-                unit=unit,
-                breath_id=str(position),
-                method=method,
-                metadata=metadata,
-            )
-        )
-    return results
+    units = ventilator_signals.get("units") or {}
+    unit = units.get(key) or ventilator_signals.get("unit") or "cmH2O"
+    return np.asarray(values, dtype=float), str(unit)

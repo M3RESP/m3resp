@@ -1,4 +1,4 @@
-"""Registered on/off-peak interval pipeline steps."""
+"""Registered on/off-peak interval workflow steps."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ from m3resp.processing.intervals import (
     onoff_from_slope,
 )
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
+from m3resp.workflows.steps._per_breath import _per_breath_flags
 
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _per_breath_flags,
     _record_step,
     _upstream_metadata,
 )
@@ -249,7 +249,7 @@ def onoffpeak_baseline_crossing(
         "start_end_validity",
         start_end_validity,
         modality="emg",
-        peak_indices=peak_indices,
+        extremum_indices=peak_indices,
         fs=fs,
     )
     for index, flag in enumerate(flags):

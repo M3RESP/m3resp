@@ -9,18 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from m3resp.workflows import run_pipeline
+from m3resp.workflows import run_workflow
 
 pytest.importorskip("resurfemg")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EMG_PATH = (
-    REPO_ROOT
-    / "data"
-    / "source"
-    / "data_from_repo"
-    / "emg_data_synth_quiet_breathing.Poly5"
-)
+EMG_PATH = REPO_ROOT / "tests" / "data" / "emg_data_synth_quiet_breathing.Poly5"
 
 
 def _provenance_for(session, action: str):
@@ -30,7 +24,7 @@ def _provenance_for(session, action: str):
 
 
 def test_upstream_backed_step_records_the_shared_provenance_schema():
-    result = run_pipeline(
+    result = run_workflow(
         {
             "name": "provenance-smoke",
             "inputs": {"emg_file": str(EMG_PATH)},
@@ -83,7 +77,7 @@ def test_native_primitive_step_records_m3resp_as_the_source_package():
         for offset in range(-5, 5):
             pressure[center + offset] = peep - 2.0
 
-    result = run_pipeline(
+    result = run_workflow(
         {
             "name": "provenance-native-smoke",
             "inputs": {"vent_file": str(EMG_PATH)},  # unused, just needs a value
@@ -99,7 +93,7 @@ def test_native_primitive_step_records_m3resp_as_the_source_package():
         },
         extra_context={
             "_ventilator_signals_input": {
-                "pressure": pressure,
+                "airway_pressure": pressure,
                 "fs": 100.0,
             },
             "_pocc_indices_input": [50, 150],
@@ -116,7 +110,7 @@ def test_native_primitive_step_records_m3resp_as_the_source_package():
 
 
 def test_each_migrated_step_call_adds_exactly_one_provenance_record():
-    result = run_pipeline(
+    result = run_workflow(
         {
             "name": "provenance-count-smoke",
             "inputs": {"emg_file": str(EMG_PATH)},

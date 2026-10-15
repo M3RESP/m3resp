@@ -1,4 +1,4 @@
-"""Importing this package registers all built-in pipeline steps.
+"""Importing this package registers all built-in workflow steps.
 
 Step modules import their upstream dependencies lazily (inside the step
 functions), so importing this package never requires the optional ``eitprocessing``
@@ -10,9 +10,8 @@ from m3resp.workflows.steps import (
     emg,
     export,
     metrics,
-    session,
     sync,
     ventilator,
 )
 
-__all__ = ["eit", "emg", "export", "metrics", "session", "sync", "ventilator"]
+__all__ = ["eit", "emg", "export", "metrics", "sync", "ventilator"]

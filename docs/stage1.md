@@ -8,7 +8,7 @@ Stage 1 establishes `m3resp` as the integration layer for multimodal respiratory
 
 - A `M3Session` object that holds raw and processed signals, events, and parameters for a single recording session.
 - Adapters around `eitprocessing` and `resurfemg` so those packages can be swapped or upgraded without touching user code.
-- A declarative pipeline engine: describe your workflow in a YAML spec, run it with `m3resp run pipeline.yaml`, and get structured outputs without writing custom Python.
+- A declarative workflow engine: describe your workflow in a YAML spec, run it with `m3resp run workflow.yaml`, and get structured outputs without writing custom Python.
 - Common event dataclasses (`BreathEvent`, `Event`) shared across modalities.
 - Manual raw-signal synchronization before processing.
 - CSV, JSON, and figure export helpers.
@@ -40,10 +40,10 @@ src/m3resp/
 ├── visualization/ Session overview and synchronization plots
 └── workflows/      Declarative engine, step registry, built-in steps
     ├── steps/     eit.*, emg.*, metric.*, session.*, export.*
-    ├── engine/    run_pipeline, run_spec, validate_spec
+    ├── engine/    run_workflow, run_spec, validate_spec
     ├── spec.py    YAML/JSON parser
     ├── registry.py  @register_step
-    ├── context.py   PipelineContext (shared artifact blackboard)
+    ├── context.py   WorkflowContext (shared artifact blackboard)
     ├── utils.py     Signal slicing, JSON writing, summary logging
     └── summaries.py Session summaries for post-run logging
 ```
@@ -53,7 +53,7 @@ src/m3resp/
 The adapters import optional packages lazily, so the base install works without the modality packages:
 
 ```bash
-pip install m3resp          # core + pipeline only
+pip install m3resp          # core + workflow only
 pip install "m3resp[eit]"   # adds eitprocessing
 pip install "m3resp[emg]"   # adds resurfemg
 pip install "m3resp[all]"   # both modality integrations
@@ -71,12 +71,12 @@ resurfemg     @ git+https://github.com/M3RESP/ReSurfEMG.git@m3resp-integration
 ```python
 from m3resp import (
     M3Session,          # session orchestration
-    run_pipeline,       # run a spec dict or file
+    run_workflow,       # run a spec dict or file
     run_spec,           # run a spec file end-to-end (CLI entry point)
-    load_spec,          # parse a YAML/JSON spec into a PipelineSpec
+    load_spec,          # parse a YAML/JSON spec into a WorkflowSpec
     register_step,      # register a custom step
     available_steps,    # list registered steps
-    PipelineResult,     # result object returned by run_pipeline / run_spec
+    WorkflowResult,     # result object returned by run_workflow / run_spec
     BreathEvent,        # common breath event dataclass
     Event,              # generic event dataclass
 )
@@ -91,18 +91,18 @@ from m3resp.io import (
 The primary way to run a workflow is via the CLI:
 
 ```bash
-m3resp run pipeline.yaml
+m3resp run workflow.yaml
 ```
 
 Or from Python:
 
 ```python
 from m3resp import run_spec
-result = run_spec("pipeline.yaml")
+result = run_spec("workflow.yaml")
 print(result.outputs)
 ```
 
-See [pipelines.md](pipelines.md) for the full spec format and how to write your own steps.
+See [workflows.md](workflows.md) for the full spec format and how to write your own steps.
 
 ## Tests
 
@@ -112,11 +112,11 @@ Run the test suite with:
 pytest
 ```
 
-Tests cover the pipeline engine, EIT and EMG session operations, adapters, synchronization, visualization, and export. Tests that require sample data files or optional modality packages are skipped automatically when those are not present.
+Tests cover the workflow engine, EIT and EMG session operations, adapters, synchronization, visualization, and export. Tests that require sample data files or optional modality packages are skipped automatically when those are not present.
 
 ## Out of scope
 
-Stage 1 intentionally does not include:
+Stage 1 does not include:
 
 - A GUI or dashboard.
 - A merger of `eitprocessing` and `resurfemg`.

@@ -7,9 +7,10 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.core.events import BreathEvent
 from m3resp.core.session import M3Session
+from m3resp.data.events import BreathEvent
 from m3resp.synchronization.alignment import align_events_by_modality_offset
+from m3resp.synchronization.start_times import shared_clock_shifts
 
 
 def plot_session_overview(
@@ -163,7 +164,7 @@ def plot_synchronization_comparison(
     )
     if not isinstance(offsets, dict):
         offsets = {}
-    after_events = _after_synchronization_events(session, synchronized, offsets)
+    after_events = _after_synchronization_events(session, synchronized)
 
     rows = _get_synchronization_plot_rows(session, emg_channel, eit_waveform, offsets)
     if not rows:
@@ -230,19 +231,20 @@ def plot_synchronization_comparison(
 def _after_synchronization_events(
     session: M3Session,
     synchronized: dict[str, Any],
-    offsets: dict[str, float],
 ) -> dict[str, list[Any]]:
     """Return event overlays on the synchronized time base.
 
-    ``synchronize_multimodal_breaths`` stores shifted event copies in ``synchronized``. Raw
-    synchronization crops the signal arrays directly instead, so it has to
-    shift the original events here to draw them on the cropped trace's clock.
+    ``synchronize_multimodal_breaths`` stores shifted event copies in
+    ``synchronized``. Raw synchronization only sets each recording's start
+    time, so the original events are moved onto the shared clock here, the
+    same way the "after" traces are.
     """
 
     if synchronized:
         return synchronized
+    shifts = shared_clock_shifts(session)
     return {
-        name: align_events_by_modality_offset(events, offsets)
+        name: align_events_by_modality_offset(events, shifts)
         for name, events in session.events.items()
         if isinstance(events, list)
     }
@@ -486,12 +488,22 @@ def _plot_events(
     color: str,
     label: str,
 ) -> None:
+    """Shade each breath interval and mark available extrema on each axis.
+
+    Times are in seconds. Adds artists to the supplied axes using color,
+    with label attached to each extremum line.
+    """
+
     for event in events:
         for ax in axes:
             ax.axvspan(event.start_time, event.end_time, color=color, alpha=0.08)
-            if event.peak_time is not None:
+            if event.extremum_time is not None:
                 ax.axvline(
-                    event.peak_time, color=color, alpha=0.45, linewidth=1, label=label
+                    event.extremum_time,
+                    color=color,
+                    alpha=0.45,
+                    linewidth=1,
+                    label=label,
                 )
 
 

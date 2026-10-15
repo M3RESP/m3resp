@@ -66,7 +66,7 @@ def test_custom_emg_detector_normalization_still_works():
             modality="emg",
             start_time=1.0,
             end_time=2.0,
-            peak_time=1.5,
+            extremum_time=1.5,
             source="resurfemg",
         )
     ]
@@ -176,9 +176,9 @@ class TestDetectedBreathBoundaries:
 
         assert len(events) > 0
         for event in events:
-            assert event.peak_time is not None
-            assert event.start_time == event.peak_time
-            assert event.end_time == event.peak_time
+            assert event.extremum_time is not None
+            assert event.start_time == event.extremum_time
+            assert event.end_time == event.extremum_time
             assert event.duration == 0.0
 
     def test_unmeasured_boundaries_are_marked_as_such(self):
@@ -200,7 +200,7 @@ def test_custom_emg_preprocess_callable_still_works():
 
 def test_custom_emg_compute_callable_still_works():
     adapter = ReSurfEMGAdapter()
-    events = [BreathEvent("emg", 0.0, 1.0, peak_time=0.5)]
+    events = [BreathEvent("emg", 0.0, 1.0, extremum_time=0.5)]
 
     features = adapter.compute_features(
         {"processed": True},
@@ -222,7 +222,7 @@ def test_custom_emg_compute_callable_still_works():
 
 def test_custom_emg_postprocess_callable_still_works():
     adapter = ReSurfEMGAdapter()
-    events = [BreathEvent("emg", 0.0, 1.0, peak_time=0.5)]
+    events = [BreathEvent("emg", 0.0, 1.0, extremum_time=0.5)]
 
     result = adapter.postprocess(
         {"processed": True},
@@ -389,7 +389,7 @@ def test_synchronization_comparison_shifts_signal_time_by_alignment_offset():
     }
     session.add_events(
         "emg_breaths",
-        [BreathEvent("emg", 0.002, 0.004, peak_time=0.003)],
+        [BreathEvent("emg", 0.002, 0.004, extremum_time=0.003)],
     )
     session.synchronize_multimodal_breaths(offset_seconds={"emg": -0.002})
 
@@ -435,7 +435,7 @@ def test_synchronization_comparison_uses_raw_eit_signal_when_filtered_exists():
     }
     session.add_events(
         "eit_breaths",
-        [BreathEvent("eit", 0.0, 1.0, peak_time=0.5)],
+        [BreathEvent("eit", 0.0, 1.0, extremum_time=0.5)],
     )
     session.align_modalities(offset_seconds={"eit": 0.0})
 
@@ -466,8 +466,8 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
             },
             "after": {
                 "title": "EMG raw (EMG)",
-                "time": [0.002, 0.003],
-                "values": [1.0, 2.0],
+                "time": [-0.002, -0.001, 0.0, 0.001],
+                "values": [0.0, 0.0, 1.0, 2.0],
                 "ylabel": "EMG amplitude (uV)",
             },
         },
@@ -480,8 +480,8 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
             },
             "after": {
                 "title": "Ventilator pressure",
-                "time": [0.01, 0.02],
-                "values": [9.0, 10.0],
+                "time": [0.0, 0.01, 0.02],
+                "values": [8.0, 9.0, 10.0],
                 "ylabel": "Pressure",
             },
         },
@@ -494,8 +494,8 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
             },
             "after": {
                 "title": "Ventilator flow",
-                "time": [0.01, 0.02],
-                "values": [0.5, 0.0],
+                "time": [0.0, 0.01, 0.02],
+                "values": [0.0, 0.5, 0.0],
                 "ylabel": "Flow",
             },
         },
@@ -508,18 +508,18 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
             },
             "after": {
                 "title": "Ventilator volume",
-                "time": [0.01, 0.02],
-                "values": [125.0, 150.0],
+                "time": [0.0, 0.01, 0.02],
+                "values": [100.0, 125.0, 150.0],
                 "ylabel": "Volume",
             },
         },
     }
-    session.parameters["raw_alignment"] = {
-        "offset_seconds": {"eit": 0.0, "emg": -0.002, "vent": 0.0}
-    }
+    # EMG started 0.002 s before the other recordings: its trace and its
+    # breaths move earlier, and nothing is cut off.
+    session.start_times = {"eit": 0.0, "emg": -0.002, "ventilator": 0.0}
     session.add_events(
         "emg_breaths",
-        [BreathEvent("emg", 0.002, 0.004, peak_time=0.003)],
+        [BreathEvent("emg", 0.002, 0.004, extremum_time=0.003)],
     )
 
     fig = plot_synchronization_comparison(session, max_seconds=None)
@@ -536,12 +536,12 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
             volume_after_ax,
         ) = fig.axes
         assert list(emg_before_ax.lines[0].get_ydata()) == [0.0, 0.0, 1.0, 2.0]
-        assert list(emg_after_ax.lines[0].get_ydata()) == [1.0, 2.0]
+        assert list(emg_after_ax.lines[0].get_ydata()) == [0.0, 0.0, 1.0, 2.0]
         assert list(emg_after_ax.lines[1].get_xdata()) == [0.001, 0.001]
         assert emg_before_ax.get_title() == "EMG raw (EMG) before synchronization"
         assert emg_after_ax.get_title() == "EMG raw (EMG) after synchronization"
         assert list(pressure_before_ax.lines[0].get_ydata()) == [8.0, 9.0, 10.0]
-        assert list(pressure_after_ax.lines[0].get_ydata()) == [9.0, 10.0]
+        assert list(pressure_after_ax.lines[0].get_ydata()) == [8.0, 9.0, 10.0]
         assert pressure_before_ax.get_title() == (
             "Ventilator pressure before synchronization"
         )
@@ -549,11 +549,11 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
             "Ventilator pressure after synchronization"
         )
         assert list(flow_before_ax.lines[0].get_ydata()) == [0.0, 0.5, 0.0]
-        assert list(flow_after_ax.lines[0].get_ydata()) == [0.5, 0.0]
+        assert list(flow_after_ax.lines[0].get_ydata()) == [0.0, 0.5, 0.0]
         assert flow_before_ax.get_title() == "Ventilator flow before synchronization"
         assert flow_after_ax.get_title() == "Ventilator flow after synchronization"
         assert list(volume_before_ax.lines[0].get_ydata()) == [100.0, 125.0, 150.0]
-        assert list(volume_after_ax.lines[0].get_ydata()) == [125.0, 150.0]
+        assert list(volume_after_ax.lines[0].get_ydata()) == [100.0, 125.0, 150.0]
         assert volume_before_ax.get_title() == (
             "Ventilator volume before synchronization"
         )
@@ -564,22 +564,20 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
         plt.close(fig)
 
 
-def test_emg_real_data_pipeline_uses_committed_poly5_sample():
+def test_emg_real_data_workflow_uses_committed_poly5_sample():
     pytest.importorskip("resurfemg")
 
     repo_root = Path(__file__).resolve().parents[1]
     emg_path = os.path.join(
         repo_root,
+        "tests",
         "data",
-        "source",
-        "data_from_repo",
         "emg_data_synth_quiet_breathing.Poly5",
     )
     vent_path = os.path.join(
         repo_root,
+        "tests",
         "data",
-        "source",
-        "data_from_repo",
         "vent_data_synth_quiet_breathing.Poly5",
     )
     assert os.path.isfile(emg_path), f"missing fixture: {emg_path}"
@@ -626,7 +624,7 @@ def test_emg_real_data_pipeline_uses_committed_poly5_sample():
 
 
 def test_emg_preset_runs_end_to_end_and_reports_respiratory_rate():
-    """`session.run_pipeline("emg")` on a made-up recording breathing at
+    """`session.run_preset("emg")` on a made-up recording breathing at
     12 breaths/min. This once crashed while saving the respiratory rate."""
 
     pytest.importorskip("resurfemg")
@@ -653,7 +651,7 @@ def test_emg_preset_runs_end_to_end_and_reports_respiratory_rate():
     )
     session.load_emg("synthetic.Poly5")
 
-    session.run_pipeline("emg")
+    session.run_preset("emg")
 
     rates = {
         p.name: p for p in session.parameter_results if p.name.startswith("respiratory")

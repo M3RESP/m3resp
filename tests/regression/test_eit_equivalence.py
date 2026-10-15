@@ -14,7 +14,7 @@ filter, so any divergence means the native path has drifted.
 The heavier default path (rate detection + MDN filtering + breath-interval
 dependent TIV/EELI/pixel-TIV) is exercised end-to-end against a *real*
 committed sample file in `tests/test_eit.py::
-test_eit_real_data_pipeline_uses_committed_sample` instead of here: those
+test_eit_real_data_workflow_uses_committed_sample` instead of here: those
 algorithms need a realistic multi-minute respiratory waveform to produce a
 meaningful breath rate, which a short synthetic fixture cannot provide
 without reimplementing `eitprocessing`'s own test data.

@@ -2,10 +2,9 @@
 and where its fixture files are present, at readiness level too) without
 importing any optional package.
 
-This is deliberately independent of ``test_workflow_spec_baseline.py``'s
-frozen-snapshot tests: those guard *exact* parsed structure against
-regressions, this file guards the weaker but more directly useful property
-that every example is a valid, compilable, GUI-discoverable pipeline.
+``test_workflow_spec_baseline.py``'s frozen-snapshot tests check the
+*exact* parsed structure; this file checks that every example is a valid,
+compilable, GUI-discoverable workflow.
 """
 
 from __future__ import annotations
@@ -16,8 +15,8 @@ import pytest
 
 import m3resp.workflows.steps  # noqa: F401 - ensure built-in steps are registered
 from m3resp.core.session import M3Session
-from m3resp.workflows import run_pipeline
-from m3resp.workflows.compiler import compile_pipeline, validate_pipeline
+from m3resp.workflows import run_workflow
+from m3resp.workflows.compiler import compile_workflow, validate_workflow
 from m3resp.workflows.spec import load_spec
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -25,22 +24,22 @@ EXAMPLES_DIR = REPO_ROOT / "examples"
 
 #: Every shipped example spec, as of Stage 2 pipeline-structure.
 EXAMPLE_SPEC_PATHS: dict[str, Path] = {
-    "rotarc": EXAMPLES_DIR / "ROTARC_example" / "breath-duration.pipeline.yaml",
+    "rotarc": EXAMPLES_DIR / "ROTARC_example" / "breath-duration.workflow.yaml",
     "multimodal_example": EXAMPLES_DIR
     / "multimodal_example"
-    / "multimodal.pipeline.yaml",
+    / "multimodal.workflow.yaml",
     "multidomain_recording1_a2": EXAMPLES_DIR
     / "multidomain_recording1"
-    / "recording1_a2.pipeline.yaml",
+    / "recording1_a2.workflow.yaml",
     "eit_full_preprocessing": EXAMPLES_DIR
     / "eit_full_preprocessing"
-    / "eit-full.pipeline.yaml",
+    / "eit-full.workflow.yaml",
     "emg_full_preprocessing": EXAMPLES_DIR
     / "emg_full_preprocessing"
-    / "emg-full.pipeline.yaml",
+    / "emg-full.workflow.yaml",
     "multimodal_full": EXAMPLES_DIR
     / "multimodal_full"
-    / "multimodal-full.pipeline.yaml",
+    / "multimodal-full.workflow.yaml",
 }
 
 #: schema_version: 1 examples added/upgraded.
@@ -51,12 +50,6 @@ _VERSIONED_SPECS = {
     "multimodal_full",
 }
 
-#: Examples whose fixture file is a private, site-specific path (see the
-#: "USER TEMPLATE" banner in breath-duration.pipeline.yaml) rather than a
-#: repo-relative fixture - readiness will flag it as missing on any machine
-#: that is not that researcher's, which is the correct behavior, not a bug.
-_PRIVATE_PATH_SPECS = {"rotarc"}
-
 
 @pytest.mark.parametrize("example_name", sorted(EXAMPLE_SPEC_PATHS))
 def test_example_spec_file_exists(example_name: str):
@@ -65,18 +58,18 @@ def test_example_spec_file_exists(example_name: str):
 
 @pytest.mark.parametrize("example_name", sorted(EXAMPLE_SPEC_PATHS))
 def test_example_spec_compiles_without_optional_packages(example_name: str):
-    """``compile_pipeline`` never imports eitprocessing/resurfemg, so this
+    """``compile_workflow`` never imports eitprocessing/resurfemg, so this
     must succeed regardless of what is installed in this environment."""
 
     spec = load_spec(EXAMPLE_SPEC_PATHS[example_name])
-    compiled = compile_pipeline(spec)
+    compiled = compile_workflow(spec)
     assert compiled.steps
 
 
 @pytest.mark.parametrize("example_name", sorted(EXAMPLE_SPEC_PATHS))
 def test_example_spec_has_no_structural_diagnostics(example_name: str):
     spec = load_spec(EXAMPLE_SPEC_PATHS[example_name])
-    report = validate_pipeline(spec, readiness=False)
+    report = validate_workflow(spec, readiness=False)
     assert report.structural == ()
 
 
@@ -100,17 +93,14 @@ def test_example_spec_steps_have_stable_explicit_ids(example_name: str):
         )
 
 
-@pytest.mark.parametrize(
-    "example_name",
-    sorted(set(EXAMPLE_SPEC_PATHS) - _PRIVATE_PATH_SPECS),
-)
+@pytest.mark.parametrize("example_name", sorted(EXAMPLE_SPEC_PATHS))
 def test_example_spec_readiness_reports_no_missing_repo_fixtures(example_name: str):
     """Every example whose fixtures ship in the repo must validate cleanly at
     readiness level too (missing optional packages aside) - a broken
     spec-relative path would show up here as a ``missing_file`` diagnostic."""
 
     spec = load_spec(EXAMPLE_SPEC_PATHS[example_name])
-    report = validate_pipeline(spec, readiness=True)
+    report = validate_workflow(spec, readiness=True)
     missing_file_diagnostics = [d for d in report.readiness if d.code == "missing_file"]
     if missing_file_diagnostics:
         # The example's fixture data ships outside version control (it lives
@@ -124,39 +114,19 @@ def test_example_spec_readiness_reports_no_missing_repo_fixtures(example_name: s
     assert missing_file_diagnostics == []
 
 
-def test_rotarc_readiness_flags_its_private_path_as_missing_when_absent():
-    """The ROTARC example's private, site-specific fixture path is expected
-    to be reported as missing on any machine other than the researcher's -
-    this is the readiness system doing its job, not a spec bug."""
-
-    spec = load_spec(EXAMPLE_SPEC_PATHS["rotarc"])
-    report = validate_pipeline(spec, readiness=True)
-    codes = {d.code for d in report.readiness}
-    # ``capability_missing_optional_dependency`` appears when a step's optional
-    # package (e.g. resurfemg) is not installed - as in the lean CI test job -
-    # which, like a missing fixture, is an environment fact rather than a spec
-    # bug. (On the researcher's own machine the private path resolves, so
-    # ``missing_file`` may be absent - hence this stays a pure subset check.)
-    assert codes <= {
-        "missing_file",
-        "missing_optional_package",
-        "capability_missing_optional_dependency",
-    }
-
-
 def test_multimodal_full_example_runs_end_to_end():
     """Unlike eit-full/emg-full (each covered by their own end-to-end test
     in test_eit_workflow_steps.py/test_emg_workflow_steps.py),
-    multimodal-full.pipeline.yaml was previously only compiled/validated,
+    multimodal-full.workflow.yaml was previously only compiled/validated,
     never actually executed as a regression test - this closes that gap."""
 
     pytest.importorskip("eitprocessing")
     pytest.importorskip("resurfemg")
 
-    # run_pipeline (unlike run_spec) does not touch the spec's `outputs:`
+    # run_workflow (unlike run_spec) does not touch the spec's `outputs:`
     # section, so this exercises the example without writing into the
     # project's real output/ directory.
-    result = run_pipeline(EXAMPLE_SPEC_PATHS["multimodal_full"], session=M3Session())
+    result = run_workflow(EXAMPLE_SPEC_PATHS["multimodal_full"], session=M3Session())
 
     assert result.status == "succeeded"
 
@@ -164,15 +134,17 @@ def test_multimodal_full_example_runs_end_to_end():
     assert "estimated_offset_seconds" not in result.context.values
 
     # Full EIT chain, through the ROI lung-space steps.
-    assert result.value("size_filtered_roi_result").value.shape == (32, 32)
+    assert result.value("size_filtered_roi_result").shape == (32, 32)
 
     # Full EMG/ventilator chain, through the clinical quality steps.
     assert len(result.value("ecg_peak_indices")) > 0
-    # The recording's muscle pressure (p_mus) has 14 breath efforts; the first
-    # is cut off at the start of the EMG, so 13 are detectable. A count well
-    # above this means the detector is picking up noise or heartbeats (as it
-    # did on the weak channel 0).
-    assert len(result.value("emg_breath_events")) == 13
+    # The recording's muscle pressure (p_mus) has 14 breath efforts. When the
+    # -2 s EMG offset cut the first 2 s off the EMG, the first breath sat too
+    # close to the new start to be found, so only 13 were. The offset now sets
+    # the EMG start time and keeps every sample (#118), so all 14 are found.
+    # A count well above this means the detector is picking up noise or
+    # heartbeats (as it did on the weak channel 0).
+    assert len(result.value("emg_breath_events")) == 14
     assert len(result.value("ventilator_breath_indices")) > 0
 
     # Native collections were populated exactly once, not duplicated.

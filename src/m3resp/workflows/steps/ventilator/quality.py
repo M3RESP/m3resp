@@ -1,4 +1,4 @@
-"""Registered ventilator event-quality pipeline steps."""
+"""Registered ventilator event-quality workflow steps."""
 
 from __future__ import annotations
 
@@ -6,11 +6,11 @@ from typing import Any
 
 from m3resp.core.session import M3Session
 from m3resp.workflows.registry import StepArtifact, register_step
+from m3resp.workflows.steps._per_breath import _per_breath_flags
 
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _per_breath_flags,
     _record_step,
     _upstream_metadata,
 )
@@ -72,7 +72,7 @@ def detect_non_consecutive_manoeuvres(
         result,
         modality="ventilator",
         category="airway_pressure",
-        peak_indices=pocc_indices,
+        extremum_indices=pocc_indices,
     )
     for flag in flags:
         session.quality.add(flag)

@@ -42,6 +42,7 @@ napoleon_google_docstring = True
 myst_enable_extensions = [
     "colon_fence",
     "deflist",
+    "dollarmath",
     "fieldlist",
     "substitution",
 ]
@@ -82,7 +83,7 @@ html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 html_sidebars = {
     "getting-started": [],
-    "pipelines": [],
+    "workflows": [],
 }
 html_theme_options = {
     "navbar_align": "content",

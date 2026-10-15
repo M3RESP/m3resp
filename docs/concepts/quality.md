@@ -13,10 +13,9 @@ window - but for a pass/fail check instead of a measurement. Key fields:
 - `threshold`/`value`, the cutoff used and the actual measured value, so
   you can see why it passed or failed.
 
-An important rule: if a check genuinely does not apply (skipped, not
-computable), the code should simply not emit a flag at all, rather than
-inventing a fake pass/fail. This avoids quietly turning "we did not check
-this" into "this passed," which would be misleading.
+An important rule: a check that does not apply (skipped, not computable)
+emits no flag. Every flag records a real pass or fail, so "we did not check
+this" never shows up as "this passed".
 
 `QualityFlag` is the lightweight, in-memory version of a more permanent
 database-style record called `QualityAnnotation` (see
@@ -52,11 +51,10 @@ middle), emit one `QualityFlag` per affected window with `start_time`/
 `QualityFlag` mirrors the persisted `QualityAnnotation` entity
 (`m3resp.datamodel.entities`, Layer 2 - see
 [provenance.md](provenance.md)) but is the lightweight, in-memory object a
-quality check actually produces during a pipeline run; conversion to
-`QualityAnnotation` happens at the `DataModelRecorder` boundary, not here. A
-skipped/not-applicable check should simply not emit a flag, rather than
-emitting one with an invented "passed" or "failed" verdict - this is what
-the native EMG quality steps already do.
+quality check actually produces during a workflow run; conversion to
+`QualityAnnotation` happens in `DataModelRecorder`. A skipped or
+not-applicable check emits no flag; the native EMG quality steps follow this
+rule.
 
 ## Where `QualityFlag`s come from
 

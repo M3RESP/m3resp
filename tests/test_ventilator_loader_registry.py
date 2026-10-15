@@ -116,7 +116,7 @@ class TestDispatch:
         adapter = VentilatorAdapter()
         recording = adapter.load("study.mfx")
         processed = adapter.preprocess(recording)
-        assert processed["pressure"].shape == (N,)
+        assert processed["airway_pressure"].shape == (N,)
 
     def test_a_bin_suffix_can_be_overridden_by_a_registered_extension(self):
         # A registered extension takes priority over the built-in suffix
@@ -167,7 +167,7 @@ class TestEitSourcedRegistration:
 
         register_ventilator_loader("mfz", reader, source="eit")
         VentilatorAdapter().load(
-            "study.mfz", ventilator_channels=("pressure",), fs=50.0
+            "study.mfz", ventilator_channels=("airway_pressure",), fs=50.0
         )
         assert "ventilator_channels" not in seen_kwargs
         assert "fs" not in seen_kwargs
@@ -176,7 +176,7 @@ class TestEitSourcedRegistration:
         sequence = self._sequence()
         register_ventilator_loader("mfz", lambda path, **kwargs: sequence, source="eit")
         payload = VentilatorAdapter().load(
-            "study.mfz", ventilator_channels=("pressure", "flow")
+            "study.mfz", ventilator_channels=("airway_pressure", "flow")
         )
         assert payload["array"].shape == (2, N)
 

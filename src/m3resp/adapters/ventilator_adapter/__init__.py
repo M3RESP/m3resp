@@ -7,14 +7,14 @@ ventilator data reached a session only as a passenger of the EMG path. Its
 defaults are native, built on `m3resp.processing.filters` and
 `m3resp.processing.peaks`.
 
-Loading is the one exception, and it has three sources rather than one:
+Loading is the one exception, and it has three sources:
 ventilator channels arrive in the multi-channel file shared with the sEMG -
 where `load` delegates to `ReSurfEMGAdapter` - inside the EIT `*.bin` itself,
 where the device stores them beside the impedance frames and `load` goes
 through `EITProcessingAdapter` (see `_eit_source`) - or in a third-party format
 neither of those knows about, read by a function registered via
-`register_ventilator_loader` (see `_loaders`), so a new format does not need a
-code change here. Dispatch is by file suffix for the first two; either can be
+`register_ventilator_loader` (see `_loaders`), so a new format is added
+without editing this module. Dispatch is by file suffix for the first two; either can be
 replaced with an injected loader per instance, or a registered extension takes
 over automatically for every instance.
 
@@ -24,6 +24,12 @@ Composed from mixins split by responsibility, matching the layout of
 
 from __future__ import annotations
 
+from ._breaths import (
+    infer_ventilator_duration,
+    infer_ventilator_fs,
+    iter_ventilator_detections,
+    normalize_ventilator_breath,
+)
 from ._channels import (
     CHANNEL_CATEGORIES,
     DEFAULT_CHANNEL_POSITIONS,
@@ -77,8 +83,12 @@ __all__ = [
     "VentilatorAdapter",
     "available_ventilator_channels",
     "channel_aliases",
+    "infer_ventilator_duration",
+    "infer_ventilator_fs",
+    "iter_ventilator_detections",
     "load_channel_aliases",
     "normalize_channel_label",
+    "normalize_ventilator_breath",
     "primary_channel",
     "recording_payload",
     "register_channel_alias",
