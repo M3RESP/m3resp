@@ -80,7 +80,10 @@ html_theme = "pydata_sphinx_theme"
 html_title = f"{project} documentation"
 html_show_sourcelink = False
 html_static_path = ["_static"]
-html_css_files = ["custom.css"]
+html_css_files = [
+    "https://fonts.googleapis.com/css2?family=Anonymous+Pro:wght@400;700&family=Audiowide&family=Roboto:wght@400;500;700&display=swap",
+    "custom.css",
+]
 html_sidebars = {
     "getting-started": [],
     "workflows": [],
