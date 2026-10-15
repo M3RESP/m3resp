@@ -1,0 +1,199 @@
+<!-- ============ 3. CHECK ============ -->
+<div class="view" id="view-check">
+
+  <div class="palette prep-sidebar check-sidebar" id="checkSidebar">
+    <div class="side-panel-topbar">
+      <span class="side-panel-topbar-title">
+        <span class="side-panel-topbar-label">Check</span>
+      </span>
+      <button class="side-collapse-btn" id="checkSidebarCollapseBtn" title="Collapse this panel"></button>
+    </div>
+
+    <!-- the run this page reports on -->
+    <div class="pal-pane fit" data-pane="run">
+      <button type="button" class="pal-pane-head" title="Open or close this panel">
+        <span class="pal-pane-chevron"></span><span class="pal-pane-title">Run</span>
+      </button>
+      <div class="pal-pane-body">
+        <dl class="rec-list">
+          <div class="rec-row"><dt>Pipeline</dt><dd class="mono">multimodal-full</dd></div>
+          <div class="rec-row"><dt>Status</dt><dd><span class="run-status ok">Succeeded</span></dd></div>
+          <div class="rec-row"><dt>Steps</dt><dd>47 of 47</dd></div>
+          <div class="rec-row"><dt>Run time</dt><dd>10.0 s</dd></div>
+          <div class="rec-row"><dt>Started</dt><dd>2026-07-30 12:42</dd></div>
+          <div class="rec-row"><dt>Run id</dt><dd class="mono" title="9907d215dda2452d">9907d215dda2</dd></div>
+        </dl>
+      </div>
+    </div>
+
+    <!-- the parts of the report; the main column shows one at a time -->
+    <div class="pal-pane fit" data-pane="report">
+      <button type="button" class="pal-pane-head" title="Open or close this panel">
+        <span class="pal-pane-chevron"></span><span class="pal-pane-title">Report</span>
+      </button>
+      <div class="pal-pane-body">
+        <div class="prep-steps" id="checkSteps">
+          <button type="button" class="step-item" data-part="checkAll"><span class="num">1</span><span class="step-name">Quality checks</span><span class="step-meta" id="checkAllCount"></span></button>
+          <div class="step-children"><div class="mod-list" id="checkModList"></div></div>
+          <button type="button" class="step-item" data-part="checkLog"><span class="num">2</span><span class="step-name">Run log</span><span class="step-meta">47</span></button>
+          <button type="button" class="step-item" data-part="checkProv"><span class="num">3</span><span class="step-name">Provenance</span></button>
+          <button type="button" class="step-item" data-part="checkConfirm"><span class="num">4</span><span class="step-name">Confirm</span><span class="step-meta" id="confirmStepMeta">to do</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- what the dots and pills mean -->
+    <div class="pal-pane" data-pane="legend">
+      <button type="button" class="pal-pane-head" title="Open or close this panel">
+        <span class="pal-pane-chevron"></span><span class="pal-pane-title">Legend</span>
+      </button>
+      <div class="pal-pane-body">
+        <div class="qc-legend">
+          <div class="qc-legend-title">Result</div>
+          <div class="qc-legend-row"><span class="qc-dot pass"></span>Passed: every breath or item passed</div>
+          <div class="qc-legend-row"><span class="qc-dot part"></span>Some failed</div>
+          <div class="qc-legend-row"><span class="qc-dot fail"></span>Failed: no breath or item passed</div>
+          <div class="qc-legend-title">Severity: how much a fail matters</div>
+          <div class="qc-legend-row"><span class="sev-pill info">info</span>for review; the run goes on</div>
+          <div class="qc-legend-row"><span class="sev-pill warn">warning</span>check the result before you use it</div>
+          <div class="qc-legend-row"><span class="sev-pill crit">error</span>the result is not usable</div>
+          <div class="qc-legend-title">Side panel dot</div>
+          <div class="qc-legend-row"><span class="st on"></span>all checks passed</div>
+          <div class="qc-legend-row"><span class="st part"></span>an info check has fails</div>
+          <div class="qc-legend-row"><span class="st fail"></span>a warning or error check has fails</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="prep-main" id="checkMain">
+
+  <div class="prep-crumb" id="checkCrumb" aria-live="polite"></div>
+
+  <!-- one card per modality (js/check/check-page.js); "1 Quality checks" shows all of them -->
+  <div id="checkModCards" class="check-mod-cards"></div>
+
+  <!-- Run log -->
+  <div class="card" id="checkLog">
+    <div class="card-head"><h3>Run log</h3><span class="hint">every step of <code>multimodal-full</code>, in run order</span></div>
+    <div class="card-body">
+      <div class="card-toolbar">
+        <div class="ct-left">
+          <span class="ct-label">Show</span>
+          <div class="tb-seg small" id="logFilter" role="group" aria-label="Steps to show">
+            <button class="on" data-mod="all">All</button>
+            <button data-mod="eit">EIT</button>
+            <button data-mod="emg">EMG</button>
+            <button data-mod="vent">Ventilator</button>
+            <button data-mod="session">Session</button>
+          </div>
+        </div>
+        <div class="ct-right"><span class="log-count" id="logCount"></span></div>
+      </div>
+      <div class="run-log" id="runLog">
+<div class="log-line ok">run <b>multimodal-full</b> · run_id 9907d215dda2 · m3resp 0.1.0 · started 12:42:52Z</div>
+<div class="log-line"><span class="t">+ 0.324s</span>eit.load                            323.6 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.226s</span>emg.load                            902.2 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.227s</span>ventilator.load                       1.1 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.241s</span>session.sync_raw                     14.0 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.313s</span>eit.detect_rates                     72.2 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.427s</span>eit.mdn_filter                      114.1 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.430s</span>eit.global_impedance                  2.8 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.432s</span>eit.detect_breaths                    2.1 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.432s</span>eit.normalize_breaths                 0.1 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.434s</span>eit.continuous_tiv                    2.2 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.451s</span>eit.eeli                             17.0 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.821s</span>eit.pixel_breaths                   369.3 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.844s</span>eit.pixel_tiv                        23.5 ms  ok</div>
+<div class="log-line"><span class="t">+ 1.868s</span>eit.roi_tiv_lungspace                23.3 ms  ok</div>
+<div class="log-line"><span class="t">+ 2.496s</span>eit.roi_amplitude_lungspace         628.6 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.281s</span>eit.roi_watershed                   785.1 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.285s</span>eit.roi_filter_by_size                3.2 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.289s</span>emg.preprocess                        4.3 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.295s</span>emg.ecg_detect_peaks                  5.8 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.298s</span>emg.ecg_gating                        3.8 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.311s</span>emg.detect_breaths                   12.7 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.311s</span>emg.peak_indices                      0.0 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.311s</span>ventilator.channels                   0.0 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.373s</span>emg.slopesum_baseline                61.8 ms  ok</div>
+<div class="log-line"><span class="t">+ 3.373s</span>emg.onoffpeak_baseline_crossing       0.4 ms  ok</div>
+<div class="log-line"><span class="t">+ 4.505s</span>emg.time_to_peak                   1131.3 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.627s</span>emg.pseudo_slope                   1122.4 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.627s</span>emg.amplitude                         0.0 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.630s</span>emg.time_product                      3.4 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.649s</span>emg.area_under_baseline              18.4 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.649s</span>emg.respiratory_rate                  0.2 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.649s</span>ventilator.find_occluded_breaths      0.4 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.650s</span>ventilator.pocc_intervals             0.7 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.651s</span>ventilator.pocc_time_product          0.5 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.651s</span>ventilator.pocc_quality               0.7 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.652s</span>ventilator.detect_breaths             0.4 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.652s</span>ventilator.respiratory_rate           0.1 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.652s</span>ventilator.detect_non_consecutive_manoeuvres    0.4 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.652s</span>ventilator.normalize_breaths          0.3 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.653s</span>emg.snr_pseudo                        0.9 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.676s</span>emg.percentage_under_baseline        22.9 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.677s</span>emg.detect_local_high_aub             0.6 ms  ok</div>
+<div class="log-line"><span class="t">+ 5.678s</span>emg.detect_extreme_time_products      0.6 ms  ok</div>
+<div class="log-line"><span class="t">+10.000s</span>emg.evaluate_bell_curve_error      4322.3 ms  ok</div>
+<div class="log-line"><span class="t">+10.000s</span>emg.evaluate_event_timing             0.7 ms  ok</div>
+<div class="log-line"><span class="t">+10.001s</span>emg.evaluate_respiratory_rates        0.5 ms  ok</div>
+<div class="log-line"><span class="t">+10.002s</span>emg.interpeak_dist                    0.7 ms  ok</div>
+<div class="log-line ok">47/47 steps completed · total 10.014s · status: succeeded</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Provenance -->
+  <div class="card" id="checkProv">
+    <div class="card-head"><h3>Provenance</h3><span class="hint">where the results came from</span></div>
+    <div class="card-body">
+      <dl class="prov-list">
+        <div class="prov-row"><dt>Pipeline</dt><dd class="mono">multimodal-full</dd></div>
+        <div class="prov-row"><dt>Run id</dt><dd class="mono">9907d215dda2452d</dd></div>
+        <div class="prov-row"><dt>m3resp version</dt><dd class="mono">0.1.0</dd></div>
+        <div class="prov-row"><dt>Started</dt><dd class="mono">2026-07-30T12:42:52Z</dd></div>
+        <div class="prov-row"><dt>Finished</dt><dd class="mono">2026-07-30T12:43:02Z · 10.0 s</dd></div>
+        <div class="prov-row"><dt>Status</dt><dd><span class="run-status ok">Succeeded</span> 47 of 47 steps</dd></div>
+        <div class="prov-row"><dt>Inputs</dt><dd class="mono">m3resp_multimodal_1_eit_draeger.bin<br>m3resp_multimodal_1_emg.Poly5<br>m3resp_multimodal_1_ventilator.Poly5</dd></div>
+      </dl>
+      <div class="prov-rerun">
+        <div class="prov-rerun-text">
+          <b>Rerun after a change</b>
+          <span>A new parameter in a step makes the steps after it out of date. Example: a new <code>emg.snr_pseudo</code> threshold</span>
+          <div class="prov-stale">
+            <code>emg_time_product</code><code>emg_pseudo_slope</code><code>quality summary</code><code>export.session_summary</code>
+          </div>
+        </div>
+        <button class="tb-btn" data-icon="reset">Rerun 4 steps</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm: the last step; it opens 4 · Results -->
+  <div class="card" id="checkConfirm">
+    <div class="card-head"><h3>Confirm the check</h3><span class="hint">opens 4 · Results</span></div>
+    <div class="card-body">
+      <div class="confirm-why">
+        <div><span class="confirm-k">What it means</span><p>You looked at the quality checks and accept this run for analysis.</p></div>
+        <div><span class="confirm-k">Why it is needed</span><p>Results turns this run into parameters and plots. It stays locked until the checks are seen, so no result is used unchecked.</p></div>
+      </div>
+      <div class="confirm-sum" id="confirmSummary"></div>
+      <div class="confirm-act" id="checkConfirmBar">
+        <span class="confirm-state" id="confirmState">Not confirmed yet.</span>
+        <div class="tb-spacer"></div>
+        <button class="tb-btn primary" id="confirmResultsBtn" data-icon="check">Confirm and open 4 · Results</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Back / Next -->
+  <div class="prep-pager">
+    <button class="tb-btn" id="checkBackBtn">Back</button>
+    <div class="tb-spacer"></div>
+    <span class="pager-hint" id="checkNextHint"></span>
+    <button class="tb-btn primary" id="checkNextBtn">Next</button>
+  </div>
+
+  </div>
+</div>
