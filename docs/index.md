@@ -15,20 +15,6 @@ html_theme.sidebar_secondary.remove: true
 
 Bring electrical impedance tomography (EIT), respiratory muscle electromyography (EMG) and ventilator recordings of pressure, flow and volume into one shared scientific workflow.
 
-::::{div} m3-channels
-:::{div} m3-channel m3-channel-eit
-EIT
-:::
-
-:::{div} m3-channel m3-channel-emg
-EMG
-:::
-
-:::{div} m3-channel m3-channel-vent
-VENT
-:::
-::::
-
 ::::{div} m3-actions
 :::{button-ref} getting-started
 :ref-type: doc
@@ -54,6 +40,32 @@ Explore tutorials
 :alt: Schematic of three respiratory signals on one shared time axis. EIT global impedance, respiratory muscle EMG and ventilator airway pressure each show four breaths, and dashed lines mark the start of each breath in all three signals.
 :class: m3-monitor
 ```
+::::::
+
+::::::{div} m3-stats
+:::{div} m3-stat
+Modalities
+
+EIT · EMG · VENT
+:::
+
+:::{div} m3-stat
+Workflow files
+
+YAML · JSON
+:::
+
+:::{div} m3-stat
+Python
+
+3.12 or newer
+:::
+
+:::{div} m3-stat
+License
+
+Apache-2.0
+:::
 ::::::
 :::::::
 
