@@ -84,14 +84,6 @@ function arrangeByDepth(){
     });
     if(placed.length) laneTop = Math.max(...placed.map(r=>r.y+r.h)) + gapY + 16;
   });
-
-  // the session band follows the EMG lane
-  const emgLane = ARRANGE_LANES.indexOf('emg');
-  const emgBlocks = blocks.filter(b=>lane(b)===emgLane);
-  sessionRailBox = emgBlocks.length ? {
-    top: Math.min(...emgBlocks.map(b=>b.rect.y)) - 14,
-    height: Math.max(...emgBlocks.map(b=>b.rect.y+b.rect.h)) - Math.min(...emgBlocks.map(b=>b.rect.y)) + 28,
-  } : null;
 }
 
 document.getElementById('arrangeBtn').addEventListener('click', ()=>{

@@ -121,6 +121,7 @@ function nodeHtml(n){
       <div class="node-head-row">
         ${nodeIconSvg(n, 14)}
         <span class="id" title="${n.label || n.id}">${n.isGroup?'▸ ':''}${n.label || n.id}</span>
+        ${sharedBadgeHtml(n)}
         <button class="node-remove" title="${n.isGroup?'Remove this whole workflow':'Remove this node'}">×</button>
       </div>
       <span class="op" title="${n.op}">${n.op}</span>
@@ -144,6 +145,45 @@ function runBadgeHtml(n){
   if(!b) return '<span class="run-badge"></span>';
   return `<span class="run-badge on" title="${b.title}"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" aria-hidden="true">
     <path d="${b.d}" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+}
+
+// ---- shared-data badge: a small store icon on a step that reads or writes
+// the shared session data (M3Session); its tooltip names what it reads and
+// writes ----
+const SHARED_ICON = 'M4 5c0-1.4 2.7-2.5 6-2.5s6 1.1 6 2.5-2.7 2.5-6 2.5S4 6.4 4 5zM4 5v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V5M4 10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5';
+function sharedIconSvg(size){
+  return `<svg width="${size}" height="${size}" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <path d="${SHARED_ICON}" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+function sharedDataTitle(op){
+  const {reads, writes} = sharedData(op);
+  const item = name=> `  • ${name}: ${sharedDataText(name)}`;
+  const lines = [
+    'Shared session data',
+    'The session (M3Session) holds all data of one analysis: the loaded',
+    'recordings and every result made so far. Besides its links, this step',
+    'uses the session directly.',
+  ];
+  if(reads.length) lines.push('', 'Reads:', ...reads.map(item));
+  if(writes.length) lines.push('', 'Writes:', ...writes.map(item));
+  if(reads.length) lines.push('', 'Data it reads comes from the last step that wrote it.');
+  return escHtml(lines.join('\n'));
+}
+function sharedBadgeHtml(n){
+  if(n.isGroup) return '';
+  const {reads, writes} = sharedData(n.op);
+  if(!reads.length && !writes.length) return '';
+  return `<span class="shared-badge" title="${sharedDataTitle(n.op)}">${sharedIconSvg(10)}</span>`;
+}
+// mark the steps that share session data with step n (n = null: clear)
+function markSharedDataSteps(n){
+  const own = n ? Object.values(sharedData(n.op)).flat() : [];
+  document.getElementById('canvasInner').classList.toggle('shared-focus', !!n);
+  document.querySelectorAll('#canvasInner .node').forEach(el=>{
+    const other = nodeById(el.dataset.id);
+    const names = other && !other.isGroup ? Object.values(sharedData(other.op)).flat() : [];
+    el.classList.toggle('shared-hl', names.some(a=> own.some(b=> sharedNamesMatch(a, b))));
+  });
 }
 
 // one small line icon per step category, drawn in the modality colour
@@ -198,6 +238,7 @@ function nodeCompactHtml(n){
       ${n.isGroup ? `<span class="cnode-count">${n.group.members.length}</span>` : ''}
       <svg class="run-progress" width="72" height="72" viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r="34"/></svg>
       ${runBadgeHtml(n)}
+      ${sharedBadgeHtml(n)}
       <button class="node-remove" title="${n.isGroup?'Remove this whole workflow':'Remove this node'}">×</button>
     </div>
     ${dots}
@@ -240,6 +281,13 @@ function renderNode(n){
     e.stopPropagation();
     if(n.isGroup) removeGroup(n.group); else removeNode(n.id);
   });
+  // pointing at the shared-data badge marks every step that reads or writes
+  // the same session data
+  const sharedBadge = el.querySelector('.shared-badge');
+  if(sharedBadge){
+    sharedBadge.addEventListener('mouseenter', ()=> markSharedDataSteps(n));
+    sharedBadge.addEventListener('mouseleave', ()=> markSharedDataSteps(null));
+  }
   el.querySelectorAll('.port-dot').forEach(dot=>{
     dot.addEventListener('mousedown', e=>{ e.stopPropagation(); startConnectionDrag(n.id, dot.dataset.side, dot.dataset.port, e); });
   });

@@ -140,11 +140,10 @@ function renderAllNodes(){
 
 // Auto-wire a newly-added node's inputs to whichever existing node already
 // produces a context key of the same name — this is exactly the positional,
-// name-based binding the compiler itself uses (see the session-rail note on
-// 2 · Design), just applied the moment a node lands on the canvas instead of
-// left for the author to draw by hand. 'session' is skipped: it matches
-// almost every node and would just clutter the canvas with edges that add
-// no information beyond what the dashed session rail already shows.
+// name-based binding the compiler itself uses, just applied the moment a node
+// lands on the canvas instead of left for the author to draw by hand.
+// 'session' is skipped: it matches almost every node, and the shared-data
+// badge on each node already shows which steps use the session.
 function autoWireNode(newNode){
   let added = 0;
   newNode.ins.forEach(([inName])=>{
@@ -229,10 +228,10 @@ function drawEdges(){
       // deleting it would just make the dependency invisible, not gone. Explain
       // instead of allowing a delete that can't be reconstructed from the graph.
       const title = document.createElementNS('http://www.w3.org/2000/svg','title');
-      title.textContent = 'Implicit session dependency — cannot be removed from the canvas. Click for why.';
+      title.textContent = 'Shared-data link: this step reads data that the earlier step wrote to the session. Click for more.';
       hit.appendChild(title);
       hit.addEventListener('click', ()=> showEdgeNote(hit,
-        'Implicit session dependency — derived from session_reads/session_writes, not a drawn binding. Removing it here would hide the dependency without removing it, so this edge can\'t be deleted from the canvas.'));
+        'Shared-data link: the earlier step writes data to the session (M3Session) and this step reads it from there. The link follows from what the steps read and write, so it cannot be removed from the canvas.'));
     } else {
       hit.addEventListener('click', ()=> removeEdge(edge));
     }
@@ -247,6 +246,20 @@ function drawEdges(){
     head.setAttribute('d', `M ${endX} ${dy-ARROW_W} L ${tipX} ${dy} L ${endX} ${dy+ARROW_W} Z`);
     head.setAttribute('fill', color);
     g.appendChild(hit); g.appendChild(path); g.appendChild(head);
+    // a shared-data link shows the session data it carries, for example
+    // "processed.emg"
+    const shared = session ? sharedLinkNames(fromNode.op, toNode.op) : [];
+    if(shared.length){
+      const label = document.createElementNS('http://www.w3.org/2000/svg','text');
+      label.setAttribute('class', 'edge-label session');
+      label.setAttribute('x', curve.mid.x.toFixed(1));
+      label.setAttribute('y', (curve.mid.y-5).toFixed(1));
+      label.textContent = shared.join(', ');
+      const tip = document.createElementNS('http://www.w3.org/2000/svg','title');
+      tip.textContent = `Shared session data: ${shared.join(', ')} · written by ${fromNode.id}, read by ${toNode.id}`;
+      label.appendChild(tip);
+      g.appendChild(label);
+    }
     // the name of the data the link carries, at its middle
     if(!session){
       const outName = (fromNode.outs[oidx]||[])[0] || srcKey || key;

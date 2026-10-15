@@ -64,6 +64,46 @@ const TYPE_COLOR = {
 };
 function tc(t){return TYPE_COLOR[t] || 'var(--text-faint)';}
 
+// ---- shared data: the parts of the M3Session that a step reads and writes
+// directly (session_reads / session_writes in the step registry), for
+// example "processed.emg" or "events.emg_breaths" ----
+function sharedData(op){
+  const info = STEP_INFO[op];
+  return {reads: (info && info.reads) || [], writes: (info && info.writes) || []};
+}
+// each part of the session in plain words (from the M3Session fields)
+const SHARED_DATA_TEXT = {
+  'raw':                          'the loaded recordings',
+  'raw.eit':                      'the loaded EIT recording',
+  'raw.emg':                      'the loaded EMG recording',
+  'raw.ventilator':               'the loaded ventilator recording',
+  'processed.emg':                'the preprocessed EMG',
+  'signals':                      'signals used by the EIT, EMG and ventilator steps',
+  'start_times':                  'the start time of each recording on the shared clock',
+  'sync_methods':                 'how each recording was aligned in time',
+  'events':                       'all detected events',
+  'events.ecg_peaks':             'the ECG peaks',
+  'events.emg_breaths':           'the EMG breaths',
+  'events.eit_breaths':           'the EIT breaths',
+  'events.ventilator_breaths':    'the ventilator breaths',
+  'events.pocc_breaths':          'the occlusion breaths',
+  'interval_data':                'values per breath, such as TIV and EELI',
+  'pixel_masks':                  'the EIT pixel masks (lung regions)',
+  'quality':                      'the quality flags',
+  'parameter_results':            'the computed parameters',
+  'parameters.raw_alignment':     'the alignment of the raw recordings',
+  'parameters.offset_estimation': 'the estimated time offset',
+  'processing_history':           'the list of steps that ran',
+};
+function sharedDataText(name){ return SHARED_DATA_TEXT[name] || name; }
+// a write of "events" covers a read of "events.emg_breaths", and the reverse
+function sharedNamesMatch(a, b){ return a===b || a.startsWith(b+'.') || b.startsWith(a+'.'); }
+// the shared data that one step writes and a later step reads
+function sharedLinkNames(srcOp, dstOp){
+  const reads = sharedData(dstOp).reads;
+  return sharedData(srcOp).writes.filter(w=> reads.some(r=> sharedNamesMatch(w, r)));
+}
+
 const NODES = [
   {id:'load_eit', op:'eit.load', mod:'eit', x:30, y:40, ins:[['sequence','sequence_bundle']], outs:[['raw_eit','eit_pixel_signal']], status:'ok'},
   {id:'load_emg', op:'emg.load', mod:'emg', x:30, y:320, ins:[['sequence','sequence_bundle']], outs:[['emg_recording','emg_recording']], status:'ok'},
@@ -155,35 +195,12 @@ const COMPACT_SCALE = 0.62;
 function scaleLayout(f){
   NODES.forEach(n=>{ n.x = Math.round(n.x*f); n.y = Math.round(n.y*f); });
   GROUPS.forEach(g=>{ g.x = Math.round(g.x*f); g.y = Math.round(g.y*f); });
-  if(sessionRailBox) sessionRailBox = {top: Math.round(sessionRailBox.top*f), height: Math.round(sessionRailBox.height*f)};
   // notes keep their size (it holds text); their places and arrows scale
   ANNOTATIONS.forEach(a=>{
     if(a.kind==='note'){ a.x = Math.round(a.x*f); a.y = Math.round(a.y*f); }
     else { a.x1 = Math.round(a.x1*f); a.y1 = Math.round(a.y1*f); a.x2 = Math.round(a.x2*f); a.y2 = Math.round(a.y2*f); }
   });
 }
-// The session band in the detailed layout: from y = 312, 130 px high, around
-// the EMG row (y = 320). In the compact layout it follows that row.
-const RAIL_TOP = 312, RAIL_H = 130, RAIL_ROW_Y = 320;
-// After "Arrange" the band follows the EMG lane: {top, height} in the
-// coordinates of the view on screen (null: the default place above)
-let sessionRailBox = null;
-function positionSessionRail(){
-  const rail = document.querySelector('.session-rail');
-  if(!rail) return;
-  if(sessionRailBox){
-    rail.style.top = sessionRailBox.top+'px';
-    rail.style.height = sessionRailBox.height+'px';
-  } else if(NODE_VIEW==='compact'){
-    const rowY = Math.round(RAIL_ROW_Y*COMPACT_SCALE);
-    rail.style.top = (rowY-14)+'px';
-    rail.style.height = (nodeHeight({})+22)+'px';
-  } else {
-    rail.style.top = RAIL_TOP+'px';
-    rail.style.height = RAIL_H+'px';
-  }
-}
-
 function nodeWidth(n){ return NODE_VIEW==='compact' ? CNODE_W : NODE_W; }
 // top of the free area under the graph, where new nodes are placed
 function stagingTop(){
@@ -317,7 +334,6 @@ function updateCanvasSize(){
   const maxY = Math.max(...NODES.map(n=>n.y+nodeHeight(n)), ...notes.map(r=>r.y+r.h), 480);
   inner.style.width = (maxX+60)+'px';
   inner.style.height = (maxY+40)+'px';
-  positionSessionRail();
   syncCanvasFootprint();
 }
 

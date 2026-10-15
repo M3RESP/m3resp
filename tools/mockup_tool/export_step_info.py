@@ -1,8 +1,9 @@
 """Write the step list of the m3resp step registry to src/js/data/step-info.js.
 
 The GUI mockup reads this file to fill the Operations palette and the help
-box: the name, one-line summary, modality, category, inputs, outputs and
-parameters of every registered step.
+box: the name, one-line summary, modality, category, inputs, outputs,
+parameters and shared session data (the parts of the M3Session a step reads
+and writes) of every registered step.
 
 Run it from the repository root, in the environment where m3resp is installed:
 
@@ -12,7 +13,7 @@ Run it from the repository root, in the environment where m3resp is installed:
 import json
 import os
 
-from m3resp.workflows.registry import describe_steps
+from m3resp.workflows.registry import STEP_REGISTRY, describe_steps
 
 OUTPUT_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "src", "js", "data", "step-info.js"
@@ -39,6 +40,11 @@ def _parameter(p):
     }
 
 
+def _session_names(resources):
+    """Return the session resource names without the leading "session."."""
+    return [r.removeprefix("session.") for r in resources]
+
+
 def build_step_info():
     """Return {step name: info} for every step in the registry."""
     info = {}
@@ -51,6 +57,8 @@ def build_step_info():
             "outs": _ports(step.output_artifacts),
             "params": [_parameter(p) for p in step.parameters],
             "packages": list(step.optional_packages),
+            "reads": _session_names(STEP_REGISTRY[step.name].session_reads),
+            "writes": _session_names(STEP_REGISTRY[step.name].session_writes),
         }
     return info
 

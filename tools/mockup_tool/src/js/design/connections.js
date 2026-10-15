@@ -133,7 +133,6 @@ renderBlocksTab();
 // (both are also choices on the welcome card, js/design/welcome.js)
 function resetCanvasState(){
   addSlotIndex = 0;
-  sessionRailBox = null;
   clearMultiSelect();
   renderAllNodes();
   drawEdges();
@@ -200,6 +199,13 @@ function selectNode(id){
   if(n.ins.length===0) portsHtml += `<div class="port-line" style="color:var(--text-faint);">none</div>`;
   portsHtml += '<div class="insp-section-title">Outputs</div>';
   n.outs.forEach(([name,type])=> portsHtml += `<div class="port-line"><span>${name}</span><span class="type-chip">${type}</span></div>`);
+  // the parts of the shared session data (M3Session) the step reads and writes
+  const shared = n.isGroup ? {reads:[], writes:[]} : sharedData(n.op);
+  if(shared.reads.length || shared.writes.length){
+    portsHtml += '<div class="insp-section-title">Shared session data</div>';
+    shared.reads.forEach(name=> portsHtml += `<div class="port-line" title="${escHtml(sharedDataText(name))}"><span>${name}</span><span class="type-chip">reads</span></div>`);
+    shared.writes.forEach(name=> portsHtml += `<div class="port-line" title="${escHtml(sharedDataText(name))}"><span>${name}</span><span class="type-chip">writes</span></div>`);
+  }
 
   insp.innerHTML = `
     <div class="insp-head">

@@ -72,7 +72,6 @@ function designSnapshot(){
     // a step that runs while the page closes is out of date when it opens again
     nodes: NODES.map(n=> n.status==='running' ? {...n, status:'stale'} : n),
     edges: EDGES, groups: GROUPS, annotations: ANNOTATIONS,
-    sessionRailBox,
     problems: PROBLEMS,
     runLog: [...dockLogEl.querySelectorAll('.log-line')].map(el=>el.outerHTML),
     autoRun,
@@ -175,7 +174,6 @@ function restoreDesign(d){
   EDGES.splice(0, EDGES.length, ...d.edges);
   GROUPS.splice(0, GROUPS.length, ...d.groups);
   ANNOTATIONS.splice(0, ANNOTATIONS.length, ...d.annotations);
-  sessionRailBox = d.sessionRailBox || null;
   // new notes and arrows continue the numbers of the kept ones
   annotSeq = Math.max(0, ...ANNOTATIONS.map(a=> Number(String(a.id).split('_').pop()) || 0));
   PROBLEMS = d.problems;

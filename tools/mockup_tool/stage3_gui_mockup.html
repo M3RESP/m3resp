@@ -669,7 +669,6 @@
       </div>
       <div class="canvas-scroll" id="canvasScroll">
         <div class="canvas-inner" id="canvasInner">
-          <div class="session-rail"><span class="session-rail-label" title="39 of the 60 registered operations read or write the shared M3Session object rather than only named inputs/outputs. Any node in this lane is one of them. The dotted lines you see are the implicit dependencies that follow from that — e.g. sync_raw reads the session that load_eit already wrote into, even though nothing was explicitly passed between them.">session state — 39/60 steps ⓘ</span></div>
           <svg class="edges" id="edgesSvg"></svg>
           <!-- nodes injected by JS -->
         </div>
@@ -726,7 +725,8 @@
             <div class="lg-title">Links</div>
             <div class="lg-row"><svg width="22" height="10" aria-hidden="true"><line x1="1" y1="5" x2="14" y2="5" stroke="var(--text-dim)" stroke-width="2"/><path d="M14 1.5 L21 5 L14 8.5 Z" fill="var(--text-dim)"/></svg><span>The arrow points at the step that gets the data.</span></div>
             <div class="lg-row"><span class="lg-label">raw_eit</span><span>Name of the data on the link. Point at it for the full name and type.</span></div>
-            <div class="lg-row"><svg width="22" height="10" aria-hidden="true"><line x1="1" y1="5" x2="21" y2="5" stroke="var(--generic)" stroke-width="2.5" stroke-dasharray="2 4"/></svg><span>Session link: the steps share data through the session. It cannot be removed.</span></div>
+            <div class="lg-row"><svg width="22" height="10" aria-hidden="true"><line x1="1" y1="5" x2="21" y2="5" stroke="var(--generic)" stroke-width="2.5" stroke-dasharray="2 4"/></svg><span>Shared-data link: the step reads data that an earlier step wrote to the session. It cannot be removed.</span></div>
+            <div class="lg-row"><span class="lg-label lg-label-session">processed.emg</span><span>Session data on a shared-data link.</span></div>
             <div class="lg-row lg-note">Click a link to remove it.</div>
 
             <div class="lg-title">Ports</div>
@@ -740,6 +740,7 @@
             <div class="lg-row"><span class="lg-badge" style="background:var(--warn);color:var(--on-warn)">!</span><span>Done, with a warning</span></div>
             <div class="lg-row"><span class="lg-badge" style="background:var(--crit)">×</span><span>Failed</span></div>
             <div class="lg-row"><span class="lg-badge lg-stale">↻</span><span>Out of date: run it again</span></div>
+            <div class="lg-row"><span class="shared-badge"><svg width="10" height="10" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 5c0-1.4 2.7-2.5 6-2.5s6 1.1 6 2.5-2.7 2.5-6 2.5S4 6.4 4 5zM4 5v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V5M4 10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>Reads or writes the shared session data (M3Session). Point at it to see which data, and to mark the other steps that use the same data.</span></div>
           </div>
         </div>
       </div>

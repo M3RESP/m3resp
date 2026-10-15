@@ -46,7 +46,15 @@ function showStepHelp(op){
     <p class="hb-summary">${escHtml((info && info.summary) || 'No summary in the registry.')}</p>
     ${note}
     <div class="hb-ports"><span class="hb-label">In</span>${portChipsHtml(ins)}</div>
-    <div class="hb-ports"><span class="hb-label">Out</span>${portChipsHtml(ports.outs)}</div>`;
+    <div class="hb-ports"><span class="hb-label">Out</span>${portChipsHtml(ports.outs)}</div>
+    ${sharedChipsHtml(op)}`;
+}
+// the shared session data (M3Session) that a step reads and writes
+function sharedChipsHtml(op){
+  const {reads, writes} = sharedData(op);
+  const chips = list=> list.map(name=> `<span class="hb-chip" title="${escHtml(sharedDataText(name))}">${sharedIconSvg(10)}${escHtml(name)}</span>`).join('');
+  return (reads.length ? `<div class="hb-ports"><span class="hb-label">Reads</span>${chips(reads)}</div>` : '')
+    + (writes.length ? `<div class="hb-ports"><span class="hb-label">Writes</span>${chips(writes)}</div>` : '');
 }
 
 function showBlockHelp(block){

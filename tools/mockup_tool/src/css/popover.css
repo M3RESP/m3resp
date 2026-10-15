@@ -38,6 +38,8 @@
 .lg-row > svg{width:22px;}
 .lg-note{color:var(--text-faint);font-size:11px;}
 .lg-label{font-family:var(--mono);font-size:10px;color:var(--text-dim);background:var(--surface-2);border-radius:3px;padding:0 3px;}
+.lg-label-session{font-style:italic;color:var(--generic);}
+.lg-row > .shared-badge{margin:0 3px;}
 .lg-badge{
   width:16px;height:16px;border-radius:50%;margin:0 3px;display:flex;align-items:center;justify-content:center;
   color:#fff;font-size:10px;font-weight:700;
@@ -51,16 +53,6 @@
   background-size:22px 22px;
 }
 .canvas-inner{position:relative;width:1420px;height:520px;transform-origin:0 0;}
-.session-rail{
-  position:absolute;left:0;right:0;height:130px;top:312px;
-  background:repeating-linear-gradient(90deg, transparent, transparent 10px, color-mix(in srgb, var(--generic) 22%, transparent) 10px, color-mix(in srgb, var(--generic) 22%, transparent) 11px);
-  border-top:1px dashed color-mix(in srgb, var(--generic) 55%, var(--border));
-  border-bottom:1px dashed color-mix(in srgb, var(--generic) 55%, var(--border));
-}
-.session-rail-label{
-  position:absolute;left:8px;top:-19px;font-size:10px;font-family:var(--mono);color:var(--text-faint);
-  letter-spacing:0.04em;text-transform:uppercase;cursor:help;
-}
 /* an <svg> is a replaced element, so `inset:0` alone leaves it at its intrinsic
    300x150 — it only *looked* right because the overflow is visible. Size it to
    the canvas explicitly so its user units line up 1:1 with node coordinates. */
@@ -199,6 +191,18 @@ svg.edges{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible
 .group-frame-head{cursor:default;user-select:none;}
 .group-collapse:hover{border-color:var(--accent);color:var(--accent-strong);}
 
+/* ---- shared-data badge: the step reads or writes the shared session data ---- */
+.shared-badge{
+  flex:none;width:16px;height:16px;border-radius:50%;box-sizing:border-box;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--surface);color:var(--generic);
+  border:1px solid color-mix(in srgb, var(--generic) 45%, var(--border));cursor:help;
+}
+.shared-badge svg{display:block;}
+.node.compact .shared-badge{position:absolute;left:50%;bottom:-6px;margin-left:-8px;z-index:2;}
+.canvas-inner.shared-focus .node:not(.shared-hl){opacity:0.35;}
+.node.shared-hl .shared-badge{background:var(--generic);color:var(--surface);border-color:var(--generic);}
+
 /* ---- run state of a node (js/design/run-state.js): badge, progress ---- */
 .run-badge{
   position:absolute;top:-7px;right:-7px;z-index:3;width:18px;height:18px;border-radius:50%;
@@ -294,6 +298,7 @@ svg.edges{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible
   font-family:var(--sans);font-size:10.5px;font-weight:500;fill:var(--text-dim);text-anchor:middle;
   paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round;pointer-events:auto;cursor:default;
 }
+.edge-label.session{font-family:var(--mono);font-size:10px;font-style:italic;fill:var(--generic);}
 .canvas-inner.labels-off .edge-label{display:none;}
 
 .dock{
