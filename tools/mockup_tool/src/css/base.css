@@ -95,6 +95,8 @@ h1,h2,h3{text-wrap:balance;}
 .tab-btn:not(.active):hover{color:var(--text);}
 .tab-btn.locked{color:var(--text-faint);cursor:not-allowed;}
 .tab-btn.locked:hover{color:var(--text-faint);}
+.tab-lock{display:inline-block;vertical-align:-1px;margin-left:6px;}
+.hidden{display:none !important;}
 .appbar-spacer{flex:1;}
 .session-chip{
   display:flex;align-items:center;gap:8px;

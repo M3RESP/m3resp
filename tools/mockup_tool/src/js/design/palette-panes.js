@@ -6,7 +6,7 @@
 // between two open parts changes their sizes (a double-click makes the two
 // equal). The open parts share the height of the panel by their --grow
 // values, so one open part alone fills the panel. ----
-const SIDE_PANELS = [document.getElementById('palettePanel'), document.getElementById('inspector'), document.getElementById('prepSidebar'), document.getElementById('checkSidebar')];
+const SIDE_PANELS = [document.getElementById('palettePanel'), document.getElementById('inspector'), document.getElementById('prepSidebar'), document.getElementById('checkSidebar'), document.getElementById('resultsSidebar')];
 const PANE_MIN_PX = 70;   // smallest height of an open part while a bar is dragged
 const PANE_REOPEN_GROW = 160;   // size of a part that was closed from the start, when it opens
 

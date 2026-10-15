@@ -93,8 +93,9 @@ const JS_FILES = [
   // after 1 · Prepare and 2 · Design: "Show in 1 · Prepare" and "Find step"
   'js/check/check-data.js',
   'js/check/check-page.js',
-  'js/results/plots.js',
-  'js/results/params-filter.js',
+  // after 3 · Check: the values link to its checks and use its breath times
+  'js/results/results-data.js',
+  'js/results/results-page.js',
 ];
 
 function read(relPath) {

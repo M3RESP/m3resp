@@ -42,7 +42,7 @@ function qcBar(passed, total, cls=''){
   return `<span class="qc-bar ${cls}" role="img" aria-label="${passed} of ${total} passed"><span style="width:${pct.toFixed(1)}%"></span></span>`;
 }
 const qcFmt = (c, v)=> v===null || v===undefined ? '–' : `${(+v).toFixed(c.digits)}${c.unit && c.unit!=='%' ? ' '+c.unit : c.unit}`;
-const qcLimit = c=> c.limit===null ? c.limitText : `${c.dir==='max' ? '≤' : '≥'} ${qcFmt(c, c.limit)}`;
+const qcLimit = c=> c.limit===null ? c.limitText : `${c.dir==='max' ? '≤' : '≥'} ${qcFmt({...c, digits: c.limitDigits ?? c.digits}, c.limit)}`;
 
 // ---- side panel: one row per modality under "1 Quality checks" ----
 const checkModList = document.getElementById('checkModList');
@@ -230,7 +230,7 @@ function qcShowInPrepare(c, x){
   const m = QC_MODS.find(q=> q.id===c.mod);
   goToView('prepare');
   showSection(m.prepCard);
-  const merge = {emg: typeof EMG_MERGE!=='undefined' && EMG_MERGE, vent: typeof VENT_MERGE!=='undefined' && VENT_MERGE}[c.mod];
+  const merge = {eit: typeof EIT_MERGE!=='undefined' && EIT_MERGE, emg: typeof EMG_MERGE!=='undefined' && EMG_MERGE, vent: typeof VENT_MERGE!=='undefined' && VENT_MERGE}[c.mod];
   if(merge && merge.shown!=='f1') merge.showSource('f1');
   const z = ZOOM[c.mod];
   if(z && x && x.t0!==undefined) z.setWindow(Math.max(0, x.t0-3), x.t1+3);
@@ -357,6 +357,7 @@ function checkConfirmed(){
   document.getElementById('confirmState').textContent = 'Confirmed. 4 · Results is open.';
   document.getElementById('confirmStepMeta').textContent = 'done';
   checkSteps.querySelector('[data-part="checkConfirm"]').classList.add('done');
+  if(typeof resultsChecked==='function') resultsChecked();
 }
 renderConfirmSummary();
 

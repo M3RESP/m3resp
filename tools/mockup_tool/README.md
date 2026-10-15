@@ -48,7 +48,7 @@ These parts are illustrative:
 - Each step is a circle in its modality colour, with a category icon and its name under it. Inputs are dots on the left edge, outputs dots on the right edge, and each link shows the name of its data. "Detailed" in the toolbar shows each step as a card with its category icon and all port names.
 - The palette on the left has two halves. The upper half, Steps, has two tabs: Operations (all registry steps) and Workflows (ready-made chains of steps). The lower half, Available data, lists the data made on the canvas and the sequences saved in 1 · Prepare. Each list has a search box, a switch between icons and a list, and sections that open one at a time.
 - The right panel has three parts, from the top: the Inspector, Edge legend (what the link colours, arrows, ports, step colours and run badges mean) and Help (explains the palette item under the mouse).
-- A click on the head of a part (Steps, Available data, Help, Edge legend, Inspector) closes or opens it. A closed part moves to the bottom of its panel; open parts keep their order at the top. Drag the bar between two open parts to change their sizes; a double-click on the bar makes the two equal. One open part alone fills its panel. The side panels of 1 · Prepare and 3 · Check work the same way.
+- A click on the head of a part (Steps, Available data, Help, Edge legend, Inspector) closes or opens it. A closed part moves to the bottom of its panel; open parts keep their order at the top. Drag the bar between two open parts to change their sizes; a double-click on the bar makes the two equal. One open part alone fills its panel. The side panels of 1 · Prepare, 3 · Check and 4 · Results work the same way.
 - A click on a palette step adds it next to the selected step; a drag puts it where it is dropped. A double-click or right-click on empty canvas opens a quick menu of steps. A link dropped on empty canvas opens the same menu with only the steps that take that data type, and the new step arrives connected. A link dropped on a step with several matching inputs asks which input to use.
 - A click on a step shows its parameters in the Inspector. A double-click opens the node window: parameters on the left, a preview of an output and the linked inputs on the right. With "Apply automatically" on, each change goes to the step at once; with it off, changes wait for "Apply".
 - "▶ Run pipeline" runs the steps in graph order with a progress ring on each step and a line per step in the Run log. Badges show done, warning, failed and out of date. A change of a setting or a link makes the step and every step after it out of date; with "Auto-run" on, those steps run again at once. "Validate" fills the Problems list without a run, and a click on a problem shows its step.
@@ -66,7 +66,14 @@ These parts are illustrative:
 - Run log: a filter by modality and the time of each step as a bar. Provenance ends with "Rerun after a change": the steps a parameter change makes out of date, and "Rerun 4 steps".
 - 4 Confirm, the last step: what confirming means and why 4 · Results needs it, the counts still open (passed, to review, warnings) per modality, and "Confirm and open 4 · Results".
 
-**4 · Results.** Parameters, saved values and plots.
+**4 · Results.** The values, plots and files of the run, in the same frame as 3 · Check. The tab opens after the confirm on 3 · Check.
+
+- Side panel: Run (session, pipeline, run id, time of the confirm), Results (1 Summary, 2 Values and 3 Plots with one row per modality, 4 Files) and Legend.
+- 1 Summary: one card per modality (EIT, EMG, Ventilator, Session) with its main values. A value per breath has a small bar per breath. The foot of each card gives the checks to review, the number of breaths that failed a check and "Open in 3 · Check". A click on a value opens it in 2 Values.
+- 2 Values: one card per modality with a search field and modality chips. Each row gives the plain name and the code name, one bar per breath, the value with its unit, and a yellow mark with the number of breaths that failed a quality check. A click opens the details: what the value is, the step, its settings, the file and key that hold it, the failed checks with a link to each, one bar per breath with the limit of its check, and a table of the breaths. "Show in 1 · Prepare" and "Find step in 2 · Design" work as on 3 · Check.
+- 3 Plots: a grid of plots per modality. "saved" plots are the figures of the run; "drawn" plots come from the saved values: the EMGdi envelope with the 19 breath peaks and their onset to offset, time under baseline per breath against its limit, the two Pocc criteria against their limits, and the two lung masks. A click opens a plot at full width with its controls.
+- 4 Files: the output folder, each file with what it holds, its rows and size, "Copy folder path", "Open folder", "Download all (.zip)" and "New run in 2 · Design".
+- The run values come from the run; the values of single breaths are example values with the same mean as the run. 3 · Check and 4 · Results use the same breaths, so a breath that failed a check is the same breath on both tabs.
 
 ## Step list from the registry
 
@@ -104,7 +111,7 @@ src/
     palette-common.js   parts shared by the three palette lists
     palette-panel.js    adding a step, the Available data panel
     help-box.js         help box in the right panel
-    palette-panes.js    parts of both side panels: open and close, sizes
+    palette-panes.js    parts of every side panel: open and close, sizes
     toolbox.js          the Operations tab
     data-preview.js     data previews
     param-form.js       parameter form of the Inspector and the node window
@@ -115,7 +122,8 @@ src/
     run-state.js        run, Auto-run, Validate, Problems, Run log
     welcome.js          welcome card
   js/check/ check-data.js (the checks of the run), check-page.js (side panel, cards, details)
-  js/prepare/, js/results/  code of the other tabs
+  js/results/ results-data.js (values, plots, files of the run), results-page.js (side panel, parts, details, plots)
+  js/prepare/  code of 1 · Prepare
 ```
 
 The page uses classic scripts and loads its data as `.js` files that declare global variables, because browsers block `fetch()` and `type="module"` scripts over `file://`.

@@ -13,8 +13,24 @@
 // example random numbers, the same on every load
 function qcRand(k){ const s=Math.sin(k*91.7+3.1)*43758.5453; return s-Math.floor(s); }
 
-// EMG breath i of the recording (s)
-const qcEmgBreath = i=> ({t0: 0.9 + i*3.12, t1: 0.9 + i*3.12 + 1.35});
+// EMG breath i of the run (s): its peak from emg.detect_breaths, and a
+// window around it of at most 0.7 s on each side that stays clear of the
+// next and the previous peak
+const RUN_EMG_PEAKS = REVIEW.emg_peaks;
+function qcEmgBreath(i){
+  const p = RUN_EMG_PEAKS, gap = Math.min(i>0 ? p[i]-p[i-1] : 9, i<p.length-1 ? p[i+1]-p[i] : 9);
+  const w = Math.min(0.7, 0.45*gap);
+  return {t0: p[i]-w, t1: p[i]+w, peak: p[i]};
+}
+
+// n example values with the given mean: random values in mean ± spread,
+// with the values in `fixed` ({index: value}) kept as they are
+function qcSeries(n, mean, spread, seed, fixed={}){
+  const v = Array.from({length:n}, (_, i)=> i in fixed ? fixed[i] : mean + spread*(2*qcRand(i+seed)-1));
+  const free = v.map((_, i)=> !(i in fixed)), nFree = free.filter(Boolean).length;
+  const shift = (n*mean - v.reduce((a, b)=> a+b, 0)) / nFree;
+  return v.map((x, i)=> free[i] ? x + shift : x);
+}
 
 // items for a per-breath check: `fails` lists the breath numbers (0-based)
 // that failed; value(i, passed) gives the example value
@@ -26,18 +42,20 @@ function qcBreathItems(n, fails, value, message){
   });
 }
 const ALL19 = Array.from({length:19}, (_, i)=> i);
+// % of each EMG breath under the baseline; the run mean is 37.7 %
+const RUN_EMG_AUB = qcSeries(19, 37.7, 3.4, 50, {6:46.3, 14:52.8});
 
 const QC_CHECKS = [
   // ---------------- ventilator ----------------
   {mod:'vent', code:'pocc_quality', step:'ventilator.pocc_quality', stepMs:0.7, severity:'info', scope:'occlusion',
    name:'Occlusion upslope', signal:'P_aw',
-   what:'Checks the pressure upslope of each airway occlusion (Pocc) manoeuvre (Warnaar et al. 2024).',
-   rule:'Passes when the normalized pressure rise at 90 % of the upslope is at least 0.80, the rise at 90 % is at least 2 and the rise at 10 % is at least 0.',
-   params:[['dp_up_90_norm_threshold','0.8'], ['dp_up_90_threshold','2'], ['dp_up_10_threshold','0']],
-   valueName:'normalized rise at 90 %', unit:'', limit:0.8, dir:'min', digits:2,
+   what:'Checks the pressure upslope after each airway occlusion (Pocc) manoeuvre (Warnaar et al. 2024). A dip in the upslope or a too steep upslope marks a bad occlusion.',
+   rule:'Passes when the 1st decile of the upslope is at least 0, its 9th decile is at most 2 and its normalized 9th decile is at most 0.8.',
+   params:[['dp_up_10_threshold','0'], ['dp_up_90_threshold','2'], ['dp_up_90_norm_threshold','0.8']],
+   valueName:'1st decile of the upslope', unit:'cmH₂O', limit:0, dir:'min', digits:4, limitDigits:0,
    items:[
-     {id:'Pocc 1', t0:40.2, t1:41.4, value:0.91, passed:true, message:''},
-     {id:'Pocc 2', t0:43.3, t1:44.5, value:0.64, passed:false, message:'Normalized rise at 90 % is 0.64, under 0.80.'},
+     {id:'Pocc 1', t0:40.2, t1:41.4, value:REVIEW.pocc.dp_up_10[0], passed:false, message:'1st decile of the upslope is −0.0348 cmH₂O, under 0: the upslope dips.'},
+     {id:'Pocc 2', t0:43.3, t1:44.5, value:REVIEW.pocc.dp_up_10[1], passed:true, message:''},
    ]},
   {mod:'vent', code:'detect_non_consecutive_manoeuvres', step:'ventilator.detect_non_consecutive_manoeuvres', stepMs:0.4, severity:'info', scope:'occlusion',
    name:'Occlusions apart', signal:'P_aw',
@@ -64,7 +82,7 @@ const QC_CHECKS = [
    rule:'Passes when at most 40 % of the breath lies under the baseline.',
    params:[['aub_threshold','40 %'], ['aub_window_seconds','the breath (onset to offset)']],
    valueName:'under baseline', unit:'%', limit:40, dir:'max', digits:1,
-   items: qcBreathItems(19, [6, 14], (i, ok)=> ok ? 8 + 26*qcRand(i) : (i===6 ? 46.3 : 52.8),
+   items: qcBreathItems(19, [6, 14], i=> RUN_EMG_AUB[i],
      v=> `${v.toFixed(1)} % of the breath under the baseline, over 40 %.`)},
   {mod:'emg', code:'evaluate_event_timing', step:'emg.evaluate_event_timing', stepMs:0.7, severity:'info', scope:'pair',
    name:'Timing against ventilator', signal:'EMGdi',
@@ -108,11 +126,11 @@ const QC_CHECKS = [
    items:[{id:'run', value:0.95, passed:true, message:''}]},
   {mod:'emg', code:'interpeak_dist', step:'emg.interpeak_dist', stepMs:0.7, severity:'info', scope:'run',
    name:'ECG and EMG peak spacing', signal:'EMGdi',
-   what:'Compares the median distance between EMG peaks with that between ECG peaks (Warnaar et al. 2024).',
-   rule:'Passes when the EMG / ECG ratio of the median peak distances is at most 1.10.',
+   what:'Compares the median distance between EMG peaks with that between ECG peaks (Warnaar et al. 2024). Breaths come slower than heart beats, so the EMG peaks lie farther apart.',
+   rule:'Passes when the EMG / ECG ratio of the median peak distances is at least 1.10.',
    params:[['threshold','1.1']],
-   valueName:'EMG / ECG ratio', unit:'', limit:1.1, dir:'max', digits:2,
-   items:[{id:'run', value:1.04, passed:true, message:''}]},
+   valueName:'EMG / ECG ratio', unit:'', limit:1.1, dir:'min', digits:2,
+   items:[{id:'run', value:2.484/2.123, passed:true, message:''}]},
 ];
 
 const QC_MODS = [

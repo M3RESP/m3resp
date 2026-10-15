@@ -9,8 +9,8 @@
 // reads no file contents.
 
 const EMG_FILES = [
-  {id:'f1', name:'m3resp_multimodal_1_emg.Poly5', dur:REC_SECONDS, fs:2000, shift:0, gain:1, real:true},
-  {id:'f2', name:'m3resp_multimodal_2_emg.Poly5', dur:45.0, fs:2000, shift:12.5, gain:0.8},
+  {id:'f1', name:'m3resp_multimodal_1_emg.Poly5', dur:REC_SECONDS, fs:2048, shift:0, gain:1, real:true},
+  {id:'f2', name:'m3resp_multimodal_2_emg.Poly5', dur:45.0, fs:2048, shift:12.5, gain:0.8},
 ];
 // file time t of file f → file time of file 1 and size
 const emgFileAt = (f, t)=> ({tau:(t + f.shift) % REC_SECONDS, gain:f.gain});
@@ -44,7 +44,7 @@ const EMG_MERGE = makeFileMerger({
   ],
   laneFn:emgLaneFn,
   exts:/\.poly5$/i, extText:'.Poly5',
-  newFile:(name, n)=> ({id:'f'+n, name, dur:REC_SECONDS, fs:2000, shift:(n*7.3) % REC_SECONDS, gain:0.7 + 0.1*(n % 4)}),
+  newFile:(name, n)=> ({id:'f'+n, name, dur:REC_SECONDS, fs:2048, shift:(n*7.3) % REC_SECONDS, gain:0.7 + 0.1*(n % 4)}),
   show:(id, M)=>{
     if(id==='merged'){
       const pieces = M.mergedPieces();
