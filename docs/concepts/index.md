@@ -17,4 +17,5 @@ synchronization
 synchronization-overview
 slicing
 provenance
+glossary
 ```
