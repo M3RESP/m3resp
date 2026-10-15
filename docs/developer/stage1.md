@@ -1,5 +1,7 @@
 # M3Resp Stage 1
 
+This page describes M3Resp at the end of stage 1. See {doc}`architecture` for the code as it is now.
+
 Stage 1 establishes `m3resp` as the integration layer for multimodal respiratory workflows. It gives users one place to run, summarize, and export EIT and EMG analyses, while the scientific processing code stays in the upstream packages.
 
 ## What m3resp does
@@ -102,7 +104,7 @@ result = run_spec("workflow.yaml")
 print(result.outputs)
 ```
 
-See [workflows.md](workflows.md) for the full spec format and how to write your own steps.
+See [workflows.md](../workflows.md) for the full spec format and how to write your own steps.
 
 ## Tests
 

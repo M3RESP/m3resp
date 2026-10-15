@@ -1,15 +1,15 @@
 # Workflows
 
-M3Resp workflows are written as YAML specs and executed by the workflow engine. A spec is an ordered list of named steps. Each step reads named artifacts from a shared context, runs one operation, and writes its outputs back. The engine validates that every step's inputs are produced before it runs, so wiring mistakes are caught immediately with a clear error.
+A {term}`workflow` file is a YAML or JSON file with a list of {term}`steps <step>`. M3Resp runs the steps in order. Each step reads {term}`results <result>` by name, does one calculation and writes its results under a name. Before the run, M3Resp checks that each input of a step comes from an earlier step.
 
-This is the declarative engine (`m3resp.workflows`). For the smaller, named preset mechanism (`session.run_preset("eit" | "emg" | "multimodal")`), see [developer/preset-contracts.md](developer/preset-contracts.md).
+This page describes all parts of a workflow file. For the tasks, see {doc}`how-to/write-a-workflow`, {doc}`how-to/check-a-workflow` and {doc}`how-to/add-a-step`. A {term}`preset` (`session.run_preset("eit")`) is a short, built-in alternative to a workflow file (see {doc}`developer/preset-contracts`).
 
-## Running a workflow
+## Run a workflow
 
 From the command line:
 
 ```bash
-m3resp run path/to/workflow.yaml
+m3resp run examples/multimodal_example/multimodal.workflow.yaml
 ```
 
 From Python:
@@ -17,101 +17,134 @@ From Python:
 ```python
 from m3resp import run_spec, run_workflow
 
-# Run a file end-to-end (handles outputs: section automatically)
-result = run_spec("path/to/workflow.yaml")
-
-# Run the declared steps; use run_spec to also apply the outputs section
-result = run_workflow("path/to/workflow.yaml")
-print(result.value("cv"))     # read a produced artifact by context key
-print(result.outputs)         # dict of every artifact the spec produced
-result.session                # the backing M3Session (events, parameters)
+result = run_spec("examples/multimodal_example/multimodal.workflow.yaml")
+print(result.status)              # succeeded
+print(result.resolved_output_dir) # the folder with the result files
 ```
 
-List the available built-in steps:
+| Function | What it runs |
+|---|---|
+| `run_spec(path)` | The steps, then the `outputs` section: the result files, the figures and the run manifest |
+| `run_workflow(spec)` | Only the steps. `spec` is a path, a dictionary or a `WorkflowSpec`. |
 
-```bash
-m3resp steps
-```
+Both return a `WorkflowResult`:
 
-Or from Python:
+| Field or method | Contents |
+|---|---|
+| `status` | `"succeeded"`, `"failed"` or `"cancelled"` |
+| `value(name)` | One result of the run, by name, for example `result.value("breath_intervals")` |
+| `outputs` | All results of the run, by name |
+| `session` | The {term}`session` with all recordings and results |
+| `warnings` | The Python warnings of the steps |
+| `step_records` | One record per step, with its status and time |
+| `resolved_output_dir`, `manifest_path` | The results folder and the run manifest |
+| `run_id`, `processing_run_id`, `started_at`, `finished_at`, `duration_seconds` | The identifiers and the times of the run |
 
-```python
-from m3resp import available_steps
-for name, summary in available_steps().items():
-    print(f"{name}: {summary}")
-```
-
-## Spec format
-
-A minimal spec looks like this:
+## An example workflow file
 
 ```yaml
 name: my-workflow
 
 inputs:
-  eit_file: /data/subject.bin   # referenced in steps as "@eit_file"
+  eit_file: ../data/subject.bin   # use it in a step as "@eit_file"
   vendor: draeger
 
 outputs:
-  dir: output/results
+  dir: ../output/results
+  mode: automatic
   timestamped: true
-  summary_json: true
-  event_csvs: true
 
 steps:
   - uses: eit.load
     with: { file_path: "@eit_file", vendor: "@vendor" }
 
   - uses: eit.detect_rates
-    in:  { signal: raw_eit }        # override which context key feeds this param
+    in: { signal: raw_eit }
     with: { subject_type: adult }
 
   - uses: eit.mdn_filter
-    in:  { signal: raw_eit }
+    in: { signal: raw_eit }
 
   - uses: eit.global_impedance
-    in:  { signal: filtered_eit }
+    in: { signal: filtered_eit }
 
   - uses: eit.detect_breaths
-    in:  { signal: global_impedance }
+    in: { signal: global_impedance }
 
   - uses: metric.interval_cv
-    in:  { intervals: breath_intervals }
-    out: { cv: breath_duration_cv }   # rename output into a different context key
+    in: { intervals: breath_intervals }
+    out: { cv: breath_duration_cv }
 ```
 
-The four keys for each step:
+## The keys of a step
 
-- **`uses`** — the registered step name.
-- **`in`** — maps a step's parameter name to the context key it reads from. Leave it out to use the step's default binding.
-- **`with`** — static parameters passed directly to the step function. A string value starting with `@` is resolved from `inputs`; this applies recursively inside lists and mappings, so `with: {paths: ["@a", "@b"]}` resolves both entries. Write `@@text` to get the literal string `@text` instead of a reference. A parameter a step declares as a `path` (e.g. `eit.load`'s `file_path`) resolves relative to the spec file's own directory, not the process working directory — same as `outputs.dir` below — after any `@` reference is substituted.
-- **`out`** — renames a step's natural output names to different context keys. Useful when you want to run the same step twice and keep both outputs.
+| Key | Contents |
+|---|---|
+| `uses` | The name of the step, for example `eit.detect_breaths` |
+| `id` | An optional fixed name of this step in the file (see {ref}`workflow-step-ids`) |
+| `in` | Which result each input of the step reads: `{input name: result name}`. Without `in`, the step reads its default result. |
+| `with` | The {term}`settings <setting>` of the step |
+| `out` | New names for the results of the step: `{result name: new name}`. Use it to run the same step twice and keep both results. |
 
-### Top-level sections
+In `with`, a text that starts with `@` is a value from `inputs`, also inside lists and dictionaries: `with: {paths: ["@a", "@b"]}`. Write `@@text` for the text `@text`.
 
-- **`name`** — a label for the workflow (used in log output).
-- **`inputs`** — named values that steps can reference with `@name`.
-- **`outputs`** — controls where and what gets exported after the workflow finishes. If `dir` is set and no explicit export step is present, the engine calls `export_session_summary` automatically.
-- **`experiment`** — study metadata used by `export.rotarc_result` for output file naming (`subject_id`, `mode`, `timepoint`, `run_identifier`, `selection`).
-- **`metadata`** — a free, JSON-serializable mapping for study/site/session notes that are not part of file naming (unlike `experiment`).
-- **`execution`** — reproducibility controls: `error_policy` (only `fail_fast` is supported) and an optional `seed`, recorded but not yet threaded into any step.
-- **`schema_version`** — omit it for the permissive legacy parser (unknown keys ignored, booleans loosely coerced with a `FutureWarning`). Set it to `1` for strict parsing: unknown top-level/step keys and non-boolean booleans become hard errors instead.
+M3Resp reads a relative file path in a step (for example `file_path` of `eit.load`) and in `outputs.dir` from the folder of the workflow file.
 
-### Strict (`schema_version: 1`) versus legacy specs
+## The sections of a workflow file
 
-A spec with no top-level `schema_version` key is parsed by the permissive legacy parser: unknown top-level/step keys are silently ignored, and a non-boolean `outputs.*` flag (e.g. `"yes"`) is coerced with `bool()` behind a `FutureWarning` rather than rejected. This exists for backward compatibility with specs written before Stage 2; new specs should set `schema_version: 1`.
+| Section | Contents |
+|---|---|
+| `name` | The name of the workflow, for the log |
+| `schema_version` | `1` for strict checks (see {ref}`workflow-strict`) |
+| `description` | A short text about the workflow |
+| `inputs` | Values that the steps use with `@name`, for example file paths |
+| `outputs` | The results folder and the result files (see {ref}`workflow-outputs`) |
+| `experiment` | Study details for the file names of `export.rotarc_result`: `subject_id`, `mode`, `timepoint`, `run_identifier`, `selection` (default `"selected"`) |
+| `metadata` | Free notes about the study, the site or the session, as a dictionary |
+| `execution` | `error_policy` (only `fail_fast`) and `seed`. M3Resp records the seed, but no step uses it. |
+| `steps` | The list of steps |
 
-A versioned spec (`schema_version: 1`) is parsed strictly by a pydantic model:
+(workflow-outputs)=
+## The outputs section
 
-- An unknown key anywhere (top level, a step, `outputs`, `experiment`, `execution`) is a hard `WorkflowSpecError`.
-- Every boolean must be a real YAML/JSON boolean. In YAML that means unquoted `true`/`false` (`yes`/`no` and `on`/`off` also work); quoted strings such as `"yes"`, and `y`/`n`, are rejected. In JSON, only `true`/`false`.
-- `outputs.mode` must be set whenever `outputs.dir` is set. Legacy specs may still omit it and let the engine infer it (see "Output modes" below).
+| Setting | Default | Meaning |
+|---|---|---|
+| `dir` | None | The results folder. Without `dir`, M3Resp writes no files. |
+| `mode` | Set by M3Resp | What happens after the steps (see the next table) |
+| `timestamped` | `true` | Each run writes to its own subfolder `<dir>/YYYYMMDD_HHMMSS` |
+| `summary_json` | `true` | Write `summary.json` |
+| `event_csvs` | `true` | Write one CSV file per list of events |
+| `parameters_csv` | `false` | Write `parameters.csv` |
+| `postprocessing` | `false` | Add the EMG results of `postprocess_emg` |
+| `structured_export` | `false` | Write the other result files (see {doc}`how-to/export-results`) |
+| `figures` | `false` | Save the figures |
+| `checksums` | `false` | Add a SHA-256 checksum of each input file to the run manifest |
 
-Both parsers build the same `WorkflowSpec`/`StepSpec` dataclasses, so the engine, `compile_workflow`, and every step behave identically either way; only what gets accepted at parse time differs. Four of the six example specs under `examples/` use `schema_version: 1`; the other two are the smaller introductory ones (`multimodal_example`, `multidomain_recording1_a2`) which are kept legacy on purpose, as a lower-ceremony starting point.
+| `mode` | What happens after the steps |
+|---|---|
+| `automatic` | M3Resp writes the result files after a successful run. Use it for a workflow without an `export.*` step. |
+| `explicit` | The `export.*` steps write the files. M3Resp writes the run manifest and the figures. |
+| `none` | M3Resp writes no result files, figures or run manifest. The `export.*` steps still run. |
 
-### Step ids
+- With `schema_version: 1`, set `mode` when you set `dir`. Without `schema_version`, M3Resp selects `explicit` if the file has an `export.*` step, else `automatic`, and gives a `FutureWarning`.
+- M3Resp saves the figures only after a successful run. After a failed or cancelled run, the files of the finished steps stay.
+- All export paths of one run use the same results folder, also with `timestamped: true`. A step of your own can read this folder from `_resolved_output_dir` (see {doc}`how-to/add-a-step`).
 
-Every step gets a stable `id`: an explicit `id:` in the spec is used as-is (and must be unique across the spec), otherwise the engine generates `step_{position:03d}_{operation}` (e.g. `step_003_eit.detect_breaths`). A generated id changes if you reorder or insert steps, so anything that needs to reference *this specific step* across runs or across spec edits — a GUI's per-step provenance link, a downstream tool reading `run_manifest.json`'s `step_records` — should use an explicit `id:` instead:
+(workflow-strict)=
+## Strict and lenient files
+
+| | Without `schema_version` | `schema_version: 1` |
+|---|---|---|
+| Unknown key | Ignored | Error (`WorkflowSpecError`) |
+| A setting that must be true or false, given as text (`"yes"`) | Converted, with a `FutureWarning` | Error |
+| `outputs.mode` with `outputs.dir` | Optional | Required |
+
+With `schema_version: 1`, true and false are the YAML words `true` and `false` (also `yes`, `no`, `on` and `off` without quotes), or `true` and `false` in JSON. Both kinds of files give the same steps and the same results. Use `schema_version: 1` for new files.
+
+(workflow-step-ids)=
+## Step identifiers
+
+Each step has an `id`. If you do not give one, M3Resp makes `step_<position>_<name>`, for example `step_003_eit.detect_breaths`. This identifier changes when you add or move steps. Give an `id` to a step that other tools must find again, for example in `run_manifest.json`:
 
 ```yaml
 steps:
@@ -120,242 +153,104 @@ steps:
     in: { signal: global_impedance }
 ```
 
-Every step in `eit-full.workflow.yaml`, `emg-full.workflow.yaml`, `multimodal-full.workflow.yaml`, and `breath-duration.workflow.yaml` declares an explicit `id:` for this reason.
+The `id` of each step must be different from the others.
 
-### Timestamped output directories
+(workflow-command-line)=
+## The command line
 
-Set `outputs.timestamped: true` to give every run its own subfolder (`<outputs.dir>/YYYYMMDD_HHMMSS/...`) instead of overwriting the same folder each time. This works the same way for *any* export path in the run:
-
-- The automatic export (no explicit export step in the spec).
-- Built-in export steps that need a directory, e.g. `export.rotarc_result` (`<outputs.dir>/<timestamp>/subject_results/<run_identifier>/...`).
-- Any custom export step, by reading `_resolved_output_dir` from context.
-
-`run_spec` computes the timestamp exactly once per run and seeds it as `_resolved_output_dir` (a resolved `Path`, or `None` if `outputs.dir` isn't set) and `_run_timestamp` (the raw stamp, or `None` if not timestamped) into context, alongside `_spec_outputs`/`_spec_experiment`. Every export path in the run reads the *same* resolved directory, so a single run never ends up split across two different timestamp folders even if it uses more than one export mechanism. To make your own export step honor it:
-
-```python
-@register_step(
-    "export.my_thing",
-    reads={
-        "session": "session",
-        "output_dir": "_resolved_output_dir",   # None if outputs.dir isn't set
-    },
-    writes=("result_path",),
-)
-def my_thing(session, output_dir, **kwargs) -> dict:
-    if output_dir is None:
-        raise ValueError("export.my_thing requires 'outputs.dir' to be set.")
-    ...
-```
-
-### Output modes
-
-`outputs.mode` states, explicitly, what happens to `outputs.dir` after the workflow runs:
-
-| Mode | Behavior |
+| Command | What it does |
 |---|---|
-| `automatic` | The engine calls `export_session_summary` itself once the run succeeds — the same behavior as omitting an explicit export step. Use this when the spec has no `export.*` step, e.g. `eit-full.workflow.yaml`/`emg-full.workflow.yaml`/`multimodal-full.workflow.yaml`. |
-| `explicit` | Declared export steps write their files during execution. The runner also writes the run manifest and requested figures. |
-| `none` | The runner skips automatic exports, figures and the run manifest. Declared export steps still execute according to their own settings. |
-
-A versioned (`schema_version: 1`) spec must set `mode` whenever `dir` is set.
-An unversioned spec may omit it; `run_spec` infers `explicit` if any `export.*`
-step is present, or `automatic` otherwise, and emits a `FutureWarning`.
-Requested figures are saved after a successful run in automatic or explicit
-mode. Failed and cancelled runs preserve files written by completed steps;
-the runner skips automatic session exports and figures for those runs.
-
-### Validation and readiness
-
-Two distinct checks are available before running anything, both without importing `eitprocessing`/`resurfemg` or touching the filesystem for anything but the readiness check itself:
-
-- **Structural** validation (`m3resp validate spec.yaml`, or `validate_workflow(spec)` from `m3resp.workflows.compiler`) checks that the spec parses, every `uses` name is a registered step, every step's inputs are bound to something produced earlier (or a declared default), every static parameter has the right value type, and no unknown/duplicate names exist. This is always safe to run and always cheap — it never imports an optional package or reads a data file.
-- **Readiness** validation (`m3resp validate --readiness spec.yaml`, or `validate_workflow(spec, readiness=True)`) reports whether declared optional packages can be found on this machine and whether input-file paths exist. Missing packages give warnings and missing files give errors in the readiness section. `is_valid` reflects structural errors only; inspect readiness separately.
-
-Both return every independent problem found in one pass (a `ValidationReport` with separate `structural`/`readiness` diagnostic tuples, each JSON-safe via `.as_dict()`), rather than raising on the first one, so a GUI or CI job can show a complete list instead of a fix-one-rerun loop. `compile_workflow(spec)` raises on the first structural error instead of collecting them — it is meant for "give me the resolved plan or fail," not for validation reporting.
-
-### Execution lifecycle: progress, warnings, cancellation, failure
-
-A run is more than success/failure. `run_workflow`/`run_spec` accept an optional `event_sink` callback and `cancellation_token`, and every `WorkflowResult` carries a full accounting of what happened:
-
-- **Progress events** — if `event_sink` is supplied, it is called with a framework-neutral event for `workflow_started`, each step's `step_started`/`step_completed`/`step_failed`/`step_warning`, and the run's own `workflow_completed`/`workflow_failed`/`workflow_cancelled`. A GUI wires this straight to a progress bar without importing anything m3resp-internal beyond the event shape itself.
-- **Warnings** — Python warnings raised inside a step are captured on its `StepExecutionRecord` and re-emitted through Python's warning system. Completed results collect them in `WorkflowResult.warnings`; step failures carry the gathered records in `WorkflowExecutionError.step_records`.
-- **Cancellation** — a `CancellationToken` is checked before and after each step; calling `.cancel()` on it (the CLI does this from a `SIGINT` handler, Ctrl-C) lets the current step finish, then stops before the next one starts. The result's `status` becomes `"cancelled"`, not `"failed"` — completed work and its manifest are preserved, not discarded. This is cooperative, not preemptive: while a step is genuinely stuck (not just slow), the cancellation check between steps never runs, so repeated Ctrl-C is a no-op for the remainder of that step. The CLI installs no handler for `SIGQUIT`/`SIGTERM`, so Ctrl-\ or `kill`/`kill -9` from another terminal still forcibly kill the process at its default OS disposition, bypassing cooperative cancellation entirely - use one of those to recover from a hung step.
-- **Failure** — a step's own exception is wrapped in `WorkflowExecutionError` (carrying `step_id`/`position`/`operation_id`, the run's `run_id`/`started_at`, and every `step_record` up to the failure, with the original exception as `__cause__`), so a caller always gets structured context, not just a bare traceback.
-
-### Run manifests
-
-Whenever `outputs.dir` is set and the resolved mode is not `"none"`, `run_spec` writes `<output_dir>/run_manifest.json` — once with `status: "running"` before any step executes, then atomically replaced (temp file + `os.replace()`, so a reader never observes a half-written file) with the terminal state once the run finishes, *including on failure or cancellation*. The manifest is JSON: `run_id`, `status`, `workflow_name`, `schema_version`, timestamps, the spec's resolved `root`/`description`, `inputs` (with any key containing `password`/`secret`/`token`/`credential`/`api_key` redacted), the execution context, every step record, every diagnostic/warning, an `error` block on failure, and (only when `outputs.checksums: true`) a sha256 of every existing file referenced by a `path`-typed step parameter. A crashed run therefore always leaves an honestly-marked-`"failed"` manifest behind instead of nothing.
-
-### Native versus compatibility artifacts
-
-Every context key a step reads or writes is a typed `StepArtifact` (`m3resp steps --details` / `m3resp describe <op>` show these). Several steps write two forms of the same result: a **native** `Signal`/`Event`/`ParameterResult`/`QualityFlag` object with full provenance (`method`/`metadata.source_function`), and a **compatibility** output that keeps the exact raw shape (e.g. a `pandas.Series`) older consumers already expect. Both are typed and both are exported; prefer the native form in new code; compatibility outputs exist so upgrading an EMG/EIT step's implementation never breaks an existing consumer of its raw shape. See the EMG step table below for the specific native/compatibility pairs on the EMG/ventilator side.
-
-### GUI discovery and the `WorkflowService` boundary
-
-`m3resp.workflows.service.WorkflowService` is the intended integration surface for a GUI or any other application embedding m3resp — every method takes a spec (path/dict/`WorkflowSpec`) and returns only JSON-safe dictionaries, never a live `M3Session`, adapter instance, upstream package object, NumPy array, or callable:
-
-```python
-from m3resp.workflows.service import WorkflowService
-
-service = WorkflowService()
-service.list_capabilities(prefix="eit.")       # every eit.* step's discovery description
-service.describe_capability("eit.detect_rates") # one step, incl. capability state
-service.validate_workflow(spec, readiness=True) # ValidationReport.as_dict()
-service.compile_workflow(spec)                  # CompiledWorkflow.as_dict()
-service.run_workflow(spec, event_sink=..., cancellation_token=...)  # run summary
-```
-
-`list_capabilities`/`describe_capability` (backed by `describe_steps`/`describe_step` in `workflows/registry.py`) let a GUI render step pickers and per-step parameter forms, and disable/grey out an operation whose optional package (`eitprocessing`/`resurfemg`) is not installed, all without importing that package or inspecting a function's signature — `step_capability_state` reports `"available"`, `"missing_optional_dependency"`, or `"deprecated"` per step. `event_sink`/`cancellation_token` are the one exception to "JSON-safe only": they are the caller's own objects, passed through unchanged to the engine (see "Execution lifecycle" above) — GUI threading/process management is the caller's responsibility, not this service's.
-
-## Built-in steps
-
-`ventilator.channels` selects `airway_pressure`, `flow` and `volume` by default.
-For a pressure-only recording, set `channels: [airway_pressure]`. Channel labels
-determine the selection; default column positions (0, 1 and 2) apply when all
-labels are absent or unrecognized. Unrecognized nonempty labels produce a
-warning. Explicit zero-based indices, such as `airway_pressure_channel: 0`,
-override label matching and must refer to channels in the requested selection.
-The returned bundle preserves recorded units. Pocc pressure thresholds use
-that pressure unit, and pressure-time products use the pressure unit times
-seconds. For repeated pressure measurements, steps use the bundle's primary
-airway-pressure channel, including keys such as `airway_pressure__pod`.
-
-Run `m3resp steps` to see the full list with descriptions. The main groups are:
-
-| Prefix | What it covers |
-|---|---|
-| `eit.*` | Load, cut (the recording or one signal), filter, detect rates/breaths, compute TIV/EELI/pixel TIV |
-| `emg.*` | Load (EMG/ventilator), preprocess, detect breaths, compute per-function baseline/event-detection/feature/quality-assessment postprocessing steps |
-| `sync.*` | Put the recordings on one shared clock: set each recording's start time (`sync.raw_modalities`), use the recordings as they are (`sync.skip`), or pass on an offset found by hand (`sync.estimate_offset`, `sync.apply_estimated_offset`) |
-| `metric.*` | Reduction steps (e.g. coefficient of variation of intervals) |
-| `export.*` | Write results to disk (scalar files, JSON, session summary, ROTARC result) |
-
-Cutting steps follow one naming rule:
-
-| Step | What it cuts |
-|---|---|
-| `emg.slice_recording`, `eit.slice_recording` | The whole loaded recording in the session, with anything recorded in the same file. The recording's start time moves with it, so it stays lined up with the other recordings. Times are seconds from the first sample. |
-| `ventilator.slice_recording` | Every standalone ventilator recording (loaded with `source: ventilator`), the same way. Ventilator data that came inside the EIT or EMG file is cut with that file's recording instead. |
-| `eit.slice_signal` | One signal passed along in the workflow (an m3resp `Signal`, or eitprocessing data). The loaded recording is not changed. In time mode, times are the signal's own time values (the time of day, for data read from an EIT file). |
-
-`emg.slice` and `eit.slice`, the names used before, still work in specs.
-
-## Adding a custom step
-
-Register a function with `@register_step`. Declare the context keys it reads (mapped onto its parameter names) and the output names it returns:
-
-```python
-from m3resp.workflows import register_step
-
-@register_step(
-    "my.step",
-    reads={"signal": "global_impedance"},   # param name → default context key
-    writes=("result",),                      # output names returned in the dict
-)
-def my_step(signal, *, threshold: float = 0.5) -> dict:
-    return {"result": signal.values > threshold}
-```
-
-The function receives bound keyword arguments and returns a mapping of `{output_name: value}`. Steps that produce no outputs return `{}` or `None`. Import the optional modality packages inside the function body so the package installs cleanly without them.
-
-## Example specs
-
-Worked examples ship with the repository. All except the two smaller introductory ones use `schema_version: 1` and declare an explicit `outputs.mode` (see above); every step in the `schema_version: 1` examples has a stable, explicit `id:`.
-
-- [`examples/ROTARC_example/breath-duration.workflow.yaml`](https://github.com/M3RESP/m3resp/blob/main/examples/ROTARC_example/breath-duration.workflow.yaml) — computes breath-duration CV from EIT data and writes a ROTARC-style result file (`outputs.mode: explicit`, since `export.rotarc_result` is its own export step). It runs on the synthetic Draeger recording in `tests/data/`; point `inputs.eit_file` at your own recording (and check the slice ranges) to use it on real data.
-- [`examples/eit_full_preprocessing/eit-full.workflow.yaml`](https://github.com/M3RESP/m3resp/blob/main/examples/eit_full_preprocessing/eit-full.workflow.yaml) — every EIT operation the Stage 2 EIT gap migration closed onto `EITProcessingAdapter`: loading, rate detection, MDN filtering, global breath detection, continuous TIV/EELI, pixel-breath timing, pixel TIV, and the four ROI lung-space steps (`outputs.mode: automatic`).
-- [`examples/emg_full_preprocessing/emg-full.workflow.yaml`](https://github.com/M3RESP/m3resp/blob/main/examples/emg_full_preprocessing/emg-full.workflow.yaml) — every EMG/ventilator operation the Stage 2 ReSurfEMG gap migration closed onto `ReSurfEMGAdapter`: loading, ECG detection + gating, breath detection, moving-baseline, on/offset detection, breath features, ventilator/Pocc detection and prerequisites, and all ten clinical quality operations. See ["EMG/ventilator workflows"](#emgventilator-workflows) below.
-- [`examples/multimodal_full/multimodal-full.workflow.yaml`](https://github.com/M3RESP/m3resp/blob/main/examples/multimodal_full/multimodal-full.workflow.yaml) — the canonical, most complete multimodal example: loads EIT + EMG + ventilator, performs raw synchronization via `sync.raw_modalities` *before* any modality-specific preprocessing, then runs the full EIT and EMG/ventilator chains above, then exports native results. Does not restore any post-detection alignment step — raw sync is the only cross-modality timing adjustment.
-- [`examples/multimodal_example/multimodal.workflow.yaml`](https://github.com/M3RESP/m3resp/blob/main/examples/multimodal_example/multimodal.workflow.yaml) — a smaller, introductory multimodal workflow (legacy spec, no `schema_version`); shorter than `multimodal-full` and easier to read end-to-end.
-- [`examples/multidomain_recording1/recording1_a2.workflow.yaml`](https://github.com/M3RESP/m3resp/blob/main/examples/multidomain_recording1/recording1_a2.workflow.yaml) — the multidomain results chain on real diaphragm sEMG (Recording1, window A2, EIT off): cut to the window, 50 Hz notch before the 20-500 Hz band-pass, wavelet ECG removal, median envelope, baseline subtracted, breath detection with close peaks merged. Gives the same 9 breaths and 9.72 breaths/min as the multidomain notebook, value for value.
-
-Run them from the repository root:
-
-```bash
-m3resp run examples/ROTARC_example/breath-duration.workflow.yaml
-m3resp run examples/eit_full_preprocessing/eit-full.workflow.yaml
-m3resp run examples/emg_full_preprocessing/emg-full.workflow.yaml
-m3resp run examples/multimodal_full/multimodal-full.workflow.yaml
-m3resp run examples/multimodal_example/multimodal.workflow.yaml
-m3resp run examples/multidomain_recording1/recording1_a2.workflow.yaml
-```
-
-Update `inputs.eit_file` in the ROTARC example before running it — it contains a site-specific path.
-
-### CLI reference
-
-`m3resp` has four subcommands, plus stable, documented exit codes so a calling script can distinguish failure categories without parsing output:
-
-| Command | Purpose |
-|---|---|
-| `m3resp run spec.yaml [--dry-run] [--debug]` | Execute a spec end-to-end. `--dry-run` compiles and prints the resolved plan (`compile_workflow(...).as_dict()`) without running any step; `--debug` prints a full traceback instead of a short message on error. Ctrl-C cooperatively cancels (finishes the current step, keeps completed work and its manifest, exits `EXIT_CANCELLED`). |
-| `m3resp validate spec.yaml [--readiness] [--json]` | Structural (and, with `--readiness`, capability/file-existence) validation without running anything — see "Validation and readiness" above. |
-| `m3resp steps [--details] [--json]` | List every registered step, tagging any whose optional package isn't installed (e.g. `[missing_optional_dependency]`) without importing it; `--details` adds parameters/artifacts/full capability state per step. |
-| `m3resp describe <operation>` | One step's full discovery description (e.g. `m3resp describe eit.detect_rates`). |
+| `m3resp run file.yaml` | Runs the workflow. `--dry-run` shows the steps and runs nothing. `--debug` shows the full Python error. Ctrl-C stops the run after the current step. |
+| `m3resp validate file.yaml` | Checks the file (see {doc}`how-to/check-a-workflow`). `--readiness` also checks the input files and the packages. `--json` gives the report as JSON. |
+| `m3resp steps` | Lists all steps. A step that needs a package that is not installed is marked `[missing_optional_dependency]`. `--details` adds the settings and the results of each step. `--json` gives JSON. |
+| `m3resp describe <step>` | Shows all details of one step, for example `m3resp describe eit.detect_rates` |
 
 | Exit code | Meaning |
 |---:|---|
-| `0` | Success. |
-| `1` | Usage error (bad CLI arguments). |
-| `2` | Invalid spec — structural validation failed, or the spec path could not be read. |
-| `3` | Readiness failure — `validate --readiness` found a missing optional package or file. |
-| `4` | Execution failure — a step raised during `run`. |
-| `5` | Cancelled — Ctrl-C during `run`. |
+| 0 | Success |
+| 1 | A wrong command or option |
+| 2 | The workflow file has an error, or M3Resp cannot read it |
+| 3 | Readiness error, for example a missing input file |
+| 4 | A step failed during the run |
+| 5 | The run was cancelled |
 
-## EMG/ventilator workflows
+## Built-in steps
 
-The ReSurfEMG gap migration keeps validated ReSurfEMG algorithms behind `ReSurfEMGAdapter` while exposing every EMG/ventilator operation as a workflow step with native `Signal`/`Event`/`ParameterResult`/`QualityFlag` outputs (see [developer/adapters.md](developer/adapters.md) for the adapter conversion boundary). This section documents that step surface; the equivalent EIT-side steps follow the same pattern via `EITProcessingAdapter`.
+Run `m3resp steps` for the list of all steps. The groups are:
 
-Using any `emg.*`/ventilator step requires the optional `resurfemg` dependency:
+| Group | Steps for |
+|---|---|
+| `eit.*` | Load and cut EIT data, filter, find the rates and the breaths, calculate TIV, EELI, pixel TIV and lung regions |
+| `emg.*` | Load and cut EMG data, filter, remove the ECG, find the baseline and the breaths, calculate the parameters and the quality checks |
+| `ventilator.*` | Load and cut ventilator data, select the channels, find the breaths and the occlusions (Pocc) |
+| `sync.*` | Put the recordings on the shared clock: `sync.raw_modalities`, `sync.skip`, `sync.estimate_offset`, `sync.apply_estimated_offset` (see {doc}`concepts/synchronization-overview`) |
+| `metric.*` | Calculations on lists, for example the coefficient of variation of the breath durations |
+| `export.*` | Write results to files: values, JSON, the session summary and the ROTARC result |
 
-```bash
-pip install "m3resp[emg]"
-```
+The steps that cut data (see {doc}`concepts/slicing`):
 
-Steps whose upstream call needs it raise `OptionalDependencyError` with that same install hint if it's missing; `import m3resp` and `m3resp steps` work without it (upstream imports are lazy, inside the adapter methods that need them).
+| Step | What it cuts |
+|---|---|
+| `emg.slice_recording`, `eit.slice_recording` | The loaded recording, with all data in the same file. The start time of the recording moves, so it stays in line with the other recordings. Times in seconds from the first sample. |
+| `ventilator.slice_recording` | Each separate ventilator recording (loaded with `source: ventilator`) |
+| `eit.slice_signal` | One signal in the workflow. The loaded recording does not change. |
 
-### Step table
+The older names `emg.slice` and `eit.slice` still work.
 
-Every step also writes its raw/compatibility output(s) unchanged (existing consumers keep working) alongside the native outputs listed here. "Upstream" means the value is `resurfemg`'s own scientific result, passed through with provenance recorded (`method`/`metadata.source_function`); "native" means it comes from an `m3resp.processing` primitive.
+### Ventilator channels
 
-| Step | Reads (besides `session`) | Key parameters | Native writes | Implementation |
+`ventilator.channels` selects `airway_pressure`, `flow` and `volume` by default. For a recording with only pressure, set `channels: [airway_pressure]`.
+
+- M3Resp selects the channels by their names. If no name is known, it uses the positions 0, 1 and 2. An unknown name gives a warning.
+- A channel number (for example `airway_pressure_channel: 0`, counted from 0) replaces the selection by name.
+- The channels keep their recorded units. The Pocc pressure limits use the pressure unit, and the pressure time products use the pressure unit × s.
+- With more than one pressure channel, the steps use the main airway pressure channel, also with names such as `airway_pressure__pod`.
+
+## EMG and ventilator steps
+
+The EMG and ventilator steps need the package `resurfemg` (`python -m pip install -e ".[emg]"`). Without it, these steps raise `OptionalDependencyError`. `import m3resp` and `m3resp steps` work also without it.
+
+Each step also writes its result in the form that `resurfemg` gives, beside the M3Resp results in the table. In the last column, "resurfemg" means that the calculation comes from `resurfemg`, and "M3Resp" that it is part of M3Resp.
+
+| Step | Reads (besides the session) | Main settings | M3Resp results | Calculation |
 |---|---|---|---|---|
-| `emg.load` | — | `file_path`, `loader_options` | `raw_emg_signals` (one `Signal`/channel) | upstream loader |
-| `emg.slice_recording` (formerly `emg.slice`) | — | `start_seconds`, `end_seconds` (optional; default: to the end) | `emg_slice` (kept window, samples removed at each end) | native (cuts `session.raw`; ventilator channels from the same file are cut too) |
-| `ventilator.slice_recording` | — | `start_seconds`, `end_seconds` (optional; default: to the end) | `ventilator_slice` (kept window and samples removed at each end, per recording) | native (cuts every standalone ventilator recording; refuses ventilator data from the EIT/EMG file) |
-| `emg.preprocess` | — | `channel`, `high_pass_hz` (default 20), `low_pass_hz` (default 500, Nyquist-capped), `envelope_window_seconds`, `envelope_method` (`"rms"` default / `"arv"` / `"median"`), `notch_base_frequency`, `notch_quality_factor`, `notch_before_bandpass` (default `false`) | — (raw `processed_emg` dict) | upstream + native notch filter |
-| `emg.ecg_detect_peaks` | `processed_emg` | `ecg_channel`, `source` (default `"raw_channel"`), `peak_fraction`, `peak_width_seconds`, `peak_distance_seconds`, `bandpass_filter` | `ecg_peak_events` (one `Event`/peak), `ecg_peak_count_result` | upstream |
-| `emg.ecg_gating` | `processed_emg`, `ecg_peak_indices` | `source` (default `"filtered"`), `gate_width_seconds` **xor** `gate_width_samples`, `fill_method` (0-3), `envelope_window_seconds`, `envelope_method` (defaults to preprocessing's) | `ecg_gated_signal`, `ecg_gate_mask_result` (array) | upstream |
-| `emg.ecg_wavelet_denoising` | `processed_emg`, `ecg_peak_indices` | `source`, `hard_thresholding`, `levels`, `wavelet_type`, `fixed_threshold`, `envelope_window_seconds`, `envelope_method` (defaults to preprocessing's) | `ecg_wavelet_cleaned_signal`, `wavelet_decomposition_result`, `wavelet_thresholds_result`, `wavelet_gate_mask_result` (all arrays) | upstream |
-| `emg.detect_breaths` | `baseline` (optional; from `emg.moving_baseline`/`emg.slopesum_baseline`) | `min_breath_width_seconds`, `half_window_seconds`, `prominence_factor`, `threshold`, `merge_close_peaks_within_width` (default `false`) | `emg_breath_events` | native |
-| `emg.moving_baseline` | `processed_emg` | `window_seconds`, `step_seconds`, `percentile` (0-100) | `baseline_signal` | upstream |
-| `emg.slopesum_baseline` | `processed_emg` | `window_seconds`, `step_seconds`, `percentile`, `augmented_percentile`, `moving_average_seconds`, `percentile_window_seconds` | `baseline_signal`, `baseline_running_mean_signal`, `baseline_running_std_signal`, `slopesum_baseline_native_detail` (NumPy-only) | upstream |
-| `ventilator.detect_pressure_breaths` | `ventilator_signals` (needs `airway_pressure`) | `smoothing_seconds` (default 0.2), `min_depth` (default 0.15, pressure unit), `min_interval_seconds` (default 2.0) | `ventilator_breath_indices` (lowest point of each airway pressure dip; spontaneous breathing only) | native (`detect_pressure_dip_breaths`) |
-| `ventilator.pocc_intervals` | `ventilator_signals`, `pocc_indices` | `baseline_window_seconds` (default 7.5), `baseline_step_seconds` (default 0.2), `baseline_percentile` (default 33) - a moving baseline of the airway pressure | `pocc_events` (`BreathEvent`, `modality="ventilator"`), `pressure_baseline` | native (`onoff_from_baseline_crossings`) |
-| `ventilator.pocc_time_product` | `ventilator_signals`, `pocc_start_indices`, `pocc_end_indices`, `pressure_baseline`, `pocc_indices` | `include_aub` (default `true`, adds the area under the baseline as ReSurfEMG's PTPocc does), `aub_window_seconds` (default 5) | `pocc_time_product_result` (unit `<pressure-unit>*s`) | native (`window_integral`) |
-| `emg.snr_pseudo` | `processed_emg`, `peak_indices`, `baseline` | `minimum_snr` (optional) | `snr_pseudo_results`; `snr_pseudo_flags` only if `minimum_snr` is set | upstream |
-| `emg.percentage_under_baseline` | `processed_emg`, `peak_indices`, `start_indices`, `end_indices`, `baseline` | `aub_window_seconds`, `aub_threshold` | `percentage_under_baseline_results`, `_flags` | upstream |
-| `emg.detect_local_high_aub` | `area_under_baseline`, `peak_indices` | `threshold_percentile`, `threshold_factor` | `_flags`, `detect_local_high_aub_threshold_result` | upstream |
-| `emg.detect_extreme_time_products` | `time_product`, `peak_indices` | `upper_percentile`, `upper_factor`, `lower_percentile`, `lower_factor` | `_flags`, `detect_extreme_time_products_bounds_result` | upstream |
-| `ventilator.detect_non_consecutive_manoeuvres` | `ventilator_breath_indices`, `pocc_indices` | — | `_flags` (`modality="ventilator"`) | upstream |
-| `emg.evaluate_bell_curve_error` | `peak_indices`, `start_indices`, `end_indices`, `processed_emg`, `time_product` | — | `_results` (incl. a separate array result per breath for the fitted bell-curve parameters), `_flags` | upstream |
-| `emg.evaluate_event_timing` | `peak_indices`, `processed_emg`, `ventilator_breath_indices`, `ventilator_signals` | — | `_results`, `_flags`, `evaluate_event_timing_unmatched_count` | upstream |
-| `emg.evaluate_respiratory_rates` | `peak_indices`, `processed_emg`, `ventilator_respiratory_rate` | `minimum_fraction` | `evaluate_respiratory_rates_result`, `_flag` | upstream |
-| `ventilator.pocc_quality` | `ventilator_signals`, `pocc_indices`, `pocc_end_indices`, `pocc_time_products` | `dp_up_10_threshold`, `dp_up_90_threshold`, `dp_up_90_norm_threshold` | `pocc_quality_results` (labeled `dp_up_10`/`dp_up_90`/`dp_up_90_norm`, 3 per manoeuvre), `pocc_quality_flags` (1 per manoeuvre) | upstream |
-| `emg.interpeak_dist` | `ecg_peak_indices`, `peak_indices`, `processed_emg` | `threshold` (default `1.1`) | `interpeak_dist_result` (median ECG/EMG interval in seconds + ratio), `interpeak_dist_flag` | upstream |
+| `emg.load` | | `file_path`, `loader_options` | `raw_emg_signals` (one signal per channel) | resurfemg |
+| `emg.slice_recording` | | `start_seconds`, `end_seconds` (default: to the end) | `emg_slice` | M3Resp. Also cuts the ventilator channels from the same file. |
+| `ventilator.slice_recording` | | `start_seconds`, `end_seconds` (default: to the end) | `ventilator_slice` | M3Resp. Refuses ventilator data from the EIT or EMG file. |
+| `emg.preprocess` | | `channel`, `high_pass_hz` (20), `low_pass_hz` (500, at most 95% of the Nyquist frequency), `envelope_window_seconds`, `envelope_method` (`"rms"`, `"arv"` or `"median"`), `notch_base_frequency`, `notch_quality_factor`, `notch_before_bandpass` (`false`) | `processed_emg` | resurfemg, with a notch filter from M3Resp |
+| `emg.ecg_detect_peaks` | `processed_emg` | `ecg_channel`, `source` (`"raw_channel"`), `peak_fraction`, `peak_width_seconds`, `peak_distance_seconds`, `bandpass_filter` | `ecg_peak_events` (one event per R peak), `ecg_peak_count_result` | resurfemg |
+| `emg.ecg_gating` | `processed_emg`, `ecg_peak_indices` | `source` (`"filtered"`), `gate_width_seconds` or `gate_width_samples`, `fill_method` (0 to 3), `envelope_window_seconds`, `envelope_method` | `ecg_gated_signal`, `ecg_gate_mask_result` | resurfemg |
+| `emg.ecg_wavelet_denoising` | `processed_emg`, `ecg_peak_indices` | `source`, `hard_thresholding`, `levels`, `wavelet_type`, `fixed_threshold`, `envelope_window_seconds`, `envelope_method` | `ecg_wavelet_cleaned_signal`, `wavelet_decomposition_result`, `wavelet_thresholds_result`, `wavelet_gate_mask_result` | resurfemg |
+| `emg.detect_breaths` | `baseline` (optional) | `min_breath_width_seconds`, `half_window_seconds`, `prominence_factor`, `threshold`, `merge_close_peaks_within_width` (`false`) | `emg_breath_events` | M3Resp |
+| `emg.moving_baseline` | `processed_emg` | `window_seconds`, `step_seconds`, `percentile` (0 to 100) | `baseline_signal` | resurfemg |
+| `emg.slopesum_baseline` | `processed_emg` | `window_seconds`, `step_seconds`, `percentile`, `augmented_percentile`, `moving_average_seconds`, `percentile_window_seconds` | `baseline_signal`, `baseline_running_mean_signal`, `baseline_running_std_signal`, `slopesum_baseline_native_detail` | resurfemg |
+| `ventilator.detect_pressure_breaths` | `ventilator_signals` (with `airway_pressure`) | `smoothing_seconds` (0.2), `min_depth` (0.15, pressure unit), `min_interval_seconds` (2.0) | `ventilator_breath_indices` (the lowest point of each pressure dip, for spontaneous breathing only) | M3Resp |
+| `ventilator.pocc_intervals` | `ventilator_signals`, `pocc_indices` | `baseline_window_seconds` (7.5), `baseline_step_seconds` (0.2), `baseline_percentile` (33): a moving baseline of the airway pressure | `pocc_events`, `pressure_baseline` | M3Resp |
+| `ventilator.pocc_time_product` | `ventilator_signals`, `pocc_start_indices`, `pocc_end_indices`, `pressure_baseline`, `pocc_indices` | `include_aub` (`true`: adds the area under the baseline, as the PTPocc of resurfemg), `aub_window_seconds` (5) | `pocc_time_product_result` (pressure unit × s) | M3Resp |
+| `emg.snr_pseudo` | `processed_emg`, `peak_indices`, `baseline` | `minimum_snr` (optional) | `snr_pseudo_results`, and `snr_pseudo_flags` if `minimum_snr` is set | resurfemg |
+| `emg.percentage_under_baseline` | `processed_emg`, `peak_indices`, `start_indices`, `end_indices`, `baseline` | `aub_window_seconds`, `aub_threshold` | `percentage_under_baseline_results`, `percentage_under_baseline_flags` | resurfemg |
+| `emg.detect_local_high_aub` | `area_under_baseline`, `peak_indices` | `threshold_percentile`, `threshold_factor` | `detect_local_high_aub_flags`, `detect_local_high_aub_threshold_result` | resurfemg |
+| `emg.detect_extreme_time_products` | `time_product`, `peak_indices` | `upper_percentile`, `upper_factor`, `lower_percentile`, `lower_factor` | `detect_extreme_time_products_flags`, `detect_extreme_time_products_bounds_result` | resurfemg |
+| `ventilator.detect_non_consecutive_manoeuvres` | `ventilator_breath_indices`, `pocc_indices` | | `detect_non_consecutive_manoeuvres_flags` | resurfemg |
+| `emg.evaluate_bell_curve_error` | `peak_indices`, `start_indices`, `end_indices`, `processed_emg`, `time_product` | | `evaluate_bell_curve_error_results` (with the fitted bell curve per breath), `evaluate_bell_curve_error_flags` | resurfemg |
+| `emg.evaluate_event_timing` | `peak_indices`, `processed_emg`, `ventilator_breath_indices`, `ventilator_signals` | | `evaluate_event_timing_results`, `evaluate_event_timing_flags`, `evaluate_event_timing_unmatched_count` | resurfemg |
+| `emg.evaluate_respiratory_rates` | `peak_indices`, `processed_emg`, `ventilator_respiratory_rate` | `minimum_fraction` | `evaluate_respiratory_rates_result`, `evaluate_respiratory_rates_flag` | resurfemg |
+| `ventilator.pocc_quality` | `ventilator_signals`, `pocc_indices`, `pocc_end_indices`, `pocc_time_products` | `dp_up_10_threshold`, `dp_up_90_threshold`, `dp_up_90_norm_threshold` | `pocc_quality_results` (`dp_up_10`, `dp_up_90` and `dp_up_90_norm` per occlusion), `pocc_quality_flags` (one per occlusion) | resurfemg |
+| `emg.interpeak_dist` | `ecg_peak_indices`, `peak_indices`, `processed_emg` | `threshold` (1.1) | `interpeak_dist_result` (the median ECG and EMG peak distance in seconds, and their ratio), `interpeak_dist_flag` | resurfemg |
 
-Run `m3resp steps` for the full list including the pre-existing feature steps (`emg.time_to_peak`, `emg.pseudo_slope`, `emg.amplitude`, `emg.time_product`, `emg.area_under_baseline`, `emg.respiratory_rate`) and event-detection steps (`emg.onoffpeak_baseline_crossing`, `emg.onoffpeak_slope_extrapolation`, `ventilator.detect_breaths`, `ventilator.find_occluded_breaths`) this migration routes through the adapter without changing their contracts. The registry metadata (`reads`/`writes`/`summary`) is enough for a GUI to render controls and disable an operation whose inputs are missing, without importing `resurfemg` or inspecting a function's signature.
+`m3resp steps` also lists the parameter steps (`emg.time_to_peak`, `emg.pseudo_slope`, `emg.amplitude`, `emg.time_product`, `emg.area_under_baseline`, `emg.respiratory_rate`) and the detection steps (`emg.onoffpeak_baseline_crossing`, `emg.onoffpeak_slope_extrapolation`, `ventilator.detect_breaths`, `ventilator.find_occluded_breaths`).
 
-### Channel selection and time-base rules
+### Channels and sampling rates
 
-- `emg.preprocess`'s `channel` is an index into the raw channel-major array from `emg.load` (`session.emg.raw[channel]`), not a label.
-- ECG detection's `source` selects a *key* in `processed_emg` (`"raw_channel"`/`"filtered"`/`"envelope"`), while `ecg_channel` (when set) selects a *raw* channel index instead - use `ecg_channel` when a recording has a dedicated reference ECG channel (e.g. the committed `emg_data_synth_quiet_breathing.Poly5` fixture's channel 0), and `source` when ECG is mixed directly into the EMG channel being processed (no separate reference channel).
-- No step assumes EMG and ventilator sample rates are equal - Pocc/timing steps convert each side to seconds using its own `fs` before comparing (`emg.evaluate_event_timing`'s per-pair results record both source sample indices and both sampling frequencies for this reason).
-- `emg.detect_breaths`'s default `min_breath_width_seconds=0.5` keeps breath bursts at least half a second wide, which also covers faster breathing (the `data_from_repo` "quiet breathing" fixture breathes at about 22 breaths/min; 1.0 s found none of its breaths). Noisy recordings can still need `min_breath_width_seconds`/`prominence_factor` tuned - see the inline comments in `emg-full.workflow.yaml` and `multimodal.workflow.yaml` for values that were verified against each fixture's actual breath timing.
+- The `channel` of `emg.preprocess` is a channel number of the loaded file, counted from 0. It is not a channel name.
+- In `emg.ecg_detect_peaks`, `source` selects a signal of `processed_emg`: `"raw_channel"`, `"filtered"` or `"envelope"`. `ecg_channel` selects a raw channel instead. Use `ecg_channel` for a separate ECG channel, and `source` when the ECG is inside the EMG channel.
+- The EMG and the ventilator data can have different sampling rates. The Pocc and timing steps change each side to seconds with its own sampling rate before they compare.
+- The default `min_breath_width_seconds` of `emg.detect_breaths` is 0.5 s. It also finds the breaths of fast breathing, for example 22 breaths per minute. For noisy recordings, change `min_breath_width_seconds` or `prominence_factor`.
 
-### ECG-removal alternatives
+(workflow-ecg-removal)=
+### Remove the ECG: gating or wavelet denoising
 
-`emg.ecg_gating` and `emg.ecg_wavelet_denoising` both naturally write `processed_emg_after_ecg`. Pick one; a workflow uses output renaming to keep the downstream key `processed_emg`:
+`emg.ecg_gating` and `emg.ecg_wavelet_denoising` both write `processed_emg_after_ecg`. Use one of them, and rename the results so that the next steps read `processed_emg`:
 
 ```yaml
 - uses: emg.preprocess
@@ -369,47 +264,109 @@ Run `m3resp steps` for the full list including the pre-existing feature steps (`
   out: { processed_emg_after_ecg: processed_emg }
 ```
 
-`gating`'s `fill_method` keeps ReSurfEMG's meanings: `0` zeros the gated region, `1` interpolates between its edges (the default), `2` fills with the mean of a neighboring segment, `3` replaces it with a running-RMS estimate. `wavelet_denoising` additionally zero-pads the signal internally to a multiple of `2**levels` for its stationary wavelet transform - the cleaned signal, thresholds, and gate mask are trimmed back to the original length, but the decomposition array (`wavelet_decomposition_result`) stays at the padded length; both lengths are recorded in its metadata (`original_length`/`padded_length`). All four array-valued outputs (gate masks, decomposition, thresholds) go through the same shared `parameter_result_arrays.npz` archive as every other array-valued `ParameterResult` - see "Array export" below.
+- The `fill_method` of gating: 0 fills the gap with zeros, 1 interpolates between its edges (default), 2 uses the mean of a segment next to the gap, 3 uses a running RMS.
+- Wavelet denoising makes the signal longer with zeros, to a multiple of `2**levels`, for its calculation. It cuts the cleaned signal, the thresholds and the gate mask back to the original length. `wavelet_decomposition_result` keeps the longer length. Its metadata has both lengths (`original_length`, `padded_length`).
 
-### Baseline alternatives
+### Baseline: moving or slope sum
 
-`emg.moving_baseline` and `emg.slopesum_baseline` both write `baseline`; the registry marks them as alternatives for the same reason as the ECG-removal steps above. `slopesum_baseline`'s compatibility output (`slopesum_baseline_detail`) keeps ReSurfEMG's `pandas.Series`; its native sibling (`slopesum_baseline_native_detail`) is NumPy-only and does not cross that boundary.
+`emg.moving_baseline` and `emg.slopesum_baseline` both write `baseline`. Use one of them. `slopesum_baseline` also writes the `pandas.Series` of `resurfemg` (`slopesum_baseline_detail`), and the same values as NumPy arrays (`slopesum_baseline_native_detail`).
 
-### Measurements vs. clinical pass/fail criteria
+### Measurements and pass or fail
 
-A quality step's raw upstream output is not automatically a clinical pass/fail result. `m3resp.processing.quality.quality_flag_from_result` (used by the shared `to_quality_flags` path) and each granular quality step follow the same rule: a boolean or boolean array is a real criterion; a numeric scalar or array (e.g. `snr_pseudo`'s per-peak ratios) is a *measurement*, and only becomes a `QualityFlag` when a threshold is actually configured (`emg.snr_pseudo`'s `minimum_snr`, for example). A measurement-only flag uses `passed=False` with `metadata["measurement_only"]=True` - the same "not evaluated" convention `metadata["skipped"]=True` uses for a flag skipped for missing inputs - rather than inventing a pass/fail verdict the upstream function never defined.
+A quality step gives a pass or a fail only for a real criterion:
 
-### Pocc prerequisites and thresholds
+- A result that is true or false is a criterion. It gives a quality flag that passed or failed.
+- A number (for example the SNR of each peak of `emg.snr_pseudo`) is a measurement. It gives a pass or a fail only when you set a limit, for example `minimum_snr`. Without a limit, the flag has `passed=False` and `metadata["measurement_only"] == True`.
+- A check that could not run because an input is missing has `passed=False` and `metadata["skipped"] == True`.
 
-`ventilator.pocc_quality` needs Pocc end indices and pressure-time products that `ventilator.find_occluded_breaths` alone doesn't produce - `ventilator.pocc_intervals` and `ventilator.pocc_time_product` supply them:
+### Pocc steps
 
-```
+`ventilator.pocc_quality` needs the end of each occlusion and the pressure time products. Run these steps first:
+
+```text
 ventilator.find_occluded_breaths  ->  pocc_indices
-ventilator.pocc_intervals          ->  pocc_start_indices, pocc_end_indices
-ventilator.pocc_time_product       ->  pocc_time_products
-ventilator.pocc_quality             (needs all of the above)
+ventilator.pocc_intervals         ->  pocc_start_indices, pocc_end_indices
+ventilator.pocc_time_product      ->  pocc_time_products
+ventilator.pocc_quality              (needs all of the above)
 ```
 
-`ventilator.pocc_quality`'s three thresholds (`dp_up_10_threshold=0.0`, `dp_up_90_threshold=2.0`, `dp_up_90_norm_threshold=0.8`) are ReSurfEMG's defaults for the pressure upslope after occlusion release (Warnaar et al. 2024); its criteria matrix is exposed as three explicitly labeled result names (`pocc_quality_dp_up_10`/`_dp_up_90`/`_dp_up_90_norm`) rather than a raw 3-by-N array.
+The default limits of `ventilator.pocc_quality` (`dp_up_10_threshold=0.0`, `dp_up_90_threshold=2.0`, `dp_up_90_norm_threshold=0.8`) are the limits of `resurfemg` for the pressure rise after the release of the occlusion (Warnaar et al. 2024).
 
-### Missing, skipped, and unmatched events
+### Missing and unmatched events
 
-- A quality step whose prerequisites are entirely missing (no ventilator input, no detected breaths) simply has nothing to iterate over - it produces no native results for that run rather than raising, so a workflow with a partial dataset still completes.
-- `emg.evaluate_event_timing` pairs EMG and ventilator events by position; if the two lists have different lengths, it still pairs as many as it can (keeping the existing raw-output truncation behavior for backward compatibility) but also reports `evaluate_event_timing_unmatched_count` and adds an `evaluate_event_timing_unmatched` warning `QualityFlag` - the unmatched events are never silently dropped without a trace.
-- Per-breath/per-manoeuvre EMG and ventilator results use `breath_id=str(position)`, the zero-based position in the input breath list. Their metadata records the turning-point sample in `extremum_sample_index` and, when the sampling rate is supplied, its time in seconds from recording start in `extremum_time`. `emg.remove_invalid_breaths` matches quality flags by this sample position; it also reads the older `peak_sample_index` key with a `UserWarning` naming the current key.
+- A quality step with no inputs (no ventilator data, no breaths) gives no results and does not stop the workflow.
+- `emg.evaluate_event_timing` pairs the EMG and the ventilator events by their position. If the two lists have different lengths, it pairs as many as it can, gives `evaluate_event_timing_unmatched_count`, and adds a warning flag `evaluate_event_timing_unmatched`.
+- The results per breath or per occlusion have `breath_id` = the position in the list, counted from 0. Their metadata has the sample of the extremum in `extremum_sample_index`, and its time in seconds in `extremum_time` when the sampling rate is known. `emg.remove_invalid_breaths` finds the breaths of the quality flags by this sample. It also reads the older key `peak_sample_index`, with a `UserWarning`.
 
-### Array export
+### Array results
 
-Array-valued `ParameterResult`s (gate masks, wavelet decomposition/thresholds, bell-curve fit parameters, ...) are not written inline into `parameter_results.csv` - they're added to `session.parameter_results` and go through the same shared `parameter_result_arrays.npz` archive (`export_summary`/`export.*`), with a CSV row (`array_key`, `shape`, `dtype`) pointing into it. There is no EMG-specific array exporter.
+Results with an array as value (gate masks, wavelet results, bell curve fits) go to `parameter_result_arrays.npz`. Their row in `parameter_results.csv` gives the key, the shape and the data type of the array (see {doc}`how-to/export-results`).
 
-## Architecture
+## Example workflow files
 
-| File | Responsibility |
+The `examples` folder has these workflow files. Run them from the M3Resp source folder.
+
+| File | What it does |
 |---|---|
-| `workflows/registry.py` | `@register_step` decorator and the global step registry. |
-| `workflows/spec.py` | Parse and validate a YAML or JSON spec into typed dataclasses. |
-| `workflows/context.py` | `WorkflowContext` — the shared artifact store wrapping an `M3Session`. |
-| `workflows/engine/` | `run_workflow` (`execution.py`), `run_spec` (`spec_runner.py`), and spec validation (`diagnostics.py`) — bind arguments, validate, execute. |
-| `workflows/steps/` | Built-in steps for EIT, EMG, metrics, session ops, and export. |
-| `workflows/utils.py` | Shared utilities: signal slicing, JSON writing, summary logging, `resolve_output_dir` (timestamped output directories). |
-| `workflows/summaries.py` | Compact session summaries written to the log after a run. |
+| `examples/multimodal_example/multimodal.workflow.yaml` | A short EIT, EMG and ventilator workflow, easy to read from start to end |
+| `examples/eit_full_preprocessing/eit-full.workflow.yaml` | All EIT steps: loading, rates, MDN filter, breaths, TIV, EELI, pixel breaths, pixel TIV and the four lung region steps |
+| `examples/emg_full_preprocessing/emg-full.workflow.yaml` | All EMG and ventilator steps: loading, ECG removal, baseline, breaths, start and end of breaths, parameters, Pocc and the ten quality checks |
+| `examples/multimodal_full/multimodal-full.workflow.yaml` | All steps of the three modalities, with `sync.raw_modalities` before the processing |
+| `examples/ROTARC_example/breath-duration.workflow.yaml` | The coefficient of variation of the EIT breath durations, written as a ROTARC result file |
+| `examples/multidomain_recording1/recording1_a2.workflow.yaml` | The EMG analysis of one time window of a real diaphragm recording: notch filter, band-pass filter, wavelet ECG removal, median envelope and breaths. It needs `tests/data/TestPS3.txt`, which is not in the repository. |
+
+All examples except the last one use the synthetic recordings in `tests/data`. The examples `eit-full`, `emg-full`, `multimodal-full` and `breath-duration` use `schema_version: 1`, a fixed `id` for each step and an explicit `outputs.mode`.
+
+```bash
+m3resp run examples/eit_full_preprocessing/eit-full.workflow.yaml
+```
+
+## Run events, cancellation and errors
+
+`run_spec` and `run_workflow` accept two optional arguments, `event_sink` and `cancellation_token`:
+
+- `event_sink` is a function that M3Resp calls at each event of the run: `workflow_started`, `step_started`, `step_completed`, `step_failed`, `step_warning`, `workflow_completed`, `workflow_failed` and `workflow_cancelled`. Use it, for example, for a progress bar.
+- A `CancellationToken` stops the run: after `token.cancel()`, the current step finishes and the next step does not start. The status is then `"cancelled"`, and the finished results and the manifest stay. Ctrl-C in `m3resp run` does the same. A step that hangs does not stop with Ctrl-C. Stop it with Ctrl-\ or `kill`.
+- M3Resp collects the Python warnings of each step in its step record and in `WorkflowResult.warnings`.
+- If a step fails, M3Resp raises `WorkflowExecutionError`. It has the step (`step_id`, `position`, `operation_id`), the run (`run_id`, `started_at`), the step records up to the error, and the original error as its cause.
+
+## The run manifest
+
+With `outputs.dir` and a `mode` other than `none`, `run_spec` writes `run_manifest.json` to the results folder. It writes the file with `status: "running"` before the first step, and replaces it with the final status at the end, also after a failure or a cancellation. So a stopped run always leaves a manifest with its status.
+
+The manifest has the run identifier, the status, the name of the workflow, the times, the `inputs`, each step record, the warnings, and an error block after a failure. M3Resp hides the values of `inputs` with `password`, `secret`, `token`, `credential` or `api_key` in their name. With `outputs.checksums: true`, it also has a SHA-256 checksum of each input file.
+
+## Results in two forms
+
+Some steps write the same result in two forms: an M3Resp object (`Signal`, `Event`, `ParameterResult` or `QualityFlag`) with its method and source, and the form of the outside package, for example a `pandas.Series`. Use the M3Resp object in new code. `m3resp steps --details` and `m3resp describe <step>` show the results of each step.
+
+## For applications: WorkflowService
+
+`m3resp.workflows.WorkflowService` is for an application, for example a graphical interface, that uses M3Resp. Each method takes a workflow (a path, a dictionary or a `WorkflowSpec`) and returns only JSON data:
+
+```python
+from m3resp.workflows import WorkflowService
+
+service = WorkflowService()
+service.list_capabilities(prefix="eit.")         # all eit.* steps
+service.describe_capability("eit.detect_rates")  # one step
+service.validate_workflow(spec, readiness=True)  # the check report
+service.compile_workflow(spec)                   # the steps that will run
+service.run_workflow(spec, event_sink=..., cancellation_token=...)
+```
+
+For each step, `describe_capability` gives `"available"`, `"missing_optional_dependency"` or `"deprecated"`, without an import of the outside package. So an application can show the steps and their settings, and disable a step whose package is not installed.
+
+## Where the code is
+
+| File | Contents |
+|---|---|
+| `workflows/registry.py` | `@register_step` and the list of steps |
+| `workflows/spec.py` | Reads and checks a YAML or JSON workflow file |
+| `workflows/context.py` | `WorkflowContext`: the results of a run, with the session |
+| `workflows/engine/` | `run_workflow` (`execution.py`), `run_spec` (`spec_runner.py`) and the checks (`diagnostics.py`) |
+| `workflows/steps/` | The built-in steps |
+| `workflows/utils.py` | Shared functions, for example `resolve_output_dir` for the results folder |
+| `workflows/summaries.py` | The short summary of a session in the log after a run |
+
+Continue with {doc}`how-to/write-a-workflow`.

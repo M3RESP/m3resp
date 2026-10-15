@@ -1,343 +1,96 @@
 # Architecture
 
-Stage 2 turns `m3resp` from a thin wrapper around `eitprocessing`/`resurfemg`
-([stage1.md](../stage1.md)) into a shared multimodal data model and
-framework, without breaking anything Stage 1 already provided. Every piece
-below is additive: existing `M3Session` methods, the declarative workflow
-engine, and the CLI all still work exactly as documented in
-[stage1.md](../stage1.md) and [workflows.md](../workflows.md).
+This page shows how the M3Resp code is organized: the two kinds of data objects, the folders of the code, and the folder for each kind of new code.
 
-Stage 2 stores results in two layers: the runtime objects
-described in `docs/concepts/` and `docs/tutorials/`, and the persisted data
-model from `main_v0.3.tex` (`m3resp.datamodel`). Both work together with
-Stage 1's declarative workflow engine. "The two data-model layers" below
-describes what each layer is for.
+## The path of the data
 
-## Plain-language overview
-
-**Layer 1: runtime objects (`m3resp.data`)**
-
-These are the objects described in the [concept guides](../concepts/index.md): `Signal`,
-`ParameterResult`, `QualityFlag`, `LinkedBreath`, `Event`/`BreathEvent`.
-"Runtime" means they exist only while code is actually running, in memory,
-created fresh each time a session runs. They are lightweight (a dataclass
-with a handful of fields, no database behind them) and their only job is to
-be the common currency that flows between processing steps while a
-workflow executes.
-
-**Layer 2: persisted entities (`m3resp.datamodel`)**
-
-These are a different, heavier set of types: `Case`, `RecordingSession`,
-`SignalStream`, `DataFile`, `ProcessingRun`, `DerivedFeature`,
-`QualityAnnotation`, and more. "Persisted" means they are meant to be saved
-and looked up later. They live
-inside a `DataModelStore` (an in-memory table structure that behaves like a
-small, simplified database: each entity type is a table, and it checks
-foreign keys, meaning it verifies that if one record refers to another
-record by ID, that other record actually exists). This layer supports two
-extra operations the runtime objects do not have: `validate_store()`
-(checks the data is complete and internally consistent) and
-`export_store()` (writes everything out, one JSON file per table, after
-running `validate_store()`; a store that fails is not written).
-
-### How you move from Layer 1 to Layer 2
-
-Layer 2 is opt-in. By default, a session only ever produces Layer 1
-objects. If you want the persisted layer as well, you attach a
-`DataModelRecorder` to the session
-(`session.datamodel = DataModelRecorder(session)`). From that point on,
-this recorder watches what Layer 1 produces and converts it into the
-matching Layer 2 entity. The data flows in one straight line, with an
-optional second stop at the end.
-
-### What each layer needs
-
-- Layer 1 needs to be fast and cheap: every processing step creates and
-  touches these objects constantly, so they should not carry validation
-  overhead, foreign-key checks, or a rigid schema that could slow things
-  down or force every intermediate step to be "complete" before it is even
-  fully computed.
-- Layer 2 needs to be strict and complete: an audit trail is only useful
-  if you can trust it, so it enforces things like every reference pointing
-  to a real record, and (via `validate_store(require_complete=True)`) that
-  important descriptive fields like units, sampling rate, and file
-  checksums are actually filled in before the dataset is considered
-  finished.
-
-One converter (`DataModelRecorder`) connects the two: Layer 1 is what the
-code works with while running, and Layer 2 is what gets saved and
-validated for later use.
-
-### Why Layer 2 exists at all, concretely
-
-Layer 2 is built for consumers that are not the processing code itself:
-
-- Reproducibility/audit: proving exactly what recording, what processing
-  run, and what derived features produced a given result, in a format that
-  can be checked for consistency.
-- Export: `export_store()` turns the whole thing into a stable, portable
-  set of JSON files.
-- Future GUI/service layer: since these entities are already validated and
-  relational, a future application can query them directly instead of
-  re-deriving that structure from raw Layer 1 objects each time.
-
-## The two data-model layers
-
-Stage 2 has two layers of objects:
+A recording goes through an adapter into the session. The data model is a second, optional record of the same results:
 
 ```text
-legacy package output (eitprocessing / resurfemg)
-        |
-        v
-   adapter (EITProcessingAdapter / ReSurfEMGAdapter)
-        |
-        v
-   Layer 1 - runtime objects (m3resp.data)
-   Signal, ParameterResult, QualityFlag, LinkedBreath, Event/BreathEvent
-        |
-        v
-   DataModelRecorder (opt-in, session.datamodel)
-        |
-        v
-   Layer 2 - persisted entities (m3resp.datamodel)
-   SignalStream, DerivedFeature, QualityAnnotation, ProcessingRun, ...
-        |
-        v
-   DataModelStore -> validate_store() / export_store()
+recording file
+    |
+    v
+adapter (EITProcessingAdapter, ReSurfEMGAdapter, VentilatorAdapter)
+    |   calls eitprocessing or resurfemg, and changes the results into Layer 1 objects
+    v
+Layer 1: objects of a running analysis (m3resp.data)
+    Signal, ParameterResult, QualityFlag, BreathEvent, IntervalData, LinkedBreath, ...
+    |
+    v   only with session.datamodel = DataModelRecorder(session)
+Layer 2: records of a finished analysis (m3resp.datamodel)
+    Case, RecordingSession, SignalStream, ProcessingRun, DerivedFeature, QualityAnnotation, ...
+    |
+    v
+DataModelStore -> validate_store() and export_store()
 ```
 
-- **Layer 1** (`m3resp.data`, described in the [concept guides](../concepts/index.md)) is what
-  processing code actually creates and passes around while a session runs.
-- **Layer 2** (`m3resp.datamodel`) is a validated, queryable record of what
-  happened - built for later consumption by things like the audit trail,
-  export, or a future backend/GUI service layer.
+## Layer 1: objects of a running analysis
 
-## Package map: where to add new functionality
+The objects in `m3resp.data` exist in memory while the code runs. Each session method and each workflow step makes them or reads them. They are small dataclasses, so a step can make an object before all its details are known.
+
+The {doc}`concept guides <../concepts/index>` describe each object, its units and its time axis.
+
+## Layer 2: records of a finished analysis
+
+The records in `m3resp.datamodel` are a checked description of an analysis: which recordings, which processing runs, and which results. A `DataModelStore` keeps them in one table per record type. When you add a record, the store checks that each reference points to an existing record.
+
+- `validate_store(store)` checks the whole store. With `require_complete=True`, it also checks that units, sampling rates, start times and file checksums are filled in.
+- `export_store(store, path)` checks the store, then writes one JSON file per table.
+
+Other programs can read the exported files to find which recording, settings and processing run gave a result.
+
+## From Layer 1 to Layer 2
+
+A session makes only Layer 1 objects. To also fill Layer 2, attach a recorder:
+
+```python
+from m3resp import DataModelRecorder
+
+session.datamodel = DataModelRecorder(session)
+```
+
+The session then sends each provenance record to the recorder. The workflow engine sends the result of each workflow run. The recorder changes them into Layer 2 records. See {doc}`../concepts/provenance`.
+
+## Folders of the code
+
 ```text
-src/m3resp/ 
-├── core/                               Session, exceptions, provenance, metadata
-│   └── session.py                      M3Session - see concepts/session.md
-│
-├── data/                               Layer 1: runtime scientific objects
-│   ├── events.py                       Event, BreathEvent (shared by all modalities)
-│   ├── signals.py                      Signal, TimeSeries - add new signal-shaped concepts here
-│   ├── parameters.py                   ParameterResult - add new computed-metric concepts here
-│   ├── quality.py                      QualityFlag
-│   ├── linked_breath.py                LinkedBreath (cross-modality breath matching)
-│   ├── processing.py                   ProcessingStep / ProcessingHistory
-│   └── collections.py                  SignalCollection / ParameterResultCollection / QualityReport
-│
-├── datamodel/                          Layer 2: persisted/audit entities (main_v0.3.tex's model)
-│   ├── entities.py                     Case, RecordingSession, SignalStream, DataFile, ...
-│   ├── store.py                        DataModelStore (in-memory, FK-checked tables)
-│   ├── recorder.py                     DataModelRecorder - the Layer 1 -> Layer 2 boundary
-│   ├── validation.py                   validate_store() - reference + completeness checks (doc Sec 10)
-│   └── export.py                       export_store() - checks the store, then one JSON
-│                                           file per table
-│
-├── adapters/                           Conversion boundary to the legacy packages - see adapters.md
-│   ├── eitprocessing_adapter/          load/preprocess + to_signals/to_parameters/
-│   │                                       to_quality_flags
-│   ├── resurfemg_adapter/              same shape, for resurfemg (split by
-│   │                                       responsibility: core/ecg/baseline/quality/defaults)
-│   └── ventilator_adapter/             same shape, for ventilator pressure/flow/volume;
-│                                           reads files through the EMG/EIT adapters above;
-│                                           turns breath detections into BreathEvents (_breaths.py)
-│
-├── processing/                         Shared, modality-neutral building blocks: filters, peaks,
-│                                           windows, intervals, metrics, quality, ecg,
-│                                           slicing (cutting one signal to a window)
-│
-├── synchronization/                    Alignment, resampling, breath linking, multimodal
-│   │                                       parameters (see concepts/synchronization.md)
-│   ├── alignment.py                    manual-offset + timestamp-derived offsets; resolving
-│   │                                       offset_seconds keys (incl. "ventilator:<name>");
-│   │                                       which recording is the reference
-│   ├── offset_estimation.py            manual-offset passthrough (no robust automatic
-│   │                                       sync method; protocol-specific estimators live in
-│   │                                       tools/visualization_tools/utils/, not in the package)
-│   ├── resampling.py                   resample_signal - common time base
-│   ├── linking.py                      link_breaths_by_time - nearest-neighbor breath linking
-│   ├── start_times.py                  per-recording start times on a shared clock,
-│   │                                       set by M3Session.synchronize_raw_modalities
-│   ├── sync_methods.py                 which recordings were synchronized, and how; the
-│   │                                       UnsynchronizedDataWarning check
-│   ├── raw_traces.py                   before/after traces for the raw synchronization plot
-│   └── breath_timing_parameters.py     compute_timing_delay / compute_event_agreement /
-│                                           compute_breath_duration_difference /
-│                                           compute_breath_timing_parameters
-│
-├── workflows/                          Stage 1's declarative step-registry engine (YAML/JSON specs)
-│   └── steps/                          add a new @register_step here for a custom, composable step
-│       ├── eit/                        eit.* steps, split by workflow stage
-│       │                                   (filtering/pixel/roi/loading/slicing/signals)
-│       ├── emg/                        emg.* steps, split by workflow stage
-│       │                                   (baseline/ecg_*/features/quality_*/slicing/...)
-│       ├── ventilator/                 ventilator.* steps (loading, slicing, breath and
-│       │                                   Pocc detection, quality)
-│       └── sync.py, metrics.py,        sync.* (every synchronization step),
-│           export.py                       metric.*, export.* steps
-│
-├── presets/                            Named, built-in presets - see
-│   │                                       developer/preset-contracts.md; NOT the same thing as
-│   │                                       workflows/ above; see presets/base.py
-│   ├── eit.py, emg.py, multimodal.py   add a new preset here
-│   └── registry.py                     register_preset(name, cls)
-│
-├── modalities/                         Recording types per modality (EIT, EMG, ventilator) and what
-│   │                                       can be done to one recording: load it, cut it to a
-│   │                                       time window (see concepts/slicing.md)
-│   ├── eit.py, emg.py, ventilator.py   load(); frame_window/sample_window + keep_frames/keep_samples
-│   ├── names.py                        modality names and accepted spellings ("vent" -> "ventilator")
-│   └── time_window.py                  TimeWindow - which samples of a recording to keep
-├── export/                             session_export.py (Stage 1 + structured export),
-│                                           tables.py (row-shaping helpers)
-├── visualization/                      Session overview and synchronization plots
-└── synthetic/                          Synthetic data generators for tests/examples
+src/m3resp/
+├── core/               M3Session, errors, provenance records, metadata, path helpers
+├── data/               Layer 1: Signal, TimeSeries, events and breaths, IntervalData, ParameterResult,
+│                           QualityFlag, LinkedBreath, PixelMap, ProcessingStep, units, categories
+├── datamodel/          Layer 2: records, DataModelStore, DataModelRecorder, validate_store, export_store
+├── adapters/           the connection to eitprocessing and resurfemg (see adapters.md)
+│   ├── eitprocessing_adapter/
+│   ├── resurfemg_adapter/    split by task: ECG, baseline, quality, defaults
+│   └── ventilator_adapter/   reads ventilator data from EMG, EIT and ventilator files
+├── processing/         signal tools for all modalities: filters, peaks, windows and envelopes,
+│                           intervals, metrics, ECG removal, ventilator waveforms, slicing
+├── synchronization/    start times, offsets, resampling, breath linking, breath timing parameters
+├── modalities/         recording types per modality, loaders, modality names, time windows
+├── io.py               load_eit and load_emg without a session
+├── presets/            the "eit", "emg" and "multimodal" presets and their registry
+├── workflows/          the workflow engine: files, checks, compiler, run, manifest, WorkflowService
+│   └── steps/          the registered steps: eit/, emg/, ventilator/, sync.py, metrics.py, export.py
+├── export/             export_session_summary and the table rows of the CSV files
+├── visualization/      session overview, synchronization and EIT figures
+├── synthetic/          synthetic EIT, EMG and ventilator recordings for tests and examples
+└── __main__.py         the m3resp command line
 ```
 
-Rule of thumb for "where does my new EIT/EMG/multimodal functionality go":
+## Where new code goes
 
-1. **A new upstream algorithm you want exposed** -> a method on the adapter
-   (`adapters/`), converting its result to a Layer 1 object via
-   `to_signals`/`to_parameters`/`to_quality_flags`.
-2. **A new kind of computed metric** -> `data/parameters.py` (`ParameterResult` already covers most cases;
-   only add a new class if the concept genuinely isn't a named/valued/
-   unit-tagged metric).
-3. **A new composable workflow step** for the YAML/JSON declarative engine
-   -> a module under `workflows/steps/` with `@register_step`.
-4. **A new one-call preset** ("run all of EIT/EMG/multimodal processing in
-   one call") -> `presets/*.py`, registered in `presets/registry.py`.
-5. **A new low-level, reusable synchronization or multimodal-metric building
-   block** (e.g. a resampling method, an offset/alignment computation, a
-   breath-linking strategy, a cross-modality timing metric - something other
-   code composes, not a full workflow step or preset itself) ->
-   `synchronization/`.
-6. **A new persisted/audit entity** (something that needs to be queryable,
-   validated, and exported later, per the `main_v0.3.tex` data model) ->
-   `datamodel/entities.py`, wired into `datamodel/recorder.py`.
-7. **A completely new algorithm with no upstream equivalent** (not wrapping
-   `eitprocessing`/`resurfemg`, genuinely new science) -> out of scope for
-   Stage 2, which only wraps existing upstream behavior; see "Stage 3
-   outlook" below for where this goes once Stage 3's native packages exist.
+| You add | Put it in |
+|---|---|
+| A function of `eitprocessing` or `resurfemg` | A method on the adapter, which changes the result into Layer 1 objects with `to_signals`, `to_parameters` or `to_quality_flags`. See {doc}`adapters`. |
+| A new calculated value | A `ParameterResult`, or an `IntervalData` for one value per breath. |
+| A signal tool that more than one modality uses | `processing/` |
+| A step for workflow files | A module in `workflows/steps/`, with `@register_step`. See {doc}`../how-to/add-a-step`. |
+| A preset | `presets/`, registered with `register_preset`. See {doc}`preset-contracts`. |
+| A synchronization method or a measure across modalities | `synchronization/` |
+| A new record type | `datamodel/entities.py`, and its conversion in `datamodel/recorder.py` |
 
-## Stage 3 outlook: what evolves, what stays, what goes
+Add a new Layer 1 class only for a result that is not a named value with a unit. For a new method that `eitprocessing` and `resurfemg` do not have, open an issue first.
 
-This section maps the pieces above onto Stage 3.
+{doc}`project-history` describes the stages of the project and the planned changes to this structure.
 
-### Ready to use as-is (stable contracts, no change needed)
-
-These are independent of `eitprocessing`/`resurfemg` and carry over to
-Stage 3 unchanged:
-
-- **Layer 1 runtime objects** (`data/signals.py`, `parameters.py`,
-  `quality.py`, `linked_breath.py`, `processing.py`): `Signal`,
-  `ParameterResult`, `QualityFlag`, `LinkedBreath`, `Event`/`BreathEvent`.
-  Their whole design point was to be a shared, upstream-independent shape
-  both modalities produce, so they carry over unchanged.
-- **`workflows/`** (the declarative step-registry engine): `m3resp.workflows`
-  is the public module in Stage 2 and Stage 3. The YAML/JSON spec format, the registry, and the engine
-  stay exactly as they are.
-- **`datamodel/`** (Layer 2, persisted entities): `Case`,
-  `RecordingSession`, `ProcessingRun`, `DataModelStore`, `validate_store()`,
-  `export_store()`. This layer only cares about recording what happened,
-  never about which backend did the computing, so it is unaffected by the
-  upstream swap.
-- **`synchronization/`**: alignment, resampling, breath linking,
-  breath timing parameters. These operate purely on `Signal`/`BreathEvent`
-  objects, not on upstream library objects, so they are already
-  backend-neutral.
-- **`M3Session`'s public method names and signatures**: `load_eit`,
-  `preprocess_eit`, `detect_eit_breaths`, `link_breaths`, `export_summary`,
-  and the rest. This is called out as a stable contract specifically so
-  Stage 3 does not have to touch calling code.
-- **`presets/`**: these just call the session's own already-instrumented
-  methods in sequence, so they ride along with whatever `M3Session` does
-  internally.
-- **Provenance schema**: `ProvenanceRecord`, `ProcessingStep`/
-  `ProcessingHistory`, and the `metadata.operation` field in provenance
-  records. `metadata.operation` (for example `"eit.pixel_tiv"`) is
-  the stable identifier for workflows and the GUI
-  across Stage 2 and Stage 3.
-
-### Replaced under the hood (same public shape, different internals)
-
-These keep their name, their method signature, and their place in the
-package map, but what runs inside them changes:
-
-- **`adapters/eitprocessing_adapter/`, `adapters/resurfemg_adapter/`, and `adapters/ventilator_adapter/`**:
-  today these wrap calls into the `eitprocessing`/`resurfemg` libraries.
-  Stage 3 replaces what is inside them, one operation at a time, with calls
-  into new native packages: `src/m3resp/eit/io/`, `eit/processing/`,
-  `eit/roi/`, `emg/io/`, `emg/processing/`. The adapters are
-  the Stage 2 backend; `M3Session` and the workflow steps are what the GUI
-  and calling code use.
-- **`modalities/`** (top-level `load_eit`/`load_emg` helpers): these
-  currently call `adapter.load()`, which calls a vendor-specific upstream
-  reader. In Stage 3 they call the new native readers in `eit/io/`/
-  `emg/io/` instead, in this order: vendor
-  loading/normalization first, then native containers and global
-  impedance, then breath/rate detection, then filtering (MDN), then
-  EELI/TIV, then pixel-level and ROI behavior.
-- **`workflows/steps/eit/*.py` and `steps/emg/*.py`**: today these bind
-  context keys and parameters, then call `session.eit_adapter`/
-  `session.emg_adapter`. In Stage 3 they call the native services directly
-  instead. The step names, `reads`/`writes` bindings, and registry metadata
-  stay the same, only the function they delegate to changes.
-- **Provenance metadata content**: fields like `method`,
-  `metadata.source_package`, and `metadata.source_function` currently name
-  `eitprocessing`/`resurfemg` classes and functions. In Stage 3 these get
-  renamed to name the native `m3resp` implementation instead. The
-  upstream names are kept in `reference_*` fields so scientific equivalence
-  stays traceable.
-- **Layer 1 dict slots that still hold upstream objects**
-  (`session.processed["eit"]`, `processed_variants`): during Stage 2 these
-  hold the original upstream object side by side with the native
-  `Signal`/`ParameterResult` conversion, for backward compatibility and
-  regression comparison. In Stage 3, once an operation is fully native, the
-  upstream object is dropped from that slot; only the native `m3resp` type
-  remains under the same context key.
-
-### New algorithms with no upstream equivalent
-
-Stage 2 has no place for a completely new algorithm, since Stage 2's
-adapters only wrap `eitprocessing`/`resurfemg` calls (item 7 in the "Rule of thumb" list
-above). Once Stage 3's native `eit/processing/`/`emg/processing/` packages
-exist, a new algorithm is added directly there as ordinary native code, with
-no adapter step, since there is no upstream call left to wrap. It only
-belongs in the shared `m3resp.processing` package instead of a
-modality-owned one if it is genuinely modality-neutral, by the same test
-already applied to the existing shared primitives (`filters`, `peaks`,
-`windows`, `intervals`, `metrics`).
-
-### Removed fully
-
-- **The runtime/production dependency on `eitprocessing` and
-  `resurfemg`**: the Stage 3 completion gate states that no production
-  source import or dependency may reference `eitprocessing` or
-  `resurfemg`. A plain `pip install m3resp` and the distributed GUI will
-  not install or import either package at all.
-- **The reference packages as installable extras for normal users**: they
-  move from being an optional runtime extra (as in Stage 2, where they are
-  needed to actually run the delegated algorithms) to a
-  development/reference-test-only extra, used solely to run an optional
-  comparison suite against the frozen Stage 2 golden fixtures.
-- **Any direct exposure of upstream objects to calling code or a GUI**: the
-  future GUI must not import from
-  `m3resp.adapters`, `eitprocessing`, or `resurfemg`, and must never
-  receive an upstream `Sequence`, `EITData`, `SparseData`, `PixelMask`, or
-  ReSurfEMG object. No upstream object reaches calling code.
-
-The adapter classes (`EITProcessingAdapter`/`ReSurfEMGAdapter`) will likely
-stay in Stage 3 as a reference for the comparison tests, after the main code
-stops calling them.
-
-## See also
-
-- [Concept guides](../concepts/index.md) - what each Layer 1 object is and what populates it.
-- [Tutorials](../tutorials/index.md) - end-to-end walkthroughs using these objects.
-- [adapters.md](adapters.md) - the adapter conversion boundary in detail.
-- [preset-contracts.md](preset-contracts.md) - presets vs. the declarative engine.
-- [testing.md](testing.md) - regression tests and the test layout.
-- [../workflows.md](../workflows.md) - the declarative YAML/JSON workflow spec format.
-- [Migration guides](../migration.md) - calling `eitprocessing`/`resurfemg` directly vs. through `m3resp`.
+Continue with {doc}`adapters`.

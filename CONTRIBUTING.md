@@ -1,97 +1,89 @@
 # Contributing
 
-M3Resp is the integration layer for multimodal respiratory workflows. Keep
-modality-specific processing in the upstream packages whenever possible:
+M3Resp connects EIT, EMG and ventilator processing in one workflow. This file shows where a change belongs, how to set up the code, and how to work on the documentation.
 
-- EIT-specific changes belong in `eitprocessing`.
-- EMG-specific changes belong in `ReSurfEMG` / `resurfemg`.
-- Cross-modality API, synchronization, export, session state, and the workflow
-  engine belong here.
+Read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
-Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+## Where a change belongs
 
-## Making changes
+| Change | Place |
+|---|---|
+| How EIT signals are processed | `eitprocessing` |
+| How EMG signals are processed | `ReSurfEMG` (`resurfemg`) |
+| Synchronization, export, the session, the workflow engine, and anything that combines modalities | M3Resp |
 
-The data files in `tests/data` are stored with [Git LFS](https://git-lfs.com).
-Install `git-lfs` and run `git lfs install` once, before cloning. If you cloned
-without it, run `git lfs pull` afterwards. Without it, those files are small text
-placeholders and the tests that read them fail.
+If you do not know where a change belongs, open an issue and ask.
 
-Before opening a pull request, make sure the tests pass:
+## Kinds of contributions
+
+- Questions: open an issue with the label "Question".
+- Bug reports: open an issue with the "Bug report" form. Give the versions of M3Resp, Python, `eitprocessing` and `resurfemg`, your operating system, and a short example. Use synthetic data in the example, never patient recordings.
+- Code changes: open a pull request. For a change larger than a small fix, open an issue first, so that we can agree on the approach.
+- Documentation: changes to the documentation are welcome. See the documentation section below.
+
+## Set up the code
+
+The recordings in `tests/data` are stored with [Git LFS](https://git-lfs.com). Install `git-lfs` and run `git lfs install` once, before you clone the repository. If you cloned without it, run `git lfs pull`. Without Git LFS, the files are small text files, and the tests that read them fail.
+
+Install M3Resp with the developer tools, and install the pre-commit hooks once:
 
 ```bash
-pytest
-```
-
-The pre-commit hooks run Ruff linting and formatting automatically. Install them
-once after setting up the dev environment:
-
-```bash
-pip install -e ".[dev]"
+pip install -e ".[all,dev]"
 pre-commit install
 ```
 
-Run the checks manually at any time:
+The hooks run the Ruff checks and the Ruff formatter at each commit. To run them on all files:
 
 ```bash
 pre-commit run --all-files
 ```
 
-## Documentation
+## Check a change
 
-Install the documentation tools and build the website locally:
+Before you open a pull request, run the tests and the type check:
 
 ```bash
-python -m pip install -e ".[docs]"
+pytest
+mypy src
+```
+
+Write docstrings and comments as `AGENTS.md` describes. See the [testing page](docs/developer/testing.md) for the groups of tests.
+
+## Documentation
+
+Install the documentation tools and build the website:
+
+```bash
+python -m pip install -e ".[all,docs]"
 python -m sphinx -W --keep-going -b html docs docs/_build/html
 ```
 
-or 
+With uv:
 
 ```bash
-uv sync --extra docs
+uv sync --extra all --extra docs
 uv run python -m sphinx -W --keep-going -b html docs docs/_build/html
 ```
 
-Open `docs/_build/html/index.html` to preview the result. The documentation
-workflow runs the same strict build for every pull request, so broken links,
-invalid cross-references, and rendering warnings must be fixed before merging.
+Open `docs/_build/html/index.html` to see the result. The documentation workflow runs the same strict build for each pull request. Fix all warnings, broken links and wrong references before the merge.
 
-Add explanatory pages and tutorials as Markdown files under `docs/`. Include
-each new page in the nearest section's `toctree` so readers can reach it from
-the navigation.
+Each page has one of four types. Put a new page in the folder of its type, and add it to the `toctree` of that folder:
 
-The `docs/gallery_examples/` directory is reserved for future executable
-Sphinx-Gallery examples. When adding the first example:
+| Type | Folder | Purpose |
+|---|---|---|
+| Tutorial | `docs/tutorials_src/` | Teaches a new user one complete analysis, step by step |
+| How-to guide | `docs/how-to/` | Shows how to do one task, for a user who knows the basics |
+| Concept | `docs/concepts/` | Explains what a thing is and why it works that way |
+| Reference | `docs/workflows.md`, `docs/api/` | Describes each step, function and class |
 
-1. Use a `.py` file with narrative comments in Sphinx-Gallery format.
-2. Use deterministic seeds and data that can be generated with the base
-   package; do not require private recordings or write into the repository.
-3. Add any required plotting package to the `docs` extra.
-4. Add `generated/gallery/index` to the main documentation navigation.
-5. Run the strict documentation build and check the generated `.py` and
-   notebook downloads.
+Tutorials are Python scripts in Sphinx-Gallery format. The documentation build runs each script and puts the printed output and the figures on the page, in `docs/tutorials/`. The build sorts the scripts by file name, so start the name with a number (`10_`, `20_`, ...). When you add a tutorial:
 
-Read the Docs builds the default branch as `latest`. Non-prerelease Git tags
-can be activated as stable and numbered documentation versions in the Read the
-Docs project settings. An organization administrator must import the repository
-and enable pull-request previews before the hosted site becomes available.
+1. Start with a docstring that has the title and says what the reader will get.
+2. Use the synthetic recordings in `tests/data`. Read the folder from `M3RESP_EXAMPLE_DATA`, as the other tutorials do. Write output files only to a temporary folder.
+3. Show the output of each step. End with a "Recap" and a "Next" section.
+4. Add each plotting package that the tutorial needs to the `docs` extra.
+5. Run the strict documentation build. Check the page and the `.py` and notebook downloads.
 
-## Types of contributions
+The API page of each function and class lists the tutorials that use it.
 
-We welcome contributions of all kinds:
-
-1. **Questions** — open an issue and add the "Question" label.
-2. **Bug reports** — open an issue with enough context to reproduce the problem
-   (commit hash, dependency versions, OS, and a minimal example if possible).
-3. **Code changes** — open a pull request. For anything beyond a small fix,
-   open an issue first so we can discuss the approach.
-4. **Documentation** — improvements to the docs are always welcome.
-
-## What belongs here vs upstream
-
-If you are unsure whether a change belongs in `m3resp` or in one of the upstream
-packages, open an issue and we will figure it out together. The general rule:
-if the change is about how EIT or EMG signals are processed scientifically, it
-belongs upstream. If it is about how those results are orchestrated, exported,
-or combined across modalities, it belongs here.
+Read the Docs builds the default branch as `latest`. In the Read the Docs project settings, you can make a release tag the `stable` version and give each release its own numbered version. An administrator of the organization must import the repository and turn on the previews of pull requests before the website is available.

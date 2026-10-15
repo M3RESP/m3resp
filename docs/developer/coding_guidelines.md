@@ -1,101 +1,47 @@
 # Coding guidelines
 
-This file collects small conventions for recurring design choices. If you
-are about to introduce a new convention, check here first, and add it here
-once it is settled.
+This page has the rules for choices that come back often in the code: the return value of a function, the choice of a field, names, and two arguments for one value. Add a rule here when the team agrees on a new one.
 
-## Optional secondary outputs: use `captures`, not a boolean return-shape toggle
+See `AGENTS.md` in the source folder for the rules for docstrings and comments.
 
-Don't give a function a boolean flag that changes what type it returns (e.g.
-`return_details: bool = False` making the function return either a value or
-a tuple). This forces an `@overload` pair to type it correctly, is easy to
-call wrong (`result = f(...)` silently works whether or not the flag was
-set, so a caller who forgot to unpack a tuple gets a confusing downstream
-error instead of an immediate one), and is generally considered poor
-practice (see the discussion on
-[PR #24](https://github.com/M3RESP/m3resp/pull/24), which surveyed
-alternatives including always-returning-a-tuple, attaching properties to
-the output object, and an OOP detector class).
+## Extra outputs go into `captures`
 
-Instead, accept an optional `captures: dict[str, Any] | None = None`
-parameter and fill it in-place via the shared `capture_value` helper
-(`m3resp.processing.filters.capture_value`):
+A function always returns the same type. To give extra outputs, for example values for a plot or a check, add an optional `captures` argument. The function fills this dictionary with `capture_value` from `m3resp.processing.filters`:
 
 ```python
-def detect_peaks(
-    ...,
-    captures: dict[str, Any] | None = None,
-) -> np.ndarray:
+def detect_peaks(..., captures: dict[str, Any] | None = None) -> np.ndarray:
     ...
     capture_value(captures, "properties", properties)
     return peak_indices
 ```
 
-The function's return type never changes shape. A caller who doesn't need
-the extra output just omits `captures`; one who does passes a dict and
-reads it back afterwards. This is the convention already used throughout
-`m3resp.processing` (`filters.py`, `peaks.py`); follow it for any new
-function with optional diagnostic/intermediate outputs rather than
-inventing a new toggle.
+A caller who wants the extra outputs gives an empty dictionary and reads it after the call. `m3resp.processing.filters` and `m3resp.processing.peaks` use this rule.
 
-## Pick fields by what the algorithm does, not by inspecting the value
+Do not add a True/False argument that changes the return type, for example from a value to a tuple. A caller who forgets to unpack the tuple gets an error much later in the code.
 
-Some types offer two or more fields for what seems like the same thing:
-`ParameterResult.breath_id` vs. `breath_ids`, or `event_id` vs.
-`start_time`/`end_time`. When that happens, decide which field to use once,
-when writing the code, based on what the algorithm actually computes. Don't
-decide it while the code runs by looking at the value (like "use
-`breath_id` if there's only one element in the list").
+## Choose a field by what the method calculates
 
-In practice: if an algorithm aggregates a value over a set of breaths, it
-always writes to `breath_ids`, even on a run where that set has just one
-breath. The claim "this is an aggregate over a set" doesn't change just
-because the set happens to be size one. Use `breath_id` for algorithms that
-are single-breath by design.
+Some objects have two fields for similar things, for example `ParameterResult.breath_id` and `breath_ids`. Choose the field when you write the code, from what the method calculates:
 
-See [PR #24](https://github.com/M3RESP/m3resp/pull/24) for the full
-reasoning.
+- A method that calculates one value per breath writes `breath_id`.
+- A method that calculates one value from a group of breaths writes `breath_ids`, also when the group has only one breath.
 
-## Name the shared primitive by what it computes; name the domain quantity by its literature term
+Do not choose the field from the data while the code runs, for example from the length of a list.
 
-When a generic math primitive in `m3resp.processing` (shared across
-modalities) underlies a domain-specific, literature-named quantity in one
-modality's adapter, name each thing for its own audience rather than giving
-the shared primitive the domain term. The primitive's name should describe
-what it mathematically does; the domain-specific name stays wherever it's
-actually user- or literature-facing (dict keys, registered step names,
-docstrings of the modality-specific functions that consume it).
+## Names: what the function calculates, and the term of the literature
 
-Concretely: `m3resp.processing.metrics.window_integral` computes "integrate
-signal-minus-baseline over a window" - a primitive already reused by both
-EMG and ventilator step code for different purposes. In EMG, that
-computation produces the quantity respiratory-EMG literature calls
-"time-product"/ETP (Electrical Time Product), and that name is preserved
-everywhere it's domain-facing: the `"time_product"` dict key, the
-registered `emg.time_product` step, and the quality-assessment functions
-that take `time_products` as an argument. Naming the shared primitive
-itself `time_product` would have been the actual mistake, since ventilator
-code calls it for something that isn't ETP at all. See the discussion on
-[PR #24](https://github.com/M3RESP/m3resp/pull/24) for the full reasoning.
+A shared function in `m3resp.processing` gets a name for what it calculates. A value of one modality keeps the name that the literature uses.
 
-## Two ways to specify one value: both default to `None`, raise if both are set
+For example, `window_integral` in `m3resp.processing.metrics` calculates the area between a signal and its baseline in each window. The EMG code uses it for the time product (ETP), with the result name `time_product` and the step `emg.time_product`. The ventilator code uses it for the pressure time product of an occlusion, `pocc_time_product`. So the shared function has a general name.
 
-When a function offers two parameters that specify the same underlying
-value in different units or forms (e.g. `gate_width_seconds` /
-`gate_width_samples`, `min_peak_width_samples` / `min_peak_width_s`), give
-both a default of `None` rather than giving one of them a concrete default
-like `1`. Resolve the effective value only after checking both: if both are
-`None`, fall back to the real default; if both are explicitly set, raise
-`ValueError` rather than silently letting one win.
+## Two arguments for one value
 
-A concrete non-`None` default on one of the two breaks this: it makes it
-impossible to tell whether the caller explicitly passed that value or just
-left it at default, so you can neither warn nor error correctly when the
-other parameter is also set - you'd get false positives whenever the
-default happens to differ from what the caller passed for the other one.
-`None`-by-default on both sides is what makes "was this explicitly set?"
-answerable at all. See `ecg_gating`'s `gate_width_seconds`/
-`gate_width_samples` handling and `detect_emg_breath_peaks`'s
-`min_peak_width_samples`/`min_peak_width_s` handling for the pattern in
-practice, and the discussion on
-[PR #24](https://github.com/M3RESP/m3resp/pull/24) for the full reasoning.
+Some functions accept one value in two forms, for example `gate_width_seconds` and `gate_width_samples`, or `min_peak_width_samples` and `min_peak_width_s`:
+
+- Both arguments have the default `None`.
+- If both are `None`, the function uses its default value.
+- If both are set, the function raises `ValueError`.
+
+With a default other than `None`, the function cannot tell if the caller set the value. See the step `emg.ecg_gating` and `detect_emg_breath_peaks` in `m3resp.processing.peaks` for examples.
+
+Continue with {doc}`offset-estimation`.

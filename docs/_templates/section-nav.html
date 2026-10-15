@@ -1,0 +1,24 @@
+{#- The other pages of the same folder, in the same look as "On this page".
+    Pages at the top level of docs, pages outside every table of contents
+    (orphan) and the source code pages belong to no folder of the
+    documentation. -#}
+{%- if "/" in pagename and not pagename.startswith("_modules/") and "orphan" not in (meta or {}) -%}
+{%- set section_html = generate_toctree_html("sidebar", show_nav_level=1, maxdepth=2, collapse=True, includehidden=True, titles_only=True) -%}
+{%- if section_html | length >= 1 -%}
+{%- set heading_id = unique_html_id("m3-section-navigation-heading") -%}
+<div id="{{ heading_id }}" class="page-toc tocsection onthispage">
+  <i class="fa-solid fa-folder-open"></i> {{ _("In this section") }}
+</div>
+<nav class="page-toc m3-section-toc" aria-labelledby="{{ heading_id }}">
+  {{ section_html
+     | replace('class="current nav bd-sidenav"', 'class="visible nav section-nav flex-column"')
+     | replace('class="nav bd-sidenav"', 'class="visible nav section-nav flex-column"')
+     | replace('<li class="toctree-l', '<li class="nav-item toc-entry toctree-l')
+     | replace('class="current reference internal"', 'class="reference internal nav-link active" aria-current="page"')
+     | replace('class="reference internal"', 'class="reference internal nav-link"')
+     | replace('<details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary>', '')
+     | replace('<details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary>', '')
+     | replace('</details>', '') }}
+</nav>
+{%- endif -%}
+{%- endif -%}
