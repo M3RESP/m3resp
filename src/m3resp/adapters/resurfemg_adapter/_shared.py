@@ -1,4 +1,4 @@
-"""Shared constants/helpers for the ReSurfEMGAdapter mixin modules."""
+"""Lists and checks used by several `ReSurfEMGAdapter` method files."""
 
 from __future__ import annotations
 
@@ -226,12 +226,12 @@ def _require_equal_length(*named_arrays: tuple[str, np.ndarray]) -> None:
 
 
 def _require_integer_valued_sample_frequency(sample_frequency: float) -> int:
-    """Normalize `sample_frequency` to `int` for upstream calls that need an
-    exact integer (e.g. `fs // 200` fed straight into a pandas rolling
-    window - see plan/stage2/2_resurfemg_gap_migration_implementation_plan.md
-    Phase 0.2). Only an exactly integer-valued float (`2048.0`) is
-    normalized; a genuinely fractional frequency is a clear error rather
-    than a silent rounding.
+    """The sampling rate in Hz as an `int`, for ReSurfEMG functions that need one.
+
+    Some ReSurfEMG functions use the rate as a whole number of samples (for
+    example ``fs // 200`` as a pandas rolling-window length). A whole-number
+    float such as ``2048.0`` is converted; a fractional rate such as
+    ``2048.5`` raises a ValueError, so it is never rounded.
     """
 
     if not np.isfinite(sample_frequency) or sample_frequency <= 0:

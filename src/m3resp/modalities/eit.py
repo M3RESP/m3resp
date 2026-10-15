@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 
@@ -13,28 +14,72 @@ from m3resp.modalities.time_window import TimeWindow
 
 @dataclass
 class EITRecording:
-    """Loaded EIT recording with source metadata."""
+    """Loaded EIT recording with source metadata.
+
+    ``path`` is the (first) file read; ``paths`` lists every file when
+    several files were joined into this recording, in recording order.
+    """
 
     data: Any
     path: Path
     vendor: str | None = None
     raw: Any = None
     global_impedance: Any = None
+    paths: tuple[Path, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.paths:
+            self.paths = (self.path,)
+
+
+EITLoaderChoice = Literal["auto", "eitprocessing", "custom"]
 
 
 def load(
-    path: str | Path,
+    path: str | Path | Sequence[str | Path],
     vendor: str | None = None,
     *,
     adapter: Any = None,
+    loader: EITLoaderChoice = "auto",
     **kwargs: Any,
 ) -> EITRecording:
-    """Load an EIT recording through the Stage 1 adapter."""
+    """Load an EIT recording through the EIT adapter.
+
+    ``loader`` picks the reader: ``"eitprocessing"`` reads a Draeger, Sentec
+    or Timpel file (``vendor`` required), ``"custom"`` uses the loader given
+    to the adapter, and ``"auto"`` uses the custom loader when there is one,
+    else eitprocessing.
+
+    ``path`` may be a list of files recorded one after the other; they are
+    read as one recording. A custom loader receives the list as given.
+    """
 
     from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
 
     eit_adapter = adapter or EITProcessingAdapter()
-    sequence = eit_adapter.load(str(path), vendor=vendor, **kwargs)
+    if isinstance(path, str | Path):
+        paths: tuple[Path, ...] = (Path(path),)
+        source: Any = str(path)
+    else:
+        if not path:
+            raise ValueError("Give at least one EIT file to load.")
+        paths = tuple(Path(item) for item in path)
+        source = [str(item) for item in paths]
+    if loader == "eitprocessing":
+        sequence = eit_adapter.load_with_eitprocessing(source, vendor=vendor, **kwargs)
+    elif loader == "custom":
+        if vendor is not None:
+            raise ValueError(
+                "A custom EIT loader takes no vendor; pass reading options "
+                "for the loader as keyword arguments."
+            )
+        sequence = eit_adapter.load_with_custom_loader(source, **kwargs)
+    elif loader == "auto":
+        sequence = eit_adapter.load(source, vendor=vendor, **kwargs)
+    else:
+        raise ValueError(
+            f"loader must be 'auto', 'eitprocessing' or 'custom'; got {loader!r}."
+        )
     raw = None
     global_impedance = None
     if hasattr(sequence, "eit_data"):
@@ -43,10 +88,11 @@ def load(
         global_impedance = eit_adapter.get_global_impedance(sequence)
     return EITRecording(
         data=sequence,
-        path=Path(path),
+        path=paths[0],
         vendor=vendor,
         raw=raw,
         global_impedance=global_impedance,
+        paths=paths,
     )
 
 

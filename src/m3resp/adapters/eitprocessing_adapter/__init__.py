@@ -22,6 +22,7 @@ from m3resp.data.events import (
 )
 from m3resp.processing.filters import butterworth_filter
 
+from ._joining import eit_file_paths, join_eit_sequences
 from ._shared import (
     _breath_intervals_to_dicts,
     _lazy_import,
@@ -53,11 +54,68 @@ class EITProcessingAdapter:
     def __init__(self, loader: Callable[..., Any] | None = None):
         self._loader = loader
 
+    @property
+    def has_custom_loader(self) -> bool:
+        """True when this adapter was given a loader of its own (``loader=``)."""
+
+        return self._loader is not None
+
     def load(self, path: str, vendor: str | None = None, **kwargs: Any) -> Any:
-        """Load EIT data through `eitprocessing` or an injected loader."""
+        """Load EIT data through the injected loader, or else `eitprocessing`."""
 
         if self._loader is not None:
             return self._loader(path, vendor=vendor, **kwargs)
+        return self.load_with_eitprocessing(path, vendor=vendor, **kwargs)
+
+    def load_with_custom_loader(self, path: str, **kwargs: Any) -> Any:
+        """Load EIT data through the loader given as ``loader=``.
+
+        Args:
+            path: File (or folder) the loader reads.
+            **kwargs: Passed on to the loader.
+
+        Returns:
+            Whatever the loader returns, normally an eitprocessing Sequence.
+
+        Raises:
+            UnsupportedWorkflowError: If this adapter has no loader of its own.
+        """
+
+        if self._loader is None:
+            raise UnsupportedWorkflowError(
+                "No custom EIT loader is set. Create the session with "
+                "M3Session(eit_adapter=EITProcessingAdapter(loader=my_loader)), "
+                "or pass that adapter as run_workflow(..., eit_adapter=...). "
+                "Use 'eit.load' with a vendor for Draeger, Sentec or Timpel files."
+            )
+        return self._loader(path, vendor=None, **kwargs)
+
+    def load_with_eitprocessing(
+        self, path: str, vendor: str | None = None, **kwargs: Any
+    ) -> Any:
+        """Load a Draeger, Sentec or Timpel file with `eitprocessing`.
+
+        Several files are read as one recording: each file is read, then they
+        are joined in the given order (see `join_eit_sequences`).
+
+        Args:
+            path: The EIT file to read, or a list of files recorded one after
+                the other.
+            vendor: ``"draeger"``, ``"sentec"`` or ``"timpel"``.
+            **kwargs: Passed on to ``eitprocessing``'s ``load_eit_data``
+                (``sample_frequency``, ``first_frame``, ``max_frames``, label
+                and name).
+
+        Returns:
+            The loaded eitprocessing Sequence.
+
+        Raises:
+            ValueError: If vendor is None; if ``first_frame`` or
+                ``max_frames`` is set with more than one file (eitprocessing
+                would apply them to each file); or if the files cannot be
+                joined.
+            OptionalDependencyError: If eitprocessing is not installed.
+        """
 
         if vendor is None:
             raise ValueError(
@@ -73,7 +131,21 @@ class EITProcessingAdapter:
             ),
         )
 
-        return load_eit_data(path, vendor=vendor, **kwargs)
+        paths = eit_file_paths(path)
+        if len(paths) == 1:
+            return load_eit_data(paths[0], vendor=vendor, **kwargs)
+
+        if kwargs.get("first_frame") or kwargs.get("max_frames") is not None:
+            raise ValueError(
+                "first_frame and max_frames apply to each file, so they cannot "
+                "be used when loading several EIT files at once. Load the "
+                "files, then cut the recording with eit.slice_recording "
+                "(session.slice_eit)."
+            )
+        sequences = [
+            load_eit_data(single_path, vendor=vendor, **kwargs) for single_path in paths
+        ]
+        return join_eit_sequences(sequences, paths)
 
     def get_raw_eit(self, sequence: Any, label: str = "raw") -> Any:
         """Return the raw EIT data object from an upstream sequence."""

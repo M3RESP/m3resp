@@ -1,6 +1,6 @@
 """Options added so a workflow can reproduce the multidomain results chain:
 median envelope, merging close peaks, notch before band-pass, and the wavelet
-step keeping the preprocessing envelope method."""
+step removing the envelope of the uncleaned signal."""
 
 from __future__ import annotations
 
@@ -124,9 +124,7 @@ class TestNotchBeforeBandpass:
         np.testing.assert_array_equal(processed["filtered"], expected)
 
 
-def test_wavelet_step_keeps_the_preprocessing_envelope_method():
-    """It used to rebuild the envelope as ARV whatever preprocessing used."""
-
+def test_wavelet_step_removes_the_envelope_of_the_uncleaned_signal():
     pytest.importorskip("resurfemg")
     from m3resp.workflows.steps.emg.ecg_wavelet import ecg_wavelet_denoising
 
@@ -145,8 +143,5 @@ def test_wavelet_step_keeps_the_preprocessing_envelope_method():
     result = ecg_wavelet_denoising(session, processed, peaks, source="filtered")
 
     after = result["processed_emg_after_ecg"]
-    assert after["filter"]["envelope_method"] == "median"
-    np.testing.assert_array_equal(
-        after["envelope"],
-        rolling_envelope(after["ecg_cleaned"], window_length=1000, method="median"),
-    )
+    assert after["envelope"] is None
+    assert after["ecg_cleaned"] is not None

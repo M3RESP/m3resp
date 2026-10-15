@@ -2,6 +2,121 @@
 
 ## Unreleased
 
+### EMG polishing: session baseline and adapter docs (#72)
+
+`M3Session.emg_moving_baseline(window_seconds=7.5, step_seconds=0.2,
+percentile=33.0, variant=None)` computes the moving baseline of the
+processed EMG envelope, with the same calculation as the
+`emg.moving_baseline` step. The baseline is added to `session.signals` as
+`<channel>_moving_baseline` (`<channel>_moving_baseline:<variant>` for a
+preprocessing variant), replacing the one from an earlier call, and the
+call is recorded in `session.provenance` as `emg_moving_baseline` with its
+settings and variant. The EMG tutorial now runs preprocess, baseline, then
+breath detection:
+
+```python
+session.preprocess_emg(channel=1)
+baseline = session.emg_moving_baseline()
+session.detect_emg_breaths(baseline=baseline)
+```
+
+The `"emg"` preset uses it, with the same numbers as before; its baseline
+now also appears in `session.signals` and `session.provenance`.
+`config={"baseline": {...}}` takes `window_seconds`, `step_seconds` and
+`percentile` (converted to numbers, so `"7.5"` works); other keys,
+including `variant`, raise `TypeError`, so the baseline always comes from
+the processed EMG that breath detection uses. A zero window or step now
+raises `ValueError`; before, it became one sample.
+
+`ReSurfEMGAdapter` and its method files have plain-language docstrings
+(inputs, outputs, units, and which values come from ReSurfEMG and which are
+computed in m3resp), and the adapter page in the developer docs lists every
+method that way. References to planning documents and project stages are
+removed from the EMG and ventilator code.
+
+### Several EIT files loaded as one recording (#121)
+
+`eit.load`, `eit.load_custom` and `session.load_eit()` take a list of files
+recorded one after the other and read them as one recording:
+
+```yaml
+- uses: eit.load
+  with: { file_path: [part_1.bin, part_2.bin], vendor: draeger }
+```
+
+The files are joined in the given order. A file that starts before the one
+before it ends is refused with an error naming both files. A pause between
+two files stays in the time axis and gives a warning with its length.
+`first_frame` and `max_frames` are refused with several files, because
+eitprocessing applies them to each file; cut the joined recording with
+`eit.slice_recording`. A custom loader receives the list as given.
+
+`EITRecording` has a new `paths` field listing every file (`path` is the
+first one); the provenance record of `load_eit` lists them all, and the
+data-model recorder stores one raw `DataFile` per file. Step parameters
+have a new `allow_list` field, true for a `path` parameter that also takes
+a list of paths; workflow checks resolve and check each path in the list.
+
+### `eit.load_custom` for your own EIT loader; `eit.load` needs a vendor (#106)
+
+`eit.load` reads Draeger, Sentec and Timpel files with eitprocessing, and
+its `vendor` parameter is required. It uses eitprocessing even when the
+session's EIT adapter has a loader of its own.
+
+The new step `eit.load_custom` reads a file with the loader given as
+`EITProcessingAdapter(loader=...)`, either on the session or through
+`run_workflow(..., eit_adapter=...)`. It takes `file_path` and
+`loader_options`, gives the same outputs as `eit.load`, and stops with an
+error when no loader was given.
+
+| Before | Now |
+|---|---|
+| `eit.load` with a custom loader set and no `vendor` | `eit.load_custom` |
+
+`session.load_eit()` has a new `loader` argument: `"eitprocessing"`,
+`"custom"`, or `"auto"` (default, the custom loader when there is one,
+else eitprocessing, as before). `EITProcessingAdapter` has the matching
+methods `load_with_eitprocessing` and `load_with_custom_loader`.
+
+### EMG preprocessing as separate steps; the envelope has its own step (#124)
+
+Four new workflow steps split EMG preprocessing into its parts:
+
+| Step | Does |
+|---|---|
+| `emg.select_channel` | takes one channel of the loaded EMG recording |
+| `emg.notch_filter` | removes a frequency and its harmonics (mains hum, EIT frame-rate comb) |
+| `emg.bandpass_filter` | band-pass filter, 20-500 Hz by default |
+| `emg.envelope` | RMS, ARV or median envelope over a moving window (0.25 s, RMS by default) |
+
+`emg.preprocess` runs channel selection, the notch filter and the band-pass
+filter in one step, and its settings are now listed as step parameters.
+**The envelope is computed only by `emg.envelope`**, normally after ECG
+removal:
+
+- `emg.preprocess` returns the filtered EMG with `"envelope"` None. Its
+  former `envelope_window_seconds`, `envelope_method` and
+  `compute_envelope` settings are refused with an error that names
+  `emg.envelope`.
+- `emg.ecg_gating` and `emg.ecg_wavelet_denoising` drop their
+  `envelope_window_seconds` and `envelope_method` parameters, and the
+  processed EMG they return has `"envelope"` None.
+- Steps that need the envelope stop with an error naming `emg.envelope`
+  when it is missing.
+
+| Before | Now |
+|---|---|
+| `emg.preprocess` with `envelope_window_seconds: 0.5`, then `emg.ecg_gating` with `out: { processed_emg_after_ecg: processed_emg }` | `emg.preprocess`, then `emg.ecg_gating`, then `emg.envelope` with `in: { processed_emg: processed_emg_after_ecg }`, `with: { window_seconds: 0.5 }` and `out: { processed_emg_with_envelope: processed_emg }` |
+
+The four example workflows are changed this way and give the same numbers
+as before. `session.preprocess_emg()` still filters and computes the
+envelope in one call. The `"emg"` preset runs `emg.envelope` after ECG
+gating with the window and method preprocessing used, or with
+`config={"envelope": {...}}`; its results are the same as before.
+
+The parts are also `ReSurfEMGAdapter` methods: `select_emg_channel`,
+`notch_filter_emg`, `bandpass_filter_emg` and `emg_envelope`.
+
 ### `register_step(..., record=True)` logs each call (#104)
 
 A step registered with `record=True` adds one record to

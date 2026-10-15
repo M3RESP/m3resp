@@ -128,7 +128,7 @@ steps:
   # signal. Channel 0 carries only 2.0 uV of noise.
   - id: preprocess
     uses: emg.preprocess
-    with: { channel: 1, high_pass_hz: 20, envelope_window_seconds: 0.5 }
+    with: { channel: 1, high_pass_hz: 20 }
     out: { processed_emg: processed_emg_before_ecg }
 
   - id: ecg_detect_peaks
@@ -139,7 +139,12 @@ steps:
     uses: emg.ecg_gating
     in: { processed_emg: processed_emg_before_ecg }
     with: { fill_method: 1 }
-    out: { processed_emg_after_ecg: processed_emg }
+
+  - id: envelope
+    uses: emg.envelope
+    in: { processed_emg: processed_emg_after_ecg }
+    with: { window_seconds: 0.5, method: rms }
+    out: { processed_emg_with_envelope: processed_emg }
 
   # The baseline comes first: a breath is a rise above the local quiet level,
   # and the detection threshold is taken from the envelope above that level.

@@ -36,7 +36,7 @@ def load(
     adapter: Any = None,
     **kwargs: Any,
 ) -> EMGRecording:
-    """Load an EMG recording through the Stage 1 adapter."""
+    """Load an EMG recording through the EMG adapter (`ReSurfEMGAdapter` by default)."""
 
     from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
 

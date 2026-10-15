@@ -61,12 +61,11 @@ steps:
   # Channel 1 ("EMGdi") is the diaphragm EMG channel in this fixture; channel
   # 0 ("ECG") is a dedicated reference ECG channel used for peak detection
   # below instead of the (also ECG-contaminated) EMG channel itself.
-  # ECG gating below recomputes the envelope from the gated signal, so one
-  # computed here would be discarded; envelope_window_seconds still sets the
-  # window that gating uses.
+  # emg.preprocess chooses the channel and band-pass filters it; the envelope
+  # is computed after ECG gating, from the gated signal.
   - id: preprocess
     uses: emg.preprocess
-    with: { channel: 1, envelope_window_seconds: 0.25, compute_envelope: false }
+    with: { channel: 1 }
     out: { processed_emg: processed_emg_before_ecg }
 
   - id: ecg_detect_peaks
@@ -78,7 +77,12 @@ steps:
     uses: emg.ecg_gating
     in: { processed_emg: processed_emg_before_ecg }
     with: { fill_method: 1 }
-    out: { processed_emg_after_ecg: processed_emg }
+
+  - id: envelope
+    uses: emg.envelope
+    in: { processed_emg: processed_emg_after_ecg }
+    with: { window_seconds: 0.25, method: rms }
+    out: { processed_emg_with_envelope: processed_emg }
 
   # -- EMG breath detection ---------------------------------------------------
   # The baseline comes first: a breath is a rise above the local quiet level,

@@ -17,6 +17,7 @@ from ._shared import (
     _require_percentile,
     _require_positive_seconds,
     _upstream_metadata,
+    require_envelope,
 )
 
 
@@ -88,11 +89,56 @@ def moving_baseline(
     step_seconds: float = 0.2,
     percentile: float = 33.0,
 ) -> dict[str, Any]:
+    baseline, baseline_signal, parameters = compute_moving_baseline(
+        session,
+        processed_emg,
+        window_seconds=window_seconds,
+        step_seconds=step_seconds,
+        percentile=percentile,
+    )
+    session.signals.add(baseline_signal)
+    return {
+        "baseline": baseline,
+        "baseline_signal": baseline_signal,
+        "_provenance": _upstream_metadata(
+            source_function="resurfemg.postprocessing.baseline.moving_baseline",
+            operation="emg.moving_baseline",
+            parameters=parameters,
+        ),
+    }
+
+
+def compute_moving_baseline(
+    session: M3Session,
+    processed_emg: Any,
+    *,
+    window_seconds: float = 7.5,
+    step_seconds: float = 0.2,
+    percentile: float = 33.0,
+    variant: str | None = None,
+) -> tuple[np.ndarray, Signal, dict[str, Any]]:
+    """The moving baseline of the envelope in `processed_emg`, as an array and a `Signal`.
+
+    Used by the ``emg.moving_baseline`` step and by
+    `M3Session.emg_moving_baseline`. The `Signal` is returned and is added to
+    the session by the caller. ``variant`` names the preprocessing variant
+    the envelope came from; it is added to the signal name
+    (``<channel>_moving_baseline:<variant>``) and metadata.
+
+    Returns:
+        tuple: the baseline (one value per envelope sample, in envelope
+            units), its `Signal`, and the settings used (requested seconds
+            and the window and step in samples).
+
+    Raises:
+        ValueError: If a setting is out of range or the bundle has no envelope.
+    """
+
     _require_positive_seconds("window_seconds", window_seconds)
     _require_positive_seconds("step_seconds", step_seconds)
     _require_percentile("percentile", percentile)
 
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.moving_baseline")
     fs = float(processed_emg["fs"])
     window_samples = max(1, int(window_seconds * fs))
     step_samples = max(1, int(step_seconds * fs))
@@ -102,15 +148,32 @@ def moving_baseline(
         step_samples=step_samples,
         percentile=percentile,
     )
+    parameters = {
+        "window_seconds": window_seconds,
+        "step_seconds": step_seconds,
+        "percentile": percentile,
+        "effective_window_samples": window_samples,
+        "effective_step_samples": step_samples,
+    }
 
     label, unit = _processed_channel_label_and_unit(processed_emg)
-    time = np.arange(len(envelope), dtype=float) / fs
+    name = f"{label}_moving_baseline"
+    metadata: dict[str, Any] = {
+        "requested_window_seconds": window_seconds,
+        "requested_step_seconds": step_seconds,
+        "effective_window_samples": window_samples,
+        "effective_step_samples": step_samples,
+        "percentile": percentile,
+    }
+    if variant is not None:
+        name = f"{name}:{variant}"
+        metadata["variant"] = variant
     baseline_signal = Signal(
         values=baseline,
-        time=time,
+        time=np.arange(len(envelope), dtype=float) / fs,
         sample_frequency=fs,
         unit=unit,
-        name=f"{label}_moving_baseline",
+        name=name,
         modality="emg",
         category="electrical_potential",
         channel=label,
@@ -118,30 +181,9 @@ def moving_baseline(
         processing_state="derived",
         derived_from="processed",
         method="resurfemg.moving_baseline",
-        metadata={
-            "requested_window_seconds": window_seconds,
-            "requested_step_seconds": step_seconds,
-            "effective_window_samples": window_samples,
-            "effective_step_samples": step_samples,
-            "percentile": percentile,
-        },
+        metadata=metadata,
     )
-    session.signals.add(baseline_signal)
-    return {
-        "baseline": baseline,
-        "baseline_signal": baseline_signal,
-        "_provenance": _upstream_metadata(
-            source_function="resurfemg.postprocessing.baseline.moving_baseline",
-            operation="emg.moving_baseline",
-            parameters={
-                "window_seconds": window_seconds,
-                "step_seconds": step_seconds,
-                "percentile": percentile,
-                "effective_window_samples": window_samples,
-                "effective_step_samples": step_samples,
-            },
-        ),
-    }
+    return baseline, baseline_signal, parameters
 
 
 @register_step(
@@ -274,7 +316,7 @@ def slopesum_baseline(
     _require_percentile("percentile", percentile)
     _require_percentile("augmented_percentile", augmented_percentile)
 
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.slopesum_baseline")
     fs = float(processed_emg["fs"])
     window_samples = max(1, int(window_seconds * fs))
     step_samples = max(1, int(step_seconds * fs))

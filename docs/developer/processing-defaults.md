@@ -65,7 +65,7 @@ need a short reason in the docs, or a reference.
 | `ventilator.detect_breaths` | `breath_width_seconds` | 0.5 s |
 | `ventilator.detect_pressure_breaths` | `smoothing_seconds` / `min_depth` / `min_interval_seconds` | 0.2 s / 0.15 / 2.0 s |
 | `ventilator.find_occluded_breaths` | `peep` | median airway pressure |
-| `emg.ecg_wavelet_denoising`, `emg.ecg_gating` | envelope window and method after cleaning | the ones used in `emg.preprocess` |
+| `emg.envelope` in the `"emg"` preset | envelope window and method after ECG gating | the ones recorded by `session.preprocess_emg` (0.25 s / RMS unless set) |
 
 ---
 
@@ -99,12 +99,12 @@ need a short reason in the docs, or a reference.
 
 | Step | Setting | Value | Set by |
 |---|---|---|---|
-| `emg.preprocess` | channel | picked from the channel labels | m3resp (undeclared) |
-| | band-pass edges | 20 Hz to the lower of 500 Hz and 0.95 × half the sampling rate | m3resp (undeclared), same as ReSurfEMG |
+| `emg.preprocess`, `emg.select_channel` | channel | picked from the channel labels | m3resp |
+| `emg.preprocess`, `emg.bandpass_filter` | band-pass edges | 20 Hz to the lower of 500 Hz and 0.95 × half the sampling rate | m3resp, same as ReSurfEMG |
 | | band-pass order | 3 | ReSurfEMG |
-| | envelope window / method | 0.25 s / RMS | m3resp (undeclared), same as ReSurfEMG |
-| | harmonic notch (EIT frame-rate comb) | off unless a base frequency is given | m3resp (undeclared) |
-| | notch quality factor / upper limit / applied | 30 / half the sampling rate / after the band-pass | m3resp (undeclared) |
+| `emg.preprocess`, `emg.notch_filter` | harmonic notch (EIT frame-rate comb) | off in `emg.preprocess` unless a base frequency is given | m3resp |
+| | notch quality factor / upper limit / applied | 30 / half the sampling rate / after the band-pass | m3resp |
+| `emg.envelope` | envelope window / method | 0.25 s / RMS | m3resp, same as ReSurfEMG |
 | `emg.detect_breaths` | shortest breath | 0.5 s | m3resp (undeclared) |
 | | prominence: factor × (75th + 50th percentile of the envelope above baseline) | 0.5 | m3resp (undeclared), same as ReSurfEMG |
 | | merge peaks closer than the shortest breath | no | m3resp (undeclared) |

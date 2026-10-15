@@ -33,7 +33,12 @@ from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
 from m3resp.data.processing import ProcessingHistory
 from m3resp.export.session_export import export_session_summary
-from m3resp.modalities.eit import EITRecording, frame_window, keep_frames
+from m3resp.modalities.eit import (
+    EITLoaderChoice,
+    EITRecording,
+    frame_window,
+    keep_frames,
+)
 from m3resp.modalities.eit import load as load_eit_recording
 from m3resp.modalities.emg import EMGRecording
 from m3resp.modalities.emg import keep_samples as keep_emg_samples
@@ -218,7 +223,12 @@ class M3Session:
         self.datamodel: DataModelRecorder | None = None
 
     def load_eit(
-        self, path: str | Path, vendor: str | None = None, **kwargs: Any
+        self,
+        path: str | Path | Sequence[str | Path],
+        vendor: str | None = None,
+        *,
+        loader: EITLoaderChoice = "auto",
+        **kwargs: Any,
     ) -> Any:
         """Load EIT data and store it under `raw["eit"]`.
 
@@ -226,9 +236,19 @@ class M3Session:
         time and synchronization record from before are cleared.
 
         Args:
-            path (str | Path): The EIT file to read.
+            path (str | Path | list): The EIT file to read, or a list of
+                files recorded one after the other, read as one recording.
+                The files are joined in the given order; a pause between two
+                files stays in the time axis and gives a warning. With
+                eitprocessing, ``first_frame``/``max_frames`` cannot be used
+                with several files.
             vendor (str | None): The EIT device maker, passed to
                 `eitprocessing` (for example ``"draeger"``).
+            loader (str): ``"eitprocessing"`` reads a Draeger, Sentec or
+                Timpel file and needs ``vendor``; ``"custom"`` uses the loader
+                given to `session.eit_adapter` (``EITProcessingAdapter(
+                loader=...)``); ``"auto"`` uses that custom loader when there
+                is one, else eitprocessing.
             **kwargs (Any): Passed on to the EIT file reader.
 
         Returns:
@@ -239,12 +259,20 @@ class M3Session:
             path,
             vendor=vendor,
             adapter=self.eit_adapter,
+            loader=loader,
             **kwargs,
         )
         self.eit = recording
         self.raw["eit"] = recording
         self._forget_synchronization("eit")
-        self._record("load_eit", "eit", path=str(path), vendor=vendor)
+        recorded_path: str | list[str] = (
+            [str(item) for item in recording.paths]
+            if not isinstance(path, str | Path)
+            else str(path)
+        )
+        self._record(
+            "load_eit", "eit", path=recorded_path, vendor=vendor, loader=loader
+        )
         return recording.data
 
     def load_emg(self, path: str | Path, **kwargs: Any) -> Any:
@@ -984,6 +1012,86 @@ class M3Session:
         self._record("detect_eit_breaths", "eit", variant=variant, **kwargs)
         return self.events[event_key]
 
+    def _processed_emg(self, variant: str | None) -> Any:
+        """The `preprocess_emg` result named `variant`, or the current
+        processed EMG (None when there is none) when `variant` is None."""
+
+        if variant is None:
+            return self.processed.get("emg")
+        data = self.processed_variants["emg"].get(variant)
+        if data is None:
+            raise MissingModalityDataError(
+                f"No EMG preprocessing variant {variant!r}; call "
+                f"preprocess_emg(variant={variant!r}, ...) first."
+            )
+        return data
+
+    def emg_moving_baseline(
+        self,
+        *,
+        window_seconds: float = 7.5,
+        step_seconds: float = 0.2,
+        percentile: float = 33.0,
+        variant: str | None = None,
+    ) -> Any:
+        """Compute the moving baseline of the EMG envelope (Grasshoff et al. 2021).
+
+        The baseline is the quiet level of the envelope: a percentile of the
+        envelope in a moving window. Breath detection measures its threshold
+        above this level, so compute it before `detect_emg_breaths` and pass
+        it on, with the same ``variant``::
+
+            baseline = session.emg_moving_baseline()
+            session.detect_emg_breaths(baseline=baseline)
+
+        The baseline is added to `session.signals` as
+        ``<channel>_moving_baseline`` (``<channel>_moving_baseline:<variant>``
+        for a variant), replacing the one from an earlier call, and the call
+        is recorded in `session.provenance`.
+
+        Args:
+            window_seconds (float): Window length in seconds.
+            step_seconds (float): Time between baseline updates, in seconds.
+            percentile (float): Percentile of the envelope in each window,
+                0 to 100.
+            variant (str | None): Use the `preprocess_emg` result with this
+                name; None uses the current processed EMG.
+
+        Returns:
+            numpy.ndarray: One baseline value per envelope sample, in the
+                units of the envelope.
+
+        Raises:
+            MissingModalityDataError: If there is no processed EMG (or no such
+                variant).
+            ValueError: If the processed EMG has no envelope, or a setting is
+                out of range.
+        """
+
+        from m3resp.workflows.steps.emg.baseline import compute_moving_baseline
+
+        processed = self._processed_emg(variant)
+        if processed is None:
+            raise MissingModalityDataError(
+                "No processed EMG; call preprocess_emg() first."
+            )
+        baseline, signal, parameters = compute_moving_baseline(
+            self,
+            processed,
+            window_seconds=window_seconds,
+            step_seconds=step_seconds,
+            percentile=percentile,
+            variant=variant,
+        )
+        self.signals.items[:] = [
+            existing
+            for existing in self.signals.items
+            if not (existing.modality == "emg" and existing.name == signal.name)
+        ]
+        self.signals.add(signal)
+        self._record("emg_moving_baseline", "emg", variant=variant, **parameters)
+        return baseline
+
     def detect_emg_breaths(self, *, variant: str | None = None, **kwargs: Any) -> Any:
         """Detect EMG breaths and store normalized events.
 
@@ -1000,16 +1108,11 @@ class M3Session:
             Any: The detected breaths, a list of `BreathEvent`.
         """
 
+        data = self._processed_emg(variant)
         if variant is not None:
-            data = self.processed_variants["emg"].get(variant)
-            if data is None:
-                raise MissingModalityDataError(
-                    f"No EMG preprocessing variant {variant!r}; call "
-                    f"preprocess_emg(variant={variant!r}, ...) first."
-                )
             event_key = f"emg_breaths:{variant}"
         else:
-            data = self.processed.get("emg") or self._require_raw("emg").data
+            data = data or self._require_raw("emg").data
             event_key = "emg_breaths"
         events = self.emg_adapter.detect_breaths(data, **kwargs)
         self.add_events(event_key, events)

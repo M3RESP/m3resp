@@ -508,9 +508,7 @@ class DataModelRecorder:
         if modality is not None:
             self._record_load(modality)
         if provenance.modality is not None:
-            file_id = self._files.get(provenance.modality)
-            if file_id is not None:
-                input_file_ids = [file_id]
+            input_file_ids = self._modality_file_ids(provenance.modality)
 
         run = ProcessingRun(
             name=provenance.action,
@@ -594,6 +592,16 @@ class DataModelRecorder:
         self._devices[key] = device.device_id
         return device.device_id
 
+    def _modality_file_ids(self, modality: str) -> list[str]:
+        """The raw files of one modality's recording, in recording order."""
+
+        file_ids = [self._files[modality]] if modality in self._files else []
+        index = 1
+        while f"{modality}#{index}" in self._files:
+            file_ids.append(self._files[f"{modality}#{index}"])
+            index += 1
+        return file_ids
+
     def _record_load(self, modality: str) -> None:
         if modality in self._signals:
             return
@@ -619,17 +627,24 @@ class DataModelRecorder:
             self._stream_recordings[stream.signal_id] = (modality, None)
 
             path = getattr(recording, "path", None)
-            if path is not None:
+            paths = tuple(getattr(recording, "paths", ()) or ())
+            if not paths and path is not None:
+                paths = (path,)
+            # A recording read from several files gets one DataFile each. The
+            # first is filed under the modality; the others under
+            # "<modality>#<n>", so runs that use the modality link all of them.
+            for index, file_path in enumerate(paths):
                 data_file = self.store.add_data_file(
                     DataFile(
                         session_id=self.recording_session.session_id,
                         signal_id=stream.signal_id,
-                        file_path=str(path),
-                        file_format=_infer_file_format(path),
+                        file_path=str(file_path),
+                        file_format=_infer_file_format(file_path),
                         file_role="raw",
                     )
                 )
-                self._files[modality] = data_file.file_id
+                key = modality if index == 0 else f"{modality}#{index}"
+                self._files[key] = data_file.file_id
 
     # -- workflow outputs -> DerivedFeature/QualityAnnotation/SignalStream ---
 

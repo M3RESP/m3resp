@@ -68,7 +68,7 @@ def load(
     adapter: Any = None,
     **kwargs: Any,
 ) -> VentilatorRecording:
-    """Load a ventilator recording through the Stage 1 adapter.
+    """Load a ventilator recording through the ventilator adapter.
 
     ``adapter`` defaults to
     :class:`~m3resp.adapters.ventilator_adapter.VentilatorAdapter`, which reads
@@ -104,7 +104,7 @@ def ventilator_raw(session: M3Session) -> Any:
     """The loaded ventilator recording, under either key.
 
     ``session.raw`` stores it under both ``"ventilator"`` (canonical) and
-    ``"vent"`` (the key Stage 1 shipped), pointing at the same object. Reading
+    ``"vent"`` (the key of m3resp 0.1), pointing at the same object. Reading
     through here means code stays correct whichever key a caller populated -
     including a user who assigned ``session.raw["vent"]`` directly.
     """
@@ -120,7 +120,7 @@ def ventilator_payload(recording: Any) -> dict[str, Any] | None:
 
     Accepts either a :class:`~m3resp.modalities.ventilator.VentilatorRecording`
     (which keeps it under ``.data``, like every other modality) or a bare dict,
-    which is what Stage 1 stored directly in ``session.raw["vent"]``.
+    which is what m3resp 0.1 stored directly in ``session.raw["vent"]``.
     """
 
     if isinstance(recording, dict) and "array" in recording:
