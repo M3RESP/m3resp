@@ -51,8 +51,8 @@ two files stays in the time axis and gives a warning with its length.
 eitprocessing applies them to each file; cut the joined recording with
 `eit.slice_recording`. A custom loader receives the list as given.
 
-`EITRecording` has a new `paths` field listing every file (`path` is the
-first one); the provenance record of `load_eit` lists them all, and the
+`EITRecording.path` is now `EITRecording.paths`, the files read, in
+recording order (one file gives a list of one); the provenance record of `load_eit` lists them all, and the
 data-model recorder stores one raw `DataFile` per file. Step parameters
 have a new `allow_list` field, true for a `path` parameter that also takes
 a list of paths; workflow checks resolve and check each path in the list.

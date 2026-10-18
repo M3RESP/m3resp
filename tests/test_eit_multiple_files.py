@@ -53,7 +53,6 @@ def test_two_consecutive_files_give_the_same_recording_as_one_file(two_halves):
         joined.eit.raw.pixel_impedance, whole.eit.raw.pixel_impedance
     )
     assert joined.eit.paths == tuple(Path(p) for p in two_halves)
-    assert joined.eit.path == Path(two_halves[0])
     assert joined.provenance[-1].parameters["path"] == two_halves
 
 

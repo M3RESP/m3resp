@@ -16,20 +16,15 @@ from m3resp.modalities.time_window import TimeWindow
 class EITRecording:
     """Loaded EIT recording with source metadata.
 
-    ``path`` is the (first) file read; ``paths`` lists every file when
-    several files were joined into this recording, in recording order.
+    ``paths`` lists the files read, in recording order: one file, or several
+    files joined into this recording.
     """
 
     data: Any
-    path: Path
+    paths: tuple[Path, ...]
     vendor: str | None = None
     raw: Any = None
     global_impedance: Any = None
-    paths: tuple[Path, ...] = ()
-
-    def __post_init__(self) -> None:
-        if not self.paths:
-            self.paths = (self.path,)
 
 
 EITLoaderChoice = Literal["auto", "eitprocessing", "custom"]
@@ -88,11 +83,10 @@ def load(
         global_impedance = eit_adapter.get_global_impedance(sequence)
     return EITRecording(
         data=sequence,
-        path=paths[0],
+        paths=paths,
         vendor=vendor,
         raw=raw,
         global_impedance=global_impedance,
-        paths=paths,
     )
 
 
