@@ -77,7 +77,6 @@ class TestTimeSeries:
 
 
 class TestSignal:
-    @MISSING_TEST_DATA_FILE
     def test_create_with_modality_and_channel(self):
         signal = Signal(
             values=[1.0, 2.0],

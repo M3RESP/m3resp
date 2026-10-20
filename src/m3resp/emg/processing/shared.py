@@ -36,35 +36,115 @@ from m3resp.core.exceptions import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-POSTPROCESSING_FUNCTIONS: dict[str, tuple[str, ...]] = {
-    "baseline": ("moving_baseline", "slopesum_baseline"),
-    "event_detection": (
-        "find_occluded_breaths",
-        "onoffpeak_baseline_crossing",
-        "onoffpeak_slope_extrapolation",
-        "detect_ventilator_breath",
-        "detect_emg_breaths",
-    ),
-    "features": (
-        "time_to_peak",
-        "pseudo_slope",
-        "amplitude",
-        "time_product",
-        "area_under_baseline",
-        "respiratory_rate",
-    ),
-    "quality_assessment": (
-        "snr_pseudo",
-        "pocc_quality",
-        "interpeak_dist",
-        "percentage_under_baseline",
-        "detect_local_high_aub",
-        "detect_extreme_time_products",
-        "detect_non_consecutive_manoeuvres",
-        "evaluate_bell_curve_error",
-        "evaluate_event_timing",
-        "evaluate_respiratory_rates",
-    ),
+
+# Mapping of postprocessing function names to their module and function path.
+# dict in the form of
+# {ReSurfEMG module:
+#   {ReSurfEMG function name:
+#       (m3resp module, m3resp function name)
+#   }  # noqa: ERA001
+# }  # noqa: ERA001
+import collections
+
+# dict[str, dict[str, tuple[str, str]]]
+PostProcessingFunction = collections.namedtuple(
+    "PostProcessingFunction", ["module", "function"]
+)
+POSTPROCESSING_FUNCTIONS: dict[str, dict[str, PostProcessingFunction]] = {
+    "baseline": {
+        "moving_baseline": PostProcessingFunction(
+            "m3resp.emg.processing.baseline._BaselineMixin",
+            "moving_baseline",
+        ),
+        "slopesum_baseline": PostProcessingFunction(
+            "m3resp.emg.processing.baseline._BaselineMixin",
+            "slopesum_baseline",
+        ),
+    },
+    "event_detection": {
+        "find_occluded_breaths": PostProcessingFunction(
+            "m3resp.processing.peaks",
+            "detect_occluded_breath_peaks",
+        ),
+        "onoffpeak_baseline_crossing": PostProcessingFunction(
+            "m3resp.processing.intervals",
+            "onoff_from_baseline_crossings",
+        ),
+        "onoffpeak_slope_extrapolation": PostProcessingFunction(
+            "m3resp.processing.intervals",
+            "onoff_from_slope",
+        ),
+        "detect_ventilator_breath": PostProcessingFunction(
+            "m3resp.processing.peaks",
+            "detect_ventilator_breath_peaks",
+        ),
+        "detect_emg_breaths": PostProcessingFunction(
+            "m3resp.processing.peaks", "detect_emg_breath_peaks"
+        ),
+    },
+    "features": {
+        "time_to_peak": PostProcessingFunction(
+            "m3resp.processing.metrics", "time_to_peak"
+        ),
+        "pseudo_slope": PostProcessingFunction(
+            "m3resp.processing.metrics", "pseudo_slope"
+        ),
+        "amplitude": PostProcessingFunction(
+            "m3resp.processing.metrics", "amplitude_at_peaks"
+        ),
+        "time_product": PostProcessingFunction(
+            "m3resp.processing.metrics", "window_integral"
+        ),
+        "area_under_baseline": PostProcessingFunction(
+            "m3resp.processing.metrics", "area_under_baseline"
+        ),
+        "respiratory_rate": PostProcessingFunction(
+            "m3resp.processing.metrics",
+            "respiratory_rate_from_indices",
+        ),
+    },
+    "quality_assessment": {
+        "snr_pseudo": PostProcessingFunction(
+            "m3resp.emg.processing.quality._QualityMixin",
+            "snr_pseudo",
+        ),
+        "pocc_quality": PostProcessingFunction(
+            "m3resp.emg.processing.quality._QualityMixin",
+            "pocc_quality",
+        ),
+        "interpeak_dist": PostProcessingFunction(
+            "m3resp.emg.processing.quality._QualityMixin",
+            "interpeak_distance",
+        ),
+        "percentage_under_baseline": PostProcessingFunction(
+            "m3resp.emg.processing.quality._QualityMixin",
+            "percentage_under_baseline",
+        ),
+        "detect_local_high_aub": PostProcessingFunction(
+            "m3resp.emg.processing.quality._QualityMixin",
+            "detect_local_high_aub",
+        ),
+        "detect_extreme_time_products": PostProcessingFunction(
+            "m3resp.emg.processing.quality._QualityMixin",
+            "detect_extreme_time_products",
+        ),
+        "detect_non_consecutive_manoeuvres": PostProcessingFunction(
+            "m3resp.emg.processing.quality._QualityMixin",
+            "detect_non_consecutive_manoeuvres",
+        ),
+        "evaluate_bell_curve_error": PostProcessingFunction(
+            "m3resp.emg.processing.quality._QualityMixin",
+            "evaluate_bell_curve_error",
+        ),
+        "evaluate_event_timing": PostProcessingFunction(
+            "m3resp.emg.processing.quality._QualityMixin",
+            "evaluate_event_timing",
+        ),
+        "evaluate_respiratory_rates": PostProcessingFunction(
+            "m3resp.emg.processing.quality._QualityMixin",
+            "evaluate_respiratory_rates",
+        ),
+    },
 }
 
 
@@ -90,6 +170,13 @@ def _emg_optional_dependency_error() -> OptionalDependencyError:
         "EMG postprocessing requires the optional dependency `resurfemg`. "
         'Install with `pip install "m3resp[emg]"`.'
     )
+
+
+def _convert_to_1d_array(value: np.ndarray) -> np.ndarray:
+    array = np.asarray(value)
+    if not array.ndim:
+        return array.reshape(1)
+    return array.squeeze() if array.ndim > 1 else array
 
 
 def _require_1d_array(name: str, value: np.ndarray) -> np.ndarray:

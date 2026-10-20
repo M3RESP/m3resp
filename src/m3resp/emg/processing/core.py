@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from importlib import import_module
+from importlib.util import find_spec
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
-from m3resp.core.events import BreathEvent, coerce_breath_events
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
 from m3resp.data import ParameterResult, QualityFlag, Signal
+from m3resp.data.events import BreathEvent, coerce_breath_events
 
 # from m3resp.emg.io.loaders import load
 from m3resp.processing.quality import quality_flag_from_result, skipped_quality_flag
@@ -179,12 +180,12 @@ class _CoreMixin:
         return flags
 
     # # TODO
-    # def available_postprocessing(self) -> dict[str, list[str]]:
-    #     """Return ReSurfEMG postprocessing functions exposed by M3Resp."""
-    #     return {
-    #         category: list(functions)
-    #         for category, functions in POSTPROCESSING_FUNCTIONS.items()
-    #     }
+    def available_postprocessing(self) -> dict[str, list[str]]:
+        """Return ReSurfEMG postprocessing functions exposed by M3Resp."""
+        return {
+            category: list(functions)
+            for category, functions in POSTPROCESSING_FUNCTIONS.items()
+        }
 
     # TODO
     def postprocess(
@@ -203,23 +204,51 @@ class _CoreMixin:
         )
 
     # TODO
-    # def run_postprocessing_function(
-    #     self, category: str, function_name: str, *args: Any, **kwargs: Any
-    # ) -> Any:
-    #     """Call any exposed `resurfemg.postprocessing` function by name."""
-    #     if function_name not in POSTPROCESSING_FUNCTIONS.get(category, ()):
-    #         msg = (
-    #             f"Unknown ReSurfEMG postprocessing function {category}.{function_name}."
-    #         )
-    #         raise ValueError(msg)
+    def run_postprocessing_function(
+        self, category: str, function_name: str, *args: Any, **kwargs: Any
+    ) -> Any:
+        def _import_m3resp_module_or_class(object_to_import: str) -> object:
+            name_parts = object_to_import.split(".")
 
-    #     try:
-    #         module = import_module(_POSTPROCESSING_MODULES[category])
-    #     except ImportError as exc:
-    #         msg = (
-    #             "EMG postprocessing requires the optional dependency `resurfemg`. "
-    #             'Install with `pip install "m3resp[emg]"`.'
-    #         )
-    #         raise OptionalDependencyError(msg) from exc
+            def _iter_module_parts(sub_package: str) -> tuple[object, str]:
+                try:
+                    find_spec(".".join(name_parts))
+                    return getattr(import_module(".".join(name_parts)), sub_package[1:])
+                except (ModuleNotFoundError, AttributeError):
+                    sub_package = "." + name_parts.pop() + sub_package
+                    if not name_parts:
+                        raise InvalidM3respModuleError(
+                            f"Could not find {object_to_import}."
+                        )
+                    return _iter_module_parts(sub_package), sub_package
 
-    #     return getattr(module, function_name)(*args, **kwargs)
+            return _iter_module_parts("")[0]
+
+        """Call any exposed `resurfemg.postprocessing` function by name."""
+        if function_name not in POSTPROCESSING_FUNCTIONS.get(category, ()):
+            msg = (
+                f"Unknown ReSurfEMG postprocessing function {category}.{function_name}."
+            )
+            raise ValueError(msg)
+
+        try:
+            # m3resp_module_name = POSTPROCESSING_FUNCTIONS[category][function_name][0]
+            # m3resp_function_name = POSTPROCESSING_FUNCTIONS[category][function_name][1]
+            m3resp_module = _import_m3resp_module_or_class(
+                POSTPROCESSING_FUNCTIONS[category][function_name][0]
+            )
+            m3resp_function = getattr(
+                m3resp_module, POSTPROCESSING_FUNCTIONS[category][function_name][1]
+            )
+        except ImportError as exc:
+            msg = (
+                "EMG postprocessing requires the optional dependency `resurfemg`. "
+                'Install with `pip install "m3resp[emg]"`.'
+            )
+            raise OptionalDependencyError(msg) from exc
+        _results = (
+            m3resp_function(self, *args, **kwargs)
+            if isinstance(m3resp_module, type(self.__class__))
+            else m3resp_function(*args, **kwargs)
+        )
+        return _results

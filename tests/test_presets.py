@@ -49,12 +49,11 @@ def _patch_ecg_removal_steps(
     monkeypatch: pytest.MonkeyPatch,
     calls: list[tuple[str, dict[str, Any]]],
 ) -> None:
-    """Spy on the two ECG-removal steps and the envelope step `EMGPreset` calls.
+    """Spy on the two ECG-removal steps `EMGPreset` calls.
 
     `EMGPreset` imports them lazily from their own modules, so
     patching the module attributes is what the workflow actually looks up.
     """
-
     # `import_module`, not `from ... import ecg_gating`: the package's
     # `__init__` re-exports the step *function* under the same name as its
     # module, which would shadow the module object here.

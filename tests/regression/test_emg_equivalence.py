@@ -156,7 +156,10 @@ def _synthetic_ecg_contaminated_signal(
     neurokit2 = pytest.importorskip("neurokit2")
     ecg = np.asarray(
         neurokit2.ecg_simulate(
-            duration=duration_seconds, sampling_rate=fs, heart_rate=75, random_state=42
+            duration=duration_seconds,
+            sampling_rate=fs,
+            heart_rate=75,
+            random_state=42,
         ),
         dtype=float,
     )
@@ -178,7 +181,7 @@ def test_detect_ecg_peaks_reproduces_resurfemg_exactly():
     np.testing.assert_array_equal(actual, expected)
 
 
-@GATE_CLIP_TO_0
+# @GATE_CLIP_TO_0
 @pytest.mark.parametrize("fill_method", [0, 1, 2, 3])
 def test_gate_ecg_reproduces_resurfemg_exactly_for_every_fill_method(fill_method):
     from resurfemg.preprocessing.ecg_removal import gating

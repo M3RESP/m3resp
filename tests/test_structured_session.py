@@ -59,7 +59,6 @@ def _fake_emg_preprocessed() -> dict[str, Any]:
     }
 
 
-@MISSING_TEST_DATA_FILE
 def test_preprocess_eit_populates_typed_collections_on_default_adapter_path():
     eit_adapter = EITProcessingAdapter()
     eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
@@ -77,7 +76,6 @@ def test_preprocess_eit_populates_typed_collections_on_default_adapter_path():
     assert all(isinstance(flag, QualityFlag) for flag in session.quality)
 
 
-@MISSING_TEST_DATA_FILE
 def test_preprocess_eit_with_custom_callable_does_not_populate_collections():
     session = M3Session(eit_adapter=EITProcessingAdapter())
     session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
@@ -140,7 +138,6 @@ def test_postprocess_emg_populates_parameter_results_and_quality():
     ]
 
 
-@MISSING_TEST_DATA_FILE
 def test_session_stores_eit_and_emg_signals_in_the_same_collection():
     """The Milestone 2.2 acceptance criterion, verbatim."""
 
@@ -160,7 +157,6 @@ def test_session_stores_eit_and_emg_signals_in_the_same_collection():
     assert modalities == {"eit", "emg"}
 
 
-@MISSING_TEST_DATA_FILE
 def test_preprocess_eit_raises_on_duplicate_variant():
     """Second write to an already-populated variant must not silently overwrite it.
 
@@ -183,7 +179,6 @@ def test_preprocess_eit_raises_on_duplicate_variant():
         session.preprocess_eit(variant="default")
 
 
-@MISSING_TEST_DATA_FILE
 def test_preprocess_eit_overwrite_true_replaces_existing_variant():
     eit_adapter = EITProcessingAdapter()
     eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
@@ -198,7 +193,6 @@ def test_preprocess_eit_overwrite_true_replaces_existing_variant():
     assert session.processed_variants["eit"]["default"] is second
 
 
-@MISSING_TEST_DATA_FILE
 def test_session_allow_overwrite_lets_repeated_preprocess_calls_through():
     """`allow_overwrite` lets notebook code opt in once instead of passing
     `overwrite=True` on every call, without weakening the default guard for
@@ -216,7 +210,6 @@ def test_session_allow_overwrite_lets_repeated_preprocess_calls_through():
     assert session.processed["eit"] is second
 
 
-@MISSING_TEST_DATA_FILE
 def test_session_allow_overwrite_defaults_to_false():
     eit_adapter = EITProcessingAdapter()
     eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
@@ -229,7 +222,6 @@ def test_session_allow_overwrite_defaults_to_false():
         session.preprocess_eit()
 
 
-@MISSING_TEST_DATA_FILE
 def test_preprocess_eit_distinct_variants_coexist_without_touching_default():
     eit_adapter = EITProcessingAdapter()
     eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]

@@ -67,6 +67,7 @@ GRANULAR_SPEC = {
 }
 
 
+# NOTE AssertionError
 def test_granular_emg_workflow_matches_monolithic_postprocess():
     result = run_workflow(GRANULAR_SPEC)
 
@@ -79,6 +80,7 @@ def test_granular_emg_workflow_matches_monolithic_postprocess():
     ventilator = reference_session.emg_adapter.load(str(VENT_PATH), verbose=False)
     reference = reference_session.postprocess_emg(
         ventilator=ventilator,
+        ventilator_breath_width_seconds=0.5,
         selected_functions={
             "baseline": {"moving_baseline": True},
             "event_detection": {

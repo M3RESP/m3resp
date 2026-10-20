@@ -56,7 +56,6 @@ class FakeIntervals:
     values: ClassVar = [FakeBreath()]
 
 
-@MISSING_TEST_DATA_FILE
 def test_load_eit_sets_preferred_and_legacy_session_slots():
     sequence = FakeSequence()
     session = M3Session(
@@ -125,7 +124,6 @@ def test_default_detection_reads_processed_breath_intervals():
     assert events[0].extremum_time == 1.5
 
 
-@MISSING_TEST_DATA_FILE
 def test_top_level_and_modality_load_helpers_return_recordings():
     sequence = FakeSequence()
     adapter = EITProcessingAdapter(loader=lambda *args, **kwargs: sequence)

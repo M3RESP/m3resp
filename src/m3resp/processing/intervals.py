@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from m3resp.data.events import BreathEvent
-from m3resp.core.events import BreathEvent
+from m3resp.data.events import BreathEvent
 from m3resp.processing.windows import compute_derivative
 
 if TYPE_CHECKING:

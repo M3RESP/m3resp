@@ -50,22 +50,12 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.core.exceptions import OptionalDependencyError, MutuallyExclusiveArgsError
-from m3resp.emg.processing.shared import (
+from m3resp.core.exceptions import MutuallyExclusiveArgsError, OptionalDependencyError
+from m3resp.processing.captures import capture_value
+from m3resp.processing.validation import (
     _require_sampling_frequency,
     _validate_incompatible_kwargs,
 )
-from m3resp.processing.captures import capture_value
-
-
-def _require_sampling_frequency(sample_frequency: float | None) -> float:
-    if sample_frequency is None:
-        msg = "sample_frequency is required."
-        raise ValueError(msg)
-    if not np.isfinite(sample_frequency) or sample_frequency <= 0:
-        msg = f"sample_frequency must be finite and positive; got {sample_frequency!r}."
-        raise ValueError(msg)
-    return float(sample_frequency)
 
 
 def detect_peaks(

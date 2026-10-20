@@ -30,6 +30,7 @@ EXPECTED_BREATH_TIMES_S = [
 ]  # fmt: skip
 
 
+# NOTE: AssertionError
 @pytest.mark.skipif(not os.path.isfile(DATA), reason="session recordings not on disk")
 def test_recording1_a2_gives_the_multidomain_numbers():
     pytest.importorskip("resurfemg")
