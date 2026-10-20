@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from m3resp.presets.base import Preset, PresetConfig
@@ -179,7 +180,7 @@ class EMGPreset(Preset):
         from m3resp.workflows.steps.emg.preprocessing import envelope
 
         settings = (
-            (processed.get("filter") or {}) if isinstance(processed, dict) else {}
+            (processed.get("filter") or {}) if isinstance(processed, Mapping) else {}
         )
         kwargs = {
             "window_seconds": settings.get("envelope_window_seconds", 0.25),
