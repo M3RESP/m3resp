@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 
 import m3resp
 
@@ -76,6 +77,11 @@ docs_dir = os.path.dirname(os.path.abspath(__file__))
 os.environ["M3RESP_EXAMPLE_DATA"] = os.path.join(
     os.path.dirname(docs_dir), "tests", "data"
 )
+
+# Each build writes one page per function or class of the API reference to
+# ``docs/api/generated``. The folder is emptied first, so it holds only the pages
+# of the names that m3resp exports now, also after a switch between branches.
+shutil.rmtree(os.path.join(docs_dir, "api", "generated"), ignore_errors=True)
 sphinx_gallery_conf = {
     "examples_dirs": "tutorials_src",
     "gallery_dirs": "tutorials",
