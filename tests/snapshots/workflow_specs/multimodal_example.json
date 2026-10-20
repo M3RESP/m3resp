@@ -190,7 +190,7 @@
       "uses": "emg.envelope",
       "with": {
         "method": "rms",
-        "window_seconds": 0.5
+        "window_seconds": 0.25
       }
     },
     {
