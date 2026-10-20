@@ -422,17 +422,38 @@ class DataModelRecorder:
         target_type: TargetType | None = None,
         target_id: str | None = None,
     ) -> QualityAnnotation:
-        """Materialize a ``QualityFlag`` as a ``QualityAnnotation``.
+        """Convert a ``QualityFlag`` into a stored ``QualityAnnotation``.
 
-        Without an explicit target, this annotates the ``SignalStream``
-        already recorded for ``flag.modality``, falling back to the session
-        itself if no such stream exists yet (e.g. a session-level check).
+        One flag gives one annotation. The flag's fields are copied as follows:
 
-        One flag gives one annotation. The flag's ``start_time``/``end_time``
-        (seconds) become the annotation's time window. Its breaths become
-        ``breath_ids``: ``[breath_id]`` for a flag about one breath, the
-        flag's ``breath_ids`` for a flag about several breaths, and None
-        for a flag about no specific breath.
+        ================================  ======================  =====
+        QualityFlag                       QualityAnnotation       Notes
+        ================================  ======================  =====
+        ``start_time``, ``end_time``      ``time_window_start``,  Seconds.
+                                          ``time_window_end``
+        ``breath_id`` or ``breath_ids``   ``breath_ids``          One ``breath_id`` becomes a list
+                                                                  of one. None if no breath is set.
+        ``passed``                        ``quality_label``       ``"valid"`` or ``"suspect"``.
+        ``name``                          ``annotator_ref``
+        ================================  ======================  =====
+
+        ``annotation_source`` is always ``"automated"``.
+
+        If ``target_id`` is None, the annotation points to the ``SignalStream``
+        recorded for the flag's ``modality``, matched on ``category`` when the
+        flag sets one. If the flag has no modality, or no stream is recorded
+        for it yet, the annotation points to the session, with ``target_type``
+        ``"session"`` and the session ID as ``target_id``.
+
+        Args:
+            flag: The ``QualityFlag`` to convert.
+            target_type: Kind of record the annotation points to. Defaults to
+                ``"signal"``.
+            target_id: ID of the record the annotation points to. If None, it
+                is looked up from the flag as described above.
+
+        Returns:
+            QualityAnnotation: The annotation added to the store.
         """
 
         resolved_type: TargetType = target_type or "signal"
