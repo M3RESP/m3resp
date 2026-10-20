@@ -51,6 +51,31 @@ def default_low_pass_hz(sample_frequency: float) -> float:
     return min(sample_frequency / 2 * 0.95, 500)
 
 
+def notch_max_frequency_hz(
+    sample_frequency: float, max_frequency: float | None
+) -> float:
+    """Highest harmonic the notch filter removes, in Hz.
+
+    None or zero gives the Nyquist frequency (half the sampling rate). A value
+    above the Nyquist frequency is lowered to it, with a warning, because the
+    filter removes no harmonics above it.
+    """
+
+    nyquist = sample_frequency / 2
+    if not max_frequency:
+        return nyquist
+    if max_frequency > nyquist:
+        warnings.warn(
+            f"Notch filter max_frequency ({max_frequency} Hz) is above the "
+            f"Nyquist frequency ({nyquist} Hz for a sampling rate of "
+            f"{sample_frequency} Hz); harmonics are removed up to {nyquist} Hz.",
+            UserWarning,
+            stacklevel=3,
+        )
+        return nyquist
+    return max_frequency
+
+
 class _DefaultsMixin:
     def _preprocess_default(
         self,
@@ -97,7 +122,8 @@ class _DefaultsMixin:
             compute_envelope: Calculate the envelope when True.
             notch_base_frequency: Optional fundamental notch frequency in Hz.
             notch_max_frequency: Upper harmonic notch frequency in Hz; an unset
-                or zero value uses Nyquist.
+                or zero value uses Nyquist. A value above Nyquist is lowered to
+                it, with a warning.
             notch_quality_factor: Quality factor for harmonic notch filters.
             notch_before_bandpass: Apply the notch to raw data before band-pass
                 filtering when True; otherwise notch the band-passed data.
@@ -119,6 +145,8 @@ class _DefaultsMixin:
         raw = processed["raw_channel"]
         if low_pass_hz is None:
             low_pass_hz = default_low_pass_hz(fs)
+        if notch_base_frequency is not None:
+            notch_max_frequency = notch_max_frequency_hz(fs, notch_max_frequency)
 
         def notch(values: Any, base_frequency: float) -> Any:
             return self.notch_filter_emg(
@@ -163,9 +191,7 @@ class _DefaultsMixin:
                 "envelope_method": envelope_method,
                 "notch_base_frequency": notch_base_frequency,
                 "notch_max_frequency": (
-                    (notch_max_frequency or (fs / 2))
-                    if notch_base_frequency is not None
-                    else None
+                    notch_max_frequency if notch_base_frequency is not None else None
                 ),
                 "notch_quality_factor": (
                     notch_quality_factor if notch_base_frequency is not None else None

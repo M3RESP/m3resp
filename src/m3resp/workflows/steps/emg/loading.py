@@ -188,7 +188,7 @@ _ENVELOPE_SETTINGS = ("envelope_window_seconds", "envelope_method", "compute_env
             default=None,
             unit="Hz",
             minimum=0,
-            description="Highest harmonic the notch filter removes. Left unset: the Nyquist frequency.",
+            description="Highest harmonic the notch filter removes. Left unset: the Nyquist frequency. A value above the Nyquist frequency is lowered to it, with a warning.",
             advanced=True,
         ),
         StepParameter(

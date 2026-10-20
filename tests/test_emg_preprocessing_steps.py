@@ -150,6 +150,32 @@ def test_filters_refuse_a_trace_already_cleaned_of_ecg():
         notch_filter(M3Session(), bundle, base_frequency=50.0)
 
 
+def test_notch_max_frequency_above_nyquist_warns_and_records_nyquist():
+    with pytest.warns(UserWarning, match="above the Nyquist frequency"):
+        after = notch_filter(
+            M3Session(),
+            _bundle(np.ones(4096)),
+            base_frequency=50.0,
+            max_frequency=2000.0,
+        )["processed_emg_after_notch"]
+
+    assert after["filter"]["notch_max_frequency"] == FS / 2
+
+
+def test_emg_preprocess_records_nyquist_for_a_notch_max_frequency_above_it(
+    loaded_session,
+):
+    with pytest.warns(UserWarning, match="above the Nyquist frequency"):
+        processed = preprocess(
+            loaded_session,
+            channel=1,
+            notch_base_frequency=50.0,
+            notch_max_frequency=2000.0,
+        )["processed_emg"]
+
+    assert processed["filter"]["notch_max_frequency"] == FS / 2
+
+
 def test_bandpass_refuses_a_lower_cutoff_above_the_upper_one():
     with pytest.raises(ValueError, match="must be below"):
         bandpass_filter(

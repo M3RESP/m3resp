@@ -117,6 +117,11 @@ gating with the window and method preprocessing used, or with
 The parts are also `ReSurfEMGAdapter` methods: `select_emg_channel`,
 `notch_filter_emg`, `bandpass_filter_emg` and `emg_envelope`.
 
+A notch `max_frequency` above the Nyquist frequency (half the sampling
+rate) gives a warning and is lowered to the Nyquist frequency, in
+`emg.notch_filter` and `emg.preprocess`. The recorded
+`notch_max_frequency` is the frequency the filter used.
+
 ### `register_step(..., record=True)` logs each call (#104)
 
 A step registered with `record=True` adds one record to

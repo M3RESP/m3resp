@@ -20,7 +20,10 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.adapters.resurfemg_adapter._defaults import default_low_pass_hz
+from m3resp.adapters.resurfemg_adapter._defaults import (
+    default_low_pass_hz,
+    notch_max_frequency_hz,
+)
 from m3resp.core.session import M3Session
 from m3resp.data import Signal
 from m3resp.data.signals import ProcessingState
@@ -195,7 +198,7 @@ def select_channel(session: M3Session, *, channel: int | None = None) -> dict[st
             default=None,
             unit="Hz",
             minimum=0,
-            description="Highest harmonic to remove. Left unset, harmonics up to the Nyquist frequency are removed.",
+            description="Highest harmonic to remove. Left unset, harmonics up to the Nyquist frequency are removed. A value above the Nyquist frequency is lowered to it, with a warning.",
         ),
         StepParameter(
             name="quality_factor",
@@ -236,6 +239,7 @@ def notch_filter(
         processed_emg: Bundle from an earlier preprocessing step.
         base_frequency: Lowest frequency to remove, in Hz.
         max_frequency: Highest harmonic to remove, in Hz; None uses Nyquist.
+            A value above Nyquist is lowered to it, with a warning.
         quality_factor: Quality factor of each notch.
 
     Returns:
@@ -253,6 +257,7 @@ def notch_filter(
     _require_positive_seconds("quality_factor", quality_factor)
     source, values = _filter_input(processed_emg, "emg.notch_filter")
     fs = float(processed_emg["fs"])
+    max_frequency = notch_max_frequency_hz(fs, max_frequency)
     filtered = session.emg_adapter.notch_filter_emg(
         values,
         sample_frequency=fs,
@@ -262,7 +267,7 @@ def notch_filter(
     )
     settings = {
         "notch_base_frequency": base_frequency,
-        "notch_max_frequency": max_frequency or (fs / 2),
+        "notch_max_frequency": max_frequency,
         "notch_quality_factor": quality_factor,
         # True when the band-pass filter has not run yet.
         "notch_before_bandpass": "high_pass_hz"
