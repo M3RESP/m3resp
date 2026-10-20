@@ -68,7 +68,7 @@ To see all workflow steps, run `m3resp steps`.
 
 M3Resp is not on PyPI yet. Install it from this repository, in a new virtual environment (see the guides for [venv](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) or [conda](https://docs.conda.io/projects/conda/en/stable/user-guide/getting-started.html)).
 
-The example recordings in `tests/data` are stored with [Git LFS](https://git-lfs.com). Install `git-lfs` and run `git lfs install` once, before you clone the repository.
+The example recordings in `tests/data` are stored with [Git LFS](https://git-lfs.com). Install `git-lfs` and run `git lfs install` once, before you clone the repository. If you cloned the repository before you installed `git-lfs`, run `git lfs pull` in the repository folder to download the recordings.
 
 ```bash
 git clone https://github.com/M3RESP/m3resp.git
@@ -116,7 +116,7 @@ The options install both packages from their `m3resp-integration` branch. [pypro
 
 ## Documentation
 
-The documentation is in the [docs](docs/index.md) folder:
+The documentation website is <https://m3resp.github.io/m3resp/>. Its source is in the [docs](docs/index.md) folder:
 
 - [Getting started](docs/getting-started.md): installation and a first workflow.
 - [Tutorials](docs/tutorials_src/): EIT only, EMG only, and EIT, EMG and ventilator together. Each tutorial is a Python script that you can run.
@@ -125,6 +125,8 @@ The documentation is in the [docs](docs/index.md) folder:
 - [Workflows](docs/workflows.md): the workflow file format and the list of steps.
 - [API reference](docs/api/index.md): the Python functions and classes.
 - [Migration guide](docs/developer/migration.md): how to move from `eitprocessing` or `resurfemg` code to M3Resp.
+
+To build the website on your computer, see [CONTRIBUTING.md](CONTRIBUTING.md#documentation).
 
 ## Relation to eitprocessing and ReSurfEMG
 

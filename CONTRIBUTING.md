@@ -51,6 +51,8 @@ Write docstrings and comments as `AGENTS.md` describes. See the [testing page](d
 
 ## Documentation
 
+The build runs each tutorial on the example recordings in `tests/data`, so these files must be present. If your clone has only the small Git LFS placeholder files, run `git lfs pull` first.
+
 Install the documentation tools and build the website:
 
 ```bash
