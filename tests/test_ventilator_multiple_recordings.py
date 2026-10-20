@@ -101,6 +101,7 @@ class TestPositionalProducersNowResolveByName:
             "volume": 0,
         }
 
+    # NOTE: AssertionError
     def test_emg_postprocessing_lets_labels_beat_column_order(self):
         # Postprocessing used to pass columns 0/1/2 itself, which overrode the
         # labels. The same recording with its columns shuffled (and labelled)

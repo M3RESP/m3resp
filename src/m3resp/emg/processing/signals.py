@@ -6,19 +6,21 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
 from m3resp.core.exceptions import OptionalDependencyError
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from m3resp.core.events import BreathEvent
+    from m3resp.data.events import BreathEvent
 
 
-#TODO
+# TODO
 def ventilator_signals(
     ventilator: Any | None,
     *,
-    pressure_channel: int,
+    airway_pressure_channel: int,
     flow_channel: int,
     volume_channel: int,
     fs: float | None = None,
@@ -45,19 +47,25 @@ def ventilator_signals(
 
     array = np.asarray(array, dtype=float)
     return {
-        "pressure": np.asarray(array[pressure_channel], dtype=float),
+        "pressure": np.asarray(array[airway_pressure_channel], dtype=float),
         "flow": np.asarray(array[flow_channel], dtype=float),
         "volume": np.asarray(array[volume_channel], dtype=float),
         "fs": float(vent_fs),
         "metadata": metadata,
     }
 
-#TODO
+
 def peak_indices_from_events(
     events: Sequence[BreathEvent] | None, fs: float
-) -> list[int]:
+) -> np.ndarray:
+    """Get the sample indices of the peak times of `events` at sampling rate `fs`."""
     if events is None:
-        return []
-    return [
-        int(event.peak_time * fs) for event in events if event.peak_time is not None
-    ]
+        return np.array([], dtype=int)
+    return np.asarray(
+        [
+            int(event.extremum_time * fs)
+            for event in events
+            if event.extremum_time is not None
+        ],
+        dtype=int,
+    )

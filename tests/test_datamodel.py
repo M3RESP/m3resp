@@ -56,7 +56,6 @@ def test_store_rejects_quality_annotation_for_an_unknown_target():
         )
 
 
-@MISSING_TEST_DATA_FILE
 def test_store_accepts_quality_annotations_for_every_target_type():
     store = DataModelStore()
     case = store.add_case(Case())

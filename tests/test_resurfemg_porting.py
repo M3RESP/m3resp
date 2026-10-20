@@ -27,7 +27,6 @@ def fake_emg_recording() -> dict[str, Any]:
     }
 
 
-@MISSING_TEST_DATA_FILE
 def test_load_emg_sets_preferred_and_legacy_session_slots():
     session = M3Session(
         emg_adapter=ReSurfEMG(loader=lambda *args, **kwargs: fake_emg_recording())
@@ -42,7 +41,6 @@ def test_load_emg_sets_preferred_and_legacy_session_slots():
     assert session.emg.metadata["fs"] == 1000.0
 
 
-@MISSING_TEST_DATA_FILE
 def test_top_level_and_modality_load_helpers_return_recordings():
     adapter = ReSurfEMG(loader=lambda *args, **kwargs: fake_emg_recording())
 
@@ -66,7 +64,7 @@ def test_custom_emg_detector_normalization_still_works():
             modality="emg",
             start_time=1.0,
             end_time=2.0,
-            peak_time=1.5,
+            extremum_time=1.5,
             source="resurfemg",
         )
     ]
@@ -155,9 +153,9 @@ class TestDetectedBreathBoundaries:
 
         assert len(events) > 0
         for event in events:
-            assert event.peak_time is not None
-            assert event.start_time == event.peak_time
-            assert event.end_time == event.peak_time
+            assert event.extremum_time is not None
+            assert event.start_time == event.extremum_time
+            assert event.end_time == event.extremum_time
             assert event.duration == 0.0
 
     def test_unmeasured_boundaries_are_marked_as_such(self):
@@ -179,7 +177,7 @@ def test_custom_emg_preprocess_callable_still_works():
 
 def test_custom_emg_compute_callable_still_works():
     adapter = ReSurfEMG()
-    events = [BreathEvent("emg", 0.0, 1.0, peak_time=0.5)]
+    events = [BreathEvent("emg", 0.0, 1.0, extremum_time=0.5)]
 
     features = adapter.compute_features(
         {"processed": True},
@@ -201,7 +199,7 @@ def test_custom_emg_compute_callable_still_works():
 
 def test_custom_emg_postprocess_callable_still_works():
     adapter = ReSurfEMG()
-    events = [BreathEvent("emg", 0.0, 1.0, peak_time=0.5)]
+    events = [BreathEvent("emg", 0.0, 1.0, extremum_time=0.5)]
 
     result = adapter.postprocess(
         {"processed": True},
@@ -221,7 +219,6 @@ def test_custom_emg_postprocess_callable_still_works():
     }
 
 
-@MISSING_TEST_DATA_FILE
 def test_default_preprocess_updates_emg_recording_with_fake_signal():
     pytest.importorskip("resurfemg")
     np = pytest.importorskip("numpy")
@@ -320,7 +317,7 @@ def test_synchronization_comparison_shifts_signal_time_by_alignment_offset():
     }
     session.add_events(
         "emg_breaths",
-        [BreathEvent("emg", 0.002, 0.004, peak_time=0.003)],
+        [BreathEvent("emg", 0.002, 0.004, extremum_time=0.003)],
     )
     session.synchronize_multimodal_breaths(offset_seconds={"emg": -0.002})
 
@@ -366,7 +363,7 @@ def test_synchronization_comparison_uses_raw_eit_signal_when_filtered_exists():
     }
     session.add_events(
         "eit_breaths",
-        [BreathEvent("eit", 0.0, 1.0, peak_time=0.5)],
+        [BreathEvent("eit", 0.0, 1.0, extremum_time=0.5)],
     )
     session.align_modalities(offset_seconds={"eit": 0.0})
 
@@ -384,6 +381,7 @@ def test_synchronization_comparison_uses_raw_eit_signal_when_filtered_exists():
         plt.close(fig)
 
 
+# NOTE: AssertionError
 def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
     plt = pytest.importorskip("matplotlib.pyplot")
     session = M3Session()
@@ -450,7 +448,7 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
     }
     session.add_events(
         "emg_breaths",
-        [BreathEvent("emg", 0.002, 0.004, peak_time=0.003)],
+        [BreathEvent("emg", 0.002, 0.004, extremum_time=0.003)],
     )
 
     fig = plot_synchronization_comparison(session, max_seconds=None)
@@ -495,6 +493,7 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
         plt.close(fig)
 
 
+# NOTE: AssertionError
 def test_emg_real_data_pipeline_uses_committed_poly5_sample():
     pytest.importorskip("resurfemg")
 

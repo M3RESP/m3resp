@@ -31,8 +31,8 @@ class _PreprocessingOpsProtocol(Protocol):  # noqa: PYI046 -- used as a `self` a
         signal: np.ndarray,
         peak_indices: np.ndarray,
         *,
-        gate_width_samples: int = 205,
-        fill_method: int = 1,
+        gate_width_samples: int = ...,
+        fill_method: int = ...,
         capture_mask: dict[str, Any] | None = None,
     ) -> np.ndarray: ...
 
@@ -43,9 +43,9 @@ class _PreprocessingOpsProtocol(Protocol):  # noqa: PYI046 -- used as a `self` a
         *,
         sample_frequency: float,
         hard_thresholding: bool = True,
-        levels: int = 4,
-        wavelet_type: str = "db2",
-        fixed_threshold: float = 4.5,
+        levels: int = ...,
+        wavelet_type: str = ...,
+        fixed_threshold: float = ...,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: ...
 
     def detect_ecg_peaks(
@@ -53,7 +53,7 @@ class _PreprocessingOpsProtocol(Protocol):  # noqa: PYI046 -- used as a `self` a
         signal: np.ndarray,
         *,
         sample_frequency: float,
-        peak_fraction: float = 0.4,
+        peak_fraction: float = ...,
         peak_width_samples: int | None = None,
         peak_distance_samples: int | None = None,
         apply_bandpass_filter: bool = True,

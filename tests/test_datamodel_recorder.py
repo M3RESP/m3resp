@@ -44,7 +44,6 @@ def _temp_steps():
     STEP_REGISTRY.pop("t.constant", None)
 
 
-@MISSING_TEST_DATA_FILE
 def test_recorder_mirrors_loads_and_provenance_into_store():
     session = M3Session(
         eit_adapter=EITProcessingAdapter(
@@ -96,7 +95,6 @@ def test_workflow_run_populates_derived_features_when_datamodel_attached():
     assert run.name == "demo"
 
 
-@MISSING_TEST_DATA_FILE
 def test_record_signal_materializes_signal_stream_and_data_file():
     session = M3Session()
     store = DataModelStore()
@@ -490,7 +488,6 @@ def test_workflow_result_prefers_layer1_objects_over_bare_scalars():
         STEP_REGISTRY.pop("t.layer1", None)
 
 
-@MISSING_TEST_DATA_FILE
 def test_export_store_writes_one_json_file_per_table(tmp_path):
     session = M3Session(
         eit_adapter=EITProcessingAdapter(

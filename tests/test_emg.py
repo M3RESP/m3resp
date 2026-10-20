@@ -29,7 +29,6 @@ def fake_emg_recording() -> dict[str, Any]:
     }
 
 
-@MISSING_TEST_DATA_FILE
 def test_load_emg_sets_preferred_and_legacy_session_slots():
     session = M3Session(
         emg_adapter=ReSurfEMG(loader=lambda *args, **kwargs: fake_emg_recording())
@@ -44,7 +43,6 @@ def test_load_emg_sets_preferred_and_legacy_session_slots():
     assert session.emg.metadata["fs"] == 1000.0
 
 
-@MISSING_TEST_DATA_FILE
 def test_top_level_and_modality_load_helpers_return_recordings():
     adapter = ReSurfEMG(loader=lambda *args, **kwargs: fake_emg_recording())
 
@@ -246,7 +244,6 @@ def test_custom_emg_postprocess_callable_still_works():
     }
 
 
-@MISSING_TEST_DATA_FILE
 def test_default_preprocess_updates_emg_recording_with_fake_signal():
     pytest.importorskip("resurfemg")
     np = pytest.importorskip("numpy")
@@ -281,7 +278,6 @@ class TestEMGChannelChoice:
     asked instead of channel 0 being used silently.
     """
 
-    @MISSING_TEST_DATA_FILE
     @staticmethod
     def _session(labels):
         pytest.importorskip("resurfemg")
@@ -302,7 +298,6 @@ class TestEMGChannelChoice:
         session.load_emg("subject.Poly5")
         return session
 
-    @MISSING_TEST_DATA_FILE
     def test_the_ecg_channel_is_skipped(self):
         session = self._session(["ECG", "EMGdi"])
 
@@ -310,7 +305,6 @@ class TestEMGChannelChoice:
 
         assert processed["channel"] == 1
 
-    @MISSING_TEST_DATA_FILE
     def test_unclear_channel_names_ask_for_a_channel(self):
         session = self._session(["emg_0", "emg_1"])
 
@@ -319,7 +313,6 @@ class TestEMGChannelChoice:
         ):
             session.preprocess_emg()
 
-    @MISSING_TEST_DATA_FILE
     def test_a_given_channel_is_always_used(self):
         session = self._session(["emg_0", "emg_1"])
 
@@ -574,6 +567,7 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
         plt.close(fig)
 
 
+# NOTE: TypeError
 def test_emg_real_data_workflow_uses_committed_poly5_sample():
     pytest.importorskip("resurfemg")
 
@@ -633,7 +627,7 @@ def test_emg_real_data_workflow_uses_committed_poly5_sample():
     )
 
 
-@MISSING_TEST_DATA_FILE
+# NOTE: AssertionError
 def test_emg_preset_runs_end_to_end_and_reports_respiratory_rate():
     """`session.run_pipeline("emg")` on a made-up recording breathing at
     12 breaths/min. This once crashed while saving the respiratory rate.

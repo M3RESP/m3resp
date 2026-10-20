@@ -95,7 +95,8 @@ addopts = "-m 'not real_data'"
 markers = [
   "real_data: runs on recorded data from tests/regression/real_data/datasets.yaml",
 ]
-pythonpath = ["tests"] 
+pythonpath = ["tests"]
+addopts = "-p no:dash -p no:anyio"
 
 [tool.marimo.runtime]
 # Raise the cell-output size cap (marimo default 8 MB) so the multimodal viewer

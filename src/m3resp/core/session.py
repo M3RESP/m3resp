@@ -129,7 +129,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from pathlib import Path
 
-    from m3resp.core.events import BreathEvent
+    from m3resp.data.events import BreathEvent
     from m3resp.data.linked_breath import LinkedBreath
     from m3resp.data.parameters import ParameterResult
     from m3resp.datamodel.recorder import DataModelRecorder
@@ -1313,7 +1313,6 @@ class M3Session:
         Returns:
             list[Any]: The stored events.
         """
-
         self.events[name] = list(events)
         return self.events[name]
 
@@ -1328,7 +1327,6 @@ class M3Session:
         Returns:
             Any: The stored events, or `default`.
         """
-
         return self.events.get(name, default)
 
     def postprocess_emg(self, **kwargs: Any) -> Any:
@@ -1349,7 +1347,6 @@ class M3Session:
                 the settings used (``"settings"``). Also stored in
                 `session.parameters["emg_postprocessing"]`.
         """
-
         data = self.processed.get("emg") or self._require_raw("emg").data
         events = self.events.get("emg_breaths")
         self.parameters["emg_postprocessing"] = self.emg_adapter.postprocess(

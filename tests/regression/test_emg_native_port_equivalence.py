@@ -39,7 +39,7 @@ pytest.importorskip("pywt")
 
 from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
 from m3resp.adapters.resurfemg_adapter import _signals as adapter_signals
-from m3resp.core.events import BreathEvent
+from m3resp.data.events import BreathEvent
 from m3resp.emg import ReSurfEMG as ReSurfEMGNative
 from m3resp.emg.processing import signals as native_signals
 
@@ -50,59 +50,19 @@ VENT_FS = 100
 ECG_FS = 2048
 
 
-# def _known_divergence(reason: str) -> pytest.MarkDecorator:
-#     return pytest.mark.xfail(condition=True, strict=False, reason=reason, run=True)
-
-
-# GATE_INTERP_AT_END = _known_divergence(
-#     "native `_gate_fill_interp` clips the post-gate index to `max_samples` "
-#     "instead of `max_samples - 1` (IndexError when a gate reaches the end of "
-#     "the signal) and treats index 0 as out of bounds via `np.where(pre, ...)`."
-# )
-# WAVELET_THRESHOLD = _known_divergence(
-#     "native `wavelet_denoise_ecg` computes `fixed_threshold & std_estimate` "
-#     "(bitwise and, TypeError) instead of `*`, and never fills `thresholds`."
-# )
-# # FIXED
-# SLOPESUM_BASELINE = _known_divergence(
-#     "native `slopesum_baseline` omits upstream's 1.2 scale factor on the "
-#     "baseline and computes the running mean/std over `moving_average_samples` "
-#     "instead of `window_samples`."
-# )
-# # FIXED
-# SLOPESUM_DEFAULT_PERCENTILE_WINDOW = _known_divergence(
-#     "native `slopesum_baseline` defaults `percentile_window_samples` to "
-#     "`fs // 2`; upstream defaults `perc_window` to `fs` (plus the "
-#     "SLOPESUM_BASELINE divergence)."
-# )
-# # FIXED
-# BELL_CURVE_RETURN_ORDER = _known_divergence(
-#     "`evaluate_bell_curve_error` return slots 1 and 2 are swapped: upstream "
-#     "(and hence the adapter) returns (valid, bell_error, percentage, ...), the "
-#     "native port returns (valid, percentage, bell_error, ...)."
-# )
-# AUB_REFERENCE_SIGNAL = _known_divergence(
-#     "upstream `percentage_under_baseline` ignores `ref_signal` (it passes "
-#     "`ref_signal=signal` to `area_under_baseline`); the native port honours "
-#     "`reference_signal`."
-# )
-# EVENT_TIMING_DEFAULTS = _known_divergence(
-#     "`evaluate_event_timing` defaults differ: adapter (min_delta=-0.5, "
-#     "max_delta=2.0), native (min_delta=0.0, max_delta=None)."
-# )
-# VENTILATOR_SIGNALS_HELPER = _known_divergence(
-#     "the adapter's `ventilator_signals` delegates to "
-#     "`ventilator_adapter.split_channels` (label-based resolution, extra "
-#     "`origins` key); the native copy still indexes fixed columns."
-# )
-
-
 # -- comparison helper -------------------------------------------------------
 
 
 def assert_identical(actual: Any, expected: Any, path: str = "result") -> None:
     """Recursively assert that two results are exactly equal (NaN == NaN)."""
-
+    if isinstance(expected, np.ndarray) or isinstance(actual, np.ndarray):
+        actual_array = np.asarray(actual)
+        expected_array = np.asarray(expected)
+        assert actual_array.shape == expected_array.shape, (
+            f"{path}: shape {actual_array.shape} != {expected_array.shape}"
+        )
+        np.testing.assert_array_equal(actual_array, expected_array, err_msg=path)
+        return
     if isinstance(expected, tuple | list):
         assert isinstance(actual, tuple | list), f"{path}: expected a sequence"
         assert len(actual) == len(expected), f"{path}: length differs"
@@ -112,14 +72,6 @@ def assert_identical(actual: Any, expected: Any, path: str = "result") -> None:
     if isinstance(expected, pd.Series):
         assert isinstance(actual, pd.Series), f"{path}: expected a pandas.Series"
         pd.testing.assert_series_equal(actual, expected, check_exact=True, obj=path)
-        return
-    if isinstance(expected, np.ndarray) or isinstance(actual, np.ndarray):
-        actual_array = np.asarray(actual)
-        expected_array = np.asarray(expected)
-        assert actual_array.shape == expected_array.shape, (
-            f"{path}: shape {actual_array.shape} != {expected_array.shape}"
-        )
-        np.testing.assert_array_equal(actual_array, expected_array, err_msg=path)
         return
     if isinstance(expected, float) and np.isnan(expected):
         assert isinstance(actual, float) and np.isnan(actual), f"{path}: not NaN"
@@ -924,11 +876,12 @@ def test_evaluate_respiratory_rates_defaults(adapter, native, breaths):
 # -- signal-shaping helpers --------------------------------------------------
 
 
+# TODO: keys in the native implementation don't match keys in the adapter.
 @VENTILATOR_SIGNALS_HELPER
 def test_ventilator_signals_helper_is_identical():
     rng = np.random.default_rng(seed=1)
     recording = {"array": rng.normal(size=(3, 500)), "metadata": {"fs": 100.0}}
-    kwargs = {"pressure_channel": 0, "flow_channel": 1, "volume_channel": 2}
+    kwargs = {"airway_pressure_channel": 0, "flow_channel": 1, "volume_channel": 2}
 
     for fs in (None, 250.0):
         expected = adapter_signals.ventilator_signals(recording, fs=fs, **kwargs)
@@ -942,9 +895,9 @@ def test_ventilator_signals_helper_is_identical():
 
 def test_peak_indices_from_events_helper_is_identical():
     events = [
-        BreathEvent("emg", 0.0, 1.0, peak_time=0.4999),
-        BreathEvent("emg", 1.0, 2.0, peak_time=1.5),
-        BreathEvent("emg", 2.0, 3.0, peak_time=None),
+        BreathEvent("emg", 0.0, 1.0, extremum_time=0.4999),
+        BreathEvent("emg", 1.0, 2.0, extremum_time=1.5),
+        BreathEvent("emg", 2.0, 3.0, extremum_time=None),
     ]
 
     for fs in (100.0, 2048.0):

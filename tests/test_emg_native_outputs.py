@@ -78,7 +78,6 @@ class TestEmgLoad:
     @pytest.mark.skipif(
         not Path("unused.Poly5").exists(), reason="session recordings not on disk"
     )
-    @MISSING_TEST_DATA_FILE
     def test_injected_loader_still_produces_native_signals(self):
         from m3resp.emg import ReSurfEMG
 

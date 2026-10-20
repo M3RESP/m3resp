@@ -9,7 +9,6 @@ from m3resp.emg import ReSurfEMG
 from known_divergences import MISSING_TEST_DATA_FILE
 
 
-@MISSING_TEST_DATA_FILE
 def test_session_loads_modalities_with_injected_adapters():
     session = M3Session(
         eit_adapter=EITProcessingAdapter(
@@ -28,7 +27,6 @@ def test_session_loads_modalities_with_injected_adapters():
     assert [entry.action for entry in session.provenance] == ["load_eit", "load_emg"]
 
 
-@MISSING_TEST_DATA_FILE
 def test_detection_alignment_and_export(tmp_path):
     session = M3Session(
         eit_adapter=EITProcessingAdapter(loader=lambda *args, **kwargs: {"eit": True}),
