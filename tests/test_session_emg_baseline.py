@@ -1,4 +1,4 @@
-"""`M3Session.emg_moving_baseline`: the EMG baseline from the session."""
+"""`M3Session.emg_moving_baseline` and `emg_slopesum_baseline`: the EMG baseline from the session."""
 
 from __future__ import annotations
 
@@ -148,3 +148,87 @@ def test_preset_refuses_a_baseline_variant():
             "emg",
             config={"preprocess": {"channel": 1}, "baseline": {"variant": "wide"}},
         )
+
+
+def _slopesum_signals(session: M3Session) -> list:
+    return [
+        signal
+        for signal in session.signals.for_modality("emg")
+        if "_slopesum_baseline" in (signal.name or "")
+    ]
+
+
+def test_slopesum_baseline_matches_the_adapter_with_the_same_settings(
+    preprocessed_session,
+):
+    processed = preprocessed_session.processed["emg"]
+    fs = processed["fs"]
+
+    baseline = preprocessed_session.emg_slopesum_baseline(
+        window_seconds=5.0, step_seconds=0.5, percentile=40.0
+    )
+
+    expected, _, _, _ = preprocessed_session.emg_adapter.slopesum_baseline(
+        np.asarray(processed["envelope"], dtype=float),
+        window_samples=int(5.0 * fs),
+        step_samples=int(0.5 * fs),
+        sample_frequency=fs,
+        percentile=40.0,
+        augmented_percentile=25.0,
+        moving_average_samples=int(0.5 * fs),
+        percentile_window_samples=int(1.0 * fs),
+    )
+    np.testing.assert_array_equal(baseline, expected)
+    assert len(baseline) == len(processed["envelope"])
+
+
+def test_slopesum_baseline_is_recorded_and_adds_three_signals(preprocessed_session):
+    preprocessed_session.emg_slopesum_baseline(window_seconds=5.0)
+
+    entry = preprocessed_session.provenance[-1]
+    assert entry.action == "emg_slopesum_baseline"
+    assert entry.parameters["variant"] is None
+    assert entry.parameters["requested_window_seconds"] == 5.0
+    names = sorted(
+        s.name[s.name.index("slopesum") :]
+        for s in _slopesum_signals(preprocessed_session)
+    )
+    assert names == [
+        "slopesum_baseline",
+        "slopesum_baseline_running_mean",
+        "slopesum_baseline_running_std",
+    ]
+
+
+def test_a_second_slopesum_call_replaces_the_three_signals(preprocessed_session):
+    preprocessed_session.emg_slopesum_baseline(window_seconds=5.0)
+    second = preprocessed_session.emg_slopesum_baseline(window_seconds=10.0)
+
+    signals = _slopesum_signals(preprocessed_session)
+    assert len(signals) == 3
+    [baseline_signal] = [s for s in signals if s.name.endswith("_slopesum_baseline")]
+    np.testing.assert_array_equal(baseline_signal.values, second)
+    assert baseline_signal.metadata["requested_window_seconds"] == 10.0
+
+
+def test_slopesum_baseline_reads_a_named_preprocessing_variant(preprocessed_session):
+    preprocessed_session.preprocess_emg(
+        channel=1, variant="wide", envelope_window_seconds=1.0
+    )
+
+    default = preprocessed_session.emg_slopesum_baseline()
+    wide = preprocessed_session.emg_slopesum_baseline(variant="wide")
+
+    assert not np.array_equal(default, wide)
+    assert preprocessed_session.provenance[-1].parameters["variant"] == "wide"
+    wide_signals = [
+        s for s in _slopesum_signals(preprocessed_session) if s.name.endswith(":wide")
+    ]
+    assert len(wide_signals) == 3
+    assert all(s.metadata["variant"] == "wide" for s in wide_signals)
+    assert len(_slopesum_signals(preprocessed_session)) == 6
+
+
+def test_slopesum_baseline_needs_preprocessed_emg():
+    with pytest.raises(MissingModalityDataError, match="preprocess_emg"):
+        M3Session().emg_slopesum_baseline()

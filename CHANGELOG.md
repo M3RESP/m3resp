@@ -28,6 +28,16 @@ including `variant`, raise `TypeError`, so the baseline always comes from
 the processed EMG that breath detection uses. A zero window or step now
 raises `ValueError`; before, it became one sample.
 
+`M3Session.emg_slopesum_baseline(...)` computes the slope-sum baseline the
+same way, with the settings and calculation of the `emg.slopesum_baseline`
+step and the same `variant` argument. It adds the baseline, and the running
+mean and running standard deviation of the moving baseline, to
+`session.signals` as
+`<channel>_slopesum_baseline`, `<channel>_slopesum_baseline_running_mean`
+and `<channel>_slopesum_baseline_running_std` (`:<variant>` at the end for a
+variant), replacing the ones from an earlier call, and records the call in
+`session.provenance` as `emg_slopesum_baseline`.
+
 `ReSurfEMGAdapter` and its method files have plain-language docstrings
 (inputs, outputs, units, and which values come from ReSurfEMG and which are
 computed in m3resp), and the adapter page in the developer docs lists every

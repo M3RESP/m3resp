@@ -121,9 +121,20 @@ def compute_moving_baseline(
 
     Used by the ``emg.moving_baseline`` step and by
     `M3Session.emg_moving_baseline`. The `Signal` is returned and is added to
-    the session by the caller. ``variant`` names the preprocessing variant
-    the envelope came from; it is added to the signal name
-    (``<channel>_moving_baseline:<variant>``) and metadata.
+    the session by the caller.
+
+    Args:
+        session (M3Session): Session that runs the ReSurfEMG calculation.
+        processed_emg (Mapping): Processed EMG bundle with the envelope and
+            the sampling rate ``"fs"`` in Hz.
+        window_seconds (float): Window length in seconds.
+        step_seconds (float): Time between baseline updates, in seconds.
+        percentile (float): Percentile of the envelope in each window,
+            0 to 100.
+        variant (str | None): Name of the preprocessing variant the envelope
+            came from. It is added to the signal name
+            (``<channel>_moving_baseline:<variant>``) and metadata; None adds
+            nothing.
 
     Returns:
         tuple: the baseline (one value per envelope sample, in envelope
@@ -243,7 +254,7 @@ def compute_moving_baseline(
             default=25.0,
             minimum=0,
             maximum=100,
-            description="Percentile used for the augmented (running mean/std) baseline.",
+            description="Percentile of the envelope plus its slope in each window; 1.2 times this value is the slope-sum baseline.",
         ),
         StepParameter(
             name="moving_average_seconds",
@@ -251,7 +262,7 @@ def compute_moving_baseline(
             default=0.5,
             unit="s",
             minimum=0,
-            description="Smoothing window for the running mean/std.",
+            description="Smoothing window of the envelope slope.",
         ),
         StepParameter(
             name="percentile_window_seconds",
@@ -259,7 +270,7 @@ def compute_moving_baseline(
             default=1.0,
             unit="s",
             minimum=0,
-            description="Window used when recomputing the percentile series.",
+            description="Time between updates of the slope-sum baseline.",
         ),
     ),
     output_artifacts=(
@@ -271,7 +282,7 @@ def compute_moving_baseline(
         StepArtifact(
             name="slopesum_baseline_detail",
             artifact_type="diagnostic_summary",
-            description="Running mean/std plus the intermediate slope-sum series.",
+            description="Running mean and standard deviation of the moving baseline, plus the moving baseline as a pandas Series.",
             public=False,
             compatibility_only=True,
         ),
@@ -288,12 +299,12 @@ def compute_moving_baseline(
         StepArtifact(
             name="baseline_running_mean_signal",
             artifact_type="signal",
-            description="Native Signal wrapping the running mean.",
+            description="Native Signal wrapping the running mean of the moving baseline.",
         ),
         StepArtifact(
             name="baseline_running_std_signal",
             artifact_type="signal",
-            description="Native Signal wrapping the running std.",
+            description="Native Signal wrapping the running standard deviation of the moving baseline.",
         ),
     ),
     record=True,
@@ -309,6 +320,92 @@ def slopesum_baseline(
     moving_average_seconds: float = 0.5,
     percentile_window_seconds: float = 1.0,
 ) -> dict[str, Any]:
+    baseline, signals, detail, effective_samples = compute_slopesum_baseline(
+        session,
+        processed_emg,
+        window_seconds=window_seconds,
+        step_seconds=step_seconds,
+        percentile=percentile,
+        augmented_percentile=augmented_percentile,
+        moving_average_seconds=moving_average_seconds,
+        percentile_window_seconds=percentile_window_seconds,
+    )
+    baseline_signal, running_mean_signal, running_std_signal = signals
+    for signal in signals:
+        session.signals.add(signal)
+
+    return {
+        "baseline": baseline,
+        "slopesum_baseline_detail": detail,
+        "baseline_signal": baseline_signal,
+        "slopesum_baseline_native_detail": {
+            "running_mean": detail["running_mean"],
+            "running_std": detail["running_std"],
+        },
+        "baseline_running_mean_signal": running_mean_signal,
+        "baseline_running_std_signal": running_std_signal,
+        "_provenance": _upstream_metadata(
+            source_function="resurfemg.postprocessing.baseline.slopesum_baseline",
+            operation="emg.slopesum_baseline",
+            parameters=effective_samples,
+        ),
+    }
+
+
+def compute_slopesum_baseline(
+    session: M3Session,
+    processed_emg: Any,
+    *,
+    window_seconds: float = 7.5,
+    step_seconds: float = 0.2,
+    percentile: float = 33.0,
+    augmented_percentile: float = 25.0,
+    moving_average_seconds: float = 0.5,
+    percentile_window_seconds: float = 1.0,
+    variant: str | None = None,
+) -> tuple[np.ndarray, tuple[Signal, Signal, Signal], dict[str, Any], dict[str, Any]]:
+    """The slope-sum baseline of the envelope in `processed_emg`, with its `Signal`s.
+
+    In each window, the slope-sum baseline is 1.2 times a percentile of the
+    envelope plus its absolute, smoothed slope. ReSurfEMG also returns the
+    running mean and running standard deviation of the moving baseline.
+
+    Used by the ``emg.slopesum_baseline`` step and by
+    `M3Session.emg_slopesum_baseline`. The three `Signal`s (slope-sum
+    baseline, and running mean and running standard deviation of the moving
+    baseline) are returned and are added to the session by the caller.
+
+    Args:
+        session (M3Session): Session that runs the ReSurfEMG calculation.
+        processed_emg (Mapping): Processed EMG bundle with the envelope and
+            the sampling rate ``"fs"`` in Hz.
+        window_seconds (float): Window length in seconds.
+        step_seconds (float): Time between updates of the moving baseline,
+            in seconds.
+        percentile (float): Percentile of the envelope in each window for
+            the moving baseline, 0 to 100.
+        augmented_percentile (float): Percentile of the envelope plus its
+            slope in each window, 0 to 100.
+        moving_average_seconds (float): Smoothing window of the envelope
+            slope, in seconds.
+        percentile_window_seconds (float): Time between updates of the
+            slope-sum baseline, in seconds.
+        variant (str | None): Name of the preprocessing variant the envelope
+            came from. It is added to each signal name
+            (``<channel>_slopesum_baseline:<variant>``) and metadata; None
+            adds nothing.
+
+    Returns:
+        tuple: the slope-sum baseline (one value per envelope sample, in
+            envelope units); its three `Signal`s; the running mean, running
+            standard deviation and moving baseline from ReSurfEMG
+            (``"running_mean"``, ``"running_std"``, ``"series"``); and the
+            settings used (requested seconds and the windows in samples).
+
+    Raises:
+        ValueError: If a setting is out of range or the bundle has no envelope.
+    """
+
     _require_positive_seconds("window_seconds", window_seconds)
     _require_positive_seconds("step_seconds", step_seconds)
     _require_positive_seconds("moving_average_seconds", moving_average_seconds)
@@ -347,70 +444,34 @@ def slopesum_baseline(
         "percentile": percentile,
         "augmented_percentile": augmented_percentile,
     }
-    baseline_signal = Signal(
-        values=baseline,
-        time=time,
-        sample_frequency=fs,
-        unit=unit,
-        name=f"{label}_slopesum_baseline",
-        modality="emg",
-        category="electrical_potential",
-        channel=label,
-        source="resurfemg",
-        processing_state="derived",
-        derived_from="processed",
-        method="resurfemg.slopesum_baseline",
-        metadata=dict(effective_samples),
-    )
-    running_mean_signal = Signal(
-        values=running_mean,
-        time=time,
-        sample_frequency=fs,
-        unit=unit,
-        name=f"{label}_slopesum_baseline_running_mean",
-        modality="emg",
-        category="electrical_potential",
-        channel=label,
-        source="resurfemg",
-        processing_state="derived",
-        derived_from="processed",
-        method="resurfemg.slopesum_baseline",
-    )
-    running_std_signal = Signal(
-        values=running_std,
-        time=time,
-        sample_frequency=fs,
-        unit=unit,
-        name=f"{label}_slopesum_baseline_running_std",
-        modality="emg",
-        category="electrical_potential",
-        channel=label,
-        source="resurfemg",
-        processing_state="derived",
-        derived_from="processed",
-        method="resurfemg.slopesum_baseline",
-    )
-    session.signals.add(baseline_signal)
-    session.signals.add(running_mean_signal)
-    session.signals.add(running_std_signal)
+    suffix = "" if variant is None else f":{variant}"
+    variant_metadata = {} if variant is None else {"variant": variant}
 
-    return {
-        "baseline": baseline,
-        "slopesum_baseline_detail": {
-            "running_mean": running_mean,
-            "running_std": running_std,
-            "series": series,
-        },
-        "baseline_signal": baseline_signal,
-        "slopesum_baseline_native_detail": {
-            "running_mean": running_mean,
-            "running_std": running_std,
-        },
-        "baseline_running_mean_signal": running_mean_signal,
-        "baseline_running_std_signal": running_std_signal,
-        "_provenance": _upstream_metadata(
-            source_function="resurfemg.postprocessing.baseline.slopesum_baseline",
-            operation="emg.slopesum_baseline",
-            parameters=effective_samples,
-        ),
+    def baseline_part(values: Any, name: str, metadata: dict[str, Any]) -> Signal:
+        return Signal(
+            values=values,
+            time=time,
+            sample_frequency=fs,
+            unit=unit,
+            name=f"{label}_{name}{suffix}",
+            modality="emg",
+            category="electrical_potential",
+            channel=label,
+            source="resurfemg",
+            processing_state="derived",
+            derived_from="processed",
+            method="resurfemg.slopesum_baseline",
+            metadata={**metadata, **variant_metadata},
+        )
+
+    signals = (
+        baseline_part(baseline, "slopesum_baseline", dict(effective_samples)),
+        baseline_part(running_mean, "slopesum_baseline_running_mean", {}),
+        baseline_part(running_std, "slopesum_baseline_running_std", {}),
+    )
+    detail = {
+        "running_mean": running_mean,
+        "running_std": running_std,
+        "series": series,
     }
+    return baseline, signals, detail, effective_samples

@@ -27,6 +27,8 @@ session.postprocess_emg()     # features + quality -> parameter_results/quality
 session.export_summary("results/emg-only/")
 ```
 
+`session.emg_slopesum_baseline()` gives the slope-sum baseline of ReSurfEMG in place of the moving baseline. Breath detection takes it in the same way: `session.detect_emg_breaths(baseline=baseline)`.
+
 After this:
 
 - `session.signals` has the raw/filtered/envelope EMG `Signal`s and the
