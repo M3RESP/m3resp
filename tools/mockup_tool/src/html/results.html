@@ -1,0 +1,116 @@
+<!-- ============ 4. RESULTS ============ -->
+<div class="view" id="view-results">
+
+  <div class="palette prep-sidebar res-sidebar" id="resultsSidebar">
+    <div class="side-panel-topbar">
+      <span class="side-panel-topbar-title">
+        <span class="side-panel-topbar-label">Results</span>
+      </span>
+      <button class="side-collapse-btn" id="resultsSidebarCollapseBtn" title="Collapse this panel"></button>
+    </div>
+
+    <!-- the run these results come from -->
+    <div class="pal-pane fit" data-pane="run">
+      <button type="button" class="pal-pane-head" title="Open or close this panel">
+        <span class="pal-pane-chevron"></span><span class="pal-pane-title">Run</span>
+      </button>
+      <div class="pal-pane-body">
+        <dl class="rec-list">
+          <div class="rec-row"><dt>Session</dt><dd class="mono" id="resSessionId">2026-06-10_153009</dd></div>
+          <div class="rec-row"><dt>Pipeline</dt><dd class="mono">multimodal-full</dd></div>
+          <div class="rec-row"><dt>Run id</dt><dd class="mono" title="9907d215dda2452d">9907d215dda2</dd></div>
+          <div class="rec-row"><dt>Checked</dt><dd id="resCheckedAt">not yet</dd></div>
+        </dl>
+      </div>
+    </div>
+
+    <!-- the parts of the results; the main column shows one at a time -->
+    <div class="pal-pane fit" data-pane="results">
+      <button type="button" class="pal-pane-head" title="Open or close this panel">
+        <span class="pal-pane-chevron"></span><span class="pal-pane-title">Results</span>
+      </button>
+      <div class="pal-pane-body">
+        <div class="prep-steps" id="resSteps">
+          <button type="button" class="step-item" data-part="resSummary"><span class="num">1</span><span class="step-name">Summary</span></button>
+          <button type="button" class="step-item" data-part="resValues"><span class="num">2</span><span class="step-name">Values</span><span class="step-meta" id="resValuesCount"></span></button>
+          <div class="step-children"><div class="mod-list" id="resValModList"></div></div>
+          <button type="button" class="step-item" data-part="resPlots"><span class="num">3</span><span class="step-name">Plots</span><span class="step-meta" id="resPlotsCount"></span></button>
+          <div class="step-children"><div class="mod-list" id="resPlotModList"></div></div>
+          <button type="button" class="step-item" data-part="resFiles"><span class="num">4</span><span class="step-name">Files</span><span class="step-meta" id="resFilesCount"></span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- what the marks and tags mean -->
+    <div class="pal-pane" data-pane="legend">
+      <button type="button" class="pal-pane-head" title="Open or close this panel">
+        <span class="pal-pane-chevron"></span><span class="pal-pane-title">Legend</span>
+      </button>
+      <div class="pal-pane-body">
+        <div class="qc-legend">
+          <div class="qc-legend-title">Values</div>
+          <div class="qc-legend-row"><span class="res-flag">2 / 19</span>breaths of this value failed a quality check</div>
+          <div class="qc-legend-row"><span class="res-legend-bars"><i></i><i></i><i class="flag"></i><i></i></span>one bar per breath; a yellow bar failed a check</div>
+          <div class="qc-legend-title">Plots</div>
+          <div class="qc-legend-row"><span class="res-tag saved">saved</span><span>a figure the run wrote to <code>figures/</code></span></div>
+          <div class="qc-legend-row"><span class="res-tag">drawn</span>drawn here from a saved file</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="prep-main" id="resultsMain">
+
+  <div class="prep-crumb" id="resCrumb" aria-live="polite"></div>
+
+  <!-- 1 Summary: one card per modality (js/results/results-page.js) -->
+  <div class="res-summary" id="resSummary"></div>
+
+  <!-- 2 Values: search, then one card per modality -->
+  <div class="res-group" id="resValues">
+    <div class="res-filter">
+      <label class="res-search">
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8.5 3.5a5 5 0 1 0 0 10a5 5 0 1 0 0-10M12.2 12.2L16 16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <input id="resSearch" type="search" placeholder="Find a value by name" aria-label="Find a value by name">
+      </label>
+      <div class="res-chips" id="resChips" role="group" aria-label="Modalities to show"></div>
+      <span class="res-count" id="resCount"></span>
+    </div>
+    <div class="res-cards" id="resValueCards"></div>
+  </div>
+
+  <!-- 3 Plots: one card per modality -->
+  <div class="res-group" id="resPlots">
+    <div class="res-cards" id="resPlotCards"></div>
+  </div>
+
+  <!-- 4 Files -->
+  <div class="card" id="resFiles">
+    <div class="card-head"><h3>Files of the run</h3><span class="hint" id="resFilesHint"></span></div>
+    <div class="card-body">
+      <div class="res-folder">
+        <span class="res-folder-icon" data-icon="folder" data-icon-size="16"></span>
+        <code id="resFolderPath"></code>
+        <button class="tb-btn small" id="resCopyPath">Copy folder path</button>
+        <button class="tb-btn small" id="resOpenFolder" data-icon="folder">Open folder</button>
+      </div>
+      <div class="res-file-list" id="resFileList"></div>
+      <div class="res-files-act">
+        <span class="res-files-state" id="resFilesState" aria-live="polite"></span>
+        <div class="tb-spacer"></div>
+        <button class="tb-btn" id="resNewRun" data-icon="reset">New run in 2 · Design</button>
+        <button class="tb-btn primary" id="resZip">Download all (.zip)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Back / Next -->
+  <div class="prep-pager">
+    <button class="tb-btn" id="resBackBtn">Back</button>
+    <div class="tb-spacer"></div>
+    <span class="pager-hint" id="resNextHint"></span>
+    <button class="tb-btn primary" id="resNextBtn">Next</button>
+  </div>
+
+  </div>
+</div>

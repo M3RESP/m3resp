@@ -1,0 +1,91 @@
+// ---- "Arrange": put the steps in columns by graph order ----
+// The column of a block is the longest chain of links that leads to it, so
+// data always flows from left to right. Each modality has its own lane (EIT,
+// EMG, ventilator, other), like the rows of the default graph. Only the
+// places change: the steps, links and settings stay the same.
+const ARRANGE_LANES = ['eit', 'emg', 'vent', 'generic'];
+
+function blockMod(b){ return (b.n || b.g).mod || 'generic'; }
+
+function arrangeByDepth(){
+  const blocks = layoutBlocks();
+  if(!blocks.length) return;
+  const ids = new Set(blocks.map(b=>b.id));
+  // links between blocks (a link inside one workflow does not count)
+  const links = [];
+  EDGES.forEach(e=>{
+    const a = blockIdOf(e.src), b = blockIdOf(e.dst);
+    if(a!==b && ids.has(a) && ids.has(b)) links.push([a, b]);
+  });
+
+  // column = longest path from a block with no incoming link
+  const depth = new Map(blocks.map(b=>[b.id, 0]));
+  const waiting = new Map(blocks.map(b=>[b.id, 0]));
+  links.forEach(([, b])=> waiting.set(b, waiting.get(b)+1));
+  const ready = blocks.filter(b=>waiting.get(b.id)===0).map(b=>b.id);
+  const seen = new Set();
+  while(ready.length){
+    const id = ready.shift();
+    seen.add(id);
+    links.filter(([a])=>a===id).forEach(([, b])=>{
+      depth.set(b, Math.max(depth.get(b), depth.get(id)+1));
+      waiting.set(b, waiting.get(b)-1);
+      if(waiting.get(b)===0) ready.push(b);
+    });
+  }
+  // blocks in a loop go one column after the deepest one
+  const maxDepth = Math.max(...depth.values());
+  blocks.forEach(b=>{ if(!seen.has(b.id)) depth.set(b.id, maxDepth+1); });
+
+  // inside a column and lane: keep the old top-to-bottom order. An opened
+  // workflow is wide, so it does not set the width of its column; it goes at
+  // its column, under the other steps of its lane that it would cover.
+  const cols = [...new Set(depth.values())].sort((a, b)=>a-b);
+  const lane = b=> Math.max(0, ARRANGE_LANES.indexOf(blockMod(b)));
+  const isFrame = b=> b.g && !b.g.collapsed;
+  const cell = (c, l)=> blocks.filter(b=>depth.get(b.id)===c && lane(b)===l && !isFrame(b)).sort((a, b)=>a.rect.y-b.rect.y);
+
+  const gapY = LAYOUT_GAP + 14;
+  // Space after column c. In the detailed view the links between cards are
+  // short, so the gap grows until the longest data name on a link that leaves
+  // the column fits on it (see the link labels in drawEdges).
+  const gapAfter = c=>{
+    if(NODE_VIEW==='compact') return 90;
+    const chars = EDGES.filter(e=> !e.session && depth.get(blockIdOf(e.src))===c && blockIdOf(e.dst)!==blockIdOf(e.src))
+      .map(e=> (e.srcKey||e.key).length);
+    // the label room is the gap minus the arrow, the port dots and 18 px margin
+    const need = Math.ceil((Math.max(0, ...chars)+1)*EDGE_LABEL_CHAR_W) + 2*PORT_R + ARROW_LEN + 18;
+    return Math.min(200, Math.max(70, need));
+  };
+  const colX = [];
+  let x = 30;
+  cols.forEach(c=>{
+    colX[c] = x;
+    const widths = blocks.filter(b=>depth.get(b.id)===c && !isFrame(b)).map(b=>b.rect.w);
+    x += (widths.length ? Math.max(...widths) : nodeWidth({})) + gapAfter(c);
+  });
+  let laneTop = 40;
+  ARRANGE_LANES.forEach((_, l)=>{
+    const placed = [];
+    cols.forEach(c=>{
+      let cy = laneTop;
+      cell(c, l).forEach(b=>{
+        moveBlock(b, colX[c]-b.rect.x, cy-b.rect.y);
+        placed.push(b.rect);
+        cy += b.rect.h + gapY;
+      });
+    });
+    blocks.filter(b=>lane(b)===l && isFrame(b)).sort((a, b)=>depth.get(a.id)-depth.get(b.id)).forEach(b=>{
+      const fx = colX[depth.get(b.id)];
+      const under = placed.filter(r=> r.x < fx+b.rect.w && fx < r.x+r.w);
+      const fy = under.length ? Math.max(...under.map(r=>r.y+r.h)) + gapY : laneTop;
+      moveBlock(b, fx-b.rect.x, fy-b.rect.y);
+      placed.push(b.rect);
+    });
+    if(placed.length) laneTop = Math.max(...placed.map(r=>r.y+r.h)) + gapY + 16;
+  });
+}
+
+document.getElementById('arrangeBtn').addEventListener('click', ()=>{
+  animateLayout(arrangeByDepth, ()=> fitCanvasToView(1));
+});

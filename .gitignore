@@ -13,8 +13,9 @@ plan/*
 # !.github/**
 graphify-out/
 tools/visualization_tools/__marimo__
-tools/
+tools/*
 analysis/
+!tools/mockup_tool/
 
 # Documentation build products
 docs/_build/

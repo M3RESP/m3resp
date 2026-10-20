@@ -1,0 +1,139 @@
+/* ---- Ventilator multi-channel stack ---- */
+.vent-checks{display:contents;}
+.vent-check{
+  display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;height:26px;
+  padding:0 9px 0 7px;border-radius:var(--r-ctl);border:1px solid var(--border);
+  background:var(--surface-2);cursor:pointer;user-select:none;color:var(--text-dim);
+  transition:border-color .12s, background-color .12s;
+}
+.vent-check:hover{border-color:var(--accent);}
+.vent-check input{margin:0;cursor:pointer;accent-color:var(--accent);}
+.vent-check .sw{width:8px;height:8px;border-radius:2px;flex:none;}
+.vent-check.on{color:var(--text);background:var(--surface);}
+.vent-check .cat{font-family:var(--mono);font-size:9.5px;color:var(--text-faint);font-weight:500;}
+.vent-stack{display:flex;flex-direction:column;gap:5px;}
+.vent-panel{
+  position:relative;background:var(--plot-bg);border:1px solid var(--border);
+  border-left:3px solid var(--vent);border-radius:7px;overflow:hidden;height:78px;
+}
+.vent-panel svg{width:100%;height:100%;display:block;}
+.vent-panel-head{
+  position:absolute;top:5px;left:9px;right:9px;display:flex;align-items:baseline;gap:9px;
+  font-size:11px;pointer-events:none;z-index:1;text-shadow:0 0 3px var(--surface), 0 0 3px var(--surface);
+}
+.vent-panel-head .nm{font-weight:700;color:var(--text);}
+.vent-panel-head .un{color:var(--text-dim);font-family:var(--mono);font-size:10.5px;}
+.vent-panel-head .ch{margin-left:auto;color:var(--text-faint);font-family:var(--mono);font-size:10px;}
+
+/* signal preview row: plot + per-modality aux tool, stacked directly under the loaded-signal header */
+.signal-row{display:flex;gap:18px;align-items:stretch;}
+.signal-plot-wrap{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;}
+.signal-plot{
+  position:relative;flex:1;min-height:172px;border:1px solid var(--border);border-left:3px solid var(--custom);border-radius:7px;
+  background:var(--plot-bg);overflow:hidden;
+}
+.signal-plot svg{position:absolute;inset:0;width:100%;height:100%;}
+.signal-plot .axis-label{position:absolute;bottom:4px;left:8px;font-size:9.5px;font-family:var(--mono);color:var(--text-faint);}
+.signal-plot .axis-label.right{left:auto;right:8px;}
+.aux-panel{flex:0 0 168px;min-width:0;}
+.aux-panel .field-grid{grid-template-columns:1fr;}
+.roi-canvas{
+  aspect-ratio:13/15;border-radius:8px;background:var(--surface-2);
+  border:1px solid var(--border);position:relative;
+}
+.roi-canvas svg{width:100%;height:100%;display:block;}
+.roi-label{font-family:var(--sans);font-weight:700;fill:var(--text);}
+.roi-side-label{font-family:var(--sans);font-weight:700;fill:var(--text-dim);}
+.sync-controls{display:grid;grid-template-columns:repeat(2, minmax(0, 240px)) auto;align-items:end;justify-content:start;gap:12px 16px;margin-bottom:16px;}
+.sync-controls .field select{height:var(--ctl-h);padding:0 8px;}
+.sync-strip{display:flex;flex-direction:column;gap:6px;--sync-name-w:92px;--sync-sig-w:170px;--sync-vs-w:110px;--sync-field-w:96px;}
+.sync-row{display:flex;align-items:center;gap:10px;}
+.sync-row.mod-eit{--mod:var(--eit);}
+.sync-row.mod-emg{--mod:var(--emg);}
+.sync-row.mod-vent{--mod:var(--vent);}
+.sync-name{width:var(--sync-name-w);flex:none;display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--text);}
+.sync-name i{width:8px;height:8px;border-radius:50%;background:var(--mod);flex:none;}
+.sync-field{width:var(--sync-field-w);flex:none;display:flex;}
+/* the signal of each row and the ventilator signal it is compared with */
+.sync-sig{width:var(--sync-sig-w);flex:none;display:flex;}
+.sync-vs{width:var(--sync-vs-w);flex:none;display:flex;}
+.sync-sel{
+  width:100%;height:var(--ctl-h);padding:0 6px;font-family:var(--mono);font-size:12px;color:var(--text);
+  background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-ctl);cursor:pointer;min-width:0;
+}
+.sync-sel:hover{border-color:var(--accent);}
+.sync-col-head{
+  font-family:var(--sans);font-size:10.5px;font-weight:700;color:var(--text-dim);text-transform:uppercase;
+  letter-spacing:0.05em;align-self:flex-end;white-space:nowrap;
+}
+.sync-ref-tag{
+  display:inline-flex;align-items:center;height:var(--ctl-h);padding:0 10px;border-radius:var(--r-ctl);
+  font-size:11px;font-weight:700;color:var(--accent-strong);background:var(--accent-soft);
+  border:1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+.sync-offset-wrap{position:relative;}
+.sync-offset{
+  width:100%;height:var(--ctl-h);font-family:var(--mono);font-size:12px;padding:0 22px 0 8px;border-radius:var(--r-ctl);
+  border:1px solid var(--border);background:var(--surface-2);color:var(--text);text-align:right;
+}
+.sync-offset::placeholder{color:var(--text-faint);}
+.sync-offset-wrap .unit{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:11px;color:var(--text-dim);pointer-events:none;}
+.sync-track{
+  position:relative;flex:1;height:28px;border-radius:6px;border:1px solid var(--border);
+  background:
+    linear-gradient(to right, transparent calc(var(--sync-zero, 0%) - 1px), var(--border) calc(var(--sync-zero, 0%) - 1px) var(--sync-zero, 0%), transparent var(--sync-zero, 0%)),
+    var(--surface);
+}
+.sync-ruler{position:relative;flex:1;height:16px;font-family:var(--mono);font-size:10.5px;color:var(--text-dim);}
+.sync-ruler span{position:absolute;bottom:0;transform:translateX(-50%);white-space:nowrap;font-variant-numeric:tabular-nums;}
+.sync-ruler span::after{content:"";position:absolute;left:50%;top:100%;width:1px;height:4px;background:var(--border);}
+.sync-bar{
+  position:absolute;top:3px;bottom:3px;border-radius:4px;display:flex;align-items:center;gap:8px;padding:0 8px;
+  background:color-mix(in srgb, var(--mod) 16%, var(--surface));
+  border-left:2px solid var(--mod);border-right:2px solid var(--mod);
+  font-size:11px;font-family:var(--mono);color:var(--text);white-space:nowrap;overflow:hidden;transition:left .15s ease-out;
+}
+.sync-bar .v{font-weight:700;font-variant-numeric:tabular-nums;}
+.sync-bar .tag{
+  font-family:var(--sans);font-size:10px;font-weight:600;color:var(--text-dim);
+  padding:1px 7px;border-radius:var(--r-chip);background:color-mix(in srgb, var(--surface) 70%, transparent);border:1px solid var(--border);
+}
+.sync-bar .tag.typed{color:var(--accent-strong);border-color:color-mix(in srgb, var(--accent) 40%, var(--border));}
+
+
+/* ---- EMG: remove button on a signal chip ---- */
+.vent-check .rm{
+  margin-left:2px;border:none;background:none;cursor:pointer;padding:0 2px;
+  font-size:13px;line-height:1;color:var(--text-faint);
+}
+.vent-check .rm:hover{color:var(--crit);}
+
+/* match value at the end of each sync row */
+.sync-strip{--sync-match-w:52px;}
+.sync-match, .sync-match-head{width:var(--sync-match-w);flex:none;text-align:center;font-family:var(--mono);font-size:11.5px;font-weight:700;}
+.sync-match-head{font-family:var(--sans);font-size:10.5px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;align-self:flex-end;}
+.sync-match.good{color:var(--ok);}
+.sync-match.fair{color:var(--warn-ink);}
+.sync-match.poor{color:var(--crit);}
+
+/* alignment check: the signals on one time line, with dashed breath starts */
+.sync-check{margin-top:16px;padding-top:14px;border-top:1px solid var(--border);}
+.sync-check-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
+.sync-check-plot{display:flex;flex-direction:column;gap:4px;}
+.sync-lane{
+  position:relative;height:58px;border:1px solid var(--border);border-left:3px solid var(--mod);border-radius:6px;
+  background:var(--plot-bg);overflow:hidden;
+}
+.sync-lane.mod-eit{--mod:var(--eit);}
+.sync-lane.mod-emg{--mod:var(--emg);}
+.sync-lane.mod-vent{--mod:var(--vent);}
+.sync-lane svg{position:absolute;inset:0;width:100%;height:100%;display:block;}
+.sync-check-axis{display:flex;justify-content:space-between;margin-top:5px;font-size:10.5px;font-family:var(--mono);color:var(--text-dim);}
+
+/* the synchronization section fills the height of the main column; the
+   alignment lanes take the extra height */
+#cardSync.is-shown{flex:1 0 auto;display:flex;flex-direction:column;}
+#cardSync > .card-body{flex:1;display:flex;flex-direction:column;}
+#cardSync .sync-check{flex:1;display:flex;flex-direction:column;min-height:0;}
+#cardSync .sync-check-plot{flex:1;}
+#cardSync .sync-lane{flex:1 1 58px;height:auto;min-height:58px;}
