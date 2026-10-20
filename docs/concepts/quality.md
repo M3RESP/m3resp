@@ -50,12 +50,10 @@ middle), emit one `QualityFlag` per affected window with `start_time`/
 `end_time` set, rather than a single flag for the whole signal -
 `signal_name` ties them all back to the same signal.
 
-A flag about one breath sets `breath_id`. A flag about several breaths
-judged together sets `breath_ids`, for example ten breaths marked as a
-stable stretch, or a set of breaths with gaps between them. A flag
-sets one or the other; setting both, or an empty `breath_ids` list,
-raises `ValueError`. The per-breath steps use the breath's position in its
-breath list as the id (`"0"`, `"1"`, ...).
+A flag about one breath sets `breath_id` (a string). A flag about several breaths
+judged together sets `breath_ids` (a list of strings), for example ten breaths marked as a stable stretch, or a set of breaths with gaps between them. 
+A flag can set either `breath_id` or `breath_ids`, but not both: setting both, or an empty `breath_ids` list, raises `ValueError`. 
+The per-breath steps use the breath's position in its breath list as the id (`"0"`, `"1"`, ...).
 
 ```python
 QualityFlag(
