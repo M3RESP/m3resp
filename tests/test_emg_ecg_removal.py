@@ -324,6 +324,21 @@ class TestEcgGating:
         assert np.all(gated[mask][: len(peaks)] == 0) or mask.sum() > 0
 
 
+@pytest.mark.parametrize("remove_ecg", [ecg_gating, ecg_wavelet_denoising])
+def test_ecg_removal_clears_the_envelope_and_its_source(remove_ecg):
+    session = M3Session()
+    with_envelope = envelope(session, _fake_processed_emg())[
+        "processed_emg_with_envelope"
+    ]
+    assert with_envelope["envelope_source"] == "filtered"
+    peaks = ecg_detect_peaks(session, with_envelope)["ecg_peak_indices"]
+
+    after = remove_ecg(session, with_envelope, peaks)["processed_emg_after_ecg"]
+
+    assert after["envelope"] is None
+    assert after["envelope_source"] is None
+
+
 class TestEcgWaveletDenoising:
     def test_preserves_all_four_upstream_results_with_padding_metadata(self):
         session = M3Session()

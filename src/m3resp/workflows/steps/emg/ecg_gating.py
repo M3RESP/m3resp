@@ -207,6 +207,7 @@ def ecg_gating(
         # gating no longer matches the signal, so it is removed.
         "ecg_cleaned": gated,
         "envelope": None,
+        "envelope_source": None,
     }
     _store_processed_emg(session, processed_emg_after_ecg)
 

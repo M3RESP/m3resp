@@ -277,6 +277,7 @@ def notch_filter(
         **processed_emg,
         "filtered": filtered,
         "envelope": None,
+        "envelope_source": None,
         "filter": {**(processed_emg.get("filter") or {}), **settings},
     }
     _store_processed_emg(session, processed_after)
@@ -397,6 +398,7 @@ def bandpass_filter(
         **processed_emg,
         "filtered": filtered,
         "envelope": None,
+        "envelope_source": None,
         "filter": {**(processed_emg.get("filter") or {}), **settings},
     }
     _store_processed_emg(session, processed_after)

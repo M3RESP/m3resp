@@ -176,6 +176,30 @@ def test_emg_preprocess_records_nyquist_for_a_notch_max_frequency_above_it(
     assert processed["filter"]["notch_max_frequency"] == FS / 2
 
 
+@pytest.mark.parametrize(
+    ("refilter", "output"),
+    [
+        (
+            lambda session, bundle: notch_filter(session, bundle, base_frequency=50.0),
+            "processed_emg_after_notch",
+        ),
+        (bandpass_filter, "processed_emg_after_bandpass"),
+    ],
+    ids=["notch", "bandpass"],
+)
+def test_filtering_again_clears_the_envelope_and_its_source(refilter, output):
+    session = M3Session()
+    with_envelope = envelope(session, _bundle(np.ones(4096)))[
+        "processed_emg_with_envelope"
+    ]
+    assert with_envelope["envelope_source"] == "filtered"
+
+    after = refilter(session, with_envelope)[output]
+
+    assert after["envelope"] is None
+    assert after["envelope_source"] is None
+
+
 def test_bandpass_refuses_a_lower_cutoff_above_the_upper_one():
     with pytest.raises(ValueError, match="must be below"):
         bandpass_filter(

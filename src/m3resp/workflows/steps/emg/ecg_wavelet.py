@@ -168,6 +168,7 @@ def ecg_wavelet_denoising(
         # signal, so it is removed.
         "ecg_cleaned": cleaned,
         "envelope": None,
+        "envelope_source": None,
     }
     _store_processed_emg(session, processed_emg_after_ecg)
 
