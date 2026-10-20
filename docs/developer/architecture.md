@@ -146,9 +146,11 @@ src/m3resp/
 │
 ├── processing/                         Shared, modality-neutral building blocks: filters, peaks,
 │                                           windows, intervals, metrics, quality, ecg,
-│                                           slicing (cutting one signal to a window)
+│                                           slicing (cutting one signal to a window),
+│                                           interpolation (one signal onto other time points),
+│                                           captures (optional extra results)
 │
-├── synchronization/                    Alignment, resampling, breath linking, multimodal
+├── synchronization/                    Alignment, breath linking, multimodal
 │   │                                       parameters (see concepts/synchronization.md)
 │   ├── alignment.py                    manual-offset + timestamp-derived offsets; resolving
 │   │                                       offset_seconds keys (incl. "ventilator:<name>");
@@ -156,7 +158,6 @@ src/m3resp/
 │   ├── offset_estimation.py            manual-offset passthrough (no robust automatic
 │   │                                       sync method; protocol-specific estimators live in
 │   │                                       tools/visualization_tools/utils/, not in the package)
-│   ├── resampling.py                   resample_signal - common time base
 │   ├── linking.py                      link_breaths_by_time - nearest-neighbor breath linking
 │   ├── start_times.py                  per-recording start times on a shared clock,
 │   │                                       set by M3Session.synchronize_raw_modalities
@@ -209,7 +210,7 @@ Rule of thumb for "where does my new EIT/EMG/multimodal functionality go":
 4. **A new one-call preset** ("run all of EIT/EMG/multimodal processing in
    one call") -> `presets/*.py`, registered in `presets/registry.py`.
 5. **A new low-level, reusable synchronization or multimodal-metric building
-   block** (e.g. a resampling method, an offset/alignment computation, a
+   block** (e.g. an offset/alignment computation, a
    breath-linking strategy, a cross-modality timing metric - something other
    code composes, not a full workflow step or preset itself) ->
    `synchronization/`.
@@ -243,7 +244,7 @@ Stage 3 unchanged:
   `export_store()`. This layer only cares about recording what happened,
   never about which backend did the computing, so it is unaffected by the
   upstream swap.
-- **`synchronization/`**: alignment, resampling, breath linking,
+- **`synchronization/`**: alignment, breath linking,
   breath timing parameters. These operate purely on `Signal`/`BreathEvent`
   objects, not on upstream library objects, so they are already
   backend-neutral.

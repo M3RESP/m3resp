@@ -2,6 +2,108 @@
 
 ## Unreleased
 
+### `register_step(..., record=True)` logs each call (#104)
+
+A step registered with `record=True` adds one record to
+`session.provenance` after each call: step name and modality, its reads
+and writes, the version of its upstream package, and the details the step
+returns under the output key `"_provenance"`. The key is removed from the
+outputs. The 33 built-in steps that logged their own call now use it, and
+the three `_record_step` helpers in the EIT, EMG and ventilator step
+modules are removed. See "Adding a custom step" in the workflow docs.
+
+The records are the same as before, with one change: `upstream_version` is
+the installed version of the first package in the step's
+`optional_packages`, and None for a step without one.
+`ventilator.pocc_time_product` and `emg.remove_invalid_breaths` compute
+their values in m3resp, so their records now have None in place of the
+ReSurfEMG version.
+
+A workflow run warns when a step registered without `record=True` returns
+`"_provenance"` details, because those details are not saved.
+
+A workflow run also writes one `session.processing_history` entry per step,
+as before. Steps with `record=True` therefore appear in both
+`session.provenance` and `session.processing_history`.
+
+### Step descriptions share one field list (#111)
+
+The fields that describe a step (name, summary, description, modality,
+category, parameters, inputs and outputs, alternatives, optional packages,
+version, ...) are declared once, in the new `StepInfo` class in
+`m3resp.workflows.registry`. `StepDefinition` and `StepDescription` both
+build on it, and `describe_step` and `StepDescription.as_dict()` copy every
+field from that list. A new step field is added in `StepInfo` and as a
+`register_step` keyword; a test fails when one of the two is missing.
+
+The output of `describe_step`, `describe_steps` and `m3resp describe` is
+the same as before. `StepDefinition` and `StepDescription` take keyword
+arguments only.
+
+### `resample_signal` replaced by `interpolate_to_time` (#110)
+
+`resample_signal(signal, target_frequency_hz)` built a new, evenly spaced
+time axis from a rate in Hz. Device time axes are not perfectly even, so
+that axis drifted away from the other device's real timestamps.
+`interpolate_to_time(signal, time)` takes the time points themselves, so a
+signal can be put on exactly the time points of another signal. It lives
+with the other signal operations in `m3resp.processing`. **The old name is
+removed.**
+
+| Before | Now |
+|---|---|
+| `m3resp.resample_signal(emg, eit.sample_frequency)` | `m3resp.interpolate_to_time(emg, eit.time)` |
+| `from m3resp.synchronization import resample_signal` | `from m3resp.processing import interpolate_to_time` |
+
+Other differences:
+
+- Time points before the first or after the last sample get NaN, with a
+  warning. `resample_signal` copied the first or last value outward without
+  a warning.
+- Values with more than one number per time point (channels, EIT pixel
+  frames) work. `resample_signal` handled one number per time point only.
+- A signal with fewer than two samples, or a time axis that is not strictly
+  increasing, raises `ValueError`.
+- The result has `metadata["interpolation"] = "linear"`, and
+  `sample_frequency` is 1 / the median time step of the new time points,
+  rounded to 9 significant digits (a 20 Hz time axis gives exactly 20.0).
+- Both time axes must be on the same clock. Synchronize the recordings
+  first; the function cannot check this.
+
+As before, the interpolation is linear with no anti-aliasing filter:
+low-pass filter the signal first when the new time points are further
+apart than the original samples.
+
+### `capture_value` moved to `m3resp.processing.captures` (#91)
+
+`capture_value` stores an extra result of a processing function in the
+optional `captures` dictionary. It is used by the filters and the peak
+detection, so it has its own module.
+
+| Before | Now |
+|---|---|
+| `from m3resp.processing.filters import capture_value` | `from m3resp.processing.captures import capture_value` |
+
+### One `QualityFlag` can cover several breaths (#94)
+
+`QualityFlag` has a new field, `breath_ids`, for a check that judges a
+set of breaths together, such as ten breaths marked as a stable stretch.
+It works like `ParameterResult.breath_ids`. The list reaches
+`quality_flags.csv` and `summary.json`, and `QualityFlag.to_dict()` gives
+the same fields as a dictionary.
+
+A `QualityFlag` or `ParameterResult` sets `breath_id` for one breath or
+`breath_ids` for several breaths. Setting both, or giving an empty
+`breath_ids` list, now raises `ValueError`.
+
+- **Fixes** `DataModelRecorder.record_quality_flag` dropping the flag's
+  breath and time window. The stored `QualityAnnotation` now keeps
+  `start_time`/`end_time` as its time window, and its breaths in the new
+  `QualityAnnotation.breath_ids` field.
+- `validate_store` reports a `QualityAnnotation` whose time window ends
+  before it starts, as it already did for derived features and clinical
+  events.
+
 ### `FilterType` renamed to `ButterworthFilterType` (#90)
 
 `m3resp.processing.filters` holds more than Butterworth filters, so the

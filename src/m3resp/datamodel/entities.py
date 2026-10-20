@@ -412,13 +412,19 @@ AnnotationSource = Literal["manual", "automated", "device_log"]
 
 
 class QualityAnnotation(Entity):
-    """Polymorphic quality label (doc Sec 11)."""
+    """Polymorphic quality label (doc Sec 11).
+
+    ``breath_ids`` lists the breaths the label is about, using the ids of
+    the in-memory results (``QualityFlag.breath_id``/``breath_ids``). It is
+    None when the label covers the whole target.
+    """
 
     quality_annotation_id: str = Field(default_factory=lambda: new_id("qa"))
     target_type: TargetType
     target_id: str
     time_window_start: float | None = None
     time_window_end: float | None = None
+    breath_ids: list[str] | None = None
     quality_label: QualityLabel
     artifact_type: ArtifactType | None = None
     annotation_source: AnnotationSource | None = None

@@ -22,7 +22,6 @@ from ._shared import (
     _EITPROCESSING,
     _SESSION_ARTIFACT,
     _breaths_used_by,
-    _record_step,
     _upstream_metadata,
 )
 
@@ -102,10 +101,11 @@ def _impedance_in_mask(
     step: str,
     output: str,
 ) -> dict[str, Any]:
-    """Sum pixel impedance inside a mask, store the waveform and record the step.
+    """Sum pixel impedance inside a mask and store the waveform.
 
     The upstream waveform goes onto the EIT sequence; a native ``Signal``
-    with channel ``output`` goes into ``session.signals``.
+    with channel ``output`` goes into ``session.signals``. The returned
+    ``"_provenance"`` details go into the calling step's provenance record.
     """
 
     waveform = session.eit_adapter.get_regional_impedance(signal, mask, label=output)
@@ -129,8 +129,7 @@ def _impedance_in_mask(
     )
     native.metadata.update(metadata)
     session.signals.add(native)
-    _record_step(session, step, metadata=metadata)
-    return {output: waveform, f"{output}_signal": native}
+    return {output: waveform, f"{output}_signal": native, "_provenance": metadata}
 
 
 _PIXEL_SIGNAL_TO_SUM = StepArtifact(
@@ -193,6 +192,7 @@ _SEQUENCE_FOR_WAVEFORM = StepArtifact(
             description="Native Signal wrapping the regional impedance.",
         ),
     ),
+    record=True,
 )
 def regional_impedance(
     signal: Any,
@@ -276,6 +276,7 @@ def regional_impedance(
             description="Native Signal wrapping the functional impedance.",
         ),
     ),
+    record=True,
 )
 def functional_impedance(
     signal: Any,
@@ -467,6 +468,7 @@ def normalize_breaths(
             description="One TIV value per breath, each stored with its breath (IntervalData).",
         ),
     ),
+    record=True,
 )
 def continuous_tiv(
     signal: Any,
@@ -519,8 +521,11 @@ def continuous_tiv(
     )
     session.interval_data.add(continuous_tiv_result)
 
-    _record_step(session, "eit.continuous_tiv", metadata=metadata)
-    return {"continuous_tiv": result, "continuous_tiv_result": continuous_tiv_result}
+    return {
+        "continuous_tiv": result,
+        "continuous_tiv_result": continuous_tiv_result,
+        "_provenance": metadata,
+    }
 
 
 @register_step(
@@ -584,6 +589,7 @@ def continuous_tiv(
             description="One EELI value per breath, each stored with its breath (IntervalData).",
         ),
     ),
+    record=True,
 )
 def eeli(
     signal: Any,
@@ -635,5 +641,4 @@ def eeli(
     )
     session.interval_data.add(eeli_result)
 
-    _record_step(session, "eit.eeli", metadata=metadata)
-    return {"eeli": result, "eeli_result": eeli_result}
+    return {"eeli": result, "eeli_result": eeli_result, "_provenance": metadata}

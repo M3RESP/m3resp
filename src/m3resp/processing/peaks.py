@@ -33,7 +33,7 @@ from typing import Any
 import numpy as np
 
 from m3resp.core.exceptions import OptionalDependencyError
-from m3resp.processing.filters import capture_value
+from m3resp.processing.captures import capture_value
 
 
 def detect_peaks(

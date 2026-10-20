@@ -258,6 +258,26 @@ def my_step(signal, *, threshold: float = 0.5) -> dict:
 
 The function receives bound keyword arguments and returns a mapping of `{output_name: value}`. Steps that produce no outputs return `{}` or `None`. Import the optional modality packages inside the function body so the package installs cleanly without them.
 
+To log each call in `session.provenance`, register the step with `record=True`. The step must read `session`. It returns its own details (the settings it used, the function it called) under the output key `"_provenance"`:
+
+```python
+@register_step(
+    "my.smooth",
+    reads={"session": "session", "signal": "global_impedance"},
+    writes=("smoothed",),
+    modality="eit",
+    record=True,
+)
+def my_smooth(session, signal, *, window_seconds: float = 1.0) -> dict:
+    smoothed = ...
+    return {
+        "smoothed": smoothed,
+        "_provenance": {"parameters": {"window_seconds": window_seconds}},
+    }
+```
+
+After each call, one record is added with the step name and modality, its `reads` and `writes`, the installed version of the first package in `optional_packages` (`upstream_version`, None for a step without one), and the details from `"_provenance"`. The `"_provenance"` key is removed from the outputs. This works the same way when the function is called directly and when a workflow runs it.
+
 ## Example specs
 
 Worked examples ship with the repository. All except the two smaller introductory ones use `schema_version: 1` and declare an explicit `outputs.mode` (see above); every step in the `schema_version: 1` examples has a stable, explicit `id:`.

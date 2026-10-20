@@ -30,7 +30,6 @@ from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
     _airway_pressure,
-    _record_step,
     _upstream_metadata,
 )
 
@@ -376,6 +375,7 @@ def find_occluded_breaths(
             description="Moving baseline of the airway pressure, one value per sample.",
         ),
     ),
+    record=True,
 )
 def pocc_intervals(
     session: M3Session,
@@ -472,10 +472,13 @@ def pocc_intervals(
         )
     session.add_events("pocc_breaths", events)
 
-    _record_step(
-        session,
-        "ventilator.pocc_intervals",
-        metadata=_upstream_metadata(
+    return {
+        "pocc_start_indices": starts,
+        "pocc_end_indices": ends,
+        "pocc_interval_validity": np.asarray(valid_peaks, dtype=bool),
+        "pocc_events": events,
+        "pressure_baseline": baseline,
+        "_provenance": _upstream_metadata(
             source_function="m3resp.processing.intervals.onoff_from_baseline_crossings",
             operation="ventilator.pocc_intervals",
             parameters={
@@ -486,13 +489,6 @@ def pocc_intervals(
             source_package="m3resp",
             implementation="m3resp.processing.intervals",
         ),
-    )
-    return {
-        "pocc_start_indices": starts,
-        "pocc_end_indices": ends,
-        "pocc_interval_validity": np.asarray(valid_peaks, dtype=bool),
-        "pocc_events": events,
-        "pressure_baseline": baseline,
     }
 
 
@@ -571,6 +567,7 @@ def pocc_intervals(
             description="Native array-valued ParameterResult of the same values.",
         ),
     ),
+    record=True,
 )
 def pocc_time_product(
     session: M3Session,
@@ -667,18 +664,17 @@ def pocc_time_product(
         },
     )
 
-    _record_step(
-        session,
-        "ventilator.pocc_time_product",
-        metadata=_upstream_metadata(
+    return {
+        "pocc_time_products": time_products,
+        "pocc_time_product_result": result,
+        "_provenance": _upstream_metadata(
             source_function="m3resp.processing.metrics.window_integral",
             operation="ventilator.pocc_time_product",
             parameters=parameters,
             source_package="m3resp",
             implementation="m3resp.processing.metrics",
         ),
-    )
-    return {"pocc_time_products": time_products, "pocc_time_product_result": result}
+    }
 
 
 _POCC_CRITERIA_ROW_NAMES = ("dp_up_10", "dp_up_90", "dp_up_90_norm")
@@ -773,6 +769,7 @@ _POCC_CRITERIA_ROW_NAMES = ("dp_up_10", "dp_up_90", "dp_up_90_norm")
             description="Native QualityFlag per manoeuvre.",
         ),
     ),
+    record=True,
 )
 def pocc_quality(
     session: M3Session,
@@ -870,10 +867,12 @@ def pocc_quality(
     for flag in flags:
         session.quality.add(flag)
 
-    _record_step(
-        session,
-        "ventilator.pocc_quality",
-        metadata=_upstream_metadata(
+    return {
+        "pocc_quality": valid,
+        "pocc_quality_criteria": criteria,
+        "pocc_quality_results": results,
+        "pocc_quality_flags": flags,
+        "_provenance": _upstream_metadata(
             source_function="resurfemg.postprocessing.quality_assessment.pocc_quality",
             operation="ventilator.pocc_quality",
             parameters={
@@ -882,10 +881,4 @@ def pocc_quality(
                 "dp_up_90_norm_threshold": dp_up_90_norm_threshold,
             },
         ),
-    )
-    return {
-        "pocc_quality": valid,
-        "pocc_quality_criteria": criteria,
-        "pocc_quality_results": results,
-        "pocc_quality_flags": flags,
     }

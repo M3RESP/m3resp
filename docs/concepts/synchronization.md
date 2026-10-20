@@ -21,12 +21,17 @@ compared on one shared time axis. Key pieces:
   "Start times" below.
 - `session.synchronize_multimodal_breaths(...)` does the same thing but for
   already-detected events (breaths), not raw signals.
-- `resample_signal(...)` is a standalone utility that changes a signal's
-  sampling rate to match another signal's, for the cases where you need two
-  signals on one shared sample grid (e.g. a sample-by-sample comparison).
-  It uses linear interpolation between the original samples and applies no
+- `interpolate_to_time(signal, time)` puts a signal onto another signal's
+  time points, for the cases where you need two signals on one shared
+  sample grid (e.g. a sample-by-sample comparison). Pass the other
+  signal's `time`. Synchronize the recordings first
+  (`session.synchronize_raw_modalities(...)`): the function cannot check
+  that the two time axes are on the same clock, so with unsynchronized
+  recordings the result is wrong and no warning is given. It
+  uses linear interpolation between the original samples and applies no
   anti-aliasing filter, so low-pass filter the signal before lowering its
-  sampling rate. You call it yourself when you need it. Breath linking and
+  sampling rate. Time points outside the signal's recording get NaN, with
+  a warning. You call it yourself when you need it. Breath linking and
   the breath timing parameters below work on real-world timestamps
   (`BreathEvent.start_time`/`end_time`/`extremum_time`), so most analysis
   stays at each modality's original sample rate.
@@ -52,8 +57,8 @@ modality's breath looks compared to another's), and event agreement (of the
 breaths any of the requested modalities found, what fraction all of them
 found, a rough "did every sensor agree a breath happened here" score).
 
-`m3resp.synchronization` provides manual offsets, timestamp alignment,
-resampling, and nearest-neighbor breath linking. The alignment assumes a
+`m3resp.synchronization` provides manual offsets, timestamp alignment
+and nearest-neighbor breath linking. The alignment assumes a
 constant offset between recordings throughout the measurement.
 
 ## Start times
@@ -161,8 +166,8 @@ or reload is reflected in streams recorded earlier.
 - `m3resp.compute_offsets_from_timestamps(reference_modality, timestamps)` /
   `m3resp.align_events_by_modality_offset(events, offsets)` are the
   lower-level functions these session methods call.
-- `m3resp.resample_signal(signal, target_frequency_hz)` resamples a `Signal`
-  onto a common sampling rate.
+- `m3resp.interpolate_to_time(signal, time)` puts a `Signal` onto the
+  given time points in seconds, usually another signal's `time`.
 
 ## Linking breaths: `LinkedBreath`
 

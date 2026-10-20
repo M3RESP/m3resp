@@ -5,31 +5,44 @@ reads (mapped onto its parameter names) and the context keys it writes. A
 workflow spec lists steps by name and binds them together, so workflows can be
 assembled from a YAML/JSON file without writing custom Python.
 
-Steps additionally carry optional, JSON-safe GUI/discovery metadata
-(:class:`StepParameter`, :class:`StepArtifact`) describing static parameters
-and input/output artifacts in a backend-neutral form. This metadata is being
-backfilled module by module (see
-``plan/stage2/3_pipeline_structure_implementation_plan.md`` Phase 1); a step
-with no declared parameters/artifacts is still a fully valid, executable step.
+Steps can also carry JSON-safe descriptions for step discovery and a GUI
+(:class:`StepParameter`, :class:`StepArtifact`): their static parameters with
+units and limits, and the values they read and write. A step without these
+descriptions runs the same way.
+
+:class:`StepInfo` holds the fields that describe a step. Both
+:class:`StepDefinition` (what the registry stores) and
+:class:`StepDescription` (what the command line and a GUI get) build on it,
+so each of these fields is declared once.
 """
 
 from __future__ import annotations
 
+import functools
 import importlib.util
 import json
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from inspect import Parameter, signature
 from typing import Any, Literal
 
 from m3resp.core.exceptions import StepMetadataError, UnknownStepError
+from m3resp.workflows.lifecycle import optional_package_version
 
 # A step callable receives bound keyword arguments and returns a mapping of
 # {output_name: value}. ``None`` is treated as "no outputs".
 StepCallable = Callable[..., Mapping[str, Any] | None]
 
-#: Controlled, JSON-safe static parameter vocabulary (Phase 1.1).
+#: Output key a step registered with ``record=True`` uses for its own
+#: provenance details (settings used, source function, ...). The step's
+#: wrapper takes this key out of the outputs and adds the details to the
+#: step's provenance record. Steps write the key as the text
+#: ``"_provenance"``; the registry and the workflow engine use this name
+#: to look for it.
+PROVENANCE_KEY = "_provenance"
+
+#: Allowed ``StepParameter.value_type`` values.
 ParameterType = Literal[
     "boolean", "integer", "number", "string", "path", "choice", "mapping", "list"
 ]
@@ -44,10 +57,9 @@ _NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
 #: Context/output names reserved by the engine; a step must not write to them.
 _RESERVED_OUTPUT_NAMES = frozenset(("session",))
 
-#: Sentinel ``StepArtifact.artifact_type`` for a genuine passthrough step
-#: (e.g. ``eit.slice_signal``, which accepts/returns whatever signal type it was
-#: given) - exempt from the compiler's artifact-type compatibility check
-#: (Phase 10 of the pipeline-structure plan) on whichever side declares it.
+#: ``StepArtifact.artifact_type`` for a step that accepts and returns any
+#: signal type (e.g. ``eit.slice_signal``). The compiler skips the artifact
+#: type check for a value on whichever side declares it.
 ANY_ARTIFACT_TYPE = "any"
 
 
@@ -99,8 +111,8 @@ class StepArtifact:
     shape_hint: str | None = None
     #: Whether this artifact is part of the native/public result contract.
     public: bool = True
-    #: True for a temporary upstream/adapter object excluded from GUI results
-    #: by default (see the plan's "Native artifacts are the public contract").
+    #: True for a temporary upstream/adapter object that a GUI leaves out of
+    #: its results by default.
     compatibility_only: bool = False
 
     def as_dict(self) -> dict[str, Any]:
@@ -118,69 +130,36 @@ class StepArtifact:
         }
 
 
-@dataclass(frozen=True)
-class StepDefinition:
-    """Metadata describing one registered step."""
+@dataclass(frozen=True, kw_only=True)
+class StepInfo:
+    """The fields that describe a registered step.
+
+    :class:`StepDefinition` and :class:`StepDescription` both build on this
+    class. A field added here reaches the registry, ``describe_step`` and
+    its JSON output; add the matching keyword to :func:`register_step`.
+    """
 
     name: str
-    func: StepCallable
-    #: parameter name -> default context key, or None if the binding is required
-    #: and must be supplied via ``in:`` in the spec.
-    reads: Mapping[str, str | None] = field(default_factory=dict)
-    #: natural output names the step returns (default context keys it writes).
-    writes: tuple[str, ...] = ()
-    #: parameter names in ``reads`` whose context key may be absent. The step
-    #: is called without the argument (falling back to its own default) rather
-    #: than the workflow failing to compile. For an input that improves a
-    #: result when present but is not required to produce one - e.g. the EMG
-    #: baseline that ``emg.detect_breaths`` sets its threshold against.
-    optional_reads: tuple[str, ...] = ()
-    #: context keys that must already exist before the step runs, but are not
-    #: passed as arguments (e.g. an in-place mutated sequence).
-    requires: tuple[str, ...] = ()
     summary: str = ""
-    #: Longer, GUI-facing description. Falls back to ``summary`` when unset.
+    #: Longer, GUI-facing description. ``describe_step`` uses ``summary``
+    #: when this is empty.
     description: str = ""
-    #: Static (``with:``) parameter metadata. Optional during migration; see
-    #: the module docstring.
-    parameters: tuple[StepParameter, ...] = ()
-    #: Whether a user has confirmed ``parameters`` is complete, i.e. that an
-    #: empty tuple means "audited, genuinely has no tunable static parameter"
-    #: rather than "not looked at yet". Set automatically when ``parameters``
-    #: is non-empty; otherwise must be set explicitly via
-    #: ``register_step(..., parameters_reviewed=True)`` once audited.
-    parameters_reviewed: bool = False
-    #: Groups of parameter names that must not be set together in the same
-    #: step invocation (e.g. ``emg.ecg_gating``'s ``gate_width_seconds``/
-    #: ``gate_width_samples``) - a structural, compile-time constraint on top
-    #: of each parameter's own type/range/choice checks (Phase 10 of the
-    #: pipeline-structure plan). Every name in every group must be a declared
-    #: parameter; checked at registration time.
-    mutually_exclusive_parameters: tuple[tuple[str, ...], ...] = ()
-    #: Artifact metadata for ``reads``/``requires`` context keys.
-    input_artifacts: tuple[StepArtifact, ...] = ()
-    #: Artifact metadata for ``writes`` context keys.
-    output_artifacts: tuple[StepArtifact, ...] = ()
-    #: Dotted resource names this step reads from the shared ``M3Session``
-    #: object itself (as opposed to an explicit ``reads``/``in:`` context
-    #: key) - e.g. ``"session.processed.emg"`` for a step that calls
-    #: ``session.detect_emg_breaths()``, which reads whatever the most
-    #: recent preprocessing/ECG-removal step left on the session, not a
-    #: declared context key. Optional, additive metadata; see
-    #: ``m3resp.workflows.session_deps``.
-    session_reads: tuple[str, ...] = ()
-    #: Dotted resource names this step writes onto the shared ``M3Session``
-    #: object, e.g. ``"session.raw.eit"`` for a loader, or
-    #: ``"session.quality"`` for a step that calls ``session.quality.add``.
-    #: A resource name is an ancestor of any more specific name sharing its
-    #: dotted prefix (``"session.raw"`` covers ``"session.raw.eit"``), so a
-    #: step may declare whichever granularity it actually audited.
-    session_writes: tuple[str, ...] = ()
     #: Owning modality, e.g. ``"eit"``, ``"emg"``, or ``None`` for a
     #: cross-modality/generic step.
     modality: str | None = None
     #: Free-form grouping for GUI menus, e.g. ``"preprocessing"``, ``"quality"``.
     category: str | None = None
+    #: Static (``with:``) parameter descriptions.
+    parameters: tuple[StepParameter, ...] = ()
+    #: Whether someone has checked that ``parameters`` is complete, so that
+    #: an empty tuple means "has no static parameter" and not "not looked at
+    #: yet". Set automatically when ``parameters`` is non-empty; otherwise
+    #: set it with ``register_step(..., parameters_reviewed=True)``.
+    parameters_reviewed: bool = False
+    #: Descriptions of the ``reads``/``requires`` context keys.
+    input_artifacts: tuple[StepArtifact, ...] = ()
+    #: Descriptions of the ``writes`` context keys.
+    output_artifacts: tuple[StepArtifact, ...] = ()
     #: Other step names that produce a compatible result (explicit
     #: alternatives selected in YAML, never auto-selected by the engine).
     alternatives: tuple[str, ...] = ()
@@ -191,6 +170,50 @@ class StepDefinition:
     resource_profile: str | None = None
     version: str | None = None
     deprecated_since: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class StepDefinition(StepInfo):
+    """A registered step: the :class:`StepInfo` fields, the function, and
+    the context keys it reads and writes."""
+
+    func: StepCallable
+    #: parameter name -> default context key, or None if the binding is required
+    #: and must be supplied via ``in:`` in the spec.
+    reads: Mapping[str, str | None] = field(default_factory=dict)
+    #: natural output names the step returns (default context keys it writes).
+    writes: tuple[str, ...] = ()
+    #: parameter names in ``reads`` whose context key may be absent. The step
+    #: is then called without the argument and uses its own default. For an
+    #: input that improves a result when present, e.g. the EMG baseline that
+    #: ``emg.detect_breaths`` sets its threshold against.
+    optional_reads: tuple[str, ...] = ()
+    #: context keys that must already exist before the step runs, but are not
+    #: passed as arguments (e.g. an in-place mutated sequence).
+    requires: tuple[str, ...] = ()
+    #: Groups of parameter names that must not be set together in the same
+    #: step invocation (e.g. ``emg.ecg_gating``'s ``gate_width_seconds``/
+    #: ``gate_width_samples``), checked when a workflow is compiled. Every
+    #: name in every group must be a declared parameter; checked at
+    #: registration time.
+    mutually_exclusive_parameters: tuple[tuple[str, ...], ...] = ()
+    #: Dotted resource names this step reads from the shared ``M3Session``
+    #: object itself, outside its ``reads``/``in:`` context keys - e.g.
+    #: ``"session.processed.emg"`` for a step that calls
+    #: ``session.detect_emg_breaths()``, which reads whatever the most
+    #: recent preprocessing/ECG-removal step left on the session. See
+    #: ``m3resp.workflows.session_deps``.
+    session_reads: tuple[str, ...] = ()
+    #: Dotted resource names this step writes onto the shared ``M3Session``
+    #: object, e.g. ``"session.raw.eit"`` for a loader, or
+    #: ``"session.quality"`` for a step that calls ``session.quality.add``.
+    #: A resource name is an ancestor of any more specific name sharing its
+    #: dotted prefix (``"session.raw"`` covers ``"session.raw.eit"``), so a
+    #: step may declare whichever level of detail was checked.
+    session_writes: tuple[str, ...] = ()
+    #: Whether each call adds one provenance record to the session; see
+    #: ``register_step(..., record=True)``.
+    record: bool = False
 
     @property
     def operation_id(self) -> str:
@@ -234,6 +257,7 @@ def register_step(
     resource_profile: str | None = None,
     version: str | None = None,
     deprecated_since: str | None = None,
+    record: bool = False,
     aliases: tuple[str, ...] = (),
 ) -> Callable[[StepCallable], StepCallable]:
     """Register a function and its workflow inputs, outputs and descriptions.
@@ -262,22 +286,32 @@ def register_step(
         resource_profile: Optional description of processing resources needed.
         version: Optional operation version.
         deprecated_since: Version from which this operation is deprecated.
+        record: Add one provenance record to ``session.provenance`` after
+            each call. The record holds the step name, its reads and writes,
+            the installed version of its first optional package (None for a
+            step without one), and the details the step returns under the
+            output key ``"_provenance"``. That key is removed from the
+            outputs. The step must read ``session``.
         aliases: Former operation names that resolve to this registration and
             are omitted from step discovery.
 
     Returns:
         Callable: Decorator that validates metadata, adds the definition and
-            aliases to the registries, and returns the supplied function.
+            aliases to the registries, and returns the supplied function, or
+            with ``record=True`` the function wrapped to record each call.
 
     Raises:
         ValueError: When applying the decorator, if a name or alias conflicts
             with a registration, or optional_reads names an undeclared input.
         StepMetadataError: When applying the decorator, if names, parameters,
-            input/output descriptions or their JSON representation are invalid.
+            input/output descriptions or their JSON representation are
+            invalid, or ``record=True`` is set for a step that does not read
+            ``session``.
     """
 
     def decorator(func: StepCallable) -> StepCallable:
-        """Validate and register the step definition and aliases, returning func."""
+        """Validate and register the step definition and aliases, returning
+        func (wrapped when ``record=True``)."""
 
         if name in STEP_REGISTRY:
             raise ValueError(f"Workflow step '{name}' is already registered.")
@@ -298,9 +332,14 @@ def register_step(
                 f"Workflow step '{name}' declares optional_reads "
                 f"{sorted(unknown_optional)} that are not in 'reads'."
             )
+        if record and "session" not in (reads or {}):
+            raise StepMetadataError(
+                f"Workflow step '{name}' sets record=True, so it must read 'session'."
+            )
+        step_func = _record_each_call(name, func) if record else func
         definition = StepDefinition(
             name=name,
-            func=func,
+            func=step_func,
             reads=dict(reads or {}),
             optional_reads=tuple(optional_reads),
             writes=tuple(writes),
@@ -323,24 +362,66 @@ def register_step(
             resource_profile=resource_profile,
             version=version,
             deprecated_since=deprecated_since,
+            record=record,
         )
         _validate_step_definition(definition)
         STEP_REGISTRY[name] = definition
         for alias in aliases:
             STEP_ALIASES[alias] = name
-        return func
+        return step_func
 
     return decorator
 
 
-def _validate_step_definition(definition: StepDefinition) -> None:
-    """Registration-time checks (Phase 1.2).
+def _record_each_call(name: str, func: StepCallable) -> StepCallable:
+    """Wrap a step so that each call adds one provenance record to its session.
 
-    Two tiers: name/output-name checks apply to every step, since every
-    currently registered step already satisfies them. Parameter/artifact
-    metadata checks only run when that metadata is actually declared, since
-    most built-in steps have not been backfilled with it yet — this keeps
-    ``register_step`` additive during the module-by-module migration.
+    The record is added after the step returns, with the fields described
+    under ``record`` in :func:`register_step`.
+    """
+
+    func_signature = signature(func)
+
+    @functools.wraps(func)
+    def run_and_record(*args: Any, **kwargs: Any) -> Mapping[str, Any] | None:
+        result = func(*args, **kwargs)
+        if result is None:
+            outputs: dict[str, Any] = {}
+        else:
+            outputs = dict(result)
+        details = outputs.pop(PROVENANCE_KEY, {})
+        session = func_signature.bind_partial(*args, **kwargs).arguments.get("session")
+        if session is None:
+            raise TypeError(
+                f"Workflow step '{name}' records each call in the session's "
+                "provenance, so it needs a session."
+            )
+        definition = STEP_REGISTRY[name]
+        session._record(
+            name,
+            definition.modality,
+            parameters={
+                "step": name,
+                "reads": sorted(definition.reads),
+                "writes": list(definition.writes),
+                "upstream_version": (
+                    optional_package_version(definition.optional_packages[0])
+                    if definition.optional_packages
+                    else None
+                ),
+                **details,
+            },
+        )
+        return None if result is None else outputs
+
+    return run_and_record
+
+
+def _validate_step_definition(definition: StepDefinition) -> None:
+    """Checks run when a step is registered.
+
+    The step name and output names are checked for every step. Parameter
+    and artifact descriptions are checked when the step declares them.
     """
 
     if not _NAME_PATTERN.match(definition.name):
@@ -507,48 +588,34 @@ def available_steps() -> dict[str, str]:
     return {name: step.summary for name, step in sorted(STEP_REGISTRY.items())}
 
 
-@dataclass(frozen=True)
-class StepDescription:
-    """JSON-safe discovery view of a registered step (Phase 1.5).
+@dataclass(frozen=True, kw_only=True)
+class StepDescription(StepInfo):
+    """What the command line and a GUI get for one registered step: the
+    :class:`StepInfo` fields plus ``capability``. All values are JSON-safe,
+    and :meth:`as_dict` gives them as a dictionary."""
 
-    Unlike :class:`StepDefinition`, this never carries the callable, so it
-    can be handed to the CLI/GUI and serialized directly.
-    """
-
-    name: str
-    summary: str
-    description: str
-    modality: str | None
-    category: str | None
-    parameters: tuple[StepParameter, ...]
-    parameters_reviewed: bool
-    input_artifacts: tuple[StepArtifact, ...]
-    output_artifacts: tuple[StepArtifact, ...]
-    alternatives: tuple[str, ...]
-    optional_packages: tuple[str, ...]
-    resource_profile: str | None
-    version: str | None
-    deprecated_since: str | None
+    #: ``"available"``, ``"missing_optional_dependency"`` or ``"deprecated"``,
+    #: from :func:`step_capability_state`.
     capability: str
 
     def as_dict(self) -> dict[str, Any]:
+        """Every field by name; tuples become lists, and parameter and
+        artifact descriptions become dictionaries."""
+
         return {
-            "name": self.name,
-            "summary": self.summary,
-            "description": self.description,
-            "modality": self.modality,
-            "category": self.category,
-            "parameters": [p.as_dict() for p in self.parameters],
-            "parameters_reviewed": self.parameters_reviewed,
-            "input_artifacts": [a.as_dict() for a in self.input_artifacts],
-            "output_artifacts": [a.as_dict() for a in self.output_artifacts],
-            "alternatives": list(self.alternatives),
-            "optional_packages": list(self.optional_packages),
-            "resource_profile": self.resource_profile,
-            "version": self.version,
-            "deprecated_since": self.deprecated_since,
-            "capability": self.capability,
+            item.name: _json_value(getattr(self, item.name)) for item in fields(self)
         }
+
+
+def _json_value(value: Any) -> Any:
+    """A field value as JSON-safe data: tuples become lists, and objects
+    with an ``as_dict`` method become dictionaries."""
+
+    if isinstance(value, tuple):
+        return [_json_value(item) for item in value]
+    if hasattr(value, "as_dict"):
+        return value.as_dict()
+    return value
 
 
 def step_capability_state(name: str) -> str:
@@ -578,23 +645,9 @@ def describe_step(name: str) -> StepDescription:
     from m3resp.workflows import steps  # noqa: F401
 
     definition = get_step(name)
-    return StepDescription(
-        name=definition.name,
-        summary=definition.summary,
-        description=definition.description or definition.summary,
-        modality=definition.modality,
-        category=definition.category,
-        parameters=definition.parameters,
-        parameters_reviewed=definition.parameters_reviewed,
-        input_artifacts=definition.input_artifacts,
-        output_artifacts=definition.output_artifacts,
-        alternatives=definition.alternatives,
-        optional_packages=definition.optional_packages,
-        resource_profile=definition.resource_profile,
-        version=definition.version,
-        deprecated_since=definition.deprecated_since,
-        capability=step_capability_state(name),
-    )
+    shared = {item.name: getattr(definition, item.name) for item in fields(StepInfo)}
+    shared["description"] = definition.description or definition.summary
+    return StepDescription(**shared, capability=step_capability_state(name))
 
 
 def describe_steps(*, prefix: str | None = None) -> list[StepDescription]:

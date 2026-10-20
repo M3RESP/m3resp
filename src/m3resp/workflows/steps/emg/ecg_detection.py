@@ -14,7 +14,6 @@ from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _record_step,
     _upstream_metadata,
 )
 
@@ -144,6 +143,7 @@ def _select_ecg_source(
             description="Native ParameterResult: count of detected ECG peaks.",
         ),
     ),
+    record=True,
 )
 def ecg_detect_peaks(
     session: M3Session,
@@ -208,17 +208,13 @@ def ecg_detect_peaks(
         metadata=detection_parameters,
     )
 
-    _record_step(
-        session,
-        "emg.ecg_detect_peaks",
-        metadata=_upstream_metadata(
-            source_function="resurfemg.preprocessing.ecg_removal.detect_ecg_peaks",
-            operation="emg.ecg_detect_peaks",
-            parameters=detection_parameters,
-        ),
-    )
     return {
         "ecg_peak_indices": indices,
         "ecg_peak_events": events,
         "ecg_peak_count_result": count_result,
+        "_provenance": _upstream_metadata(
+            source_function="resurfemg.preprocessing.ecg_removal.detect_ecg_peaks",
+            operation="emg.ecg_detect_peaks",
+            parameters=detection_parameters,
+        ),
     }

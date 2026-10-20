@@ -24,7 +24,6 @@ from m3resp.synchronization.offset_estimation import (
     SyncOffsetResult,
     estimate_sync_offset,
 )
-from m3resp.synchronization.resampling import resample_signal
 
 __all__ = [
     "SyncOffsetResult",
@@ -40,5 +39,4 @@ __all__ = [
     "iter_ventilator_detections",
     "link_breaths_by_time",
     "normalize_ventilator_breath",
-    "resample_signal",
 ]
