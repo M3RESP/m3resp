@@ -195,17 +195,18 @@
 .res-plot .unit{font-family:var(--mono);font-size:10.5px;fill:var(--text-dim);font-weight:400;}
 .res-plot .sig{fill:none;stroke:var(--mod-c);stroke-width:1.6;vector-effect:non-scaling-stroke;stroke-linejoin:round;}
 .res-plot .base{fill:none;stroke:var(--text-dim);stroke-width:1.2;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;}
-.res-plot .win{fill:color-mix(in srgb, var(--mod-c) 10%, transparent);}
-.res-plot .win.flag{fill:color-mix(in srgb, var(--warn) 22%, transparent);}
+.res-plot .win{fill:color-mix(in srgb, var(--ok) 13%, transparent);}
+.res-plot .win.flag{fill:color-mix(in srgb, var(--crit) 20%, transparent);}
 .res-plot .peak{stroke:var(--text);stroke-width:1;stroke-dasharray:2 3;vector-effect:non-scaling-stroke;opacity:0.55;}
 .res-plot .peak-dot{fill:var(--surface);stroke:var(--text);stroke-width:1.5;vector-effect:non-scaling-stroke;}
 .res-plot .peak-lab{font-family:var(--mono);font-size:10.5px;fill:var(--text-dim);font-weight:400;}
-.res-plot .bar{fill:color-mix(in srgb, var(--mod-c) 72%, var(--surface));}
-.res-plot .bar.fail{fill:var(--warn);}
+.res-plot .bar{fill:color-mix(in srgb, var(--ok) 80%, var(--surface));}
+.res-plot .bar.fail{fill:var(--crit);}
 .res-plot .limit{stroke:var(--crit);stroke-width:1.5;stroke-dasharray:6 4;vector-effect:non-scaling-stroke;}
 .res-plot .limit-lab{font-family:var(--mono);font-size:10.5px;fill:var(--crit);}
 .res-plot .mean{stroke:var(--text-dim);stroke-width:1;vector-effect:non-scaling-stroke;}
 .res-plot .mean-lab{font-family:var(--mono);font-size:10.5px;fill:var(--text-dim);}
+.res-plot .limit-lab, .res-plot .mean-lab{paint-order:stroke;stroke:var(--surface);stroke-width:3px;stroke-linejoin:round;}
 .res-pocc .pass{fill:color-mix(in srgb, var(--ok) 13%, transparent);}
 .res-pocc .axis{stroke:var(--border);stroke-width:1.5;}
 .res-pocc .row-lab{font-size:12.5px;font-weight:400;fill:var(--text);}
@@ -219,8 +220,10 @@
 .res-plot-key i{display:inline-block;width:16px;height:10px;border-radius:2px;}
 .res-plot-key .k-sig{height:2px;background:var(--emg);}
 .res-plot-key .k-base{height:0;border-top:1.5px dashed var(--text-dim);}
-.res-plot-key .k-win{background:color-mix(in srgb, var(--emg) 14%, var(--surface));}
-.res-plot-key .k-flag{background:color-mix(in srgb, var(--warn) 30%, var(--surface));}
+.res-plot-key .k-win{background:color-mix(in srgb, var(--ok) 18%, var(--surface));}
+.res-plot-key .k-flag{background:color-mix(in srgb, var(--crit) 26%, var(--surface));}
+.res-plot-key .k-pass{background:color-mix(in srgb, var(--ok) 80%, var(--surface));}
+.res-plot-key .k-fail{background:var(--crit);}
 .res-masks{display:flex;gap:28px;flex-wrap:wrap;justify-content:center;}
 .res-masks figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:8px;}
 .res-masks .res-mask{width:260px;height:260px;}

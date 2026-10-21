@@ -322,6 +322,16 @@ function resOpenCheckMod(mod){
 const resPlotCards = document.getElementById('resPlotCards');
 const resPlotOpen = new Set();
 const resPlotState = {emgRange:'all', emgPeaks:true, emgWin:true, emgBase:true, bvValue:'percentage_under_baseline', imgLarge:{}};
+// an open plot is drawn at the width of its box in pixels, so the text keeps its
+// shape; the plot is drawn again when the box changes width
+let resPlotW = 1000;
+const resPlotSizer = new ResizeObserver(entries=> entries.forEach(en=>{
+  const w = Math.round(en.contentRect.width), body = en.target;
+  if(!w || w===+body.dataset.w) return;
+  body.dataset.w = w;
+  resPlotW = w;
+  if(body.resPlot.kind!=='img') body.innerHTML = resPlotBody(body.resPlot, false);
+}));
 
 function renderResPlotCards(){
   resPlotCards.innerHTML = '';
@@ -373,6 +383,9 @@ function resPlotTile(p){
     </div>
     <div class="res-view-tools">${resPlotTools(p)}</div>
     <div class="res-view-body">${resPlotBody(p, false)}</div>`;
+  const body = tile.querySelector('.res-view-body');
+  body.resPlot = p;
+  resPlotSizer.observe(body);
   tile.addEventListener('click', e=>{
     if(e.target.closest('[data-close]')){ resPlotOpen.delete(p.id); tile.replaceWith(resPlotTile(p)); return; }
     if(e.target.closest('[data-find-step]')){ qcFindStep(p); return; }
@@ -433,7 +446,7 @@ function resEmgEnvAt(t){
 }
 const resEmgBaseAt = t=> 8.2 + 0.8*Math.sin(t/7);
 function resEmgPlot(thumb){
-  const W = 1000, H = thumb ? 150 : 250, m = thumb ? {l:4, r:4, t:8, b:8} : {l:46, r:14, t:22, b:28};
+  const W = thumb ? 1000 : resPlotW, H = thumb ? 150 : 250, m = thumb ? {l:4, r:4, t:8, b:8} : {l:46, r:14, t:22, b:28};
   const r = resPlotState.emgRange, x0 = thumb || r==='all' ? 0 : +r, x1 = thumb || r==='all' ? REC_SECONDS : +r+20;
   const y0 = 0, y1 = 42;
   const X = t=> m.l + (t-x0)/(x1-x0)*(W-m.l-m.r), Y = y=> H-m.b - (y-y0)/(y1-y0)*(H-m.t-m.b);
@@ -449,7 +462,7 @@ function resEmgPlot(thumb){
     if(!thumb && resPlotState.emgPeaks) peaks += `<line class="peak" x1="${X(p)}" x2="${X(p)}" y1="${Y(resEmgEnvAt(p))-4}" y2="${H-m.b}"/><circle class="peak-dot" cx="${X(p)}" cy="${Y(resEmgEnvAt(p))}" r="3"/>`
       + (x1-x0<=20 ? `<text class="peak-lab" x="${X(p)}" y="${Y(resEmgEnvAt(p))-9}" text-anchor="middle">${i+1}</text>` : '');
   });
-  return `<svg class="res-plot mod-emg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" width="100%" height="${H}" role="img" aria-label="EMGdi envelope with 19 breaths">
+  return `<svg class="res-plot mod-emg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="${thumb ? 'none' : 'xMinYMid meet'}" width="100%" height="${H}" role="img" aria-label="EMGdi envelope with 19 breaths">
     ${resAxes(W, H, m, x0, x1, y0, y1, x1-x0>20 ? 10 : 2, [0, 10, 20, 30, 40], 'µV', thumb)}
     ${wins}
     ${!thumb && resPlotState.emgBase ? `<polyline class="base" points="${base}"/>` : ''}
@@ -457,31 +470,34 @@ function resEmgPlot(thumb){
     ${peaks}
     ${thumb ? '' : `<text class="tick" x="${W-m.r}" y="${H-4}" text-anchor="end">time (s)</text>`}
   </svg>`
-  + (thumb ? '' : `<div class="res-plot-key"><span><i class="k-sig"></i>EMGdi envelope (RMS, ECG removed)</span><span><i class="k-base"></i>baseline</span><span><i class="k-win"></i>onset to offset</span><span><i class="k-flag"></i>failed: time under baseline</span></div>`);
+  + (thumb ? '' : `<div class="res-plot-key"><span><i class="k-sig"></i>EMGdi envelope (RMS, ECG removed)</span><span><i class="k-base"></i>baseline</span><span><i class="k-win"></i>onset to offset, passed</span><span><i class="k-flag"></i>failed: time under baseline</span></div>`);
 }
 
-// one bar per EMG breath, with the limit of the check when it has one
+// one bar per EMG breath, with the limit of the check when it has one;
+// green when the breath passed the time-under-baseline check, red when it failed
 function resBreathValuesPlot(thumb){
   const v = RES_VALUES.find(x=> x.code===(thumb ? 'percentage_under_baseline' : resPlotState.bvValue));
   const lim = v.code==='percentage_under_baseline' ? 40 : null;
-  const W = 1000, H = thumb ? 150 : 240, m = thumb ? {l:4, r:4, t:8, b:8} : {l:46, r:14, t:22, b:30};
+  const W = thumb ? 1000 : resPlotW, H = thumb ? 150 : 240, m = thumb ? {l:4, r:4, t:8, b:8} : {l:46, r:14, t:22, b:30};
   const vals = v.items.map(x=> x.value), y1 = Math.max(...vals, lim || 0)*1.15;
   const Y = y=> H-m.b - y/y1*(H-m.t-m.b), bw = (W-m.l-m.r)/vals.length;
   const step = y1>20 ? 10 : y1>2 ? 0.5 : 0.25, ticks = [];
   for(let y=0; y<=y1; y+=step) ticks.push(+y.toFixed(2));
-  const f = resFlags(v);
+  const f = resFlags(v), aub = qcItemsOf('percentage_under_baseline');
   let s = '';
   if(!thumb) ticks.forEach(y=>{ s += `<line class="grid" x1="${m.l}" x2="${W-m.r}" y1="${Y(y)}" y2="${Y(y)}"/><text class="tick" x="${m.l-6}" y="${Y(y)+3.5}" text-anchor="end">${y}</text>`; });
   v.items.forEach((x, i)=>{
-    const fail = lim!==null && x.value>lim;
+    const fail = !aub[i].passed;
     s += `<rect class="bar${fail ? ' fail' : ''}" x="${m.l+i*bw+bw*0.18}" y="${Y(x.value)}" width="${bw*0.64}" height="${H-m.b-Y(x.value)}" rx="2"><title>breath ${x.id} · ${resNum(x.value, v.digits)} ${v.unit}${f && f.failedBy[x.id] ? ' · failed: '+f.failedBy[x.id].map(c=> c.name).join(', ') : ''}</title></rect>`;
     if(!thumb) s += `<text class="tick" x="${m.l+i*bw+bw/2}" y="${H-m.b+15}" text-anchor="middle">${x.id}</text>`;
   });
   if(lim!==null) s += `<line class="limit" x1="${m.l}" x2="${W-m.r}" y1="${Y(lim)}" y2="${Y(lim)}"/>` + (thumb ? '' : `<text class="limit-lab" x="${W-m.r}" y="${Y(lim)-5}" text-anchor="end">limit ≤ 40 %</text>`);
-  const mean = v.value;
-  s += `<line class="mean" x1="${m.l}" x2="${W-m.r}" y1="${Y(mean)}" y2="${Y(mean)}"/>` + (thumb ? '' : `<text class="mean-lab" x="${m.l+4}" y="${Y(mean)-5}">mean ${resNum(mean, v.digits)} ${v.unit}</text>`);
+  // the mean label goes under its line when the limit line is just above it
+  const mean = v.value, meanY = lim!==null && mean<lim && Y(mean)-Y(lim)<16 ? Y(mean)+13 : Y(mean)-5;
+  s += `<line class="mean" x1="${m.l}" x2="${W-m.r}" y1="${Y(mean)}" y2="${Y(mean)}"/>` + (thumb ? '' : `<text class="mean-lab" x="${m.l+4}" y="${meanY}">mean ${resNum(mean, v.digits)} ${v.unit}</text>`);
   if(!thumb) s += `<text class="unit" x="${m.l-6}" y="${m.t-6}" text-anchor="end">${v.unit || 'ratio'}</text><text class="tick" x="${W-m.r}" y="${H-2}" text-anchor="end">breath</text>`;
-  return `<svg class="res-plot mod-emg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" width="100%" height="${H}" role="img" aria-label="${v.name} per breath">${s}</svg>`;
+  return `<svg class="res-plot mod-emg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="${thumb ? 'none' : 'xMinYMid meet'}" width="100%" height="${H}" role="img" aria-label="${v.name} per breath">${s}</svg>`
+  + (thumb ? '' : `<div class="res-plot-key"><span><i class="k-pass"></i>passed</span><span><i class="k-fail"></i>failed: time under baseline</span></div>`);
 }
 
 // the two Pocc criteria of the run, each on its own scale with its pass band
@@ -490,7 +506,7 @@ function resPoccPlot(thumb){
     {v:RES_VALUES.find(x=> x.code==='pocc_quality_dp_up_10'), lo:-0.05, hi:0.05, ticks:[-0.04, -0.02, 0, 0.02, 0.04]},
     {v:RES_VALUES.find(x=> x.code==='pocc_quality_dp_up_90'), lo:-0.2, hi:2.4, ticks:[0, 0.5, 1, 1.5, 2]},
   ];
-  const W = 1000, rowH = thumb ? 70 : 92, H = rows.length*rowH + (thumb ? 10 : 16), l = thumb ? 10 : 210, r = thumb ? 10 : 30;
+  const W = thumb ? 1000 : Math.max(600, resPlotW), rowH = thumb ? 70 : 92, H = rows.length*rowH + (thumb ? 10 : 16), l = thumb ? 10 : 210, r = thumb ? 10 : 30;
   let s = '';
   rows.forEach((row, k)=>{
     const {v} = row, y = k*rowH + rowH/2 + 6, X = x=> l + (x-row.lo)/(row.hi-row.lo)*(W-l-r);
