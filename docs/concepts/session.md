@@ -69,7 +69,7 @@ session.preprocess_ventilator()      # airway pressure, flow and volume
 session.detect_ventilator_breaths()  # session.events["ventilator_breaths"]
 ```
 
-- `load_ventilator` reads multi-channel files (for example a Biopac export) with the EMG loader, and EIT `.bin` files with the EIT loader.
+- `load_ventilator` reads multi-channel files (for example a Biopac `.txt` export) with the EMG loader, and EIT `.bin` files with the EIT loader.
 - `preprocess_ventilator` takes the airway pressure, flow and volume channels. It filters them only if you give a cutoff, for example `lowpass_hz=20.0`. The result keeps the original values too.
 - Each ventilator {term}`signal` has `modality="ventilator"` and a `category`: `"airway_pressure"`, `"airflow"` or `"volume"` (see {doc}`signals`).
 - `detect_ventilator_breaths` finds the breaths in the volume signal.
