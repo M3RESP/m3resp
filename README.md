@@ -33,7 +33,7 @@ M3Resp is an integration layer on top of [`eitprocessing`](https://github.com/M3
 
 ## Installation
 
-We recommend installing M3Resp in a dedicated virtual environment. See the Python Packaging Authority's guide to [installing packages with `venv`](https://packaging.python.org/en/latest/guides installing-using-pip-and-virtual-environments/) or the conda documentation on [getting started](https://docs.conda.io/projects/conda/en/stable/user-guide/getting-started.html).
+We recommend installing M3Resp in a dedicated virtual environment. See the Python Packaging Authority's guide to [installing packages with `venv`](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) or the conda documentation on [getting started](https://docs.conda.io/projects/conda/en/stable/user-guide/getting-started.html).
 
 M3Resp is not yet published on PyPI. Install it from the repository as described below.
 
@@ -44,18 +44,41 @@ The base package supports ventilator data, the shared data model, and the workfl
 ```bash
 git clone https://github.com/M3RESP/m3resp.git
 cd m3resp
-python -m pip install -e .  # or `uv sync`
+```
+
+With pip:
+
+```bash
+python -m pip install -e .
+```
+
+With [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv sync
 ```
 
 ### Optional modality support
 
 Install only the integrations needed for your recordings:
 
+With pip:
+
 ```bash
-python -m pip install -e ".[eit]"  # or `uv sync --extra eit`, add eitprocessing
-python -m pip install -e ".[emg]"  # or `uv synx --extra emg`, add resurfemg
-python -m pip install -e ".[all]"  # or `uv synx --extra all`, add both modalities
+python -m pip install -e ".[eit]"  # adds eitprocessing
+python -m pip install -e ".[emg]"  # adds resurfemg
+python -m pip install -e ".[all]"  # adds both modalities
 ```
+
+With uv:
+
+```bash
+uv sync --extra eit  # adds eitprocessing
+uv sync --extra emg  # adds resurfemg
+uv sync --extra all  # adds both modalities
+```
+
+`uv sync` installs only the extras named in the command and removes the others, so name every extra you need, for example `uv sync --extra all --extra dev`.
 
 The modality extras currently use the M3Resp integration branches of the upstream packages. See [pyproject.toml](pyproject.toml) for the exact versions.
 
@@ -66,8 +89,20 @@ For tests, linting, formatting, and type checking:
 ```bash
 git clone https://github.com/M3RESP/m3resp.git
 cd m3resp
-python -m pip install -e ".[all,dev]"  # or `uv sync --extra all --extra dev`
+```
+
+With pip:
+
+```bash
+python -m pip install -e ".[all,dev]"
 pre-commit install
+```
+
+With uv:
+
+```bash
+uv sync --extra all --extra dev
+uv run pre-commit install
 ```
 
 ## Quick start
@@ -81,10 +116,23 @@ m3resp steps
 m3resp run path/to/workflow.yaml
 ```
 
+With uv:
+
+```bash
+uv run m3resp steps
+uv run m3resp run path/to/workflow.yaml
+```
+
 For example, the multimodal workflow included in this repository loads EIT, EMG, and ventilator signals, synchronizes them, processes each modality, and exports session summaries:
 
 ```bash
 m3resp run examples/multimodal_example/multimodal.workflow.yaml
+```
+
+With uv:
+
+```bash
+uv run m3resp run examples/multimodal_example/multimodal.workflow.yaml
 ```
 
 Paths in `outputs.dir` are resolved relative to the workflow file. Input files, sampling rates, synchronization choices, and all other scientific settings remain explicit in the workflow.
@@ -163,6 +211,13 @@ Run the local checks with:
 ```bash
 pytest
 pre-commit run --all-files
+```
+
+With uv:
+
+```bash
+uv run pytest
+uv run pre-commit run --all-files
 ```
 
 Changes to modality-specific scientific processing generally belong in `eitprocessing` or `resurfemg`; synchronization, shared data, workflow, and export changes belong in M3Resp. The contribution guide explains this boundary in more detail.

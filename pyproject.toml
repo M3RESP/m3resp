@@ -86,6 +86,12 @@ packages = ["src/m3resp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Tests on the full recordings are slow and need files outside the
+# repository; run them with `pytest -m real_data`.
+addopts = "-m 'not real_data'"
+markers = [
+  "real_data: runs on recorded data from tests/regression/real_data/datasets.yaml",
+]
 
 [tool.marimo.runtime]
 # Raise the cell-output size cap (marimo default 8 MB) so the multimodal viewer

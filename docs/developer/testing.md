@@ -40,6 +40,56 @@ upstream output - check the diff against the specific
 method involved before assuming the test is wrong. See
 [adapters.md](adapters.md).
 
+## Tests on recorded data (`tests/regression/real_data/`)
+
+These tests run m3resp on full recordings: dataset 3 of the 27 July 2026
+recordings (TestPS3), with Biopac EMG and airway pressure, FluxMed flow and
+Draeger EIT. They use one minute with EIT on (37-97 s on the Biopac clock)
+and one minute with EIT off (140-200 s). The FluxMed and EIT recordings are
+lined up on the Biopac clock, for each window, by cross-correlating the
+airway pressure that all three devices record.
+
+The recordings are not in the repository. The tests read them from the
+folder in the environment variable `M3RESP_REAL_DATA` (default
+`data/source/Test_PS_27072026`), check the SHA-256 checksum of each file
+against `datasets.yaml`, and skip when a file is missing. They have the
+marker `real_data`, and the normal test run leaves them out:
+
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
+```bash
+pytest -m real_data
+```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run pytest -m real_data
+```
+:::
+::::
+
+There are three kinds of check:
+
+- Same as upstream: each m3resp step gives exactly what `eitprocessing` or
+  `resurfemg` gives when called directly on the same data.
+- Same as last time: every collected number equals the stored value in
+  `reference_values.json`. Counts and sample indices must match exactly,
+  other numbers to a relative difference of 1e-9.
+- Physiology: heart rate from EIT against the ECG in the EMG, breathing
+  rates and breath onsets against the flow, and the EMG filter chains with a
+  notch filter against each other while EIT runs.
+
+After a change that is meant to alter results, rewrite the reference values
+with `scripts/update_real_data_references.py` and check the diff of
+`reference_values.json`: it shows which numbers moved.
+
 ## Optional-dependency tests
 
 `tests/test_optional_dependency_absence.py` checks that importing `m3resp`
@@ -79,11 +129,29 @@ private clinical data. Examples reference the generated files under
 
 ## Running the suite
 
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
 ```bash
 pytest                       # full suite
 ruff check .                 # lint
 mypy src                     # type check
 ```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run pytest                # full suite
+uv run ruff check .          # lint
+uv run mypy src              # type check
+```
+:::
+::::
 
 All three must pass before a change is considered done; do not weaken mypy
 settings or exclude a package to make it pass.

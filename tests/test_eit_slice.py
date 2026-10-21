@@ -180,3 +180,42 @@ def test_step_delegates_to_the_session():
     result = slice_recording(session, start_seconds=2.0, end_seconds=5.0)
 
     assert result["eit_slice"] == session.parameters["eit_slice"]
+
+
+def test_steps_after_the_slice_step_read_the_cut_recording(tmp_path):
+    from m3resp.workflows import load_spec, run_workflow
+
+    (tmp_path / "study.bin").write_bytes(b"")
+    session = M3Session(
+        eit_adapter=EITProcessingAdapter(loader=lambda *args, **kwargs: _sequence())
+    )
+    spec = {
+        "name": "cut_then_sum",
+        "steps": [
+            {"uses": "eit.load_custom", "with": {"file_path": "study.bin"}},
+            {
+                "uses": "eit.slice_recording",
+                "with": {"start_seconds": 2.0, "end_seconds": 5.0},
+            },
+            {"uses": "eit.global_impedance", "in": {"signal": "raw_eit"}},
+        ],
+    }
+
+    context = run_workflow(load_spec(spec, root=tmp_path), session=session).context
+
+    # Frame i holds i in every pixel, so the cut part starts at frame 40.
+    raw = context.get("raw_eit")
+    assert raw.pixel_impedance.shape[0] == 60
+    assert raw.pixel_impedance[0, 0, 0] == 40.0
+    assert len(context.get("eit_sequence").time) == 60
+    assert len(context.get("global_impedance").values) == 60
+    raw_signals = [
+        signal
+        for signal in session.signals.items
+        if signal.modality == "eit" and signal.processing_state == "raw"
+    ]
+    assert sorted(signal.channel for signal in raw_signals) == [
+        "global_impedance",
+        "pixel_impedance",
+    ]
+    assert all(len(signal.values) == 60 for signal in raw_signals)

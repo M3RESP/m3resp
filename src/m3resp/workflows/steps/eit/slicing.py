@@ -15,6 +15,7 @@ from m3resp.workflows.registry import (
 )
 
 from ._shared import _EITPROCESSING, _SESSION_ARTIFACT
+from .loading import _LOAD_OUTPUTS, _LOAD_WRITES, _loaded_recording_outputs
 
 
 @register_step(
@@ -87,14 +88,20 @@ def slice_signal(
 @register_step(
     "eit.slice_recording",
     reads={"session": "session"},
-    writes=("eit_slice",),
+    writes=("eit_slice", *_LOAD_WRITES),
+    replaces=_LOAD_WRITES,
     summary="Keep only a time window of the loaded EIT recording.",
-    description="Keep only the part of the loaded EIT recording between two times, for example to analyse one ventilator setting or leave out a disturbed stretch. The cutting is done by eitprocessing, so pixel data, global impedance, pressure/flow channels and markers are cut to the same frames. A ventilator recording from the same EIT file is cut the same way. Run before eit.preprocess.",
+    description="Keep only the part of the loaded EIT recording between two times, for example to analyse one ventilator setting or leave out a disturbed stretch. The cutting is done by eitprocessing, so pixel data, global impedance, pressure/flow channels and markers are cut to the same frames. A ventilator recording from the same EIT file is cut the same way. The step gives the cut recording under the same names as eit.load (raw_eit, eit_sequence, ...), so the steps after it work on the cut part, and its raw signals replace the uncut ones in session.signals. Run before eit.preprocess.",
     category="preprocessing",
     modality="eit",
     optional_packages=_EITPROCESSING,
     session_reads=("session.raw.eit",),
-    session_writes=("session.raw.eit", "session.raw.ventilator", "session.start_times"),
+    session_writes=(
+        "session.raw.eit",
+        "session.raw.ventilator",
+        "session.start_times",
+        "session.signals",
+    ),
     input_artifacts=(_SESSION_ARTIFACT,),
     parameters=(
         StepParameter(
@@ -120,6 +127,7 @@ def slice_signal(
             artifact_type="eit_slice_summary",
             description="The kept window and how many frames were removed at each end.",
         ),
+        *_LOAD_OUTPUTS,
     ),
 )
 def slice_recording(
@@ -128,4 +136,18 @@ def slice_recording(
     start_seconds: float,
     end_seconds: float | None = None,
 ) -> dict[str, Any]:
-    return {"eit_slice": session.slice_eit(start_seconds, end_seconds)}
+    """Cut the loaded EIT recording to a window.
+
+    Returns:
+        dict[str, Any]: ``eit_slice`` (the kept window, see
+            `M3Session.slice_eit`) and the cut recording under the names
+            `eit.load` uses: ``raw_eit``, ``raw_global_impedance``,
+            ``eit_sequence``, ``raw_global_impedance_signal`` and
+            ``raw_pixel_impedance_signal``.
+    """
+
+    summary = session.slice_eit(start_seconds, end_seconds)
+    return {
+        "eit_slice": summary,
+        **_loaded_recording_outputs(session, replace_raw_signals=True),
+    }
