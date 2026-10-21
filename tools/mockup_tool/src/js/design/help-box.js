@@ -101,7 +101,7 @@ function showSequenceHelp(seq){
       <span class="hb-icon mod-generic">${categoryIconSvg('sequence', 16)}</span>
       <div class="hb-title">
         <div class="hb-name">${escHtml(seq.name)}</div>
-        <div class="hb-sub">saved sequence · ${seq.windows.length} window${seq.windows.length===1?'':'s'}</div>
+        <div class="hb-sub">saved sequence · ${seq.windows.length} window${seq.windows.length===1?'':'s'}${seq.modalities ? ' · '+seqModalityText(seq) : ''}</div>
       </div>
     </div>
     <p class="hb-summary">Saved in 1 · Prepare. Click it to put it on the canvas, or 👁 to see the signals.</p>`;

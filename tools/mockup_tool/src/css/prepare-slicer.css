@@ -4,14 +4,14 @@
 .slice-toolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:12px 24px;margin-bottom:14px;flex-wrap:wrap;}
 .slice-group{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;}
 .slice-field{display:flex;flex-direction:column;gap:5px;}
-.slice-field label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;}
+.slice-field label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;font-weight:500;}
 .slice-field input{
   font-family:var(--mono);font-size:12.5px;background:var(--surface-2);border:1px solid var(--border);
   border-radius:var(--r-ctl);height:var(--ctl-h);padding:0 9px;color:var(--text);width:96px;
 }
 .slice-duration{
   height:var(--ctl-h);display:flex;align-items:center;padding:0 12px;min-width:84px;
-  font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums;
+  font-family:var(--mono);font-size:12px;font-weight:400;color:var(--text);font-variant-numeric:tabular-nums;
   background:color-mix(in srgb, var(--win-keep) 10%, var(--surface));border:1px solid color-mix(in srgb, var(--win-keep) 40%, var(--border));border-radius:var(--r-ctl);
 }
 .slice-duration.cut{background:color-mix(in srgb, var(--crit) 8%, var(--surface));border-color:color-mix(in srgb, var(--crit) 40%, var(--border));}
@@ -29,25 +29,39 @@
 .card-seqs .seq-row:hover{background:var(--accent-soft);}
 .card-seqs .seq-row .seq-icon{width:18px;height:18px;border-radius:5px;}
 .card-seqs .seq-row .seq-text{display:flex;align-items:baseline;gap:10px;}
-.card-seqs .seq-row .seq-name{font-size:12px;font-weight:600;}
+.card-seqs .seq-row .seq-name{font-size:12px;font-weight:400;}
 .card-seqs .seq-row .seq-meta{font-size:12px;}
 .card-seqs .seq-row .remove{opacity:0.6;}
 .card-seqs .seq-row:hover .remove{opacity:1;}
+/* the recording of each modality, above the lanes */
+.slice-sources{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;margin-bottom:10px;}
+.slice-sources-head{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;font-weight:500;}
+.slice-src{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:400;color:var(--text);}
+.slice-src.mod-eit{--mod:var(--eit);}
+.slice-src.mod-emg{--mod:var(--emg);}
+.slice-src.mod-vent{--mod:var(--vent);}
+.slice-src i{width:8px;height:8px;border-radius:50%;background:var(--mod);flex:none;}
+.slice-src .sync-sel{width:160px;}
+.slice-sources-hint{font-size:11px;color:var(--text-dim);}
 .slice-track{
   position:relative;display:flex;flex-direction:column;gap:6px;overflow:visible;
 }
+/* each lane: its name above, then the plot */
+.slice-row{display:flex;flex-direction:column;}
 .slice-panel{
-  position:relative;height:116px;border:1px solid var(--border);border-left-width:3px;border-radius:7px;
+  position:relative;height:96px;border:1px solid var(--border);border-left-width:3px;border-radius:7px;
   background:var(--plot-bg);overflow:hidden;
 }
 .slice-panel.mod-eit{border-left-color:var(--eit);}
 .slice-panel.mod-emg{border-left-color:var(--emg);}
 .slice-panel.mod-vent{border-left-color:var(--vent);}
+/* the name of a lane, above its plot (working window and alignment check) */
 .slice-panel-label{
-  position:absolute;top:5px;left:9px;font-size:11px;font-weight:700;color:var(--text);
-  z-index:5;pointer-events:none;text-shadow:0 0 3px var(--surface), 0 0 3px var(--surface);
+  display:block;padding:0 2px 3px;font-size:11.5px;font-weight:400;color:var(--text);line-height:1.3;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;
+  position:relative;z-index:5;   /* the text stays above the window bands */
 }
-.slice-panel-label .src{font-weight:500;color:var(--text-dim);font-family:var(--mono);font-size:10.5px;margin-right:6px;}
+.slice-panel-label .src{font-weight:400;color:var(--text-dim);font-family:var(--mono);font-size:10.5px;margin-right:6px;}
 .slice-lane{position:absolute;inset:0;opacity:0.95;}
 .slice-lane svg{width:100%;height:100%;display:block;}
 /* colour coding: --win-neutral (the accent) is the plain band, green marks a kept
@@ -70,15 +84,16 @@
 .slice-handle:hover::after, .slice-handle.dragging::after{background:var(--text);}
 .slice-select-badge{
   position:absolute;bottom:3px;left:3px;width:16px;height:16px;border-radius:5px;z-index:4;
-  background:var(--win-color, var(--win-neutral));color:#fff;font-size:10px;font-weight:700;
+  background:var(--win-color, var(--win-neutral));color:#fff;font-size:10px;font-weight:500;
   display:flex;align-items:center;justify-content:center;pointer-events:none;
 }
 .slice-select-remove{
   position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:5px;z-index:4;
-  border:none;background:var(--surface);color:var(--text-faint);font-size:12px;line-height:1;
+  border:none;padding:0;background:var(--surface);color:var(--text-faint);font-size:12px;line-height:1;
   display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity .12s;
   box-shadow:0 0 0 1px var(--border);
 }
+.slice-select-remove svg{flex:none;}
 .slice-select:hover .slice-select-remove{opacity:1;}
 .slice-select-remove:hover{background:var(--crit);color:#fff;box-shadow:0 0 0 1px var(--crit);}
 
@@ -94,7 +109,7 @@
 }
 .window-row.cut .range{text-decoration:line-through;text-decoration-color:color-mix(in srgb, var(--crit) 70%, transparent);}
 .win-kind{
-  font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;flex:none;
+  font-size:9.5px;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;flex:none;
   padding:2px 7px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);
   color:var(--text-faint);cursor:pointer;
 }
@@ -110,14 +125,14 @@
   display:flex;align-items:center;justify-content:space-between;padding:8px 12px;
   border-bottom:1px solid var(--border);background:var(--surface-2);
 }
-.windows-panel-head h4{margin:0;font-size:11.5px;font-weight:700;}
+.windows-panel-head h4{margin:0;font-size:11.5px;font-weight:500;}
 .windows-panel-head .hint{font-size:11px;color:var(--text-faint);}
 /* sequence name and Save button at the foot of "Selected windows" */
 .windows-panel-foot{
   display:flex;align-items:center;gap:10px;padding:8px 12px;
   border-top:1px solid var(--border);background:var(--surface-2);
 }
-.windows-panel-foot label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;}
+.windows-panel-foot label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;font-weight:500;}
 .windows-panel-foot input{
   font-family:var(--mono);font-size:12px;background:var(--surface);border:1px solid var(--border);
   border-radius:var(--r-ctl);height:26px;padding:0 8px;color:var(--text);width:220px;
@@ -146,10 +161,10 @@
 .window-row:hover{background:var(--accent-soft);}
 .window-row.active{background:color-mix(in srgb, var(--win-color) 14%, var(--surface));}
 .window-row .badge{
-  width:18px;height:18px;border-radius:5px;background:var(--win-color);color:#fff;font-size:10.5px;font-weight:700;
+  width:18px;height:18px;border-radius:5px;background:var(--win-color);color:#fff;font-size:10.5px;font-weight:500;
   display:flex;align-items:center;justify-content:center;flex:none;
 }
-.window-row .range{font-family:var(--mono);font-weight:600;flex:none;}
+.window-row .range{font-family:var(--mono);font-weight:400;flex:none;}
 .window-row .dur{color:var(--text-dim);flex:1;}
 .window-row .remove{opacity:0.6;}
 .window-row:hover .remove{opacity:1;}
@@ -160,7 +175,7 @@
 }
 .save-summary b{color:var(--text);}
 .save-summary .ok-pill{
-  display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--ok);margin-bottom:6px;
+  display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:400;color:var(--ok);margin-bottom:6px;
 }
 .slice-axis{display:flex;justify-content:space-between;margin-top:6px;font-size:10.5px;font-family:var(--mono);color:var(--text-dim);font-variant-numeric:tabular-nums;}
 .slice-note{font-size:11.5px;color:var(--text-dim);margin-top:12px;line-height:1.5;}

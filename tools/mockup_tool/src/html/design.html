@@ -84,15 +84,14 @@
         </label>
         <button class="tb-btn primary" id="runPipelineBtn" title="Run all steps in graph order">▶ Run workflow</button>
       </div>
-      <div class="canvas-hud">
-        <span class="hud-val" id="stepCountPill" title="15 of 45 steps shown · multimodal-full.pipeline.yaml">15/45</span>
-        <span class="hud-sep"></span>
-        <button id="canvasZoomOutBtn" title="Zoom out">−</button>
-        <span class="hud-val" id="canvasZoomPill" title="Current zoom level">100%</span>
-        <button id="canvasZoomInBtn" title="Zoom in">+</button>
-        <button id="canvasZoomFitBtn" title="Fit to view">⛶</button>
-        <span class="hud-sep"></span>
-        <span class="info-dot bare hud-help" tabindex="0" title="Mouse and keys">?<span class="info-pop info-pop-end">
+      <!-- the same control as the time range on 1 · Prepare (.tb-seg) -->
+      <div class="canvas-hud tb-seg small">
+        <span class="tb-seg-readout" id="stepCountPill" title="15 of 45 steps shown · multimodal-full.pipeline.yaml">15/45</span>
+        <button id="canvasZoomOutBtn" title="Zoom out" aria-label="Zoom out" data-icon="minus"></button>
+        <span class="tb-seg-readout hud-zoom" id="canvasZoomPill" title="Current zoom level">100%</span>
+        <button id="canvasZoomInBtn" title="Zoom in" aria-label="Zoom in" data-icon="plus"></button>
+        <button id="canvasZoomFitBtn" title="Fit to view" aria-label="Fit to view" data-icon="fit"></button>
+        <span class="info-dot bare hud-help" tabindex="0" title="Mouse and keys" aria-label="Mouse and keys" data-icon="help"><span class="info-pop info-pop-end">
           <span class="key-list">
             <span><b>Click</b> or <b>drag</b> a palette step</span><span>add it to the canvas</span>
             <span><b>Double-click</b> or <b>right-click</b> the canvas</span><span>open the quick menu to add a step</span>

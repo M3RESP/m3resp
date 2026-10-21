@@ -19,8 +19,7 @@
 //   sections    [{id, fileId, start (s), end (s)}]
 //   laneFn(f)   the value drawn on the lane of file f, at file time t; or a
 //               list of {fn, color, label}, one line each, below each other
-//   exts        file names that "Add files…" takes; extText names them
-//   newFile(name, n)   a file object for a chosen file (example signal)
+//   newFile(name, n)   a file object for an added file (example signal)
 //   show(id, M)        draw the plots for a file id or 'merged'
 //   note(id, M)        (optional) text under the plots
 
@@ -87,6 +86,8 @@ function makeFileMerger(cfg){
     render();
     // the merged recording on screen follows the sections
     if(M.shown==='merged') showSource(M.sections.length ? 'merged' : M.files[0].id);
+    // the recording choices of the synchronization rows (js/prepare/sync-strip.js)
+    if(typeof syncFilesChanged==='function') syncFilesChanged(cfg.prefix);
   }
 
   function render(){
@@ -351,7 +352,7 @@ function makeFileMerger(cfg){
   setCollapsed(false);
 
   // "Merge sections": the card head and the side panel show the merged recording,
-  // and the merge block closes
+  // the synchronization row of this modality uses it, and the merge block closes
   mergeBtn.addEventListener('click', ()=>{
     M.merged = true;
     const total = M.mergedLength(), files = M.fileCount(), card = document.getElementById(cfg.cardId);
@@ -362,23 +363,24 @@ function makeFileMerger(cfg){
     renderSections();
     showSource('merged');
     setCollapsed(true);
+    if(typeof syncFilesChanged==='function') syncFilesChanged(cfg.prefix, 'merged');
     showEdgeNote(summary, `Merged ${M.sections.length} sections into one ${cfg.name} recording of ${fmtSec(total)}. The plots below show it now.`);
   });
 
-  // "Add files…" and "Add folder…": each chosen file becomes a row
-  function addFiles(fileList){
-    const picked = [...fileList].filter(f=> cfg.exts.test(f.name));
-    picked.forEach(file=>{ M.fileSeq++; M.files.push(cfg.newFile(file.name, M.fileSeq)); });
-    if(picked.length) changed();
-    showEdgeNote($('AddFilesBtn'), picked.length
-      ? `Added ${picked.length} file${pl(picked.length)}. This mockup shows an example signal for each.`
-      : `No ${cfg.extText} files were chosen.`);
+  // "Add files…" adds one example file and "Add folder…" adds two. Each one
+  // gets the name of file 1 with its own number (…_1_… → …_3_…) and an
+  // example signal from cfg.newFile.
+  const firstName = cfg.files[0].name;
+  function addExampleFiles(count, btnId){
+    for(let i=0;i<count;i++){
+      M.fileSeq++;
+      M.files.push(cfg.newFile(firstName.replace(/_\d+_/, `_${M.fileSeq}_`), M.fileSeq));
+    }
+    changed();
+    showEdgeNote($(btnId), `Added ${count} example ${cfg.name} file${pl(count)}. The × on a file removes it.`);
   }
-  [['AddFilesBtn', 'AddFilesInput'], ['AddFolderBtn', 'AddFolderInput']].forEach(([btnId, inputId])=>{
-    const input = $(inputId);
-    $(btnId).addEventListener('click', ()=> input.click());
-    input.addEventListener('change', ()=>{ addFiles(input.files); input.value=''; });
-  });
+  $('AddFilesBtn').addEventListener('click', ()=> addExampleFiles(1, 'AddFilesBtn'));
+  $('AddFolderBtn').addEventListener('click', ()=> addExampleFiles(2, 'AddFolderBtn'));
 
   // the time map of a merged recording: merged time t → [file, file time]
   M.mergedPieces = ()=>{

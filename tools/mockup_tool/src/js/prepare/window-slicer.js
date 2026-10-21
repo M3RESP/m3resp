@@ -8,10 +8,11 @@
 let winSeq = 1;
 let windows = [{id:'w1', start:4, end:22, type:'keep'}];
 let activeWindowId = 'w1';
-const CUT_COLOR = '#d1554f'; // --crit, needed as a literal for SVG fill/stroke
+const CUT_COLOR = '#b5473f'; // --crit, needed as a literal for SVG fill/stroke
 const SAVED_COLOR = 'var(--text-faint)';   // windows of a saved sequence
 
-function clampSeconds(v){ return Math.min(Math.max(v,0), REC_SECONDS); }
+// times are seconds on the time line of the ventilator recording, from 0 to sliceDur()
+function clampSeconds(v){ return Math.min(Math.max(v,0), sliceDur()); }
 function sortedWindows(){ return [...windows].sort((a,b)=>a.start-b.start); }
 function isCut(w){ return w.type==='cut'; }
 function sortedKeeps(){ return sortedWindows().filter(w=>!isCut(w)); }
@@ -45,7 +46,7 @@ function resolvedSegments(){
   const cuts = openCuts().map(w=>({start:w.start, end:w.end}));
   if(keeps.length===0 && cuts.length===0) return [];
   let merged = [];
-  const base = keeps.length ? keeps : [{start:0, end:REC_SECONDS}];
+  const base = keeps.length ? keeps : [{start:0, end:sliceDur()}];
   base.forEach(k=>{
     const last = merged[merged.length-1];
     if(last && k.start<=last.end) last.end = Math.max(last.end, k.end);
@@ -69,7 +70,7 @@ function updateSaveState(){
   const open = openWindows(), locked = windows.filter(isLocked);
   const btn = document.getElementById('saveSequenceBtn');
   const allSaved = open.length===0 && locked.length>0;
-  btn.disabled = resolvedSegments().length===0;
+  btn.disabled = resolvedSegments().length===0 || sliceModalities().length===0;
   btn.querySelector('.save-label').textContent = allSaved ? 'Saved' : 'Save as new sequence';
   btn.title = allSaved
     ? 'All windows are saved. Add a window to start a new sequence.'
@@ -133,7 +134,7 @@ function updateMasks(){
 }
 
 function positionWindowEl(el, w){
-  const lp=(w.start/REC_SECONDS)*100, rp=(w.end/REC_SECONDS)*100;
+  const dur=sliceDur(), lp=Math.min(w.start/dur, 1)*100, rp=Math.min(w.end/dur, 1)*100;
   el.style.left = lp+'%';
   el.style.width = Math.max(0, rp-lp)+'%';
 }
@@ -141,7 +142,7 @@ function positionWindowEl(el, w){
 function secondsAtClientX(clientX){
   const rect = sliceTrack.getBoundingClientRect();
   const frac = (clientX-rect.left)/rect.width;
-  return clampSeconds(frac*REC_SECONDS);
+  return clampSeconds(frac*sliceDur());
 }
 
 function applyActiveClasses(){
@@ -178,8 +179,10 @@ function wireWindowDrag(el, w){
     el.addEventListener('mousedown', e=>{ e.preventDefault(); activeWindowId=w.id; applyActiveClasses(); });
     return;
   }
+  // the bands of this window on all plots
+  const bands = ()=> sliceTrack.querySelectorAll(`.slice-select[data-id="${w.id}"]`);
   function startDrag(mode, startClientX){
-    el.classList.add('dragging');
+    bands().forEach(b=> b.classList.add('dragging'));
     const handleEl = mode!=='move' ? el.querySelector(`[data-h="${mode}"]`) : null;
     if(handleEl) handleEl.classList.add('dragging');
     const origStart=w.start, origEnd=w.end;
@@ -188,20 +191,21 @@ function wireWindowDrag(el, w){
       else if(mode==='right'){ w.end = clampSeconds(Math.max(secondsAtClientX(ev.clientX), w.start+1)); }
       else {
         const rect=sliceTrack.getBoundingClientRect();
-        const deltaSec=((ev.clientX-startClientX)/rect.width)*REC_SECONDS;
+        const dur=sliceDur();
+        const deltaSec=((ev.clientX-startClientX)/rect.width)*dur;
         const width=origEnd-origStart;
         let lo=origStart+deltaSec, hi=origEnd+deltaSec;
-        if(lo<0){ lo=0; hi=width; } if(hi>REC_SECONDS){ hi=REC_SECONDS; lo=REC_SECONDS-width; }
+        if(lo<0){ lo=0; hi=width; } if(hi>dur){ hi=dur; lo=dur-width; }
         w.start=lo; w.end=hi;
       }
-      positionWindowEl(el, w);
+      bands().forEach(b=> positionWindowEl(b, w));
       updateMasks();
       if(w.id===activeWindowId) updateActiveFields();
     }
     function onUp(){
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      el.classList.remove('dragging');
+      bands().forEach(b=> b.classList.remove('dragging'));
       if(handleEl) handleEl.classList.remove('dragging');
       renderWindows(); // reconciles ordering/badges/list after the drag settles
     }
@@ -309,7 +313,9 @@ function renderWindowsList(sorted){
 function renderWindows(){
   sliceTrack.querySelectorAll('.slice-select').forEach(el=>el.remove());
   const sorted = sortedWindows();
-  sorted.forEach(w=> sliceTrack.appendChild(buildWindowEl(w, seqIndexOf(w.id))));
+  // each window is a band on every plot, inside the plot area
+  const plots = sliceTrack.querySelectorAll('.slice-panel');
+  sorted.forEach(w=> plots.forEach(p=> p.appendChild(buildWindowEl(w, seqIndexOf(w.id)))));
   renderWindowsList(sorted);
   updateActiveFields();
   updateMasks();
@@ -341,20 +347,21 @@ function addWindow(type='keep'){
     const segs = resolvedSegments();
     const host = segs.length
       ? segs.reduce((a,b)=> (b.end-b.start > a.end-a.start ? b : a))
-      : {start:0, end:REC_SECONDS};
+      : {start:0, end:sliceDur()};
     const width = Math.max(1.5, Math.min(6, (host.end-host.start)/3));
     const mid = (host.start+host.end)/2;
     start = clampSeconds(mid-width/2);
     end = clampSeconds(start+width);
   } else if(windows.length===0){
-    start=4; end=22;
+    start=clampSeconds(4); end=clampSeconds(22);
   } else {
+    const dur = sliceDur();
     const lastEnd = Math.max(...windows.map(w=>w.end));
     const widest = windows.reduce((a,b)=> (b.end-b.start > a.end-a.start ? b : a));
     const width = Math.max(2, Math.min(18, widest.end-widest.start));
-    start = Math.min(REC_SECONDS-2, lastEnd+2);
-    end = Math.min(REC_SECONDS, start+width);
-    if(end-start < 2){ end = REC_SECONDS; start = Math.max(0, end-width); }
+    start = Math.min(dur-2, lastEnd+2);
+    end = Math.min(dur, start+width);
+    if(end-start < 2){ end = dur; start = Math.max(0, end-width); }
   }
   windows.push({id, start, end, type});
   activeWindowId = id;
@@ -365,14 +372,14 @@ function addWindow(type='keep'){
 // starting point for "everything except…" — remove windows are left alone so
 // they keep cutting into the full span.
 const FULL_SPAN_EPS = 0.001;
-function isFullSpan(w){ return !isCut(w) && w.start<=FULL_SPAN_EPS && w.end>=REC_SECONDS-FULL_SPAN_EPS; }
+function isFullSpan(w){ return !isCut(w) && w.start<=FULL_SPAN_EPS && w.end>=sliceDur()-FULL_SPAN_EPS; }
 function keepWholeSignal(){
   // several keep windows would merge into the full span anyway, so widen one and
   // drop the rest instead of leaving redundant rows in the list
   const locked = windows.filter(isLocked), cuts = openCuts();
   let full = openKeeps()[0];
-  if(full){ full.start = 0; full.end = REC_SECONDS; }
-  else { winSeq++; full = {id:'w'+winSeq, start:0, end:REC_SECONDS, type:'keep'}; }
+  if(full){ full.start = 0; full.end = sliceDur(); }
+  else { winSeq++; full = {id:'w'+winSeq, start:0, end:sliceDur(), type:'keep'}; }
   windows = [...locked, full, ...cuts];
   activeWindowId = full.id;
   renderWindows();
@@ -405,3 +412,19 @@ endInput.addEventListener('input', ()=>{
   renderWindows();
 });
 
+
+// ---- a new ventilator recording for the synchronization: a new time line ----
+// The windows without a sequence move inside the new length (at least 1 s
+// long); the windows of a saved sequence stay as saved.
+let sliceDurShown = REC_SECONDS;
+function sliceDurChanged(){
+  const dur = sliceDur();
+  if(dur===sliceDurShown) return;
+  sliceDurShown = dur;
+  windows.filter(w=>!isLocked(w)).forEach(w=>{
+    w.end = Math.min(w.end, dur);
+    w.start = Math.max(0, Math.min(w.start, w.end-1));
+  });
+  drawSliceAxis();
+  renderWindows();
+}

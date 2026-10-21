@@ -16,12 +16,12 @@ function emgRand(i){ const s=Math.sin(i*12.9898)*43758.5453; return s-Math.floor
 //   sharp - higher = the muscle only fires near the top of each breath
 //   expir - true for muscles active during breathing out (abdominal)
 const EMG_MUSCLES = {
-  di:   {short:'EMGdi',   long:'diaphragm',          amp:0.62, ecg:1.00, lag: 0.00, sharp:1.6, color:'#c98a2c'},
-  para: {short:'EMGpara', long:'parasternal',        amp:0.45, ecg:1.60, lag:-0.12, sharp:1.8, color:'#d1554f'},
-  scm:  {short:'EMGscm',  long:'sternocleidomastoid',amp:0.30, ecg:0.35, lag: 0.10, sharp:3.2, color:'#b25c8a'},
-  scal: {short:'EMGscal', long:'scalene',            amp:0.34, ecg:0.50, lag: 0.05, sharp:2.4, color:'#8a67c9'},
-  abd:  {short:'EMGabd',  long:'abdominal',          amp:0.40, ecg:0.40, lag: 0.00, sharp:2.0, color:'#3aa88b', expir:true},
-  alae: {short:'EMGan',   long:'alae nasi',          amp:0.26, ecg:0.20, lag:-0.30, sharp:1.4, color:'#4f8fd8'},
+  di:   {short:'EMGdi',   long:'diaphragm',          amp:0.62, ecg:1.00, lag: 0.00, sharp:1.6, color:'#d4825a'},
+  para: {short:'EMGpara', long:'parasternal',        amp:0.45, ecg:1.60, lag:-0.12, sharp:1.8, color:'#a85f4d'},
+  scm:  {short:'EMGscm',  long:'sternocleidomastoid',amp:0.30, ecg:0.35, lag: 0.10, sharp:3.2, color:'#c99a3e'},
+  scal: {short:'EMGscal', long:'scalene',            amp:0.34, ecg:0.50, lag: 0.05, sharp:2.4, color:'#7e473a'},
+  abd:  {short:'EMGabd',  long:'abdominal',          amp:0.40, ecg:0.40, lag: 0.00, sharp:2.0, color:'#e0a27f', expir:true},
+  alae: {short:'EMGan',   long:'alae nasi',          amp:0.26, ecg:0.20, lag:-0.30, sharp:1.4, color:'#9a7a5c'},
 };
 
 // raw EMG: breathing burst envelope * noise carrier, plus periodic ECG spikes

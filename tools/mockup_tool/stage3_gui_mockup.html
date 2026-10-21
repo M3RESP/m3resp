@@ -32,8 +32,11 @@
       </div>
       <input type="file" id="sessionLoadInput" accept=".json,application/json" hidden>
     </div>
-    <span class="brand-mark" role="img" aria-label="M3RESP">M<span class="brand-3">3</span>RESP</span>
-    <span class="brand-tag">workspace</span>
+    <!-- the logo and the tag sit on one baseline -->
+    <span class="brand-name">
+      <span class="brand-mark" role="img" aria-label="M3RESP">M<span class="brand-3">3</span>RESP</span>
+      <span class="brand-tag">workspace</span>
+    </span>
   </div>
   <div class="tabs" id="tabs">
     <button class="tab-btn active" data-view="prepare">1 · Prepare</button>
@@ -160,8 +163,6 @@
             <button id="eitAddFilesBtn" title="Choose one or more .bin / .stp / .zip files"><span data-icon="plus"></span>Add files…</button>
             <button id="eitAddFolderBtn" title="Add every EIT file in a folder"><span data-icon="folder"></span>Add folder…</button>
           </div>
-          <input type="file" id="eitAddFilesInput" accept=".bin,.stp,.zip" multiple hidden>
-          <input type="file" id="eitAddFolderInput" webkitdirectory hidden>
         </div>
         <div class="ef-list" id="eitFileList"></div>
         <div class="ef-merge">
@@ -272,8 +273,6 @@
             <button id="emgAddFilesBtn" title="Choose one or more .Poly5 files"><span data-icon="plus"></span>Add files…</button>
             <button id="emgAddFolderBtn" title="Add every EMG file in a folder"><span data-icon="folder"></span>Add folder…</button>
           </div>
-          <input type="file" id="emgAddFilesInput" accept=".Poly5,.poly5" multiple hidden>
-          <input type="file" id="emgAddFolderInput" webkitdirectory hidden>
         </div>
         <!-- the EMG signals: ticked ones show on the file lanes (envelope) and in the plots below -->
         <div class="ef-lane-signals">
@@ -371,8 +370,6 @@
             <button id="ventAddFilesBtn" title="Choose one or more .Poly5 files"><span data-icon="plus"></span>Add files…</button>
             <button id="ventAddFolderBtn" title="Add every ventilator file in a folder"><span data-icon="folder"></span>Add folder…</button>
           </div>
-          <input type="file" id="ventAddFilesInput" accept=".Poly5,.poly5" multiple hidden>
-          <input type="file" id="ventAddFolderInput" webkitdirectory hidden>
         </div>
         <!-- the ventilator channels: ticked ones show on the file lanes and in the plots below -->
         <div class="ef-lane-signals">
@@ -421,7 +418,7 @@
 
   <!-- Sync -->
   <div class="card" id="cardSync">
-    <div class="card-head"><h3>Raw synchronization<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: raw synchronization"><span class="help-pop" role="tooltip"><span class="hp-p">The ventilator is the reference. The offset of a recording, in seconds, is where its first sample sits on the ventilator time line. The bar of each row shows it.</span><span class="hp-li"><b>Signal</b> is the signal of the row; <b>Compared with</b> is the ventilator signal it is matched to. EMG signals are compared as their envelope (RMS over 0.3 s, ECG removed).</span><span class="hp-li">An empty offset field uses the estimated offset: the cross-correlation of the two signals, over −5.0 to +5.0 s. A change of signal gives a new estimate.</span><span class="hp-li">Type a value to replace the estimate. With the method <code>estimate_offset</code>, <b>Estimate</b> finds the offsets of all rows again and clears the typed values.</span><span class="hp-li"><b>Match</b> is the correlation at the offset in use (1 is the same shape).</span><span class="hp-p"><code>session.sync_raw</code> applies the offsets.</span></span></span></h3><span class="hint">session.sync_raw</span></div>
+    <div class="card-head"><h3>Raw synchronization<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: raw synchronization"><span class="help-pop" role="tooltip"><span class="hp-p">The ventilator is the reference. The offset of a recording, in seconds, is where its first sample sits on the ventilator time line. The bar of each row shows it.</span><span class="hp-li"><b>Recording</b> is the loaded file or the merged recording that the row uses. <b>Merge sections</b> on a card sets its row to the merged recording.</span><span class="hp-li"><b>Signal</b> is the signal of the row; <b>Compared with</b> is the ventilator signal it is matched to. EMG signals are compared as their envelope (RMS over 0.3 s, ECG removed).</span><span class="hp-li">An empty offset field uses the estimated offset: the cross-correlation of the two signals, over −5.0 to +5.0 s. A change of signal gives a new estimate.</span><span class="hp-li">Drag a bar to move its recording, or click it and use the arrow keys (0.1 s; with Shift 1.0 s). The offset field shows the new value.</span><span class="hp-li">Type a value to replace the estimate. With the method <code>estimate_offset</code>, <b>Estimate</b> finds the offsets of all rows again and clears the typed values.</span><span class="hp-li"><b>Match</b> is the correlation at the offset in use (1 is the same shape).</span><span class="hp-p"><code>session.sync_raw</code> applies the offsets.</span></span></span></h3><span class="hint">session.sync_raw</span></div>
     <div class="card-body">
       <div class="sync-controls">
         <div class="field"><label for="syncMethod">Method</label><select id="syncMethod"><option>manual_offset</option><option>estimate_offset (cross-correlation)</option></select></div>
@@ -433,6 +430,7 @@
       <div class="sync-strip" id="syncStrip">
         <div class="sync-row sync-ruler-row" aria-hidden="true">
           <span class="sync-name"></span>
+          <span class="sync-col-head sync-src">Recording</span>
           <span class="sync-col-head sync-sig">Signal</span>
           <span class="sync-col-head sync-vs">Compared with</span>
           <span class="sync-col-head sync-field">Offset</span>
@@ -441,6 +439,7 @@
         </div>
         <div class="sync-row mod-vent">
           <span class="sync-name"><i></i>Ventilator</span>
+          <span class="sync-src"><select class="sync-sel" id="syncSrcVent" aria-label="Ventilator recording used for the synchronization" title="Loaded Ventilator file or the merged Ventilator recording"></select></span>
           <span class="sync-sig"><span class="sync-ref-tag" title="The other recordings move against this one. Each row chooses the ventilator signal it is compared with.">Reference</span></span>
           <span class="sync-vs"></span>
           <span class="sync-field"></span>
@@ -449,6 +448,7 @@
         </div>
         <div class="sync-row mod-eit">
           <span class="sync-name"><i></i>EIT</span>
+          <span class="sync-src"><select class="sync-sel" id="syncSrcEit" aria-label="EIT recording used for the synchronization" title="Loaded EIT file or the merged EIT recording"></select></span>
           <span class="sync-sig"><select class="sync-sel" id="syncSigEit" aria-label="EIT signal used for the match" title="EIT signal used for the match"></select></span>
           <span class="sync-vs"><select class="sync-sel" id="syncRefEit" aria-label="Ventilator signal compared with EIT" title="Ventilator signal compared with the EIT signal"></select></span>
           <label class="sync-field sync-offset-wrap"><input class="sync-offset" type="number" step="0.1" id="syncOffsetEit" aria-label="EIT offset in seconds"><span class="unit">s</span></label>
@@ -457,6 +457,7 @@
         </div>
         <div class="sync-row mod-emg">
           <span class="sync-name"><i></i>EMG</span>
+          <span class="sync-src"><select class="sync-sel" id="syncSrcEmg" aria-label="EMG recording used for the synchronization" title="Loaded EMG file or the merged EMG recording"></select></span>
           <span class="sync-sig"><select class="sync-sel" id="syncSigEmg" aria-label="EMG signal used for the match" title="EMG signal used for the match (its envelope after ECG removal)"></select></span>
           <span class="sync-vs"><select class="sync-sel" id="syncRefEmg" aria-label="Ventilator signal compared with EMG" title="Ventilator signal compared with the EMG envelope"></select></span>
           <label class="sync-field sync-offset-wrap"><input class="sync-offset" type="number" step="0.1" id="syncOffsetEmg" aria-label="EMG offset in seconds"><span class="unit">s</span></label>
@@ -469,7 +470,7 @@
       <div class="sync-check">
         <div class="sync-check-head" data-zoom-toolbar="sync">
           <span class="ct-label">Check alignment</span>
-          <span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: check alignment"><span class="help-pop" role="tooltip"><span class="hp-p">The lanes show each ventilator signal in use, the EIT signal and the EMG envelope on one time line, with the offsets above applied.</span><span class="hp-p">The dashed lines are the breath starts of the reference. With a good offset, each signal starts its breath on a line.</span></span></span>
+          <span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: check alignment"><span class="help-pop" role="tooltip"><span class="hp-p">The lanes show the ventilator signals ticked on the ventilator card and the ones the rows are compared with, the EIT signal and the EMG envelope on one time line, with the offsets above applied.</span><span class="hp-p">The dashed lines are the breath starts of the reference. With a good offset, each signal starts its breath on a line.</span></span></span>
           <div class="tb-spacer"></div>
           <div class="tb-seg small view-seg" role="group" aria-label="Time range">
             <button data-z="out" title="Zoom out" aria-label="Zoom out"><span data-icon="minus"></span></button>
@@ -487,7 +488,7 @@
 
   <!-- Working-window slicer -->
   <div class="card" id="cardWindow">
-    <div class="card-head"><h3>Working window<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: working window"><span class="help-pop wide" role="tooltip"><span class="hp-p">Cut out the part of the recording that 2 · Design analyses.</span><span class="hp-li">Each lane is an overview (minimum and maximum) of the signal in the section of that modality. The ventilator lanes follow the channels ticked there.</span><span class="hp-li"><b>Keep window</b> adds a span to keep. Drag its band to move it, or a handle to change its length. Click a window, on the lanes or in the list, to edit it with the Start and End fields.</span><span class="hp-li"><b>Remove window</b> adds a span to cut out (hatched red). Everything around it is kept. Use it to remove a cough or a disconnection from the middle of a recording.</span><span class="hp-li"><b>Whole signal</b> makes one keep window over the whole recording and joins the other keep windows into it. On its own it saves the recording unchanged. With remove windows, it keeps everything except those spans.</span><span class="hp-li">With only remove windows, the whole recording minus those spans is saved.</span><span class="hp-li">The <b>keep</b>/<b>remove</b> chip of a row changes it between the two.</span><span class="hp-p"><b>Save as new sequence</b> joins the segments, in time order, into one named sequence (<code>eit.slice</code> followed by <code>Sequence.concatenate()</code>). It adds the sequence to <b>Saved sequences</b>, under this card and in the side panel. The saved windows turn grey and are locked. New windows make the next sequence. Remove a sequence to unlock its windows.</span></span></span></h3><span class="hint">eit.slice</span></div>
+    <div class="card-head"><h3>Working window<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: working window"><span class="help-pop wide" role="tooltip"><span class="hp-p">Cut out the part of the recording that 2 · Design analyses.</span><span class="hp-li"><b>Recording</b> chooses the loaded file or the merged recording of each modality. These are the same lists as on the Synchronization rows, so a change in one place changes both. <b>None</b> leaves a modality out of the working window and of the sequence you save; its synchronization stays. The lanes use the offsets of the synchronization, and the time line is the ventilator recording.</span><span class="hp-li">Each lane is an overview (minimum and maximum) of the signal in the section of that modality. The ventilator lanes follow the channels ticked there.</span><span class="hp-li"><b>Keep window</b> adds a span to keep. Drag its band to move it, or a handle to change its length. Click a window, on the lanes or in the list, to edit it with the Start and End fields.</span><span class="hp-li"><b>Remove window</b> adds a span to cut out (hatched red). Everything around it is kept. Use it to remove a cough or a disconnection from the middle of a recording.</span><span class="hp-li"><b>Whole signal</b> makes one keep window over the whole recording and joins the other keep windows into it. On its own it saves the recording unchanged. With remove windows, it keeps everything except those spans.</span><span class="hp-li">With only remove windows, the whole recording minus those spans is saved.</span><span class="hp-li">The <b>keep</b>/<b>remove</b> chip of a row changes it between the two.</span><span class="hp-p"><b>Save as new sequence</b> joins the segments, in time order, into one named sequence (<code>eit.slice</code> followed by <code>Sequence.concatenate()</code>). It adds the sequence to <b>Saved sequences</b>, under this card and in the side panel. The saved windows turn grey and are locked. New windows make the next sequence. Remove a sequence to unlock its windows.</span></span></span></h3><span class="hint">eit.slice</span></div>
     <div class="card-body">
       <div class="slice-toolbar">
         <div class="slice-group" role="group" aria-label="Edit the selected window">
@@ -511,6 +512,15 @@
         </div>
       </div>
 
+      <!-- the recording of each modality; the same lists as on the
+           synchronization rows (js/prepare/sync-strip.js) -->
+      <div class="slice-sources" role="group" aria-label="Recordings in the working window">
+        <span class="slice-sources-head">Recording</span>
+        <label class="slice-src mod-vent"><i></i>Ventilator<select class="sync-sel" id="sliceSrcVent" aria-label="Ventilator recording in the working window"></select></label>
+        <label class="slice-src mod-eit"><i></i>EIT<select class="sync-sel" id="sliceSrcEit" aria-label="EIT recording in the working window"></select></label>
+        <label class="slice-src mod-emg"><i></i>EMG<select class="sync-sel" id="sliceSrcEmg" aria-label="EMG recording in the working window"></select></label>
+        <span class="slice-sources-hint">The same recordings as on Synchronization. None leaves a modality out. The time line is the ventilator recording.</span>
+      </div>
       <div class="slice-track" id="sliceTrack"></div>
       <div class="slice-axis" id="sliceAxis"></div>
 
@@ -641,15 +651,14 @@
         </label>
         <button class="tb-btn primary" id="runPipelineBtn" title="Run all steps in graph order">▶ Run workflow</button>
       </div>
-      <div class="canvas-hud">
-        <span class="hud-val" id="stepCountPill" title="15 of 45 steps shown · multimodal-full.pipeline.yaml">15/45</span>
-        <span class="hud-sep"></span>
-        <button id="canvasZoomOutBtn" title="Zoom out">−</button>
-        <span class="hud-val" id="canvasZoomPill" title="Current zoom level">100%</span>
-        <button id="canvasZoomInBtn" title="Zoom in">+</button>
-        <button id="canvasZoomFitBtn" title="Fit to view">⛶</button>
-        <span class="hud-sep"></span>
-        <span class="info-dot bare hud-help" tabindex="0" title="Mouse and keys">?<span class="info-pop info-pop-end">
+      <!-- the same control as the time range on 1 · Prepare (.tb-seg) -->
+      <div class="canvas-hud tb-seg small">
+        <span class="tb-seg-readout" id="stepCountPill" title="15 of 45 steps shown · multimodal-full.pipeline.yaml">15/45</span>
+        <button id="canvasZoomOutBtn" title="Zoom out" aria-label="Zoom out" data-icon="minus"></button>
+        <span class="tb-seg-readout hud-zoom" id="canvasZoomPill" title="Current zoom level">100%</span>
+        <button id="canvasZoomInBtn" title="Zoom in" aria-label="Zoom in" data-icon="plus"></button>
+        <button id="canvasZoomFitBtn" title="Fit to view" aria-label="Fit to view" data-icon="fit"></button>
+        <span class="info-dot bare hud-help" tabindex="0" title="Mouse and keys" aria-label="Mouse and keys" data-icon="help"><span class="info-pop info-pop-end">
           <span class="key-list">
             <span><b>Click</b> or <b>drag</b> a palette step</span><span>add it to the canvas</span>
             <span><b>Double-click</b> or <b>right-click</b> the canvas</span><span>open the quick menu to add a step</span>

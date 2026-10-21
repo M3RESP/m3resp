@@ -23,6 +23,7 @@ const PREP_ICONS = {
   seq:     'M3 5h14v10H3zM7.5 5v10M12.5 5v10',
   dot:     'M10 8.5a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3',
   'chevron-down': 'M6 8l4 4 4-4',
+  fit:     'M4 7.5V4h3.5M12.5 4H16v3.5M16 12.5V16h-3.5M7.5 16H4v-3.5',
 };
 function prepIcon(name, size=14){
   return `<svg width="${size}" height="${size}" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="${PREP_ICONS[name]}" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -34,3 +35,5 @@ function placeIcons(root){
   });
 }
 placeIcons(document.getElementById('view-prepare'));
+// the zoom control on the canvas of 2 · Design
+placeIcons(document.querySelector('.canvas-hud'));

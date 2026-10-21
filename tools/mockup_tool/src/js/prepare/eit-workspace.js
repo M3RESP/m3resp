@@ -84,7 +84,7 @@ function buildPixelGrid(container, {showRoiLines, showRoiLabels}){
       const text=document.createElementNS('http://www.w3.org/2000/svg','text');
       text.setAttribute('x',R); text.setAttribute('y',y+0.5);
       text.setAttribute('text-anchor','middle'); text.setAttribute('font-size',1.6);
-      text.setAttribute('fill','#e7ebf0'); text.setAttribute('font-weight','700');
+      text.setAttribute('fill','#e7ebf0'); text.setAttribute('font-weight','500');
       text.textContent = String(b+1);
       svg.appendChild(text);
     }
@@ -239,7 +239,7 @@ PANELS.forEach(pn=>{
       <span class="mx"></span>
     </div>
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-      <polyline fill="none" stroke="${pn.key==='global'?'var(--accent)':'var(--eit)'}" stroke-width="1.7" vector-effect="non-scaling-stroke"/>
+      <polyline fill="none" stroke="${pn.key==='global'?'var(--eit)':'var(--slate-500)'}" stroke-width="1.7" vector-effect="non-scaling-stroke"/>
     </svg>`;
   stack.insertBefore(div, cursorEl);
   eitPolys[pn.key]=div.querySelector('polyline');

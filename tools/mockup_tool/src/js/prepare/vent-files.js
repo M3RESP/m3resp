@@ -4,8 +4,7 @@
 // second file. Every file holds the same channels (the chips in the Files
 // block). An example file reads the channels of file 1 from another start time:
 //   shift  file time 0 of this file is file time `shift` of file 1 (s)
-// Files added with the file picker get an example signal too: this mockup
-// reads no file contents.
+// Files added with "Add files…" or "Add folder…" get an example signal too.
 
 const VENT_FILES = [
   {id:'f1', name:'m3resp_multimodal_1_ventilator.Poly5', dur:REC_SECONDS, fs:200, shift:0, real:true},
@@ -26,11 +25,11 @@ function ventSourceNote(id, M){
   const pf = s=> s===1 ? '' : 's';
   if(id==='merged'){
     const files = M.fileCount();
-    return `<b>Merged recording${M.merged?'':' (preview)'}</b>: ${M.sections.length} section${pf(M.sections.length)} from ${files} file${pf(files)}, joined in merge order; dashed lines mark the joins. Synchronization and the working window use file 1.`;
+    return `<b>Merged recording${M.merged?'':' (preview)'}</b>: ${M.sections.length} section${pf(M.sections.length)} from ${files} file${pf(files)}, joined in merge order; dashed lines mark the joins.`;
   }
   const f = M.file(id);
   if(f.real) return `<b>File ${M.fileNo(id)}</b>: <code>${f.name}</code>, ${fmtSec(f.dur)} at ${f.fs} Hz.`;
-  return `<b>File ${M.fileNo(id)}</b> (example): <code>${f.name}</code>. The channels are those of file 1 from ${fmtSec(f.shift)} on. Synchronization and the working window use file 1.`;
+  return `<b>File ${M.fileNo(id)}</b> (example): <code>${f.name}</code>. The channels are those of file 1 from ${fmtSec(f.shift)} on.`;
 }
 
 const VENT_MERGE = makeFileMerger({
@@ -41,7 +40,6 @@ const VENT_MERGE = makeFileMerger({
     {id:'s2', fileId:'f2', start:8.0, end:26.0},
   ],
   laneFn:ventLaneFn,
-  exts:/\.poly5$/i, extText:'.Poly5',
   newFile:(name, n)=> ({id:'f'+n, name, dur:REC_SECONDS, fs:200, shift:(n*7.3) % REC_SECONDS}),
   show:(id, M)=>{
     if(id==='merged'){

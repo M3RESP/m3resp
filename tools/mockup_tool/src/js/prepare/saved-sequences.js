@@ -17,6 +17,10 @@ const SEQ_LISTS = [
   {list:'windowSequencesList', count:'windowSequencesCount', countText:n=> n ? `${n} saved · listed under Available data on 2 · Design` : '',
    empty:()=> '<div class="windows-empty">No sequences yet. "Save as new sequence" adds one here; 2 · Design lists it under Available data.</div>'},
 ];
+// the modalities of a sequence, for example "EIT, ventilator"
+function seqModalityText(seq){
+  return (seq.modalities || []).map(m=> SLICE_MOD_NAMES[m] || m).join(', ');
+}
 function seqRow(seq){
   const row = document.createElement('div');
   row.className = 'seq-row' + (seq.id===lastSavedSeqId ? ' is-new' : '');
@@ -24,7 +28,7 @@ function seqRow(seq){
   row.innerHTML = `
     <span class="seq-icon">${prepIcon('seq', 14)}</span>
     <div class="seq-text"><div class="seq-name">${seq.name}</div>
-      <div class="seq-meta">${seq.windows.length} window${seq.windows.length===1?'':'s'} · ${fmtDuration(seq.total)}</div></div>
+      <div class="seq-meta">${seq.windows.length} window${seq.windows.length===1?'':'s'} · ${fmtDuration(seq.total)}${seq.modalities ? ' · '+seqModalityText(seq) : ''}</div></div>
     <button class="tb-btn small icon quiet remove" data-remove-seq title="Remove this sequence" aria-label="Remove this sequence">${prepIcon('close')}</button>`;
   row.querySelector('[data-remove-seq]').addEventListener('click', ()=>{
     SAVED_SEQUENCES = SAVED_SEQUENCES.filter(s=>s.id!==seq.id);
@@ -70,6 +74,7 @@ document.getElementById('saveSequenceBtn').addEventListener('click', ()=>{
     name,
     windows: sorted.map(w=>({start:w.start, end:w.end})),
     total,
+    modalities: sliceModalities(),
     savedAt: Date.now(),
   });
   lastSavedSeqId = 'seq'+seqSaveSeq;
@@ -90,14 +95,16 @@ document.getElementById('saveSequenceBtn').addEventListener('click', ()=>{
   nameInput.value = defaultSequenceName();
 });
 
-(function drawSliceAxis(){
+// time axis under the working-window lanes, over the length of the ventilator recording
+function drawSliceAxis(){
   const el=document.getElementById('sliceAxis');
   let out='';
   for(let k=0;k<=6;k++){
-    const t=REC_SECONDS*(k/6);
+    const t=sliceDur()*(k/6);
     out+=`<span>${fmtSec(t)}</span>`;
   }
   el.innerHTML=out;
-})();
+}
+drawSliceAxis();
 
 renderWindows();

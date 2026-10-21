@@ -37,22 +37,32 @@ function buildSignalSvg(svgEl, {stroke, freqHz, amp, baseline, noise, wobble, re
 // ---- working-window overview lanes ----
 // Each lane is the SAME generator its modality card uses, plotted over the
 // full session — not a separate, lower-fidelity stand-in.
+// The working window spans the ventilator recording chosen for the
+// synchronization (js/prepare/sync-strip.js): its length in seconds.
+function sliceDur(){
+  return (typeof syncSource==='function') ? syncSource('vent').dur : REC_SECONDS;
+}
+// fn(t, i) gives null where the recording has no data; the lane is empty there
 function overviewLaneSvg(fn, color, W, H){
-  const N=1100, PAD=6;
+  const N=1100, PAD=6, dur=sliceDur();
   const vals=[];
-  for(let i=0;i<N;i++) vals.push(fn((i/(N-1))*REC_SECONDS, i));
-  let lo=Math.min(...vals), hi=Math.max(...vals);
+  for(let i=0;i<N;i++) vals.push(fn((i/(N-1))*dur, i));
+  const known=vals.filter(v=> v!==null);
+  const lo=Math.min(...known), hi=Math.max(...known);
   const span=(hi-lo)||1;
-  let pts='';
+  // one polyline for each stretch with data
+  const runs=[]; let pts='';
   for(let i=0;i<N;i++){
+    if(vals[i]===null){ if(pts) runs.push(pts); pts=''; continue; }
     const x=(i/(N-1))*W;
     const y=PAD+(1-(vals[i]-lo)/span)*(H-2*PAD);
     pts+=`${x.toFixed(1)},${y.toFixed(1)} `;
   }
+  if(pts) runs.push(pts);
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   svg.setAttribute('preserveAspectRatio','none');
-  svg.innerHTML=`<polyline points="${pts.trim()}" fill="none" stroke="${color}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`;
+  svg.innerHTML=runs.map(p=>`<polyline points="${p.trim()}" fill="none" stroke="${color}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`).join('');
   return svg;
 }
 
@@ -115,25 +125,45 @@ function breathPhaseAt(t){
   return {start, len, p:(t-start)/len};
 }
 
-// The lanes use the current synchronization offsets (js/prepare/sync-strip.js):
-// a recording that starts `o` seconds after the reference is read at t − o.
+// The lanes use the recordings and the offsets of the synchronization
+// (js/prepare/sync-strip.js): a recording that starts `o` seconds after the
+// reference is read at t − o. Time 0 is the start of the ventilator recording.
+// the modalities in the working window: the ones whose Recording is not None
+const SLICE_MOD_NAMES = {eit:'EIT', emg:'EMG', vent:'ventilator'};
+function sliceModalities(){
+  return Object.keys(SLICE_MOD_NAMES).filter(m=> !(typeof SLICE_OFF!=='undefined' && SLICE_OFF[m]));
+}
 function sliceLanes(){
-  const off = mod=> (typeof syncOffsetOf==='function') ? syncOffsetOf(mod) : 0;
-  const oEit = off('eit'), oEmg = off('emg');
-  const lanes=[{mod:'eit', label:'EIT · global impedance', color:'var(--eit)', fn:t=>eitOverviewAt(t-oEit)}];
-  EMG_CHANNELS.filter(c=>c.on).forEach(c=>{
-    lanes.push({mod:'emg', label:'EMG · '+c.name, color:c.color, fn:(t,i)=>c.fn(t-oEmg, i)});
+  const on = sliceModalities(), lanes=[];
+  if(on.includes('eit')) lanes.push({mod:'eit', label:`EIT · ${syncSourceName('eit')} · global impedance`, color:'var(--eit)',
+                fn:syncAtRef('eit', (f, t)=> f.fn(t))});
+  if(on.includes('emg')) EMG_CHANNELS.filter(c=>c.on).forEach(c=>{
+    lanes.push({mod:'emg', label:`EMG · ${syncSourceName('emg')} · ${c.name}`, color:c.color,
+                fn:syncAtRef('emg', (f, t, i)=>{ const q = f ? emgFileAt(f, t) : {tau:t, gain:1}; return q.gain*c.fn(q.tau, i); })});
   });
-  VENT_CHANNELS.filter(c=>c.on).forEach(c=>{
-    lanes.push({mod:'vent', label:'Ventilator · '+c.name, color:c.color, fn:t=>c.fn(ventPhase(t))});
+  if(on.includes('vent')) VENT_CHANNELS.filter(c=>c.on).forEach(c=>{
+    lanes.push({mod:'vent', label:`Ventilator · ${syncSourceName('vent')} · ${c.name}`, color:c.color,
+                fn:syncAtRef('vent', (f, t)=> c.fn(ventPhase(ventFileAt(f, t).tau)))});
   });
   return lanes;
 }
 
 function renderSliceLanes(){
+  // the lanes need the synchronization, which loads after this file
+  if(typeof syncAtRef!=='function') return;
   const track=document.getElementById('sliceTrack');
-  [...track.querySelectorAll('.slice-panel')].forEach(el=>el.remove());
-  sliceLanes().forEach(l=>{
+  [...track.querySelectorAll('.slice-row')].forEach(el=>el.remove());
+  const lanes = sliceLanes();
+  if(!lanes.length){
+    const note=document.createElement('div');
+    note.className='slice-row windows-empty';
+    note.textContent='No modality in the working window. Choose a recording for at least one modality above.';
+    track.appendChild(note);
+  }
+  lanes.forEach(l=>{
+    // the name above the plot, then the plot
+    const row=document.createElement('div');
+    row.className='slice-row';
     const panel=document.createElement('div');
     panel.className='slice-panel mod-'+l.mod;
     panel.style.borderLeftColor=l.color;
@@ -146,16 +176,19 @@ function renderSliceLanes(){
     // "EIT · global impedance": the modality in small mono, then the signal name
     const [src, ...rest]=l.label.split(' · ');
     lab.innerHTML=`<span class="src">${src}</span>${rest.join(' · ')}`;
-    panel.appendChild(lab);
-    track.appendChild(panel); // z-index (not DOM order) keeps windows above lanes
+    row.appendChild(lab);
+    row.appendChild(panel);
+    track.appendChild(row);
   });
+  // the window bands sit inside the plots (js/prepare/window-slicer.js)
+  if(typeof renderWindows==='function') renderWindows();
 }
 
 // ---- working-window state ----
 let sliceMode = 'time';
 const EIT_HZ = 50;
-// window colour coding: teal (--win-neutral, CSS: the accent) is the plain
+// window colour coding: clay (--win-neutral, CSS: the accent) is the plain
 // band, green (--ok) = kept, red = removed
-const NEUTRAL_COLOR = '#0f8b8d';
-const KEEP_COLOR = '#2f9e6e';
+const NEUTRAL_COLOR = '#a85f4d';
+const KEEP_COLOR = '#4f7a5a';
 

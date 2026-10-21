@@ -2,8 +2,7 @@
 // The Files block of the EIT card (shared code: js/prepare/file-merge.js).
 // File 1 is the real recording of this card; file 2 is an example of a
 // second file (a part of the same signal, scaled, with other ROI shares).
-// Files added with the file picker get an example signal too: this mockup
-// reads no file contents.
+// Files added with "Add files…" or "Add folder…" get an example signal too.
 // The plots and images under the Files block show one file, or the merged
 // recording.
 //   roiWeights: size of each ROI curve (ventral to dorsal) against the global curve
@@ -43,7 +42,6 @@ const EIT_MERGE = makeFileMerger({
     {id:'s2', fileId:'f2', start:10.0, end:30.0},
   ],
   laneFn:f=> f.fn,
-  exts:/\.(bin|stp|zip)$/i, extText:'.bin, .stp or .zip',
   newFile:(name, n)=>{
     const shift = (n*7.3) % REC_SECONDS, k = n % 3;
     return {id:'f'+n, name, dur:REC_SECONDS, fs:20,

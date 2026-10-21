@@ -56,6 +56,8 @@ function prepareSnapshot(){
     emgSeq,
     ventOn: Object.fromEntries(VENT_CHANNELS.map(c=>[c.id, c.on])),
     sync: JSON.parse(JSON.stringify(SYNC_STATE)),
+    syncSources: {...SYNC_SRC},
+    sliceOff: {...SLICE_OFF},
     syncMethod: document.getElementById('syncMethod').value,
     syncReference: document.getElementById('syncReference').value,
     windows: JSON.parse(JSON.stringify(windows)),
@@ -137,9 +139,11 @@ function restorePrepare(p){
   document.getElementById('syncMethod').value = p.syncMethod;
   document.getElementById('syncReference').value = p.syncReference;
   updateSyncEstimateButton();
+  Object.assign(SYNC_SRC, p.syncSources || {});
+  Object.assign(SLICE_OFF, p.sliceOff || {});
+  renderSyncSources();
   renderSyncSelects();
-  Object.keys(SYNC_IDS).forEach(updateSyncRow);
-  renderSyncCheck();
+  refreshSync();
 
   SAVED_SEQUENCES = p.sequences;
   seqSaveSeq = p.seqSaveSeq;

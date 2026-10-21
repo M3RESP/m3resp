@@ -5,8 +5,7 @@
 // An example file reads the signals of file 1 from another start time:
 //   shift  file time 0 of this file is file time `shift` of file 1 (s)
 //   gain   size of the signals against file 1
-// Files added with the file picker get an example signal too: this mockup
-// reads no file contents.
+// Files added with "Add files…" or "Add folder…" get an example signal too.
 
 const EMG_FILES = [
   {id:'f1', name:'m3resp_multimodal_1_emg.Poly5', dur:REC_SECONDS, fs:2048, shift:0, gain:1, real:true},
@@ -28,11 +27,11 @@ function emgSourceNote(id, M){
   const pf = s=> s===1 ? '' : 's';
   if(id==='merged'){
     const files = M.fileCount();
-    return `<b>Merged recording${M.merged?'':' (preview)'}</b>: ${M.sections.length} section${pf(M.sections.length)} from ${files} file${pf(files)}, joined in merge order; dashed lines mark the joins. Synchronization and the working window use file 1.`;
+    return `<b>Merged recording${M.merged?'':' (preview)'}</b>: ${M.sections.length} section${pf(M.sections.length)} from ${files} file${pf(files)}, joined in merge order; dashed lines mark the joins.`;
   }
   const f = M.file(id);
   if(f.real) return `<b>File ${M.fileNo(id)}</b>: <code>${f.name}</code>, ${fmtSec(f.dur)} at ${f.fs} Hz.`;
-  return `<b>File ${M.fileNo(id)}</b> (example): <code>${f.name}</code>. The signals are those of file 1 from ${fmtSec(f.shift)} on, at ${Math.round(f.gain*100)} % size. Synchronization and the working window use file 1.`;
+  return `<b>File ${M.fileNo(id)}</b> (example): <code>${f.name}</code>. The signals are those of file 1 from ${fmtSec(f.shift)} on, at ${Math.round(f.gain*100)} % size.`;
 }
 
 const EMG_MERGE = makeFileMerger({
@@ -43,7 +42,6 @@ const EMG_MERGE = makeFileMerger({
     {id:'s2', fileId:'f2', start:5.0, end:20.0},
   ],
   laneFn:emgLaneFn,
-  exts:/\.poly5$/i, extText:'.Poly5',
   newFile:(name, n)=> ({id:'f'+n, name, dur:REC_SECONDS, fs:2048, shift:(n*7.3) % REC_SECONDS, gain:0.7 + 0.1*(n % 4)}),
   show:(id, M)=>{
     if(id==='merged'){
@@ -67,3 +65,5 @@ const EMG_MERGE = makeFileMerger({
   },
 });
 EMG_MERGE.showSource('f1');
+// the EMG row of the synchronization lists these files
+syncFilesChanged('emg');

@@ -21,6 +21,8 @@ analysis/
 docs/_build/
 docs/api/generated/
 docs/generated/
+docs/tutorials/
 
 # agentics
 AGENTS.md
+tests/data/TestPS3.txt

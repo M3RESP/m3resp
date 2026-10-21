@@ -35,7 +35,7 @@ function stepPorts(op){
 
 // ---- node graph: real steps from examples/multimodal_full/multimodal-full.pipeline.yaml ----
 // Edge colour = artifact-type FAMILY, deliberately independent of the modality
-// accent colours (blue/orange/purple/pink) used for node borders and the
+// colours (--eit, --emg, --vent, --custom) used for node borders and the
 // palette. On this particular graph the "signal-like" family happens to only
 // ever appear on EIT/EMG/vent-flavoured signal types, so it can look like
 // colour-by-modality by coincidence — it isn't: index/event, mask, result and

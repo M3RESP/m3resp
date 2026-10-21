@@ -19,42 +19,42 @@ function ventPhase(t){
 const VENT_CHANNELS = [
   {
     id:'paw', name:'P_aw', unit:'cmH₂O', cat:'airway_pressure', ch:'ch 0',
-    color:'#8a67c9', on:true,
+    color:'#7b6ba6', on:true,
     fn:({insp,f})=> insp
       ? 5 + 15 * Math.min(1, f*3.2)                    // fast rise to plateau
       : 5 + 15 * Math.exp(-f*6.5)                      // decay back to PEEP
   },
   {
     id:'flow', name:'Flow', unit:'L/s', cat:'airflow', ch:'ch 1',
-    color:'#4f8fd8', on:true,
+    color:'#d0403a', on:true,
     fn:({insp,f})=> insp
       ? 0.62 * (1 - 0.25*f)                            // decelerating inspiratory flow
       : -0.80 * Math.exp(-f*4.2)                       // passive expiratory decay
   },
   {
     id:'volume', name:'Volume', unit:'mL', cat:'volume', ch:'ch 2',
-    color:'#3aa88b', on:true,
+    color:'#6a8f4e', on:true,
     fn:({insp,f})=> insp
       ? 480 * (f - 0.12*f*f)                           // integral of inspiratory flow
       : 480 * Math.exp(-f*3.6)
   },
   {
     id:'pes', name:'P_es', unit:'cmH₂O', cat:'esophageal_pressure', ch:'unmapped',
-    color:'#c98a2c', on:false,
+    color:'#9a6a8f', on:false,
     fn:({insp,f})=> insp
       ? -2 - 6.5 * Math.sin(Math.PI*Math.min(1,f))     // negative swing on effort
       : -2 + 1.2 * (1 - Math.exp(-f*3))
   },
   {
     id:'pga', name:'P_ga', unit:'cmH₂O', cat:'gastric_pressure', ch:'unmapped',
-    color:'#b25c8a', on:false,
+    color:'#a08bc4', on:false,
     fn:({insp,f})=> insp
       ? 6 + 2.2 * Math.sin(Math.PI*Math.min(1,f))
       : 6 - 0.4 * Math.exp(-f*3)
   },
   {
     id:'pl', name:'P_L', unit:'cmH₂O', cat:'transpulmonary_pressure', ch:'derived',
-    color:'#d1554f', on:false,
+    color:'#8a8458', on:false,
     // transpulmonary pressure is Paw - Pes by definition
     fn:(ph)=> VENT_CHANNELS[0].fn(ph) - VENT_CHANNELS[3].fn(ph)
   },
@@ -148,6 +148,8 @@ ventChecks.addEventListener('change', e=>{
   c.on=inp.checked;
   syncVentVisibility();
   if(typeof renderSliceLanes==='function') renderSliceLanes();
+  // the alignment check of the synchronization draws the ticked channels
+  if(typeof renderSyncCheck==='function') renderSyncCheck();
   // the file lanes draw the ticked channels
   if(typeof VENT_MERGE!=='undefined') VENT_MERGE.render();
 });
