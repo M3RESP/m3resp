@@ -13,7 +13,7 @@ session.load_emg("recording.Poly5")
 session.load_ventilator("ventilator.txt", source="ventilator")
 ```
 
-Each load method stores the {term}`recording` in `session.raw`, under `"eit"`, `"emg"` or `"ventilator"`.
+Each load method stores the loaded {term}`recording` in `session.raw`, under `"eit"`, `"emg"` or `"ventilator"`.
 
 ## Process the recordings
 
