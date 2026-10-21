@@ -1,6 +1,6 @@
 # The session
 
-A {term}`session` (`M3Session`) holds the recordings and all the results of one analysis. Make one session per measurement. Each method that you call stores its result in the session, so the next method can use it.
+A {term}`session` (`M3Session`) holds the recordings and all the results of one analysis. Make one session for each set of recordings that were made at the same time on one patient. Each method that you call stores its result in the session, so the next method in your workflow can use it.
 
 ## Make a session and load recordings
 
