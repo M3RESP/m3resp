@@ -36,6 +36,8 @@ exclude_patterns = [
     "_build",
     "Thumbs.db",
     ".DS_Store",
+    # Pages of a tutorial that the build leaves out (see ``ignore_pattern``).
+    "tutorials/30_multimodal*",
 ]
 
 autosummary_generate = True
@@ -94,6 +96,8 @@ sphinx_gallery_conf = {
     "examples_dirs": "tutorials_src",
     "gallery_dirs": "tutorials",
     "filename_pattern": r".*\.py",
+    # The multimodal tutorial is not complete, so the build leaves it out.
+    "ignore_pattern": r"__init__\.py|30_multimodal\.py",
     "within_subsection_order": "FileNameSortKey",
     # Each API page lists the tutorials that use that function or class.
     "backreferences_dir": os.path.join("api", "backreferences"),

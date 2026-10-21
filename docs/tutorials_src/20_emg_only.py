@@ -128,5 +128,5 @@ for flag in session.quality:
 # Next
 # ----
 #
-# - Combine EIT, EMG and ventilator data in the next tutorial.
+# - Put EMG, EIT and ventilator recordings on one clock: :doc:`/how-to/synchronize-recordings`.
 # - Change the filter, the envelope or the ECG removal: :doc:`/how-to/emg-processing-settings`.

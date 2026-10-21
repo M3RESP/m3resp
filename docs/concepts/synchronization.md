@@ -154,4 +154,4 @@ The three calculations are also available as functions in `m3resp.synchronizatio
 
 Each modality marks its breath times at its own moment of the breath. For example, the start of the default EMG breath is the time of the highest EMG activity. So use the delays to check the detection and the synchronization.
 
-Continue with {doc}`slicing`, or follow the {doc}`multimodal tutorial <../tutorials/30_multimodal>`.
+Continue with {doc}`slicing`.

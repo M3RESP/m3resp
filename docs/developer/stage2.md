@@ -16,7 +16,6 @@ Stage 2 turns `m3resp` from a thin wrapper around `eitprocessing`/`resurfemg` ([
 
 - {doc}`../tutorials/10_eit_only`
 - {doc}`../tutorials/20_emg_only`
-- {doc}`../tutorials/30_multimodal`
 - {doc}`../how-to/export-results`
 
 ## Migration

@@ -42,7 +42,6 @@ jobs:
           python -m sphinx -W --keep-going -b html docs docs/_build/html
           test -f docs/_build/html/index.html
           test -f docs/_build/html/tutorials/index.html
-          test -f docs/_build/html/tutorials/30_multimodal.html
           test -f docs/_build/html/how-to/index.html
           test -f docs/_build/html/api/index.html
           test -f docs/_build/html/searchindex.js
