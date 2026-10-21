@@ -57,7 +57,7 @@ The session also keeps the results in the format returned by the outside package
 
 The collections in the table above (`signals`, `parameter_results`, `interval_data`, `pixel_masks`, `quality`, `linked_breaths`) use the same objects for all modalities. Use them to compare modalities and to export results.
 
-If you give `preprocess_eit` a function of your own with `preprocess=`, M3Resp stores its output in `session.processed` and leaves the collections empty for that step.
+`preprocess_eit` can receive custom preprocessing functions as input: if you pass it a function of your own with `preprocess=`, M3Resp stores its output in `session.processed` instead than in the collections, which will therefore not contain anything for that specific step.
 
 ## Ventilator data
 
