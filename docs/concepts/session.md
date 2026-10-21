@@ -55,7 +55,7 @@ for signal in session.signals.for_modality("eit"):
 
 The session also keeps the results in the format returned by the outside packages and stores them in four dictionaries: `session.raw`, `session.processed`, `session.events` and `session.parameters`. In each dictionary, you can access the specific modality's results by the modality's own key: for example `session.processed["eit"]` or `session.parameters["emg"]`.
 
-The collections in the table above (`signals`, `parameter_results`, `interval_data`, `pixel_masks`, `quality`, `linked_breaths`) use the same objects for all modalities. Use them to compare modalities and to export results.
+The collections in the [table above](session.md#where-the-session-stores-the-results) (`signals`, `parameter_results`, `interval_data`, `pixel_masks`, `quality`, `linked_breaths`) use the same objects for all modalities, making it easy to compare modalities and to export results.
 
 `preprocess_eit` can receive custom preprocessing functions as input: if you pass it a function of your own with `preprocess=`, M3Resp stores its output in `session.processed` instead than in the collections, which will therefore not contain anything for that specific step.
 
