@@ -36,9 +36,14 @@ Explore tutorials
 ::::::
 
 ::::::{div} m3-hero-visual
+```{image} _static/m3-signal-monitor-light.svg
+:alt: Schematic of three respiratory signals on one shared time axis. EIT global impedance, respiratory muscle EMG and ventilator airway pressure each show four breaths, and dashed lines mark the start of each breath in all three signals.
+:class: m3-monitor only-light
+```
+
 ```{image} _static/m3-signal-monitor.svg
 :alt: Schematic of three respiratory signals on one shared time axis. EIT global impedance, respiratory muscle EMG and ventilator airway pressure each show four breaths, and dashed lines mark the start of each breath in all three signals.
-:class: m3-monitor dark-light
+:class: m3-monitor only-dark
 ```
 ::::::
 

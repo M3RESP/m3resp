@@ -1,70 +1,78 @@
-/* Colours for the whole site. They come from the M3Resp project landing page
-   (github.com/Mahyar-t/landing_page): stone surfaces, ink text and one clay accent. */
+/* Colours for the whole site, from the M3Resp colour palette: bone and stone
+   surfaces, ink text and one clay accent. Clay marks links, labels and lines;
+   it fills only buttons. Small text uses the "strong" and "on ink" steps, which
+   have a contrast of at least 4.5:1 (WCAG 2.1). */
 
 :root {
-  /* Palette */
-  --m3-stone: #d9d8d5;
-  --m3-stone-light: #edece9;
-  --m3-stone-deep: #cdccc7;
+  /* Core colours */
+  --m3-bone: #d9d8d5;
+  --m3-stone: #cdccc7;
   --m3-ink: #17161a;
-  --m3-ink-raised: #222026;
-  --m3-ink-deep: #0f0e11;
-  --m3-taupe: #6f6b65;
-  --m3-taupe-dark: #5c5852;
-  --m3-taupe-light: #a8a49c;
+  --m3-muted: #6f6b65;
   --m3-clay: #a85f4d;
-  --m3-clay-dark: #8a4636;
-  --m3-clay-darker: #7a3c2e;
-  --m3-clay-light: #d08a77;
-  --m3-clay-lighter: #e0a594;
   --m3-white: #fff;
 
-  /* Fonts: Space Mono for headings, navigation and code; the theme's sans-serif for body text */
-  --m3-font-mono: "Space Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  /* Steps for small text */
+  --m3-muted-strong: #5a5652; /* 5.1:1 on bone */
+  --m3-clay-strong: #7e473a; /* 5.17:1 on bone, 4.58:1 on stone */
+  --m3-muted-on-ink: #848078; /* 4.58:1 on ink */
+  --m3-clay-on-ink: #b56e5d; /* 4.59:1 on ink */
 
-  /* Light mode: stone surface, ink text, clay accent */
-  --m3-c-surface: var(--m3-stone);
-  --m3-c-elevated: var(--m3-stone-light);
-  --m3-c-raised: var(--m3-stone-deep);
+  /* Raised surfaces: white 35 % on bone, and white 4 % on ink */
+  --m3-bone-raised: #e6e6e4;
+  --m3-ink-raised: #201f23;
+
+  /* Fonts: Roboto for all text, Roboto Mono for code */
+  --m3-font-sans: "Roboto", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --m3-font-mono: "Roboto Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* Light mode: bone surface, ink text, clay accent */
+  --m3-c-surface: var(--m3-bone);
+  --m3-c-elevated: var(--m3-bone-raised);
+  --m3-c-raised: var(--m3-stone);
   --m3-c-line: rgb(23 22 26 / 12%);
   --m3-c-line-strong: rgb(23 22 26 / 28%);
   --m3-c-text: var(--m3-ink);
-  --m3-c-muted: var(--m3-taupe-dark);
+  --m3-c-muted: var(--m3-muted-strong);
   --m3-c-accent: var(--m3-clay);
-  --m3-c-accent-hover: var(--m3-clay-dark);
-  --m3-c-accent-text: var(--m3-clay-dark);
-  --m3-c-accent-strong: var(--m3-clay-darker);
+  --m3-c-accent-hover: var(--m3-clay-strong);
+  --m3-c-accent-text: var(--m3-clay-strong);
+  --m3-c-accent-strong: var(--m3-clay-strong);
   --m3-c-accent-soft: rgb(168 95 77 / 14%);
   --m3-c-accent-target: rgb(168 95 77 / 25%);
   --m3-c-on-accent: var(--m3-white);
-  --m3-c-neutral-soft: rgb(111 107 101 / 16%);
+  --m3-c-neutral-soft: rgb(23 22 26 / 8%);
+  --m3-c-row-hover: rgb(23 22 26 / 3%);
+  --m3-c-shadow: rgb(23 22 26 / 12%);
 
-  /* Ink panels (terminal, signal monitor) in both modes */
+  /* Ink panels (terminal, signal monitor, footer) in both modes */
   --m3-c-panel: var(--m3-ink);
-  --m3-c-panel-line: rgb(217 216 213 / 14%);
-  --m3-c-panel-text: var(--m3-stone);
-  --m3-c-panel-muted: var(--m3-taupe-light);
-  --m3-c-panel-accent: var(--m3-clay-light);
+  --m3-c-panel-line: rgb(255 255 255 / 10%);
+  --m3-c-panel-text: var(--m3-bone);
+  --m3-c-panel-muted: var(--m3-muted-on-ink);
+  --m3-c-panel-accent: var(--m3-clay-on-ink);
 }
 
-/* Dark mode: ink surface, stone text, light clay accent */
+/* Dark mode: ink surface, bone text, clay accent for ink */
 html[data-theme="dark"] {
   --m3-c-surface: var(--m3-ink);
   --m3-c-elevated: var(--m3-ink-raised);
   --m3-c-raised: var(--m3-ink-raised);
   --m3-c-line: rgb(217 216 213 / 12%);
   --m3-c-line-strong: rgb(217 216 213 / 28%);
-  --m3-c-text: var(--m3-stone);
-  --m3-c-muted: var(--m3-taupe-light);
-  --m3-c-accent: var(--m3-clay-light);
-  --m3-c-accent-hover: var(--m3-clay-lighter);
-  --m3-c-accent-text: var(--m3-clay-light);
-  --m3-c-accent-strong: var(--m3-clay-lighter);
-  --m3-c-accent-soft: rgb(208 138 119 / 14%);
-  --m3-c-accent-target: rgb(208 138 119 / 25%);
+  --m3-c-text: var(--m3-bone);
+  --m3-c-muted: var(--m3-muted-on-ink);
+  --m3-c-accent: var(--m3-clay-on-ink);
+  --m3-c-accent-hover: var(--m3-clay);
+  --m3-c-accent-text: var(--m3-clay-on-ink);
+  --m3-c-accent-strong: var(--m3-clay-on-ink);
+  --m3-c-accent-soft: rgb(168 95 77 / 14%);
+  --m3-c-accent-target: rgb(168 95 77 / 25%);
   --m3-c-on-accent: var(--m3-ink);
-  --m3-c-neutral-soft: rgb(168 164 156 / 16%);
-  --m3-c-panel: var(--m3-ink-deep);
+  --m3-c-neutral-soft: rgb(217 216 213 / 8%);
+  --m3-c-row-hover: rgb(255 255 255 / 4%);
+  --m3-c-shadow: rgb(0 0 0 / 30%);
+  --m3-c-panel: var(--m3-ink-raised);
 }
 
 /* Theme colours (pydata-sphinx-theme) taken from the tokens above */
@@ -91,11 +99,13 @@ html[data-theme="dark"] {
   --pst-color-heading: var(--m3-c-text);
   --pst-color-text-base: var(--m3-c-text);
   --pst-color-text-muted: var(--m3-c-muted);
-  --pst-color-blockquote-notch: var(--m3-taupe);
-  --pst-color-table-row-hover-bg: var(--m3-c-accent-soft);
-  --pst-color-shadow: rgb(23 22 26 / 8%);
-  --pst-font-family-heading: var(--m3-font-mono);
+  --pst-color-blockquote-notch: var(--m3-muted);
+  --pst-color-table-row-hover-bg: var(--m3-c-row-hover);
+  --pst-color-shadow: var(--m3-c-shadow);
+  --pst-font-family-base: var(--m3-font-sans);
+  --pst-font-family-heading: var(--m3-font-sans);
   --pst-font-family-monospace: var(--m3-font-mono);
+  --pst-font-weight-heading: 500;
   --pst-color-info: var(--m3-c-muted);
   --pst-color-info-bg: var(--m3-c-neutral-soft);
 
@@ -108,11 +118,11 @@ html[data-theme="dark"] {
   --sg-download-a-border-color: 1px solid var(--m3-c-accent);
   --sg-download-a-hover-background-color: var(--m3-c-accent-hover);
   --sg-thumb-hover-border: var(--m3-c-accent);
-  --sg-thumb-box-shadow-color: rgb(23 22 26 / 15%);
+  --sg-thumb-box-shadow-color: var(--m3-c-shadow);
 }
 
 body {
-  letter-spacing: -0.006em;
+  font-family: var(--m3-font-sans);
 }
 
 .bd-header {
@@ -131,35 +141,35 @@ body {
   color: var(--m3-c-accent-text);
 }
 
-.bd-footer {
-  border-top: 1px solid var(--m3-c-line);
-}
-
 .navbar-brand {
   color: var(--pst-color-text-base);
-  font-family: var(--m3-font-mono);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 .navbar-header-items__center .nav-link,
 .bd-header .navbar-nav .dropdown-toggle {
-  font-family: var(--m3-font-mono);
   font-size: 0.875rem;
-  font-weight: 400;
-  letter-spacing: 0;
+  font-weight: 500;
 }
 
-.bd-sidebar-primary,
-.bd-sidebar-secondary,
-.bd-breadcrumbs,
-.prev-next-area,
-.bd-header .navbar-item .dropdown-menu,
-.admonition > .admonition-title,
-div.admonition > .admonition-title,
+/* Footer: an ink panel with bone text in both modes */
+.bd-footer {
+  border-top: 1px solid var(--m3-c-panel-line);
+  background: var(--m3-c-panel);
+  color: var(--m3-c-panel-muted);
+}
+
+.bd-footer a {
+  color: var(--m3-c-panel-text);
+}
+
+.bd-footer a:hover {
+  color: var(--m3-c-panel-accent);
+}
+
 p.sphx-glr-script-out {
   font-family: var(--m3-font-mono);
-  letter-spacing: 0;
 }
 
 /* Wider page: less empty space left and right of the sidebars on wide screens. */
@@ -197,11 +207,11 @@ p.sphx-glr-script-out {
 .bd-main .bd-content .bd-article-container h2,
 .bd-main .bd-content .bd-article-container h3 {
   color: var(--pst-color-heading);
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
 
-/* Landing page (docs/index.md): one flat surface, Space Mono, square corners, hairline borders. */
+/* Landing page (docs/index.md): one flat surface, Roboto, square corners, hairline borders. */
 
 html:has(#m3resp-documentation) {
   --m3-space-1: 4px;
@@ -217,7 +227,7 @@ html:has(#m3resp-documentation) {
 
 #m3resp-documentation {
   color: var(--m3-c-text);
-  font-family: var(--m3-font-mono);
+  font-family: var(--m3-font-sans);
   letter-spacing: 0;
 }
 
@@ -235,9 +245,9 @@ html:has(#m3resp-documentation) {
 #m3resp-documentation > section > h2 {
   margin: 0 0 var(--m3-space-2);
   color: var(--m3-c-text);
-  font-family: var(--m3-font-mono);
+  font-family: var(--m3-font-sans);
   font-size: 1.5rem;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.3;
   letter-spacing: 0;
 }
@@ -288,9 +298,9 @@ html:has(#m3resp-documentation) {
   padding: 0;
   border: 0;
   color: var(--m3-c-text);
-  font-family: var(--m3-font-mono);
+  font-family: var(--m3-font-sans);
   font-size: clamp(1.5rem, 2.4vw, 2rem);
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.3;
   letter-spacing: -0.01em;
   overflow-wrap: break-word;
@@ -344,9 +354,9 @@ html:has(#m3resp-documentation) {
   margin: 0;
   padding: var(--m3-space-2) var(--m3-space-4);
   border-radius: var(--m3-radius);
-  font-family: var(--m3-font-mono);
+  font-family: var(--m3-font-sans);
   font-size: 0.875rem;
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: 0.02em;
   transition:
     background-color 120ms linear,
@@ -583,9 +593,9 @@ html:has(#m3resp-documentation) {
   padding: 0;
   border: 0;
   color: var(--m3-c-text);
-  font-family: var(--m3-font-mono);
+  font-family: var(--m3-font-sans);
   font-size: 1.25rem;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.4;
 }
 

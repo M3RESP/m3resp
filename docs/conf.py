@@ -103,7 +103,7 @@ html_title = f"{project} documentation"
 html_show_sourcelink = False
 html_static_path = ["_static"]
 html_css_files = [
-    "https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap",
+    "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,500;0,700;1,400&family=Roboto+Mono:wght@400;500;700&display=swap",
     "custom.css",
 ]
 html_js_files = ["m3-page-toc.js"]
