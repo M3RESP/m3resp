@@ -18,7 +18,7 @@ print(signal.time[:3])           # [0.   0.05 0.1 ]
 | Field | Contents |
 |---|---|
 | `values` | The measured values, as a NumPy array |
-| `time` | The time of each value, in seconds |
+| `time` | The time of each sample on the clock of its recording, in seconds |
 | `sample_frequency` | The sampling rate, in Hz |
 | `unit` | The unit of the values, for example `"µV"` |
 | `name` | The name of the signal |
