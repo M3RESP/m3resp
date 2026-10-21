@@ -57,7 +57,7 @@ The fields `sample_index` (for an event), `start_index`, `end_index` and `extrem
 
 ## The identifier of an event
 
-Each event, interval and breath gets a random `id` when M3Resp makes it. The `id` stays the same when M3Resp shifts the event to the shared clock, and when it writes the event to a file and reads it back. Two events that differ only in `id` are equal.
+Each event, interval and breath gets a random `id` when M3Resp makes it. The `id` stays the same when M3Resp shifts the event to the shared clock, and when it writes the event to a file and reads it back. When you run the breath detection two times on the same data, the breaths of the two runs have the same times but different `id`s. M3Resp ignores the `id` when it compares two events, so the breaths of both runs count as equal.
 
 A result can point to one event with its `id`, for example with `ParameterResult.event_id`. The results per breath of M3Resp still point to a breath by its position in the list.
 
