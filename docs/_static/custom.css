@@ -806,6 +806,13 @@ code {
   color: var(--m3-c-accent-text);
 }
 
+/* The download buttons at the end of each tutorial: the text has the colour of
+   the button text, on the accent colour of the button. */
+.bd-article .sphx-glr-download a code.literal {
+  background: none;
+  color: inherit;
+}
+
 /* Code in headings, breadcrumbs and the side panel looks like the text around it. */
 .bd-article :is(h1, h2, h3, h4, h5, h6) code.literal,
 .bd-breadcrumbs code.literal,

@@ -93,10 +93,13 @@ print("TIV of the first three breaths:", first_values)
 # -------------------
 #
 # :func:`~m3resp.visualization.plot_eit_processing_summary` shows the filtered global impedance with the breaths, the TIV and EELI of each breath, and the mean TIV of each pixel.
+#
+# With ``backend="plotly"``, the figure is interactive. Drag over a part of a panel to zoom in, double-click to zoom out, and move the mouse over a line to see its values. ``fig.show()`` shows the figure in a notebook, or in your web browser when you run a Python script. Without ``backend="plotly"``, you get a static matplotlib figure.
 
 from m3resp.visualization import plot_eit_processing_summary
 
-fig = plot_eit_processing_summary(session)
+fig = plot_eit_processing_summary(session, backend="plotly")
+fig.show()
 
 # %%
 # Save the results

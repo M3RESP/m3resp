@@ -86,6 +86,8 @@ uv sync --extra all --extra docs
 uv run python -m sphinx -W --keep-going -b html docs docs/_build/html
 ```
 
+The tutorials show interactive plotly figures. The build also saves each figure as a PNG image for the tutorial thumbnails. Kaleido makes these images with Chrome. If Chrome is not on your computer, run `plotly_get_chrome -y` once.
+
 Open `docs/_build/html/index.html` to see the result. The documentation workflow runs the same strict build for each pull request. Fix all warnings, broken links and wrong references before the merge.
 
 Each page has one of four types. Put a new page in the folder of its type, and add it to the `toctree` of that folder:

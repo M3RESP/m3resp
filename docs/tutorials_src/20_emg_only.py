@@ -77,7 +77,8 @@ print("Extremum times of the first five breaths (s):", extremum_times)
 
 from m3resp.visualization import plot_session_overview
 
-fig = plot_session_overview(session)
+fig = plot_session_overview(session, backend="plotly")
+fig.show()
 
 # %%
 # Look at the parameters

@@ -69,7 +69,8 @@ for name in ["eit_breaths", "emg_breaths", "ventilator_breaths"]:
 
 from m3resp.visualization import plot_synchronization_comparison
 
-fig = plot_synchronization_comparison(session)
+fig = plot_synchronization_comparison(session, backend="plotly")
+fig.show()
 
 # %%
 # Link the breaths

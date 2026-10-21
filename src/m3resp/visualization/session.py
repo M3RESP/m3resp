@@ -11,6 +11,10 @@ from m3resp.core.session import M3Session
 from m3resp.data.events import BreathEvent
 from m3resp.synchronization.alignment import align_events_by_modality_offset
 from m3resp.synchronization.start_times import shared_clock_shifts
+from m3resp.visualization import plotly_figures
+from m3resp.visualization.plotly_figures import EventOverlay, LinePanel
+
+BACKENDS = ("matplotlib", "plotly")
 
 
 def plot_session_overview(
@@ -19,21 +23,39 @@ def plot_session_overview(
     max_seconds: float | None = 120.0,
     emg_channel: int | None = None,
     eit_waveform: str = "global_impedance_(raw)",
+    backend: str = "matplotlib",
+    max_points: int | None = 5000,
 ):
-    """Plot loaded EIT and processed EMG signals from an ``M3Session``.
+    """Plot the loaded EIT signal and the processed EMG signals of a session.
 
-    Matplotlib is imported lazily so visualization remains optional for the
-    core package.
+    Each signal gets its own panel. Green lines mark the EIT breaths and red
+    lines mark the EMG breaths, at the extremum of each breath.
+
+    Args:
+        session (M3Session): The session with the loaded EIT data, the
+            processed EMG data, or both.
+        max_seconds (float | None): Show the first ``max_seconds`` seconds of
+            each signal. ``None`` shows the full signal.
+        emg_channel (int | None): The EMG channel to show. It must be the
+            channel that the EMG processing used. ``None`` shows that channel.
+        eit_waveform (str): The name of the EIT signal in the first panel.
+        backend (str): ``"matplotlib"`` gives a static figure. ``"plotly"``
+            gives an interactive figure for a web page or a notebook.
+        max_points (int | None): For ``backend="plotly"`` only. The largest
+            number of points drawn for one signal. A longer signal keeps the
+            lowest and the highest value of each short time bin, so the peaks
+            stay visible. ``None`` draws every sample.
+
+    Returns:
+        matplotlib.figure.Figure | plotly.graph_objects.Figure: The figure.
+
+    Raises:
+        ValueError: If ``backend`` is unknown, if the session has no signal to
+            plot, or if ``emg_channel`` is not the processed channel.
+        ImportError: If the plot library of ``backend`` is not installed.
     """
 
-    try:
-        from matplotlib import pyplot as plt
-    except ImportError as exc:  # pragma: no cover - depends on local extras
-        raise ImportError(
-            "Session visualization requires matplotlib. Install the EIT or EMG "
-            "optional dependencies, or install matplotlib directly."
-        ) from exc
-
+    _check_backend(backend)
     rows: list[tuple[str, str, np.ndarray, np.ndarray, str]] = []
     rows.extend(_get_eit_rows(session, eit_waveform))
 
@@ -45,6 +67,24 @@ def plot_session_overview(
             "No plottable EIT or EMG data found. Load data and run EMG "
             "preprocessing before calling plot_session_overview."
         )
+
+    if backend == "plotly":
+        panels = []
+        for modality, title, time, values, ylabel in rows:
+            time, values = _limit_time(time, values, max_seconds)
+            event_key = f"{modality}_breaths"
+            color, label = _event_style(modality)
+            overlay = EventOverlay(session.events.get(event_key, []), color, label)
+            panels.append([LinePanel(title, ylabel, time, values, [overlay])])
+        return plotly_figures.line_grid_figure(panels, max_points=max_points)
+
+    try:
+        from matplotlib import pyplot as plt
+    except ImportError as exc:  # pragma: no cover - depends on local extras
+        raise ImportError(
+            "Session visualization requires matplotlib. Install the EIT or EMG "
+            "optional dependencies, or install matplotlib directly."
+        ) from exc
 
     fig, axes = plt.subplots(
         len(rows),
@@ -81,17 +121,36 @@ def plot_session_overview(
     return fig
 
 
-def plot_eit_processing_summary(session: M3Session):
-    """Plot EIT processing outputs stored by the multimodal notebook."""
+def plot_eit_processing_summary(
+    session: M3Session,
+    *,
+    backend: str = "matplotlib",
+    max_points: int | None = 5000,
+):
+    """Plot the results of the EIT processing of a session.
 
-    try:
-        from matplotlib import pyplot as plt
-    except ImportError as exc:  # pragma: no cover - depends on local extras
-        raise ImportError(
-            "EIT visualization requires matplotlib. Install the EIT optional "
-            "dependencies, or install matplotlib directly."
-        ) from exc
+    The four panels show the global impedance with the EIT breaths, the TIV
+    and the EELI of each breath, and the mean TIV of each pixel.
 
+    Args:
+        session (M3Session): The session after the EIT processing.
+        backend (str): ``"matplotlib"`` gives a static figure. ``"plotly"``
+            gives an interactive figure for a web page or a notebook.
+        max_points (int | None): For ``backend="plotly"`` only. The largest
+            number of points drawn for the global impedance. See
+            :func:`plot_session_overview`.
+
+    Returns:
+        matplotlib.figure.Figure | plotly.graph_objects.Figure: The figure.
+
+    Raises:
+        TypeError: If the session has no processed EIT data.
+        ValueError: If ``backend`` is unknown, or if the processed EIT data
+            has no global impedance.
+        ImportError: If the plot library of ``backend`` is not installed.
+    """
+
+    _check_backend(backend)
     processed = session.processed.get("eit")
     if not isinstance(processed, dict):
         raise TypeError("No processed EIT dictionary found on the session.")
@@ -101,6 +160,36 @@ def plot_eit_processing_summary(session: M3Session):
     )
     if signal is None:
         raise ValueError("No EIT global impedance signal found in processed EIT data.")
+
+    pixel_tiv = processed.get("pixel_tiv")
+    mean_pixel_tiv = None
+    if pixel_tiv is not None and len(pixel_tiv.values):
+        mean_pixel_tiv = np.nanmean(np.stack(pixel_tiv.values), axis=0)
+
+    if backend == "plotly":
+        color, label = _event_style("eit")
+        panel = LinePanel(
+            "EIT global impedance",
+            signal.label,
+            np.asarray(signal.time, dtype=float),
+            np.asarray(signal.values, dtype=float),
+            [EventOverlay(session.events.get("eit_breaths", []), color, label)],
+        )
+        return plotly_figures.eit_summary_figure(
+            panel,
+            processed.get("continuous_tiv"),
+            processed.get("eeli"),
+            mean_pixel_tiv,
+            max_points=max_points,
+        )
+
+    try:
+        from matplotlib import pyplot as plt
+    except ImportError as exc:  # pragma: no cover - depends on local extras
+        raise ImportError(
+            "EIT visualization requires matplotlib. Install the EIT optional "
+            "dependencies, or install matplotlib directly."
+        ) from exc
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 7), constrained_layout=True)
     ax_signal, ax_tiv, ax_eeli, ax_map = axes.ravel()
@@ -119,9 +208,7 @@ def plot_eit_processing_summary(session: M3Session):
     _plot_sparse(ax_tiv, processed.get("continuous_tiv"), "Continuous TIV", "TIV")
     _plot_sparse(ax_eeli, processed.get("eeli"), "EELI", "EELI")
 
-    pixel_tiv = processed.get("pixel_tiv")
-    if pixel_tiv is not None and len(pixel_tiv.values):
-        mean_pixel_tiv = np.nanmean(np.stack(pixel_tiv.values), axis=0)
+    if mean_pixel_tiv is not None:
         image = ax_map.imshow(mean_pixel_tiv, cmap="viridis")
         ax_map.set(title="Mean pixel TIV")
         fig.colorbar(image, ax=ax_map, fraction=0.046, pad=0.04)
@@ -137,17 +224,39 @@ def plot_synchronization_comparison(
     max_seconds: float | None = 120.0,
     emg_channel: int | None = None,
     eit_waveform: str = "global_impedance_(raw)",
+    backend: str = "matplotlib",
+    max_points: int | None = 5000,
 ):
-    """Plot plottable signals before and after manual synchronization."""
+    """Plot each signal before and after synchronization.
 
-    try:
-        from matplotlib import pyplot as plt
-    except ImportError as exc:  # pragma: no cover - depends on local extras
-        raise ImportError(
-            "Synchronization visualization requires matplotlib. Install the EIT "
-            "or EMG optional dependencies, or install matplotlib directly."
-        ) from exc
+    Each row shows one signal: on its own clock at the left, and on the shared
+    clock at the right. The lines mark the breaths of each modality.
 
+    Args:
+        session (M3Session): The session after
+            ``synchronize_raw_modalities`` or after
+            ``synchronize_multimodal_breaths``.
+        max_seconds (float | None): Show the first ``max_seconds`` seconds of
+            each signal. ``None`` shows the full signal.
+        emg_channel (int | None): The EMG channel to show. It must be the
+            channel that the EMG processing used. ``None`` shows that channel.
+        eit_waveform (str): The name of the EIT signal to show.
+        backend (str): ``"matplotlib"`` gives a static figure. ``"plotly"``
+            gives an interactive figure for a web page or a notebook.
+        max_points (int | None): For ``backend="plotly"`` only. The largest
+            number of points drawn for one signal. See
+            :func:`plot_session_overview`.
+
+    Returns:
+        matplotlib.figure.Figure | plotly.graph_objects.Figure: The figure.
+
+    Raises:
+        ValueError: If ``backend`` is unknown, or if the session has no
+            synchronization data or no signal to plot.
+        ImportError: If the plot library of ``backend`` is not installed.
+    """
+
+    _check_backend(backend)
     synchronized = session.processed.get("synchronized")
     if not isinstance(synchronized, dict):
         synchronized = {}
@@ -171,6 +280,60 @@ def plot_synchronization_comparison(
         raise ValueError(
             "No plottable EIT or EMG signals found for synchronization comparison."
         )
+
+    if backend == "plotly":
+        panels = []
+        for (
+            modality,
+            event_key,
+            title,
+            before_time,
+            before_values,
+            after_time,
+            after_values,
+            ylabel,
+        ) in rows:
+            color, label = _event_style(modality)
+            before_time, before_values = _limit_time(
+                before_time, before_values, max_seconds
+            )
+            after_time, after_values = _limit_time(
+                after_time, after_values, max_seconds
+            )
+            before_events = session.events.get(event_key, [])
+            panels.append(
+                [
+                    LinePanel(
+                        f"{title} before synchronization",
+                        ylabel,
+                        before_time,
+                        before_values,
+                        [EventOverlay(before_events, color, f"{label} original")],
+                    ),
+                    LinePanel(
+                        f"{title} after synchronization",
+                        ylabel,
+                        after_time,
+                        after_values,
+                        [
+                            EventOverlay(
+                                after_events.get(event_key, []),
+                                color,
+                                f"{label} synchronized",
+                            )
+                        ],
+                    ),
+                ]
+            )
+        return plotly_figures.line_grid_figure(panels, max_points=max_points)
+
+    try:
+        from matplotlib import pyplot as plt
+    except ImportError as exc:  # pragma: no cover - depends on local extras
+        raise ImportError(
+            "Synchronization visualization requires matplotlib. Install the EIT "
+            "or EMG optional dependencies, or install matplotlib directly."
+        ) from exc
 
     fig, axes = plt.subplots(
         len(rows),
@@ -226,6 +389,11 @@ def plot_synchronization_comparison(
         ax.set_xlabel("Time (s)")
     _deduplicate_legends(axes.ravel())
     return fig
+
+
+def _check_backend(backend: str) -> None:
+    if backend not in BACKENDS:
+        raise ValueError(f"backend must be one of {BACKENDS}, got {backend!r}.")
 
 
 def _after_synchronization_events(

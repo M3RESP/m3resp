@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 
 import m3resp
 
@@ -63,6 +64,7 @@ intersphinx_mapping = {
     "scipy": ("https://docs.scipy.org/doc/scipy", None),
     "pandas": ("https://pandas.pydata.org/docs", None),
     "matplotlib": ("https://matplotlib.org/stable", None),
+    "plotly": ("https://plotly.com/python-api-reference", None),
 }
 intersphinx_disabled_reftypes = ["std:doc"]
 
@@ -78,6 +80,12 @@ os.environ["M3RESP_EXAMPLE_DATA"] = os.path.join(
     os.path.dirname(docs_dir), "tests", "data"
 )
 
+# The tutorials draw interactive plotly figures. ``_ext/plotly_gallery.py``
+# puts them on the pages. The import makes ``fig.show()`` keep each figure
+# for the page.
+sys.path.insert(0, os.path.join(docs_dir, "_ext"))
+import plotly_gallery  # noqa: F401
+
 # Each build writes one page per function or class of the API reference to
 # ``docs/api/generated``. The folder is emptied first, so it holds only the pages
 # of the names that m3resp exports now, also after a switch between branches.
@@ -90,6 +98,7 @@ sphinx_gallery_conf = {
     # Each API page lists the tutorials that use that function or class.
     "backreferences_dir": os.path.join("api", "backreferences"),
     "doc_module": ("m3resp",),
+    "image_scrapers": ("matplotlib", "plotly_gallery.plotly_scraper"),
     "download_all_examples": False,
     "remove_config_comments": True,
     "show_signature": False,
@@ -106,7 +115,7 @@ html_css_files = [
     "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,500;0,700;1,400&family=Roboto+Mono:wght@400;500;700&display=swap",
     "custom.css",
 ]
-html_js_files = ["m3-page-toc.js"]
+html_js_files = ["m3-page-toc.js", "m3-plotly-figures.js"]
 # No left sidebar. The right sidebar has the sections of the page and the
 # other pages of the same part of the documentation.
 html_sidebars = {"**": []}
