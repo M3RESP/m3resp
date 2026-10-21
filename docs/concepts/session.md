@@ -44,7 +44,7 @@ The EIT calculations come from the package `eitprocessing` and the EMG calculati
 | `session.processing_history` | Each workflow step | The processing steps of a workflow run (see {doc}`provenance`) |
 | `session.datamodel` | You, with `session.datamodel = DataModelRecorder(session)` | The stored data model (see {doc}`provenance`) |
 
-To find the results of one modality, use `for_modality`:
+To find the results of one {term}`modality`, use `for_modality`:
 
 ```python
 for signal in session.signals.for_modality("eit"):
