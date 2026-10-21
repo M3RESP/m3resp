@@ -51,8 +51,6 @@
       "uses": "emg.preprocess",
       "with": {
         "channel": 1,
-        "envelope_method": "median",
-        "envelope_window_seconds": 0.85,
         "high_pass_hz": 20.0,
         "low_pass_hz": 500.0,
         "notch_base_frequency": 50.0,
@@ -78,9 +76,7 @@
       "in": {
         "processed_emg": "processed_emg_before_ecg"
       },
-      "out": {
-        "processed_emg_after_ecg": "processed_emg"
-      },
+      "out": {},
       "uses": "emg.ecg_wavelet_denoising",
       "with": {
         "fixed_threshold": 4.5,
@@ -90,7 +86,21 @@
       }
     },
     {
-      "id": "step_005_emg_moving_baseline",
+      "id": "step_005_emg_envelope",
+      "in": {
+        "processed_emg": "processed_emg_after_ecg"
+      },
+      "out": {
+        "processed_emg_with_envelope": "processed_emg"
+      },
+      "uses": "emg.envelope",
+      "with": {
+        "method": "median",
+        "window_seconds": 0.85
+      }
+    },
+    {
+      "id": "step_006_emg_moving_baseline",
       "in": {},
       "out": {},
       "uses": "emg.moving_baseline",
@@ -101,7 +111,7 @@
       }
     },
     {
-      "id": "step_006_emg_detect_breaths",
+      "id": "step_007_emg_detect_breaths",
       "in": {},
       "out": {},
       "uses": "emg.detect_breaths",
@@ -112,35 +122,35 @@
       }
     },
     {
-      "id": "step_007_emg_peak_indices",
+      "id": "step_008_emg_peak_indices",
       "in": {},
       "out": {},
       "uses": "emg.peak_indices",
       "with": {}
     },
     {
-      "id": "step_008_emg_onoffpeak_baseline_crossing",
+      "id": "step_009_emg_onoffpeak_baseline_crossing",
       "in": {},
       "out": {},
       "uses": "emg.onoffpeak_baseline_crossing",
       "with": {}
     },
     {
-      "id": "step_009_emg_amplitude",
+      "id": "step_010_emg_amplitude",
       "in": {},
       "out": {},
       "uses": "emg.amplitude",
       "with": {}
     },
     {
-      "id": "step_010_emg_time_product",
+      "id": "step_011_emg_time_product",
       "in": {},
       "out": {},
       "uses": "emg.time_product",
       "with": {}
     },
     {
-      "id": "step_011_emg_respiratory_rate",
+      "id": "step_012_emg_respiratory_rate",
       "in": {},
       "out": {},
       "uses": "emg.respiratory_rate",

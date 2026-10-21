@@ -35,7 +35,7 @@ def _eit(
     time = first_time + np.arange(n_samples) / fs
     return EITRecording(
         data=None,
-        path=Path("synthetic_eit.bin"),
+        paths=(Path("synthetic_eit.bin"),),
         global_impedance=SimpleNamespace(
             time=time, values=np.zeros(n_samples), label="global_impedance"
         ),

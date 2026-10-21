@@ -49,9 +49,9 @@ def _patch_ecg_removal_steps(
     monkeypatch: pytest.MonkeyPatch,
     calls: list[tuple[str, dict[str, Any]]],
 ) -> None:
-    """Spy on the two ECG-removal steps `EMGPreset` calls.
+    """Spy on the two ECG-removal steps and the envelope step `EMGPreset` calls.
 
-    `EMGPreset._remove_ecg` imports them lazily from their own modules, so
+    `EMGPreset` imports them lazily from their own modules, so
     patching the module attributes is what the workflow actually looks up.
     """
 
@@ -67,7 +67,20 @@ def _patch_ecg_removal_steps(
         _step_spy(calls, "ecg_detect_peaks", result={"ecg_peak_indices": []}),
     )
     monkeypatch.setattr(
-        gating_module, "ecg_gating", _step_spy(calls, "ecg_gating", result={})
+        gating_module,
+        "ecg_gating",
+        _step_spy(calls, "ecg_gating", result={"processed_emg_after_ecg": {}}),
+    )
+    _patch_envelope_step(monkeypatch, calls)
+
+
+def _patch_envelope_step(
+    monkeypatch: pytest.MonkeyPatch,
+    calls: list[tuple[str, dict[str, Any]]],
+) -> None:
+    preprocessing_module = import_module("m3resp.workflows.steps.emg.preprocessing")
+    monkeypatch.setattr(
+        preprocessing_module, "envelope", _step_spy(calls, "envelope", result={})
     )
 
 
@@ -142,6 +155,7 @@ class TestEMGPreset:
             "preprocess_emg",
             "ecg_detect_peaks",
             "ecg_gating",
+            "envelope",
             "detect_emg_breaths",
             "postprocess_emg",
         ]
@@ -198,9 +212,10 @@ class TestEMGPreset:
         def _capture_gating(_session: Any, _processed: Any, peaks: Any, **kwargs: Any):
             calls.append(("ecg_gating", kwargs))
             gated.append(peaks)
-            return {}
+            return {"processed_emg_after_ecg": {}}
 
         monkeypatch.setattr(gating_module, "ecg_gating", _capture_gating)
+        _patch_envelope_step(monkeypatch, calls)
 
         session.run_preset(
             "emg", config={"ecg_removal": {"ecg_peak_indices": [10, 20, 30]}}
@@ -209,6 +224,7 @@ class TestEMGPreset:
         assert [name for name, _ in calls] == [
             "preprocess_emg",
             "ecg_gating",
+            "envelope",
             "detect_emg_breaths",
             "postprocess_emg",
         ]

@@ -14,7 +14,7 @@ import <name>`` keeps working unchanged.
 from __future__ import annotations
 
 from .filtering import butterworth_filter, mdn_filter
-from .loading import load
+from .loading import load, load_custom
 from .pixel import _ALLOWED_PIXEL_BREATH_PHASE_MODES, pixel_breaths, pixel_tiv
 from .rates import detect_rates
 from .roi import (
@@ -41,6 +41,7 @@ __all__ = [
     "eeli",
     "global_impedance",
     "load",
+    "load_custom",
     "mdn_filter",
     "normalize_breaths",
     "pixel_breaths",

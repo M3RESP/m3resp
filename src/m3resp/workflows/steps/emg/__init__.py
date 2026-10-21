@@ -1,8 +1,10 @@
 """Registered EMG workflow steps.
 
-Loading/preprocessing steps wrap the ``M3Session`` EMG stage methods.
-Postprocessing steps keep the one-step-per-operation structure used by
-``eit.py``. Factored signal-processing primitives are used where available;
+``emg.load``, ``emg.preprocess`` and ``emg.detect_breaths`` call the
+``M3Session`` EMG methods. ``preprocessing.py`` holds channel selection, the
+notch and band-pass filters, the envelope and ``emg.preprocess``, which runs
+channel selection and both filters in one step. The steps after preprocessing
+each do one operation. Factored signal-processing primitives are used where available;
 remaining upstream imports are deferred to call time so the package installs
 without the optional ``resurfemg`` dependency.
 
@@ -39,12 +41,18 @@ from .loading import (
     detect_breaths,
     load,
     peak_indices,
-    preprocess,
 )
 from .onoffpeak import (
     interpeak_dist,
     onoffpeak_baseline_crossing,
     onoffpeak_slope_extrapolation,
+)
+from .preprocessing import (
+    bandpass_filter,
+    envelope,
+    notch_filter,
+    preprocess,
+    select_channel,
 )
 from .quality_events import (
     evaluate_bell_curve_error,
@@ -63,18 +71,21 @@ from .slicing import slice_recording
 __all__ = [
     "amplitude",
     "area_under_baseline",
+    "bandpass_filter",
     "detect_breaths",
     "detect_extreme_time_products",
     "detect_local_high_aub",
     "ecg_detect_peaks",
     "ecg_gating",
     "ecg_wavelet_denoising",
+    "envelope",
     "evaluate_bell_curve_error",
     "evaluate_event_timing",
     "evaluate_respiratory_rates",
     "interpeak_dist",
     "load",
     "moving_baseline",
+    "notch_filter",
     "onoffpeak_baseline_crossing",
     "onoffpeak_slope_extrapolation",
     "peak_indices",
@@ -83,6 +94,7 @@ __all__ = [
     "pseudo_slope",
     "remove_invalid_breaths",
     "respiratory_rate",
+    "select_channel",
     "slice_recording",
     "slopesum_baseline",
     "snr_pseudo",

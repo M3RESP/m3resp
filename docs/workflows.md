@@ -240,6 +240,35 @@ Cutting steps follow one naming rule:
 
 `emg.slice` and `eit.slice`, the names used before, still work in specs.
 
+Two steps load EIT data:
+
+| Step | Reads |
+|---|---|
+| `eit.load` | A Draeger, Sentec or Timpel file, with eitprocessing. `vendor` is required; `sample_frequency`, `first_frame` and `max_frames` are optional. |
+| `eit.load_custom` | Any other file, with a loader you write in Python. The loader is called as `loader(file_path, vendor=None, **loader_options)` and returns an eitprocessing `Sequence`. |
+
+Both give the same outputs (`raw_eit`, `raw_global_impedance_signal`, `raw_pixel_impedance_signal`, ...), so the steps after them work with either. The custom loader is given to the session's EIT adapter before the workflow runs:
+
+```python
+from m3resp.adapters import EITProcessingAdapter
+from m3resp.workflows import run_workflow
+
+result = run_workflow(
+    "my-workflow.yaml", eit_adapter=EITProcessingAdapter(loader=my_loader)
+)
+```
+
+`eit.load_custom` stops with an error when no loader was given.
+
+`file_path` of both steps also takes a list of files recorded one after the other, for a recording the device split into several files:
+
+```yaml
+- uses: eit.load
+  with: { file_path: [part_1.bin, part_2.bin], vendor: draeger }
+```
+
+`eit.load` reads each file and joins them into one recording, in the order given. Each file must start after the one before it ends; files out of order or overlapping stop the workflow with an error that names the two files. A pause between two files stays in the time axis and gives a warning with its length, because filters and breath detection run across it. The files must come from the same device, with the same image size and sampling rate. `first_frame` and `max_frames` cannot be used with several files (eitprocessing would apply them to each file); cut the joined recording with `eit.slice_recording` instead. `eit.load_custom` passes the list to the loader as given.
+
 ## Adding a custom step
 
 Register a function with `@register_step`. Declare the context keys it reads (mapped onto its parameter names) and the output names it returns:
@@ -343,10 +372,14 @@ Every step also writes its raw/compatibility output(s) unchanged (existing consu
 | `emg.load` | — | `file_path`, `loader_options` | `raw_emg_signals` (one `Signal`/channel) | upstream loader |
 | `emg.slice_recording` (formerly `emg.slice`) | — | `start_seconds`, `end_seconds` (optional; default: to the end) | `emg_slice` (kept window, samples removed at each end) | native (cuts `session.raw`; ventilator channels from the same file are cut too) |
 | `ventilator.slice_recording` | — | `start_seconds`, `end_seconds` (optional; default: to the end) | `ventilator_slice` (kept window and samples removed at each end, per recording) | native (cuts every standalone ventilator recording; refuses ventilator data from the EIT/EMG file) |
-| `emg.preprocess` | — | `channel`, `high_pass_hz` (default 20), `low_pass_hz` (default 500, Nyquist-capped), `envelope_window_seconds`, `envelope_method` (`"rms"` default / `"arv"` / `"median"`), `notch_base_frequency`, `notch_quality_factor`, `notch_before_bandpass` (default `false`) | — (raw `processed_emg` dict) | upstream + native notch filter |
+| `emg.preprocess` | — | `channel`, `high_pass_hz` (default 20), `low_pass_hz` (default 500, Nyquist-capped), `notch_base_frequency`, `notch_max_frequency`, `notch_quality_factor`, `notch_before_bandpass` (default `false`) | — (`processed_emg` dict with `"envelope"` None) | `emg.select_channel` + `emg.notch_filter` + `emg.bandpass_filter` in one step |
+| `emg.select_channel` | — | `channel` | — (`processed_emg` dict holding the chosen channel) | native |
+| `emg.notch_filter` | `processed_emg` | `base_frequency` (Hz, required), `max_frequency` (default Nyquist), `quality_factor` (default 30) | `notch_filtered_signal` | native |
+| `emg.bandpass_filter` | `processed_emg` | `high_pass_hz` (default 20), `low_pass_hz` (default 500, Nyquist-capped) | `bandpass_filtered_signal` | upstream |
+| `emg.envelope` | `processed_emg` | `window_seconds` (default 0.25), `method` (`"rms"` default / `"arv"` / `"median"`), `source` (default: ECG-cleaned trace, else filtered) | `envelope_signal` | native |
 | `emg.ecg_detect_peaks` | `processed_emg` | `ecg_channel`, `source` (default `"raw_channel"`), `peak_fraction`, `peak_width_seconds`, `peak_distance_seconds`, `bandpass_filter` | `ecg_peak_events` (one `Event`/peak), `ecg_peak_count_result` | upstream |
-| `emg.ecg_gating` | `processed_emg`, `ecg_peak_indices` | `source` (default `"filtered"`), `gate_width_seconds` **xor** `gate_width_samples`, `fill_method` (0-3), `envelope_window_seconds`, `envelope_method` (defaults to preprocessing's) | `ecg_gated_signal`, `ecg_gate_mask_result` (array) | upstream |
-| `emg.ecg_wavelet_denoising` | `processed_emg`, `ecg_peak_indices` | `source`, `hard_thresholding`, `levels`, `wavelet_type`, `fixed_threshold`, `envelope_window_seconds`, `envelope_method` (defaults to preprocessing's) | `ecg_wavelet_cleaned_signal`, `wavelet_decomposition_result`, `wavelet_thresholds_result`, `wavelet_gate_mask_result` (all arrays) | upstream |
+| `emg.ecg_gating` | `processed_emg`, `ecg_peak_indices` | `source` (default `"filtered"`), `gate_width_seconds` **xor** `gate_width_samples`, `fill_method` (0-3) | `ecg_gated_signal`, `ecg_gate_mask_result` (array) | upstream |
+| `emg.ecg_wavelet_denoising` | `processed_emg`, `ecg_peak_indices` | `source`, `hard_thresholding`, `levels`, `wavelet_type`, `fixed_threshold` | `ecg_wavelet_cleaned_signal`, `wavelet_decomposition_result`, `wavelet_thresholds_result`, `wavelet_gate_mask_result` (all arrays) | upstream |
 | `emg.detect_breaths` | `baseline` (optional; from `emg.moving_baseline`/`emg.slopesum_baseline`) | `min_breath_width_seconds`, `half_window_seconds`, `prominence_factor`, `threshold`, `merge_close_peaks_within_width` (default `false`) | `emg_breath_events` | native |
 | `emg.moving_baseline` | `processed_emg` | `window_seconds`, `step_seconds`, `percentile` (0-100) | `baseline_signal` | upstream |
 | `emg.slopesum_baseline` | `processed_emg` | `window_seconds`, `step_seconds`, `percentile`, `augmented_percentile`, `moving_average_seconds`, `percentile_window_seconds` | `baseline_signal`, `baseline_running_mean_signal`, `baseline_running_std_signal`, `slopesum_baseline_native_detail` (NumPy-only) | upstream |
@@ -368,14 +401,56 @@ Run `m3resp steps` for the full list including the pre-existing feature steps (`
 
 ### Channel selection and time-base rules
 
-- `emg.preprocess`'s `channel` is an index into the raw channel-major array from `emg.load` (`session.emg.raw[channel]`), not a label.
+- The `channel` of `emg.preprocess` and `emg.select_channel` is an index into the raw channel-major array from `emg.load` (`session.emg.raw[channel]`), not a label.
 - ECG detection's `source` selects a *key* in `processed_emg` (`"raw_channel"`/`"filtered"`/`"envelope"`), while `ecg_channel` (when set) selects a *raw* channel index instead - use `ecg_channel` when a recording has a dedicated reference ECG channel (e.g. the committed `emg_data_synth_quiet_breathing.Poly5` fixture's channel 0), and `source` when ECG is mixed directly into the EMG channel being processed (no separate reference channel).
 - No step assumes EMG and ventilator sample rates are equal - Pocc/timing steps convert each side to seconds using its own `fs` before comparing (`emg.evaluate_event_timing`'s per-pair results record both source sample indices and both sampling frequencies for this reason).
 - `emg.detect_breaths`'s default `min_breath_width_seconds=0.5` keeps breath bursts at least half a second wide, which also covers faster breathing (the `data_from_repo` "quiet breathing" fixture breathes at about 22 breaths/min; 1.0 s found none of its breaths). Noisy recordings can still need `min_breath_width_seconds`/`prominence_factor` tuned - see the inline comments in `emg-full.workflow.yaml` and `multimodal.workflow.yaml` for values that were verified against each fixture's actual breath timing.
 
+### Preprocessing order and the envelope
+
+EMG preprocessing runs in this order:
+
+```
+emg.select_channel -> emg.notch_filter (optional) -> emg.bandpass_filter
+  -> ECG removal (emg.ecg_gating or emg.ecg_wavelet_denoising)
+  -> emg.envelope -> baseline -> emg.detect_breaths
+```
+
+The notch filter can also come after the band-pass filter. `emg.preprocess` runs the first three steps as one step and takes all their settings; use the separate steps to change the order or to add a step of your own between them. Each step passes the processed EMG on as a dictionary (`processed_emg`): the chosen channel (`"raw_channel"`), the filtered trace (`"filtered"`), the ECG-cleaned trace (`"ecg_cleaned"`), the envelope (`"envelope"`), the sampling rate (`"fs"`, Hz) and the settings used (`"filter"`).
+
+The envelope is computed only by `emg.envelope`, from the ECG-cleaned trace when there is one. The filter and ECG-removal steps return the processed EMG without an envelope, because an envelope from an earlier trace no longer matches the signal. Steps that need the envelope (baselines, breath detection, per-breath measures, quality checks) stop with an error naming `emg.envelope` when it is missing.
+
+Every step writes its own output name, so a workflow connects them with `in:` and `out:`. The last step before the baseline writes to `processed_emg`, the name the later steps read:
+
+```yaml
+- uses: emg.select_channel
+  with: { channel: 1 }
+  out: { processed_emg: selected_emg }
+
+- uses: emg.notch_filter
+  in: { processed_emg: selected_emg }
+  with: { base_frequency: 50.0 }
+
+- uses: emg.bandpass_filter
+  in: { processed_emg: processed_emg_after_notch }
+  with: { high_pass_hz: 20.0, low_pass_hz: 500.0 }
+
+- uses: emg.ecg_detect_peaks
+  in: { processed_emg: processed_emg_after_bandpass }
+  with: { source: filtered }
+
+- uses: emg.ecg_wavelet_denoising
+  in: { processed_emg: processed_emg_after_bandpass }
+
+- uses: emg.envelope
+  in: { processed_emg: processed_emg_after_ecg }
+  with: { window_seconds: 0.25, method: rms }
+  out: { processed_emg_with_envelope: processed_emg }
+```
+
 ### ECG-removal alternatives
 
-`emg.ecg_gating` and `emg.ecg_wavelet_denoising` both naturally write `processed_emg_after_ecg`. Pick one; a workflow uses output renaming to keep the downstream key `processed_emg`:
+`emg.ecg_gating` and `emg.ecg_wavelet_denoising` both write `processed_emg_after_ecg`. Pick one, then compute the envelope from its output:
 
 ```yaml
 - uses: emg.preprocess
@@ -386,7 +461,10 @@ Run `m3resp steps` for the full list including the pre-existing feature steps (`
 
 - uses: emg.ecg_gating  # or emg.ecg_wavelet_denoising
   in: { processed_emg: processed_emg_before_ecg }
-  out: { processed_emg_after_ecg: processed_emg }
+
+- uses: emg.envelope
+  in: { processed_emg: processed_emg_after_ecg }
+  out: { processed_emg_with_envelope: processed_emg }
 ```
 
 `gating`'s `fill_method` keeps ReSurfEMG's meanings: `0` zeros the gated region, `1` interpolates between its edges (the default), `2` fills with the mean of a neighboring segment, `3` replaces it with a running-RMS estimate. `wavelet_denoising` additionally zero-pads the signal internally to a multiple of `2**levels` for its stationary wavelet transform - the cleaned signal, thresholds, and gate mask are trimmed back to the original length, but the decomposition array (`wavelet_decomposition_result`) stays at the padded length; both lengths are recorded in its metadata (`original_length`/`padded_length`). All four array-valued outputs (gate masks, decomposition, thresholds) go through the same shared `parameter_result_arrays.npz` archive as every other array-valued `ParameterResult` - see "Array export" below.

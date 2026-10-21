@@ -166,6 +166,11 @@ class _FakeAdapter:
         self._sequence = _FakeSequence(raw)
         return self._sequence
 
+    def load_with_eitprocessing(
+        self, path: str, vendor: str | None = None, **kwargs: Any
+    ) -> Any:
+        return self.load(path, vendor=vendor, **kwargs)
+
     def get_raw_eit(self, sequence: Any, label: str = "raw") -> Any:
         return sequence.eit_data[label]
 

@@ -1,4 +1,4 @@
-"""Registered EMG loading/preprocessing workflow steps."""
+"""Registered EMG steps: loading, breath detection and breath peak indices."""
 
 from __future__ import annotations
 
@@ -121,39 +121,6 @@ def load(
             parameters={"loader_options": dict(loader_options or {})},
         ),
     }
-
-
-@register_step(
-    "emg.preprocess",
-    reads={"session": "session"},
-    writes=("processed_emg",),
-    summary="Filter EMG and compute its envelope.",
-    description="Filter the loaded EMG recording and compute its envelope via ReSurfEMGAdapter.preprocess. Accepts arbitrary adapter keyword arguments beyond 'variant'.",
-    category="preprocessing",
-    modality="emg",
-    optional_packages=_RESURFEMG,
-    session_writes=("session.processed.emg", "session.signals"),
-    input_artifacts=(_SESSION_ARTIFACT,),
-    parameters=(
-        StepParameter(
-            name="variant",
-            value_type="string",
-            required=False,
-            default=None,
-            description="Store this preprocessing under a named variant instead of the default slot.",
-            advanced=True,
-        ),
-    ),
-    output_artifacts=(
-        StepArtifact(
-            name="processed_emg",
-            artifact_type="emg_processed_bundle",
-            description="Mapping of 'filtered'/'envelope'/'fs'/'channel'/'metadata'.",
-        ),
-    ),
-)
-def preprocess(session: M3Session, **kwargs: Any) -> dict[str, Any]:
-    return {"processed_emg": session.preprocess_emg(**kwargs)}
 
 
 @register_step(

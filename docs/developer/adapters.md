@@ -44,17 +44,34 @@ m3resp Signal / BreathEvent / ParameterResult / QualityFlag
 
 ## `ReSurfEMGAdapter` (`src/m3resp/adapters/resurfemg_adapter/`)
 
-| Method | Responsibility |
-|---|---|
-| `load(path, **kwargs)` | Load an EMG file (also used by `VentilatorAdapter` for ventilator channels stored in the same file as the EMG). |
-| `preprocess(signal, **kwargs)` | Filtering + envelope, matching `resurfemg.preprocessing`. |
-| `detect_breaths(signal, **kwargs)` | Returns `list[BreathEvent]` directly - already converted. |
-| `compute_features(...)` | Amplitude/AUC/pseudo-slope/time-to-peak and related per-breath features. |
-| `to_signals(processed_emg)` | **Conversion boundary.** Turns a `preprocess()`/`postprocess()` result into `list[Signal]`. |
-| `to_parameters(postprocessed)` | **Conversion boundary.** Turns a `postprocess()` result into `list[ParameterResult]`. |
-| `to_quality_flags(postprocessed)` | **Conversion boundary.** Turns a `postprocess()` result into `list[QualityFlag]` (native `resurfemg` clinical quality checks). |
-| `available_postprocessing()` / `postprocess(...)` / `run_postprocessing_function(category, function_name, ...)` | Discover and call `resurfemg.postprocessing` functions not covered by a named wrapper above, without leaving the adapter boundary. |
-| `detect_ecg_peaks`, `gate_ecg`, `wavelet_denoise_ecg`, `moving_baseline`, `slopesum_baseline`, `snr_pseudo`, `pocc_quality`, `interpeak_distance`, `percentage_under_baseline`, `detect_local_high_aub`, `detect_extreme_time_products`, `detect_non_consecutive_manoeuvres`, `evaluate_bell_curve_error`, `evaluate_event_timing`, `evaluate_respiratory_rates` | Individual ECG-removal, baseline, and clinical quality operations, exposed one-to-one for the declarative workflow engine (`workflows/steps/emg/` and `workflows/steps/ventilator/`) and custom composition. |
+The session holds one as `session.emg_adapter`. Its methods take plain
+arrays or the recording dictionary from `load` (samples under `"array"`,
+one row per channel; sampling rate in Hz under `metadata["fs"]`). Values
+keep the units of the recording; times are in seconds and positions in
+samples. The last column says whether a value comes from ReSurfEMG (called
+with ReSurfEMG's own settings and defaults) or is computed in m3resp.
+
+| Method | What it does | Computed by |
+|---|---|---|
+| `load(path, **kwargs)` | Read an EMG file into a recording dictionary (also used by `VentilatorAdapter` for ventilator channels stored in the same file). Biopac `.txt` exports are read by m3resp. | ReSurfEMG `load_file` |
+| `select_emg_channel(recording, channel=)` | Take one channel as the trace to analyse; with no channel, choose it from the labels, leaving out ECG/EKG channels. | m3resp |
+| `notch_filter_emg(values, ...)` | Remove a frequency and its harmonics (mains hum, EIT frame-rate comb). | m3resp (`processing.filters`) |
+| `bandpass_filter_emg(values, ...)` | Band-pass filter, 20-500 Hz by default. | ReSurfEMG `emg_bandpass_butter` |
+| `emg_envelope(values, ...)` | RMS, ARV or median envelope over a moving window. | m3resp (`processing.windows`) |
+| `preprocess(recording, **kwargs)` | The four methods above in one call; what `session.preprocess_emg()` uses. | as above |
+| `detect_ecg_peaks`, `gate_ecg`, `wavelet_denoise_ecg` | Find heartbeats in the EMG (or an ECG channel) and remove them. | ReSurfEMG |
+| `moving_baseline`, `slopesum_baseline` | The quiet level of the envelope. | ReSurfEMG |
+| `detect_breaths(processed_emg, **kwargs)` | Find breaths as envelope peaks above the baseline; returns `list[BreathEvent]`. | m3resp (`processing.peaks`) |
+| `postprocess(processed_emg, events, **kwargs)` | Baselines, breath on/offsets, per-breath measures (amplitude, time product, ...) and quality checks in one call; what `session.postprocess_emg()` uses. | m3resp measures, ReSurfEMG baselines and quality checks |
+| `snr_pseudo`, `pocc_quality`, `interpeak_distance`, `percentage_under_baseline`, `detect_local_high_aub`, `detect_extreme_time_products`, `detect_non_consecutive_manoeuvres`, `evaluate_bell_curve_error`, `evaluate_event_timing`, `evaluate_respiratory_rates` | Quality checks on breaths and Pocc manoeuvres. | ReSurfEMG |
+| `available_postprocessing()` / `run_postprocessing_function(category, function_name, ...)` | List, and call by name, ReSurfEMG postprocessing functions that have no method of their own. | ReSurfEMG |
+| `compute_features(signal, events, compute=...)` | Run a feature function you pass as `compute=`. | your function |
+| `to_signals(processed_emg)` | **Conversion boundary.** Raw channel, filtered trace and envelope as `list[Signal]`. | m3resp |
+| `to_parameters(postprocessed)` | **Conversion boundary.** Per-breath measures of a `postprocess()` result as `list[ParameterResult]`. | m3resp |
+| `to_quality_flags(postprocessed)` | **Conversion boundary.** Quality checks of a `postprocess()` result as `list[QualityFlag]`. | m3resp |
+
+The `emg.*` workflow steps (`workflows/steps/emg/`) and the ventilator steps
+(`workflows/steps/ventilator/`) call these methods one by one.
 
 ## `VentilatorAdapter` (`src/m3resp/adapters/ventilator_adapter/`)
 

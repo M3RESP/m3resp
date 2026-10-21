@@ -1,4 +1,6 @@
-"""Baseline-estimation methods of `ReSurfEMGAdapter`."""
+"""`ReSurfEMGAdapter` methods that compute the EMG baseline: the quiet level
+of the envelope that breath detection and per-breath measures are taken
+against (ReSurfEMG's moving and slope-sum baselines)."""
 
 from __future__ import annotations
 

@@ -40,6 +40,14 @@ def _is_number_or_mapping_of_numbers(value: Any) -> bool:
     return _is_number(value)
 
 
+def _is_path_or_path_list(value: Any) -> bool:
+    """One path, or a nonempty list of paths."""
+
+    if isinstance(value, list):
+        return bool(value) and all(isinstance(v, str) for v in value)
+    return isinstance(value, str)
+
+
 _PARAM_TYPE_CHECKS: dict[str, Any] = {
     "boolean": lambda v: isinstance(v, bool),
     "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
@@ -534,6 +542,8 @@ def _check_parameter_value(
 ) -> list[Diagnostic]:
     diagnostics: list[Diagnostic] = []
     checker = _PARAM_TYPE_CHECKS.get(parameter.value_type)
+    if parameter.value_type == "path" and parameter.allow_list:
+        checker = _is_path_or_path_list
     if checker is not None and not checker(value):
         diagnostics.append(
             Diagnostic(
