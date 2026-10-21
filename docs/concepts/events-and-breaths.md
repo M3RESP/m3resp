@@ -4,8 +4,8 @@ M3Resp has three objects for things that happen at a time, beside the continuous
 
 | Object | What it is | Example |
 |---|---|---|
-| `Event` | Something at one time point: `time` | An R peak, a blood gas sample |
-| `Interval` | Something with a start and an end: `start_time` and `end_time` | An occlusion, a noisy period, an intervention |
+| `Event` | Something at a single instant: `time` | An R peak, a blood gas sample |
+| `Interval` | Something that lasts for a period, from `start_time` to `end_time` | An occlusion manoeuvre, a noisy period, an intervention |
 | `BreathEvent` | One {term}`breath`: an interval with an {term}`extremum` inside it | A breath found in EIT, EMG or ventilator data |
 
 All times are in seconds.
