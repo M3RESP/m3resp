@@ -53,7 +53,7 @@ for signal in session.signals.for_modality("eit"):
 
 ## The result dictionaries
 
-The session also keeps the results in the form that the outside packages give them, in four dictionaries: `session.raw`, `session.processed`, `session.events` and `session.parameters`. Each modality has its own keys and its own shape there, for example `session.processed["eit"]`.
+The session also keeps the results in the format returned by the outside packages and stores them in four dictionaries: `session.raw`, `session.processed`, `session.events` and `session.parameters`. In each dictionary, you can access the specific modality's results by the modality's own key: for example `session.processed["eit"]` or `session.parameters["emg"]`.
 
 The collections in the table above (`signals`, `parameter_results`, `interval_data`, `pixel_masks`, `quality`, `linked_breaths`) use the same objects for all modalities. Use them to compare modalities and to export results.
 
