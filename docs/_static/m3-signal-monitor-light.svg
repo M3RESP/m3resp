@@ -15,7 +15,7 @@ text{font-family:"Roboto Mono",ui-monospace,SFMono-Regular,Menlo,monospace;fill:
 @media (prefers-reduced-motion:reduce){.sweep{animation:none;opacity:0}.blink{animation:none}}
 </style>
 </defs>
-<rect x="1" y="1" width="558" height="378" rx="2" fill="#E6E6E4" stroke="#17161A" stroke-opacity=".12"/>
+<rect x="1" y="1" width="558" height="378" rx="2" fill="#D9D8D5" stroke="#17161A" stroke-opacity=".12"/>
 <path d="M1 44H559" stroke="#17161A" stroke-opacity=".12"/>
 <rect x="20" y="19" width="8" height="8" fill="#A85F4D" class="blink"/>
 <text x="38" y="27" class="lbl">SIGNAL MONITOR</text>
