@@ -23,12 +23,12 @@ Some tasks that you did by hand have one M3Resp call:
 |---|---|
 | Keep a note of the settings and the package versions | `session.provenance`, or a `DataModelRecorder` for a full record. See {doc}`../concepts/provenance`. |
 | Shift the times of one recording to the clock of another | `session.synchronize_raw_modalities(offset_seconds=...)`. See {doc}`../how-to/synchronize-recordings`. |
-| Change the sampling rate of a signal | `resample_signal(signal, target_frequency_hz)` |
+| Put a signal on the time points of another signal | `interpolate_to_time(signal, other_signal.time)`. See {doc}`../concepts/synchronization`. |
 | Find the breaths of two modalities that belong together | `session.link_breaths(time_tolerance=0.5)`, or `link_breaths_by_time(...)` for your own lists of breaths |
 | Calculate the time between the breaths of two modalities | `session.compute_breath_timing_parameters()`, after `session.link_breaths()`. See {ref}`breath-timing-parameters`. |
 | Write the results to CSV and JSON files | `session.export_summary(output_dir)`. See {doc}`../how-to/export-results`. |
 
-`resample_signal` uses linear interpolation. To lower the sampling rate, filter the signal with a low-pass filter first.
+`interpolate_to_time` uses linear interpolation. The two signals must be on the same clock. To lower the sampling rate, filter the signal with a low-pass filter first.
 
 `session.link_breaths` only matches breaths. Detect the breaths of each modality first.
 

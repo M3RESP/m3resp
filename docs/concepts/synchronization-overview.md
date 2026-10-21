@@ -21,7 +21,7 @@ You can also call these functions yourself. They record nothing in the session:
 |---|---|
 | `compute_offsets_from_timestamps` | Calculates offsets from the start times of the devices |
 | `m3resp.synchronization.align_events_by_modality_offset` | Shifts a list of events by an offset per modality |
-| `resample_signal` | Changes the sampling rate of a signal |
+| `interpolate_to_time` | Puts a signal on the time points of another signal |
 
 ## How synchronization works
 

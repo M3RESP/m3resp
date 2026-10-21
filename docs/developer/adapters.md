@@ -44,19 +44,25 @@ The code is in `src/m3resp/adapters/eitprocessing_adapter/`.
 
 The code is in `src/m3resp/adapters/resurfemg_adapter/`, with one file per task: `_core.py`, `_ecg.py`, `_baseline.py`, `_quality.py` and `_defaults.py`.
 
-| Methods | What they do |
-|---|---|
-| `load(path)` | Load an EMG file. Biopac `.txt` files are read by M3Resp, all other files by `resurfemg`. |
-| `preprocess(recording, ...)` | Band-pass filter, notch filter and envelope |
-| `detect_breaths(processed, ...)` | Find the breaths in the envelope |
-| `postprocess(processed, events, ...)` | Calculate the parameters and run the quality checks of each breath |
-| `detect_ecg_peaks`, `gate_ecg`, `wavelet_denoise_ecg` | Find and remove the ECG |
-| `moving_baseline`, `slopesum_baseline` | Calculate the baseline of the envelope |
-| `snr_pseudo`, `pocc_quality`, `interpeak_distance`, `percentage_under_baseline`, `detect_local_high_aub`, `detect_extreme_time_products`, `detect_non_consecutive_manoeuvres`, `evaluate_bell_curve_error`, `evaluate_event_timing`, `evaluate_respiratory_rates` | Run one quality check each |
-| `available_postprocessing()`, `run_postprocessing_function(category, name, ...)` | List and call 23 functions of `resurfemg.postprocessing` by name |
-| `compute_features(signal, events, compute=...)` | Run a feature function that you give |
+The methods take plain arrays or the recording dictionary of `load`. This dictionary has the samples under `"array"`, one row per channel, and the sampling rate in Hz under `metadata["fs"]`. The values keep the units of the recording. Times are in seconds, and positions are sample numbers. The last column says which package calculates the result. A `resurfemg` function runs with the settings and defaults of `resurfemg`.
 
-The workflow steps in `workflows/steps/emg/` and `workflows/steps/ventilator/` call these methods.
+| Methods | What they do | Calculated by |
+|---|---|---|
+| `load(path)` | Load an EMG file into a recording dictionary. The `VentilatorAdapter` uses it for ventilator channels in the same file. | `resurfemg` (`load_file`). M3Resp reads Biopac `.txt` files. |
+| `select_emg_channel(recording, channel=)` | Take one channel to analyse. Without `channel`, choose it from the channel labels, and leave out ECG/EKG channels. | M3Resp |
+| `notch_filter_emg(values, ...)` | Remove one frequency and its harmonics, for example the mains hum or the frame rate of the EIT | M3Resp (`processing.filters`) |
+| `bandpass_filter_emg(values, ...)` | Band-pass filter, 20 to 500 Hz by default. If 95% of the Nyquist frequency is below 500 Hz, the upper limit is 95% of the Nyquist frequency. | `resurfemg` (`emg_bandpass_butter`) |
+| `emg_envelope(values, ...)` | RMS, ARV or median envelope over a moving window | M3Resp (`processing.windows`) |
+| `preprocess(recording, ...)` | The four methods above in one call. `session.preprocess_emg()` uses it. | As above |
+| `detect_ecg_peaks`, `gate_ecg`, `wavelet_denoise_ecg` | Find and remove the ECG | `resurfemg` |
+| `moving_baseline`, `slopesum_baseline` | Calculate the baseline of the envelope | `resurfemg` |
+| `detect_breaths(processed, ...)` | Find the breaths as envelope peaks above the baseline | M3Resp (`processing.peaks`) |
+| `postprocess(processed, events, ...)` | Calculate the baselines, the start and end of each breath, the parameters of each breath and the quality checks in one call. `session.postprocess_emg()` uses it. | M3Resp for the parameters, `resurfemg` for the baselines and the quality checks |
+| `snr_pseudo`, `pocc_quality`, `interpeak_distance`, `percentage_under_baseline`, `detect_local_high_aub`, `detect_extreme_time_products`, `detect_non_consecutive_manoeuvres`, `evaluate_bell_curve_error`, `evaluate_event_timing`, `evaluate_respiratory_rates` | Run one quality check each | `resurfemg` |
+| `available_postprocessing()`, `run_postprocessing_function(category, name, ...)` | List and call 23 functions of `resurfemg.postprocessing` by name | `resurfemg` |
+| `compute_features(signal, events, compute=...)` | Run a feature function that you give | Your function |
+
+The workflow steps in `workflows/steps/emg/` and `workflows/steps/ventilator/` call these methods one by one.
 
 ## VentilatorAdapter
 

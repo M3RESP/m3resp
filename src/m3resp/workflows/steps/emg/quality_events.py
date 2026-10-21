@@ -18,8 +18,8 @@ from m3resp.workflows.steps._per_breath import _per_breath_flags, _per_breath_re
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _record_step,
     _upstream_metadata,
+    require_envelope,
 )
 
 
@@ -92,6 +92,7 @@ from ._shared import (
             description="Native QualityFlag per breath.",
         ),
     ),
+    record=True,
 )
 def evaluate_bell_curve_error(
     session: M3Session,
@@ -102,7 +103,7 @@ def evaluate_bell_curve_error(
     time_product: Any,
 ) -> dict[str, Any]:
 
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.evaluate_bell_curve_error")
     fs = float(processed_emg["fs"])
     result = session.emg_adapter.evaluate_bell_curve_error(
         peak_indices,
@@ -153,19 +154,15 @@ def evaluate_bell_curve_error(
     for flag in flags:
         session.quality.add(flag)
 
-    _record_step(
-        session,
-        "emg.evaluate_bell_curve_error",
-        metadata=_upstream_metadata(
-            source_function="resurfemg.postprocessing.quality_assessment.evaluate_bell_curve_error",
-            operation="emg.evaluate_bell_curve_error",
-            parameters={},
-        ),
-    )
     return {
         "evaluate_bell_curve_error": result,
         "evaluate_bell_curve_error_results": results,
         "evaluate_bell_curve_error_flags": flags,
+        "_provenance": _upstream_metadata(
+            source_function="resurfemg.postprocessing.quality_assessment.evaluate_bell_curve_error",
+            operation="emg.evaluate_bell_curve_error",
+            parameters={},
+        ),
     }
 
 
@@ -239,6 +236,7 @@ def evaluate_bell_curve_error(
             description="Number of unpaired breaths, from unequal EMG/ventilator breath counts.",
         ),
     ),
+    record=True,
 )
 def evaluate_event_timing(
     session: M3Session,
@@ -319,20 +317,16 @@ def evaluate_event_timing(
     for flag in flags:
         session.quality.add(flag)
 
-    _record_step(
-        session,
-        "emg.evaluate_event_timing",
-        metadata=_upstream_metadata(
-            source_function="resurfemg.postprocessing.quality_assessment.evaluate_event_timing",
-            operation="emg.evaluate_event_timing",
-            parameters={"unmatched_count": unmatched_count},
-        ),
-    )
     return {
         "evaluate_event_timing": result,
         "evaluate_event_timing_results": results,
         "evaluate_event_timing_flags": flags,
         "evaluate_event_timing_unmatched_count": unmatched_count,
+        "_provenance": _upstream_metadata(
+            source_function="resurfemg.postprocessing.quality_assessment.evaluate_event_timing",
+            operation="emg.evaluate_event_timing",
+            parameters={"unmatched_count": unmatched_count},
+        ),
     }
 
 
@@ -402,6 +396,7 @@ def evaluate_event_timing(
             description="Native QualityFlag for the overall check.",
         ),
     ),
+    record=True,
 )
 def evaluate_respiratory_rates(
     session: M3Session,
@@ -412,7 +407,7 @@ def evaluate_respiratory_rates(
     minimum_fraction: float = 0.1,
 ) -> dict[str, Any]:
     fs = float(processed_emg["fs"])
-    envelope = processed_emg["envelope"]
+    envelope = require_envelope(processed_emg, "emg.evaluate_respiratory_rates")
     rr_vent = ventilator_respiratory_rate[0]
     result = session.emg_adapter.evaluate_respiratory_rates(
         peak_indices, len(envelope) / fs, rr_vent, minimum_fraction=minimum_fraction
@@ -442,17 +437,13 @@ def evaluate_respiratory_rates(
     session.parameter_results.add(parameter_result)
     session.quality.add(flag)
 
-    _record_step(
-        session,
-        "emg.evaluate_respiratory_rates",
-        metadata=_upstream_metadata(
-            source_function="resurfemg.postprocessing.quality_assessment.evaluate_respiratory_rates",
-            operation="emg.evaluate_respiratory_rates",
-            parameters={"minimum_fraction": minimum_fraction},
-        ),
-    )
     return {
         "evaluate_respiratory_rates": result,
         "evaluate_respiratory_rates_result": parameter_result,
         "evaluate_respiratory_rates_flag": flag,
+        "_provenance": _upstream_metadata(
+            source_function="resurfemg.postprocessing.quality_assessment.evaluate_respiratory_rates",
+            operation="emg.evaluate_respiratory_rates",
+            parameters={"minimum_fraction": minimum_fraction},
+        ),
     }

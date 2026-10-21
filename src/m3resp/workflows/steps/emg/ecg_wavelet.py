@@ -8,15 +8,13 @@ import numpy as np
 
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult, Signal
-from m3resp.processing.windows import ENVELOPE_METHODS, rolling_envelope
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
     _processed_channel_label_and_unit,
-    _record_step,
-    _update_session_after_ecg_removal,
+    _store_processed_emg,
     _upstream_metadata,
     resolve_emg_source,
 )
@@ -95,24 +93,6 @@ from ._shared import (
             minimum=0,
             description="Fixed wavelet-coefficient shrinkage threshold.",
         ),
-        StepParameter(
-            name="envelope_window_seconds",
-            value_type="number",
-            required=False,
-            default=None,
-            unit="s",
-            description="Envelope recomputation window on the cleaned signal. Defaults to the original preprocessing window.",
-            advanced=True,
-        ),
-        StepParameter(
-            name="envelope_method",
-            value_type="string",
-            required=False,
-            default=None,
-            choices=ENVELOPE_METHODS,
-            description="Envelope method for the recomputation on the cleaned signal. Defaults to the method preprocessing used, so the two cannot disagree.",
-            advanced=True,
-        ),
     ),
     output_artifacts=(
         StepArtifact(
@@ -123,7 +103,7 @@ from ._shared import (
         StepArtifact(
             name="processed_emg_after_ecg",
             artifact_type="emg_processed_bundle",
-            description="Updated processed-EMG bundle with the cleaned signal as its 'filtered'/'envelope'.",
+            description="Updated processed-EMG bundle with the cleaned signal as 'ecg_cleaned' and no envelope (compute it with 'emg.envelope').",
             public=False,
         ),
         StepArtifact(
@@ -149,6 +129,7 @@ from ._shared import (
             description="Native array-valued ParameterResult: boolean mask of denoised samples.",
         ),
     ),
+    record=True,
 )
 def ecg_wavelet_denoising(
     session: M3Session,
@@ -160,8 +141,6 @@ def ecg_wavelet_denoising(
     levels: int = 4,
     wavelet_type: str = "db2",
     fixed_threshold: float = 4.5,
-    envelope_window_seconds: float | None = None,
-    envelope_method: str | None = None,
 ) -> dict[str, Any]:
     source = resolve_emg_source(processed_emg, source, "emg.ecg_wavelet_denoising")
 
@@ -182,42 +161,16 @@ def ecg_wavelet_denoising(
         )
     )
 
-    original_filter = processed_emg.get("filter") or {}
-    original_window_seconds = original_filter.get("envelope_window_seconds")
-    # Same kind of envelope as preprocessing made, so this step cannot
-    # silently switch method (it always used ARV before).
-    effective_envelope_method = (
-        envelope_method
-        if envelope_method is not None
-        else original_filter.get("envelope_method") or "rms"
-    )
-    effective_envelope_window_seconds = (
-        envelope_window_seconds
-        if envelope_window_seconds is not None
-        else original_window_seconds
-    )
-    envelope = processed_emg.get("envelope")
-    if effective_envelope_window_seconds is not None:
-        envelope_window_samples = max(1, int(effective_envelope_window_seconds * fs))
-        envelope = rolling_envelope(
-            cleaned,
-            window_length=envelope_window_samples,
-            method=effective_envelope_method,
-        )
-
     processed_emg_after_ecg = {
         **processed_emg,
-        # Beside the band-passed signal, not over it - see
-        # `emg_signal_for_analysis`.
+        # "filtered" keeps the band-passed signal and the cleaned one lands
+        # beside it. An envelope from before denoising no longer matches the
+        # signal, so it is removed.
         "ecg_cleaned": cleaned,
-        "envelope": envelope,
-        "filter": {
-            **original_filter,
-            "envelope_window_seconds": effective_envelope_window_seconds,
-            "envelope_method": effective_envelope_method,
-        },
+        "envelope": None,
+        "envelope_source": None,
     }
-    _update_session_after_ecg_removal(session, processed_emg_after_ecg)
+    _store_processed_emg(session, processed_emg_after_ecg)
 
     label, unit = _processed_channel_label_and_unit(processed_emg)
     time = np.arange(len(cleaned), dtype=float) / fs
@@ -229,8 +182,6 @@ def ecg_wavelet_denoising(
         "fixed_threshold": fixed_threshold,
         "original_length": original_length,
         "padded_length": padded_length,
-        "effective_envelope_window_seconds": effective_envelope_window_seconds,
-        "effective_envelope_method": effective_envelope_method,
     }
     ecg_wavelet_cleaned_signal = Signal(
         values=cleaned,
@@ -279,15 +230,6 @@ def ecg_wavelet_denoising(
     for array_result in (decomposition_result, thresholds_result, gate_mask_result):
         session.parameter_results.add(array_result)
 
-    _record_step(
-        session,
-        "emg.ecg_wavelet_denoising",
-        metadata=_upstream_metadata(
-            source_function="resurfemg.preprocessing.ecg_removal.wavelet_denoising",
-            operation="emg.ecg_wavelet_denoising",
-            parameters=wavelet_parameters,
-        ),
-    )
     return {
         "ecg_wavelet_cleaned_emg": cleaned,
         "processed_emg_after_ecg": processed_emg_after_ecg,
@@ -295,4 +237,9 @@ def ecg_wavelet_denoising(
         "wavelet_decomposition_result": decomposition_result,
         "wavelet_thresholds_result": thresholds_result,
         "wavelet_gate_mask_result": gate_mask_result,
+        "_provenance": _upstream_metadata(
+            source_function="resurfemg.preprocessing.ecg_removal.wavelet_denoising",
+            operation="emg.ecg_wavelet_denoising",
+            parameters=wavelet_parameters,
+        ),
     }

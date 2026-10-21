@@ -46,8 +46,19 @@ def _temp_steps():
     def _falsy_output(*, value: Any) -> Any:
         return value
 
+    @register_step("t.replace", reads={"x": "a"}, writes=("a",), replaces=("a",))
+    def _replace(x: Any) -> dict[str, Any]:
+        return {"a": x + 1}
+
     created.extend(
-        ["t.make", "t.double", "t.bad_output", "t.no_output", "t.falsy_output"]
+        [
+            "t.make",
+            "t.double",
+            "t.bad_output",
+            "t.no_output",
+            "t.falsy_output",
+            "t.replace",
+        ]
     )
     yield
     for name in created:
@@ -84,6 +95,30 @@ def test_validation_rejects_duplicate_output_keys():
     }
     with pytest.raises(WorkflowSpecError, match="already produced"):
         validate_spec(load_spec(spec))
+
+
+def test_a_step_may_replace_an_output_it_declares_in_replaces():
+    spec = {
+        "name": "replace",
+        "steps": [
+            {"uses": "t.make", "with": {"value": 1}},
+            {"uses": "t.replace"},
+            {"uses": "t.double"},
+        ],
+    }
+
+    result = run_workflow(spec)
+
+    assert result.value("a") == 2
+    assert result.value("result") == 4
+
+
+def test_replaces_must_name_a_declared_output():
+    with pytest.raises(ValueError, match="replaces"):
+
+        @register_step("t.bad_replace", writes=("a",), replaces=("b",))
+        def _bad_replace() -> dict[str, Any]:
+            return {"a": 1}
 
 
 def test_validation_allows_duplicate_step_with_out_rename():
@@ -355,8 +390,8 @@ _ROTARC_SPEC: dict[str, Any] = {
     "name": "rotarc-breath-duration",
     "steps": [
         {
-            "uses": "eit.load",
-            "with": {"file_path": "data/eit.bin", "vendor": "draeger"},
+            "uses": "eit.load_custom",
+            "with": {"file_path": "data/eit.bin"},
         },
         {
             "uses": "eit.slice",

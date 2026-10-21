@@ -8,9 +8,25 @@ This page describes all parts of a workflow file. For the tasks, see {doc}`how-t
 
 From the command line:
 
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
 ```bash
 m3resp run examples/multimodal_example/multimodal.workflow.yaml
 ```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run m3resp run examples/multimodal_example/multimodal.workflow.yaml
+```
+:::
+::::
 
 From Python:
 
@@ -165,6 +181,8 @@ The `id` of each step must be different from the others.
 | `m3resp steps` | Lists all steps. A step that needs a package that is not installed is marked `[missing_optional_dependency]`. `--details` adds the settings and the results of each step. `--json` gives JSON. |
 | `m3resp describe <step>` | Shows all details of one step, for example `m3resp describe eit.detect_rates` |
 
+If you installed M3Resp with uv, put `uv run` in front of each command, for example `uv run m3resp steps`.
+
 | Exit code | Meaning |
 |---:|---|
 | 0 | Success |
@@ -197,6 +215,42 @@ The steps that cut data (see {doc}`concepts/slicing`):
 
 The older names `emg.slice` and `eit.slice` still work.
 
+### Load EIT data
+
+Two steps load EIT data:
+
+| Step | Reads |
+|---|---|
+| `eit.load` | A Dräger, Sentec or Timpel file, with `eitprocessing`. `vendor` is required. `sample_frequency`, `first_frame` and `max_frames` are optional. |
+| `eit.load_custom` | Any other file, with a loader that you write in Python. M3Resp calls it as `loader(file_path, vendor=None, **loader_options)`, and it returns an `eitprocessing` `Sequence`. |
+
+Both steps give the same results (`raw_eit`, `raw_global_impedance_signal`, `raw_pixel_impedance_signal`, ...), so the next steps work with both. Give the loader to the EIT adapter of the session before the run:
+
+```python
+from m3resp.adapters import EITProcessingAdapter
+from m3resp.workflows import run_workflow
+
+result = run_workflow(
+    "my-workflow.yaml", eit_adapter=EITProcessingAdapter(loader=my_loader)
+)
+```
+
+Without a loader, `eit.load_custom` stops with an error.
+
+A device can split one recording into several files. The `file_path` of both steps also takes a list of these files, in the order of the recording:
+
+```yaml
+- uses: eit.load
+  with: { file_path: [part_1.bin, part_2.bin], vendor: draeger }
+```
+
+- `eit.load` reads each file and joins them into one recording, in the order of the list.
+- Each file must start after the end of the file before it. If the files are in the wrong order or overlap, the workflow stops with an error that names the two files.
+- A pause between two files stays in the time axis and gives a warning with its length, because the filters and the breath detection run across the pause.
+- The files must come from the same device, with the same image size and sampling rate.
+- `first_frame` and `max_frames` work only with one file, because `eitprocessing` would apply them to each file. To cut the joined recording, use `eit.slice_recording`.
+- `eit.load_custom` gives the list to the loader as it is.
+
 ### Ventilator channels
 
 `ventilator.channels` selects `airway_pressure`, `flow` and `volume` by default. For a recording with only pressure, set `channels: [airway_pressure]`.
@@ -208,7 +262,7 @@ The older names `emg.slice` and `eit.slice` still work.
 
 ## EMG and ventilator steps
 
-The EMG and ventilator steps need the package `resurfemg` (`python -m pip install -e ".[emg]"`). Without it, these steps raise `OptionalDependencyError`. `import m3resp` and `m3resp steps` work also without it.
+The EMG and ventilator steps need the package `resurfemg` (`python -m pip install -e ".[emg]"`, or `uv sync --extra emg`). Without it, these steps raise `OptionalDependencyError`. `import m3resp` and `m3resp steps` work also without it.
 
 Each step also writes its result in the form that `resurfemg` gives, beside the M3Resp results in the table. In the last column, "resurfemg" means that the calculation comes from `resurfemg`, and "M3Resp" that it is part of M3Resp.
 
@@ -217,10 +271,14 @@ Each step also writes its result in the form that `resurfemg` gives, beside the 
 | `emg.load` | | `file_path`, `loader_options` | `raw_emg_signals` (one signal per channel) | resurfemg |
 | `emg.slice_recording` | | `start_seconds`, `end_seconds` (default: to the end) | `emg_slice` | M3Resp. Also cuts the ventilator channels from the same file. |
 | `ventilator.slice_recording` | | `start_seconds`, `end_seconds` (default: to the end) | `ventilator_slice` | M3Resp. Refuses ventilator data from the EIT or EMG file. |
-| `emg.preprocess` | | `channel`, `high_pass_hz` (20), `low_pass_hz` (500, at most 95% of the Nyquist frequency), `envelope_window_seconds`, `envelope_method` (`"rms"`, `"arv"` or `"median"`), `notch_base_frequency`, `notch_quality_factor`, `notch_before_bandpass` (`false`) | `processed_emg` | resurfemg, with a notch filter from M3Resp |
+| `emg.preprocess` | | `channel`, `high_pass_hz` (20), `low_pass_hz` (500, at most 95% of the Nyquist frequency), `notch_base_frequency`, `notch_max_frequency`, `notch_quality_factor`, `notch_before_bandpass` (`false`) | `processed_emg`, without an envelope | `emg.select_channel`, `emg.notch_filter` and `emg.bandpass_filter` in one step |
+| `emg.select_channel` | | `channel` | `processed_emg` with the selected channel | M3Resp |
+| `emg.notch_filter` | `processed_emg` | `base_frequency` (Hz, required), `max_frequency` (the Nyquist frequency), `quality_factor` (30) | `notch_filtered_signal` | M3Resp |
+| `emg.bandpass_filter` | `processed_emg` | `high_pass_hz` (20), `low_pass_hz` (500, at most 95% of the Nyquist frequency) | `bandpass_filtered_signal` | resurfemg |
+| `emg.envelope` | `processed_emg` | `window_seconds` (0.25), `method` (`"rms"`, `"arv"` or `"median"`), `source` (the signal after the ECG removal, else the filtered signal) | `envelope_signal` | M3Resp |
 | `emg.ecg_detect_peaks` | `processed_emg` | `ecg_channel`, `source` (`"raw_channel"`), `peak_fraction`, `peak_width_seconds`, `peak_distance_seconds`, `bandpass_filter` | `ecg_peak_events` (one event per R peak), `ecg_peak_count_result` | resurfemg |
-| `emg.ecg_gating` | `processed_emg`, `ecg_peak_indices` | `source` (`"filtered"`), `gate_width_seconds` or `gate_width_samples`, `fill_method` (0 to 3), `envelope_window_seconds`, `envelope_method` | `ecg_gated_signal`, `ecg_gate_mask_result` | resurfemg |
-| `emg.ecg_wavelet_denoising` | `processed_emg`, `ecg_peak_indices` | `source`, `hard_thresholding`, `levels`, `wavelet_type`, `fixed_threshold`, `envelope_window_seconds`, `envelope_method` | `ecg_wavelet_cleaned_signal`, `wavelet_decomposition_result`, `wavelet_thresholds_result`, `wavelet_gate_mask_result` | resurfemg |
+| `emg.ecg_gating` | `processed_emg`, `ecg_peak_indices` | `source` (`"filtered"`), `gate_width_seconds` or `gate_width_samples`, `fill_method` (0 to 3) | `ecg_gated_signal`, `ecg_gate_mask_result` | resurfemg |
+| `emg.ecg_wavelet_denoising` | `processed_emg`, `ecg_peak_indices` | `source`, `hard_thresholding`, `levels`, `wavelet_type`, `fixed_threshold` | `ecg_wavelet_cleaned_signal`, `wavelet_decomposition_result`, `wavelet_thresholds_result`, `wavelet_gate_mask_result` | resurfemg |
 | `emg.detect_breaths` | `baseline` (optional) | `min_breath_width_seconds`, `half_window_seconds`, `prominence_factor`, `threshold`, `merge_close_peaks_within_width` (`false`) | `emg_breath_events` | M3Resp |
 | `emg.moving_baseline` | `processed_emg` | `window_seconds`, `step_seconds`, `percentile` (0 to 100) | `baseline_signal` | resurfemg |
 | `emg.slopesum_baseline` | `processed_emg` | `window_seconds`, `step_seconds`, `percentile`, `augmented_percentile`, `moving_average_seconds`, `percentile_window_seconds` | `baseline_signal`, `baseline_running_mean_signal`, `baseline_running_std_signal`, `slopesum_baseline_native_detail` | resurfemg |
@@ -242,15 +300,59 @@ Each step also writes its result in the form that `resurfemg` gives, beside the 
 
 ### Channels and sampling rates
 
-- The `channel` of `emg.preprocess` is a channel number of the loaded file, counted from 0. It is not a channel name.
+- The `channel` of `emg.preprocess` and `emg.select_channel` is a channel number of the loaded file, counted from 0. It is not a channel name.
 - In `emg.ecg_detect_peaks`, `source` selects a signal of `processed_emg`: `"raw_channel"`, `"filtered"` or `"envelope"`. `ecg_channel` selects a raw channel instead. Use `ecg_channel` for a separate ECG channel, and `source` when the ECG is inside the EMG channel.
 - The EMG and the ventilator data can have different sampling rates. The Pocc and timing steps change each side to seconds with its own sampling rate before they compare.
 - The default `min_breath_width_seconds` of `emg.detect_breaths` is 0.5 s. It also finds the breaths of fast breathing, for example 22 breaths per minute. For noisy recordings, change `min_breath_width_seconds` or `prominence_factor`.
 
+### The order of the EMG steps and the envelope
+
+The EMG steps run in this order:
+
+```text
+emg.select_channel -> emg.notch_filter (optional) -> emg.bandpass_filter
+  -> ECG removal (emg.ecg_gating or emg.ecg_wavelet_denoising)
+  -> emg.envelope -> baseline -> emg.detect_breaths
+```
+
+- The notch filter can also come after the band-pass filter.
+- `emg.preprocess` runs the first three steps as one step, with all their settings. To change the order, or to add a step of your own between them, use the separate steps.
+- Each step gives the processed EMG to the next step as a dictionary (`processed_emg`). It holds the selected channel (`"raw_channel"`), the filtered signal (`"filtered"`), the signal after the ECG removal (`"ecg_cleaned"`), the envelope (`"envelope"`), the sampling rate in Hz (`"fs"`) and the settings that the steps used (`"filter"`).
+
+Only `emg.envelope` calculates the envelope. It uses the signal after the ECG removal, if there is one. The filter and ECG removal steps give the processed EMG without an envelope, because an envelope of an earlier signal does not match the new signal. The steps that need the envelope (baselines, breath detection, parameters per breath and quality checks) stop with an error that names `emg.envelope` if there is no envelope.
+
+Each step writes a result name of its own, so connect the steps with `in` and `out`. The last step before the baseline writes to `processed_emg`, which the next steps read:
+
+```yaml
+- uses: emg.select_channel
+  with: { channel: 1 }
+  out: { processed_emg: selected_emg }
+
+- uses: emg.notch_filter
+  in: { processed_emg: selected_emg }
+  with: { base_frequency: 50.0 }
+
+- uses: emg.bandpass_filter
+  in: { processed_emg: processed_emg_after_notch }
+  with: { high_pass_hz: 20.0, low_pass_hz: 500.0 }
+
+- uses: emg.ecg_detect_peaks
+  in: { processed_emg: processed_emg_after_bandpass }
+  with: { source: filtered }
+
+- uses: emg.ecg_wavelet_denoising
+  in: { processed_emg: processed_emg_after_bandpass }
+
+- uses: emg.envelope
+  in: { processed_emg: processed_emg_after_ecg }
+  with: { window_seconds: 0.25, method: rms }
+  out: { processed_emg_with_envelope: processed_emg }
+```
+
 (workflow-ecg-removal)=
 ### Remove the ECG: gating or wavelet denoising
 
-`emg.ecg_gating` and `emg.ecg_wavelet_denoising` both write `processed_emg_after_ecg`. Use one of them, and rename the results so that the next steps read `processed_emg`:
+`emg.ecg_gating` and `emg.ecg_wavelet_denoising` both write `processed_emg_after_ecg`. Use one of them, then calculate the envelope from its result:
 
 ```yaml
 - uses: emg.preprocess
@@ -261,7 +363,10 @@ Each step also writes its result in the form that `resurfemg` gives, beside the 
 
 - uses: emg.ecg_gating  # or emg.ecg_wavelet_denoising
   in: { processed_emg: processed_emg_before_ecg }
-  out: { processed_emg_after_ecg: processed_emg }
+
+- uses: emg.envelope
+  in: { processed_emg: processed_emg_after_ecg }
+  out: { processed_emg_with_envelope: processed_emg }
 ```
 
 - The `fill_method` of gating: 0 fills the gap with zeros, 1 interpolates between its edges (default), 2 uses the mean of a segment next to the gap, 3 uses a running RMS.
@@ -317,9 +422,25 @@ The `examples` folder has these workflow files. Run them from the M3Resp source 
 
 All examples except the last one use the synthetic recordings in `tests/data`. The examples `eit-full`, `emg-full`, `multimodal-full` and `breath-duration` use `schema_version: 1`, a fixed `id` for each step and an explicit `outputs.mode`.
 
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
 ```bash
 m3resp run examples/eit_full_preprocessing/eit-full.workflow.yaml
 ```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run m3resp run examples/eit_full_preprocessing/eit-full.workflow.yaml
+```
+:::
+::::
 
 ## Run events, cancellation and errors
 

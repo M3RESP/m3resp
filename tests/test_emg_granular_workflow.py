@@ -30,7 +30,14 @@ GRANULAR_SPEC = {
         {"uses": "ventilator.load", "with": {"file_path": "@vent_file"}},
         {
             "uses": "emg.preprocess",
-            "with": {"channel": 0, "high_pass_hz": 80, "envelope_window_seconds": 0.5},
+            "with": {"channel": 0, "high_pass_hz": 80},
+            "out": {"processed_emg": "filtered_emg"},
+        },
+        {
+            "uses": "emg.envelope",
+            "in": {"processed_emg": "filtered_emg"},
+            "with": {"window_seconds": 0.5},
+            "out": {"processed_emg_with_envelope": "processed_emg"},
         },
         {
             "uses": "emg.detect_breaths",

@@ -8,15 +8,13 @@ import numpy as np
 
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult, Signal
-from m3resp.processing.windows import ENVELOPE_METHODS, rolling_envelope
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
     _processed_channel_label_and_unit,
-    _record_step,
-    _update_session_after_ecg_removal,
+    _store_processed_emg,
     _upstream_metadata,
     resolve_emg_source,
 )
@@ -119,24 +117,6 @@ def _build_gate_mask(
             choices=(0, 1, 2, 3),
             description="Gate fill strategy: 0 zeros, 1 interpolation, 2 mean of a neighboring segment, 3 running-RMS-based replacement.",
         ),
-        StepParameter(
-            name="envelope_window_seconds",
-            value_type="number",
-            required=False,
-            default=None,
-            unit="s",
-            description="Envelope recomputation window on the gated signal. Defaults to the original preprocessing window.",
-            advanced=True,
-        ),
-        StepParameter(
-            name="envelope_method",
-            value_type="string",
-            required=False,
-            default=None,
-            choices=ENVELOPE_METHODS,
-            description="Envelope method for the recomputation on the gated signal. Defaults to the method preprocessing used, so the two cannot disagree.",
-            advanced=True,
-        ),
     ),
     output_artifacts=(
         StepArtifact(
@@ -147,7 +127,7 @@ def _build_gate_mask(
         StepArtifact(
             name="processed_emg_after_ecg",
             artifact_type="emg_processed_bundle",
-            description="Updated processed-EMG bundle with the gated signal as its 'filtered'/'envelope'.",
+            description="Updated processed-EMG bundle with the gated signal as 'ecg_cleaned' and no envelope (compute it with 'emg.envelope').",
             public=False,
         ),
         StepArtifact(
@@ -161,6 +141,7 @@ def _build_gate_mask(
             description="Native array-valued ParameterResult: boolean mask of gated samples.",
         ),
     ),
+    record=True,
 )
 def ecg_gating(
     session: M3Session,
@@ -171,8 +152,6 @@ def ecg_gating(
     gate_width_seconds: float | None = None,
     gate_width_samples: int | None = None,
     fill_method: int = 1,
-    envelope_window_seconds: float | None = None,
-    envelope_method: str | None = None,
 ) -> dict[str, Any]:
     """Remove ECG peaks from an EMG channel by gating each detected peak (zero/interpolate/replace), via ReSurfEMGAdapter.gate_ecg.
 
@@ -184,12 +163,10 @@ def ecg_gating(
         gate_width_seconds (float | None): Gate width in seconds. Mutually exclusive with 'gate_width_samples'.
         gate_width_samples (int | None): Gate width in samples. Mutually exclusive with 'gate_width_seconds'.
         fill_method (int): Gate fill strategy.
-        envelope_window_seconds (float | None): Envelope recomputation window on the gated signal.
-        envelope_method (str | None): {'rms', 'arv', 'median'}, envelope method for the recomputation. Defaults to the method preprocessing used.
 
     Returns:
         ecg_gated_emg (signal_array): Gated EMG array.
-        processed_emg_after_ecg (emg_processed_bundle): Updated processed-EMG bundle with the gated signal as its 'filtered'/'envelope'.
+        processed_emg_after_ecg (emg_processed_bundle): Updated processed-EMG bundle with the gated signal as 'ecg_cleaned' and no envelope (compute it with 'emg.envelope').
         ecg_gated_signal (signal): Native Signal wrapping the gated EMG.
         ecg_gate_mask_result (parameter_result): Native array-valued ParameterResult: boolean mask of gated samples.
     """
@@ -222,47 +199,17 @@ def ecg_gating(
         fill_method=fill_method,
     )
 
-    original_filter = processed_emg.get("filter") or {}
-    original_window_seconds = original_filter.get("envelope_window_seconds")
-    effective_envelope_window_seconds = (
-        envelope_window_seconds
-        if envelope_window_seconds is not None
-        else original_window_seconds
-    )
-    # Default to whatever method preprocessing used, so the recomputed
-    # envelope is the same kind of envelope as the one it replaces; a bundle
-    # without that field falls back to "rms".
-    effective_envelope_method = (
-        envelope_method
-        if envelope_method is not None
-        else original_filter.get("envelope_method") or "rms"
-    )
-    envelope = processed_emg.get("envelope")
-    if effective_envelope_window_seconds is not None:
-        envelope_window_samples = max(1, int(effective_envelope_window_seconds * fs))
-        envelope = rolling_envelope(
-            gated,
-            window_length=envelope_window_samples,
-            method=effective_envelope_method,
-        )
-
     processed_emg_after_ecg = {
         **processed_emg,
         # Band-passing and gating are separate steps: "filtered" keeps the
         # band-passed signal and the gated one lands beside it, so what
-        # gating did stays visible and recomputable.
+        # gating did stays visible and recomputable. An envelope from before
+        # gating no longer matches the signal, so it is removed.
         "ecg_cleaned": gated,
-        "envelope": envelope,
-        # Carry the *effective* envelope settings forward, so a later
-        # recomputation off this bundle reuses what was actually applied here
-        # rather than the pre-gating preprocessing values.
-        "filter": {
-            **original_filter,
-            "envelope_window_seconds": effective_envelope_window_seconds,
-            "envelope_method": effective_envelope_method,
-        },
+        "envelope": None,
+        "envelope_source": None,
     }
-    _update_session_after_ecg_removal(session, processed_emg_after_ecg)
+    _store_processed_emg(session, processed_emg_after_ecg)
 
     label, unit = _processed_channel_label_and_unit(processed_emg)
     time = np.arange(len(gated), dtype=float) / fs
@@ -272,8 +219,6 @@ def ecg_gating(
         "requested_gate_width_samples": gate_width_samples,
         "effective_gate_width_samples": effective_gate_width_samples,
         "fill_method": fill_method,
-        "effective_envelope_window_seconds": effective_envelope_window_seconds,
-        "effective_envelope_method": effective_envelope_method,
     }
     ecg_gated_signal = Signal(
         values=gated,
@@ -304,18 +249,14 @@ def ecg_gating(
     # parameter_result_arrays.npz file.
     session.parameter_results.add(gate_mask_result)
 
-    _record_step(
-        session,
-        "emg.ecg_gating",
-        metadata=_upstream_metadata(
-            source_function="resurfemg.preprocessing.ecg_removal.gating",
-            operation="emg.ecg_gating",
-            parameters=gating_parameters,
-        ),
-    )
     return {
         "ecg_gated_emg": gated,
         "processed_emg_after_ecg": processed_emg_after_ecg,
         "ecg_gated_signal": ecg_gated_signal,
         "ecg_gate_mask_result": gate_mask_result,
+        "_provenance": _upstream_metadata(
+            source_function="resurfemg.preprocessing.ecg_removal.gating",
+            operation="emg.ecg_gating",
+            parameters=gating_parameters,
+        ),
     }

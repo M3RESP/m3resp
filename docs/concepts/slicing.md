@@ -42,6 +42,7 @@ The file of the ventilator data gives its clock, so it also gives the way to cut
 
 - Cut the recordings before the preprocessing. `slice_eit` and `slice_ventilator` refuse to run after the preprocessing of that modality, because the preprocessed results cover the whole recording. `slice_emg` runs, but it cuts only the loaded EMG: the filtered EMG and the envelope in `session.signals` keep their full length.
 - A cut removes the samples from the loaded recording. Load the file again to get them back.
+- In a workflow, the steps after a cut use the cut recording. `eit.slice_recording` gives it under the names of `eit.load` (`raw_eit`, `raw_global_impedance`, `eit_sequence` and the two raw signals). `emg.slice_recording` gives it under the names of `emg.load` (`emg_recording`, `raw_emg_signals`). The raw signals of the cut recording replace the full ones in `session.signals`.
 - `eit.slice_signal` with `mode: time` uses the time values of the signal. An EIT file can have the time of day as its times: a Dräger file can start at 36528.6 s. The `slice_recording` steps always use seconds from the start.
 - `slice_eit` selects the images by their times. The times of a device can be a little uneven, so 100 s can hold a slightly different number of images than the image rate × 100 s.
 - The older step names still work: `emg.slice` runs `emg.slice_recording`, and `eit.slice` runs `eit.slice_signal`.

@@ -422,11 +422,38 @@ class DataModelRecorder:
         target_type: TargetType | None = None,
         target_id: str | None = None,
     ) -> QualityAnnotation:
-        """Materialize a ``QualityFlag`` as a ``QualityAnnotation``.
+        """Convert a ``QualityFlag`` into a stored ``QualityAnnotation``.
 
-        Without an explicit target, this annotates the ``SignalStream``
-        already recorded for ``flag.modality``, falling back to the session
-        itself if no such stream exists yet (e.g. a session-level check).
+        One flag gives one annotation. The flag's fields are copied as follows:
+
+        ================================  ======================  =====
+        QualityFlag                       QualityAnnotation       Notes
+        ================================  ======================  =====
+        ``start_time``, ``end_time``      ``time_window_start``,  Seconds.
+                                          ``time_window_end``
+        ``breath_id`` or ``breath_ids``   ``breath_ids``          One ``breath_id`` becomes a list
+                                                                  of one. None if no breath is set.
+        ``passed``                        ``quality_label``       ``"valid"`` or ``"suspect"``.
+        ``name``                          ``annotator_ref``
+        ================================  ======================  =====
+
+        ``annotation_source`` is always ``"automated"``.
+
+        If ``target_id`` is None, the annotation points to the ``SignalStream``
+        recorded for the flag's ``modality``, matched on ``category`` when the
+        flag sets one. If the flag has no modality, or no stream is recorded
+        for it yet, the annotation points to the session, with ``target_type``
+        ``"session"`` and the session ID as ``target_id``.
+
+        Args:
+            flag: The ``QualityFlag`` to convert.
+            target_type: Kind of record the annotation points to. Defaults to
+                ``"signal"``.
+            target_id: ID of the record the annotation points to. If None, it
+                is looked up from the flag as described above.
+
+        Returns:
+            QualityAnnotation: The annotation added to the store.
         """
 
         resolved_type: TargetType = target_type or "signal"
@@ -437,10 +464,19 @@ class DataModelRecorder:
             resolved_type = "session"
             resolved_id = self.recording_session.session_id
 
+        breath_ids: list[str] | None = None
+        if flag.breath_ids is not None:
+            breath_ids = list(flag.breath_ids)
+        elif flag.breath_id is not None:
+            breath_ids = [flag.breath_id]
+
         return self.store.add_quality_annotation(
             QualityAnnotation(
                 target_type=resolved_type,
                 target_id=resolved_id,
+                time_window_start=flag.start_time,
+                time_window_end=flag.end_time,
+                breath_ids=breath_ids,
                 quality_label="valid" if flag.passed else "suspect",
                 annotation_source="automated",
                 annotator_ref=flag.name,
@@ -493,9 +529,7 @@ class DataModelRecorder:
         if modality is not None:
             self._record_load(modality)
         if provenance.modality is not None:
-            file_id = self._files.get(provenance.modality)
-            if file_id is not None:
-                input_file_ids = [file_id]
+            input_file_ids = self._modality_file_ids(provenance.modality)
 
         run = ProcessingRun(
             name=provenance.action,
@@ -579,6 +613,16 @@ class DataModelRecorder:
         self._devices[key] = device.device_id
         return device.device_id
 
+    def _modality_file_ids(self, modality: str) -> list[str]:
+        """The raw files of one modality's recording, in recording order."""
+
+        file_ids = [self._files[modality]] if modality in self._files else []
+        index = 1
+        while f"{modality}#{index}" in self._files:
+            file_ids.append(self._files[f"{modality}#{index}"])
+            index += 1
+        return file_ids
+
     def _record_load(self, modality: str) -> None:
         if modality in self._signals:
             return
@@ -604,17 +648,24 @@ class DataModelRecorder:
             self._stream_recordings[stream.signal_id] = (modality, None)
 
             path = getattr(recording, "path", None)
-            if path is not None:
+            paths = tuple(getattr(recording, "paths", ()) or ())
+            if not paths and path is not None:
+                paths = (path,)
+            # A recording read from several files gets one DataFile each. The
+            # first is filed under the modality; the others under
+            # "<modality>#<n>", so runs that use the modality link all of them.
+            for index, file_path in enumerate(paths):
                 data_file = self.store.add_data_file(
                     DataFile(
                         session_id=self.recording_session.session_id,
                         signal_id=stream.signal_id,
-                        file_path=str(path),
-                        file_format=_infer_file_format(path),
+                        file_path=str(file_path),
+                        file_format=_infer_file_format(file_path),
                         file_role="raw",
                     )
                 )
-                self._files[modality] = data_file.file_id
+                key = modality if index == 0 else f"{modality}#{index}"
+                self._files[key] = data_file.file_id
 
     # -- workflow outputs -> DerivedFeature/QualityAnnotation/SignalStream ---
 

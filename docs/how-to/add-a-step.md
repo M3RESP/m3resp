@@ -59,3 +59,28 @@ def my_table(session, output_dir, **kwargs) -> dict:
         raise ValueError("export.my_table needs 'outputs.dir' in the workflow file.")
     ...
 ```
+
+## Record each call in the provenance
+
+To add a record to `session.provenance` at each call, register the step with `record=True`. The step must read `session`. It returns its own details, for example its settings, under the result name `"_provenance"`:
+
+```python
+@register_step(
+    "my.smooth",
+    reads={"session": "session", "signal": "global_impedance"},
+    writes=("smoothed",),
+    modality="eit",
+    record=True,
+)
+def my_smooth(session, signal, *, window_seconds: float = 1.0) -> dict:
+    smoothed = ...
+    return {
+        "smoothed": smoothed,
+        "_provenance": {"parameters": {"window_seconds": window_seconds}},
+    }
+```
+
+- After each call, M3Resp adds one record with the name and the modality of the step, its `reads` and `writes`, and the details from `"_provenance"`.
+- The record also has `upstream_version`: the installed version of the first package in `optional_packages`, or `None` for a step without one.
+- M3Resp removes `"_provenance"` from the results.
+- This works in the same way when you call the function directly and when a workflow runs it.

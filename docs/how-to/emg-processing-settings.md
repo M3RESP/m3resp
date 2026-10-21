@@ -8,6 +8,7 @@ The `"emg"` {term}`preset` runs the EMG processing in this order: band-pass filt
 | `"ecg_detect_peaks"` | Detection of the R peaks | The step `emg.ecg_detect_peaks` |
 | `"ecg_gating"` | Removal of the ECG at each R peak | The step `emg.ecg_gating` |
 | `"ecg_removal"` | Turn ECG removal off, or give the R peaks | The preset |
+| `"envelope"` | Envelope of the signal after the ECG removal | The step `emg.envelope` |
 | `"baseline"` | Baseline of the envelope | `ReSurfEMGAdapter.moving_baseline` |
 | `"detect_breaths"` | Breath detection | `ReSurfEMGAdapter.detect_breaths` |
 | `"postprocess"` | Parameters and quality checks | `ReSurfEMGAdapter.postprocess` |
@@ -57,7 +58,7 @@ A notch filter removes one frequency and its multiples, for example 50 Hz mains 
 | `envelope_method` | `"rms"` | `"rms"`: root mean square. `"arv"`: average rectified value, the method of `resurfemg`'s `full_rolling_arv`. `"median"`: median of the absolute signal, which ignores short spikes such as parts of the ECG that stay after gating. |
 | `envelope_window_seconds` | 0.25 | Length of the envelope window, in seconds |
 
-Put both settings in the `"preprocess"` group. ECG gating calculates the envelope again with the same settings.
+Put both settings in the `"preprocess"` group. After the ECG gating, the step `emg.envelope` calculates the envelope of the gated signal, with the same settings. To give this envelope other settings, set `"envelope": {"window_seconds": ..., "method": ...}`.
 
 ## Change the ECG removal
 
@@ -83,6 +84,17 @@ The preset calculates the baseline as the 33rd percentile of the envelope in a m
 | `window_seconds` | 7.5 | Length of the window, in seconds |
 | `step_seconds` | 0.2 | Step of the window, in seconds |
 | `percentile` | 33.0 | Percentile of the envelope in each window |
+
+Without the preset, calculate the baseline with a session method, and give it to the breath detection:
+
+```python
+session.preprocess_emg(channel=1)
+baseline = session.emg_moving_baseline()  # 7.5 s window, 0.2 s step, 33rd percentile
+session.detect_emg_breaths(baseline=baseline)
+session.postprocess_emg()
+```
+
+`session.emg_slopesum_baseline()` gives the slope-sum baseline of `resurfemg` in place of the moving baseline. Give it to `detect_emg_breaths` in the same way. Both methods add the baseline to `session.signals`. Without a baseline, `detect_emg_breaths` measures the peaks against zero and gives a warning.
 
 ## Change the breath detection
 

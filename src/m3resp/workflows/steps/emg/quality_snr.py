@@ -14,8 +14,8 @@ from m3resp.workflows.steps._per_breath import _per_breath_flags, _per_breath_re
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _record_step,
     _upstream_metadata,
+    require_envelope,
 )
 
 
@@ -79,6 +79,7 @@ from ._shared import (
             description="Native QualityFlag per breath, only when 'minimum_snr' is set.",
         ),
     ),
+    record=True,
 )
 def snr_pseudo(
     session: M3Session,
@@ -88,9 +89,8 @@ def snr_pseudo(
     *,
     minimum_snr: float | None = None,
 ) -> dict[str, Any]:
-    import numpy as np
 
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.snr_pseudo")
     fs = float(processed_emg["fs"])
     result = session.emg_adapter.snr_pseudo(
         envelope, peak_indices, baseline, sample_frequency=fs
@@ -125,19 +125,15 @@ def snr_pseudo(
     for flag in flags:
         session.quality.add(flag)
 
-    _record_step(
-        session,
-        "emg.snr_pseudo",
-        metadata=_upstream_metadata(
-            source_function="resurfemg.postprocessing.quality_assessment.snr_pseudo",
-            operation="emg.snr_pseudo",
-            parameters={"minimum_snr": minimum_snr},
-        ),
-    )
     return {
         "snr_pseudo": result,
         "snr_pseudo_results": results,
         "snr_pseudo_flags": flags,
+        "_provenance": _upstream_metadata(
+            source_function="resurfemg.postprocessing.quality_assessment.snr_pseudo",
+            operation="emg.snr_pseudo",
+            parameters={"minimum_snr": minimum_snr},
+        ),
     }
 
 
@@ -228,6 +224,7 @@ def snr_pseudo(
             description="Native QualityFlag per breath.",
         ),
     ),
+    record=True,
 )
 def percentage_under_baseline(
     session: M3Session,
@@ -240,9 +237,8 @@ def percentage_under_baseline(
     aub_window_seconds: float | None = None,
     aub_threshold: float = 40.0,
 ) -> dict[str, Any]:
-    import numpy as np
 
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.percentage_under_baseline")
     fs = float(processed_emg["fs"])
     aub_window_samples = (
         max(1, int(aub_window_seconds * fs)) if aub_window_seconds is not None else None
@@ -285,10 +281,11 @@ def percentage_under_baseline(
     for flag in flags:
         session.quality.add(flag)
 
-    _record_step(
-        session,
-        "emg.percentage_under_baseline",
-        metadata=_upstream_metadata(
+    return {
+        "percentage_under_baseline": result,
+        "percentage_under_baseline_results": results,
+        "percentage_under_baseline_flags": flags,
+        "_provenance": _upstream_metadata(
             source_function="resurfemg.postprocessing.quality_assessment.percentage_under_baseline",
             operation="emg.percentage_under_baseline",
             parameters={
@@ -297,11 +294,6 @@ def percentage_under_baseline(
                 "effective_aub_window_samples": aub_window_samples,
             },
         ),
-    )
-    return {
-        "percentage_under_baseline": result,
-        "percentage_under_baseline_results": results,
-        "percentage_under_baseline_flags": flags,
     }
 
 
@@ -370,6 +362,7 @@ def percentage_under_baseline(
             description="Native ParameterResult: the effective threshold used.",
         ),
     ),
+    record=True,
 )
 def detect_local_high_aub(
     session: M3Session,
@@ -415,10 +408,11 @@ def detect_local_high_aub(
         session.quality.add(flag)
     session.parameter_results.add(threshold_result)
 
-    _record_step(
-        session,
-        "emg.detect_local_high_aub",
-        metadata=_upstream_metadata(
+    return {
+        "detect_local_high_aub": result,
+        "detect_local_high_aub_flags": flags,
+        "detect_local_high_aub_threshold_result": threshold_result,
+        "_provenance": _upstream_metadata(
             source_function="resurfemg.postprocessing.quality_assessment.detect_local_high_aub",
             operation="emg.detect_local_high_aub",
             parameters={
@@ -426,11 +420,6 @@ def detect_local_high_aub(
                 "threshold_factor": threshold_factor,
             },
         ),
-    )
-    return {
-        "detect_local_high_aub": result,
-        "detect_local_high_aub_flags": flags,
-        "detect_local_high_aub_threshold_result": threshold_result,
     }
 
 
@@ -514,6 +503,7 @@ def detect_local_high_aub(
             description="Native ParameterResult: [lower_bound, upper_bound].",
         ),
     ),
+    record=True,
 )
 def detect_extreme_time_products(
     session: M3Session,
@@ -561,10 +551,11 @@ def detect_extreme_time_products(
         session.quality.add(flag)
     session.parameter_results.add(bounds_result)
 
-    _record_step(
-        session,
-        "emg.detect_extreme_time_products",
-        metadata=_upstream_metadata(
+    return {
+        "detect_extreme_time_products": result,
+        "detect_extreme_time_products_flags": flags,
+        "detect_extreme_time_products_bounds_result": bounds_result,
+        "_provenance": _upstream_metadata(
             source_function="resurfemg.postprocessing.quality_assessment.detect_extreme_time_products",
             operation="emg.detect_extreme_time_products",
             parameters={
@@ -574,9 +565,4 @@ def detect_extreme_time_products(
                 "lower_factor": lower_factor,
             },
         ),
-    )
-    return {
-        "detect_extreme_time_products": result,
-        "detect_extreme_time_products_flags": flags,
-        "detect_extreme_time_products_bounds_result": bounds_result,
     }

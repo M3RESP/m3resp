@@ -2,6 +2,283 @@
 
 ## Unreleased
 
+### Tests on recorded data (part of #92)
+
+New tests run m3resp on dataset 3 of the 27 July 2026 recordings (TestPS3):
+one minute with EIT on (37-97 s) and one with EIT off (140-200 s). The
+FluxMed and EIT recordings are lined up on the Biopac clock by
+cross-correlating the airway pressure. The tests check that each step gives
+exactly what `eitprocessing` and `resurfemg` give, that the results equal the
+stored values in `tests/regression/real_data/reference_values.json`, and that
+heart rate, breathing rate and breath onsets agree with the ECG and the flow.
+They run with `pytest -m real_data` and read the recordings from the folder
+in `M3RESP_REAL_DATA`; the normal test run leaves them out.
+`scripts/update_real_data_references.py` rewrites the stored values.
+
+### Steps after a cut read the cut recording
+
+`eit.slice_recording` cut the recording in the session, but `raw_eit`,
+`eit_sequence` and `raw_global_impedance` kept the whole recording, so the
+steps after it (rates, MDN filter, global impedance, breaths) used the whole
+file. On one minute of TestPS3 this gave a heart rate of 40 per minute from
+all 106 s; the cut minute gives 75.5 per minute. `eit.slice_recording` now
+gives the cut recording under the names `eit.load` uses, and
+`emg.slice_recording` does the same for `emg_recording` and
+`raw_emg_signals`. The raw signals of the cut recording replace the uncut
+ones in `session.signals`. Step registrations have a new field, `replaces`:
+the outputs a step may write again under a name an earlier step wrote.
+
+### uv commands next to the pip commands (#88)
+
+The install, test, docs and run commands in the README, `CONTRIBUTING.md`,
+the documentation site and the synthetic data README are shown both for pip
+and for [uv](https://docs.astral.sh/uv/). On the
+documentation site each command block has a "pip" and a "uv" tab, and the
+choice carries over to every page. The `uv synx` typo in the README is fixed.
+
+### Origin of the EIT code noted in each module (#87)
+
+`processing/peaks.py` (`remove_duplicate_extrema`,
+`remove_low_amplitude_peaks`) and `data/pixel_maps.py` (the checks of
+`PixelMask`) have a Provenance block naming the eitprocessing code they
+follow, and are listed in `NOTICE.md`. The eitprocessing blocks in
+`filters.py`, `windows.py` and `metrics.py` give the commit m3resp installs
+(`m3resp-integration`, `6d6da6a`, version 1.8.7). `CONTRIBUTING.md` describes
+the block, and `tests/test_notice_provenance.py` checks that the blocks and
+`NOTICE.md` list the same files.
+
+### EMG polishing: session baseline and adapter docs (#72)
+
+`M3Session.emg_moving_baseline(window_seconds=7.5, step_seconds=0.2,
+percentile=33.0, variant=None)` computes the moving baseline of the
+processed EMG envelope, with the same calculation as the
+`emg.moving_baseline` step. The baseline is added to `session.signals` as
+`<channel>_moving_baseline` (`<channel>_moving_baseline:<variant>` for a
+preprocessing variant), replacing the one from an earlier call, and the
+call is recorded in `session.provenance` as `emg_moving_baseline` with its
+settings and variant. The EMG tutorial now runs preprocess, baseline, then
+breath detection:
+
+```python
+session.preprocess_emg(channel=1)
+baseline = session.emg_moving_baseline()
+session.detect_emg_breaths(baseline=baseline)
+```
+
+The `"emg"` preset uses it, with the same numbers as before; its baseline
+now also appears in `session.signals` and `session.provenance`.
+`config={"baseline": {...}}` takes `window_seconds`, `step_seconds` and
+`percentile` (converted to numbers, so `"7.5"` works); other keys,
+including `variant`, raise `TypeError`, so the baseline always comes from
+the processed EMG that breath detection uses. A zero window or step now
+raises `ValueError`; before, it became one sample.
+
+`M3Session.emg_slopesum_baseline(...)` computes the slope-sum baseline the
+same way, with the settings and calculation of the `emg.slopesum_baseline`
+step and the same `variant` argument. It adds the baseline, and the running
+mean and running standard deviation of the moving baseline, to
+`session.signals` as
+`<channel>_slopesum_baseline`, `<channel>_slopesum_baseline_running_mean`
+and `<channel>_slopesum_baseline_running_std` (`:<variant>` at the end for a
+variant), replacing the ones from an earlier call, and records the call in
+`session.provenance` as `emg_slopesum_baseline`.
+
+`ReSurfEMGAdapter` and its method files have plain-language docstrings
+(inputs, outputs, units, and which values come from ReSurfEMG and which are
+computed in m3resp), and the adapter page in the developer docs lists every
+method that way. References to planning documents and project stages are
+removed from the EMG and ventilator code.
+
+### Several EIT files loaded as one recording (#121)
+
+`eit.load`, `eit.load_custom` and `session.load_eit()` take a list of files
+recorded one after the other and read them as one recording:
+
+```yaml
+- uses: eit.load
+  with: { file_path: [part_1.bin, part_2.bin], vendor: draeger }
+```
+
+The files are joined in the given order. A file that starts before the one
+before it ends is refused with an error naming both files. A pause between
+two files stays in the time axis and gives a warning with its length.
+`first_frame` and `max_frames` are refused with several files, because
+eitprocessing applies them to each file; cut the joined recording with
+`eit.slice_recording`. A custom loader receives the list as given.
+
+`EITRecording.path` is now `EITRecording.paths`, the files read, in
+recording order (one file gives a list of one); the provenance record of `load_eit` lists them all, and the
+data-model recorder stores one raw `DataFile` per file. Step parameters
+have a new `allow_list` field, true for a `path` parameter that also takes
+a list of paths; workflow checks resolve and check each path in the list.
+
+### `eit.load_custom` for your own EIT loader; `eit.load` needs a vendor (#106)
+
+`eit.load` reads Draeger, Sentec and Timpel files with eitprocessing, and
+its `vendor` parameter is required. It uses eitprocessing even when the
+session's EIT adapter has a loader of its own.
+
+The new step `eit.load_custom` reads a file with the loader given as
+`EITProcessingAdapter(loader=...)`, either on the session or through
+`run_workflow(..., eit_adapter=...)`. It takes `file_path` and
+`loader_options`, gives the same outputs as `eit.load`, and stops with an
+error when no loader was given.
+
+| Before | Now |
+|---|---|
+| `eit.load` with a custom loader set and no `vendor` | `eit.load_custom` |
+
+`session.load_eit()` has a new `loader` argument: `"eitprocessing"`,
+`"custom"`, or `"auto"` (default, the custom loader when there is one,
+else eitprocessing, as before). `EITProcessingAdapter` has the matching
+methods `load_with_eitprocessing` and `load_with_custom_loader`.
+
+### EMG preprocessing as separate steps; the envelope has its own step (#124)
+
+Four new workflow steps split EMG preprocessing into its parts:
+
+| Step | Does |
+|---|---|
+| `emg.select_channel` | takes one channel of the loaded EMG recording |
+| `emg.notch_filter` | removes a frequency and its harmonics (mains hum, EIT frame-rate comb) |
+| `emg.bandpass_filter` | band-pass filter, 20-500 Hz by default |
+| `emg.envelope` | RMS, ARV or median envelope over a moving window (0.25 s, RMS by default) |
+
+`emg.preprocess` runs channel selection, the notch filter and the band-pass
+filter in one step, and its settings are now listed as step parameters.
+**The envelope is computed only by `emg.envelope`**, normally after ECG
+removal:
+
+- `emg.preprocess` returns the filtered EMG with `"envelope"` None. Its
+  former `envelope_window_seconds`, `envelope_method` and
+  `compute_envelope` settings are refused with an error that names
+  `emg.envelope`.
+- `emg.ecg_gating` and `emg.ecg_wavelet_denoising` drop their
+  `envelope_window_seconds` and `envelope_method` parameters, and the
+  processed EMG they return has `"envelope"` None.
+- Steps that need the envelope stop with an error naming `emg.envelope`
+  when it is missing.
+
+| Before | Now |
+|---|---|
+| `emg.preprocess` with `envelope_window_seconds: 0.5`, then `emg.ecg_gating` with `out: { processed_emg_after_ecg: processed_emg }` | `emg.preprocess`, then `emg.ecg_gating`, then `emg.envelope` with `in: { processed_emg: processed_emg_after_ecg }`, `with: { window_seconds: 0.5 }` and `out: { processed_emg_with_envelope: processed_emg }` |
+
+The four example workflows are changed this way and give the same numbers
+as before. `session.preprocess_emg()` still filters and computes the
+envelope in one call. The `"emg"` preset runs `emg.envelope` after ECG
+gating with the window and method preprocessing used, or with
+`config={"envelope": {...}}`; its results are the same as before.
+
+The parts are also `ReSurfEMGAdapter` methods: `select_emg_channel`,
+`notch_filter_emg`, `bandpass_filter_emg` and `emg_envelope`.
+
+A notch `max_frequency` above the Nyquist frequency (half the sampling
+rate) gives a warning and is lowered to the Nyquist frequency, in
+`emg.notch_filter` and `emg.preprocess`. The recorded
+`notch_max_frequency` is the frequency the filter used.
+
+### `register_step(..., record=True)` logs each call (#104)
+
+A step registered with `record=True` adds one record to
+`session.provenance` after each call: step name and modality, its reads
+and writes, the version of its upstream package, and the details the step
+returns under the output key `"_provenance"`. The key is removed from the
+outputs. The 33 built-in steps that logged their own call now use it, and
+the three `_record_step` helpers in the EIT, EMG and ventilator step
+modules are removed. See "Adding a custom step" in the workflow docs.
+
+The records are the same as before, with one change: `upstream_version` is
+the installed version of the first package in the step's
+`optional_packages`, and None for a step without one.
+`ventilator.pocc_time_product` and `emg.remove_invalid_breaths` compute
+their values in m3resp, so their records now have None in place of the
+ReSurfEMG version.
+
+A workflow run warns when a step registered without `record=True` returns
+`"_provenance"` details, because those details are not saved.
+
+A workflow run also writes one `session.processing_history` entry per step,
+as before. Steps with `record=True` therefore appear in both
+`session.provenance` and `session.processing_history`.
+
+### Step descriptions share one field list (#111)
+
+The fields that describe a step (name, summary, description, modality,
+category, parameters, inputs and outputs, alternatives, optional packages,
+version, ...) are declared once, in the new `StepInfo` class in
+`m3resp.workflows.registry`. `StepDefinition` and `StepDescription` both
+build on it, and `describe_step` and `StepDescription.as_dict()` copy every
+field from that list. A new step field is added in `StepInfo` and as a
+`register_step` keyword; a test fails when one of the two is missing.
+
+The output of `describe_step`, `describe_steps` and `m3resp describe` is
+the same as before. `StepDefinition` and `StepDescription` take keyword
+arguments only.
+
+### `resample_signal` replaced by `interpolate_to_time` (#110)
+
+`resample_signal(signal, target_frequency_hz)` built a new, evenly spaced
+time axis from a rate in Hz. Device time axes are not perfectly even, so
+that axis drifted away from the other device's real timestamps.
+`interpolate_to_time(signal, time)` takes the time points themselves, so a
+signal can be put on exactly the time points of another signal. It lives
+with the other signal operations in `m3resp.processing`. **The old name is
+removed.**
+
+| Before | Now |
+|---|---|
+| `m3resp.resample_signal(emg, eit.sample_frequency)` | `m3resp.interpolate_to_time(emg, eit.time)` |
+| `from m3resp.synchronization import resample_signal` | `from m3resp.processing import interpolate_to_time` |
+
+Other differences:
+
+- Time points before the first or after the last sample get NaN, with a
+  warning. `resample_signal` copied the first or last value outward without
+  a warning.
+- Values with more than one number per time point (channels, EIT pixel
+  frames) work. `resample_signal` handled one number per time point only.
+- A signal with fewer than two samples, or a time axis that is not strictly
+  increasing, raises `ValueError`.
+- The result has `metadata["interpolation"] = "linear"`, and
+  `sample_frequency` is 1 / the median time step of the new time points,
+  rounded to 9 significant digits (a 20 Hz time axis gives exactly 20.0).
+- Both time axes must be on the same clock. Synchronize the recordings
+  first; the function cannot check this.
+
+As before, the interpolation is linear with no anti-aliasing filter:
+low-pass filter the signal first when the new time points are further
+apart than the original samples.
+
+### `capture_value` moved to `m3resp.processing.captures` (#91)
+
+`capture_value` stores an extra result of a processing function in the
+optional `captures` dictionary. It is used by the filters and the peak
+detection, so it has its own module.
+
+| Before | Now |
+|---|---|
+| `from m3resp.processing.filters import capture_value` | `from m3resp.processing.captures import capture_value` |
+
+### One `QualityFlag` can cover several breaths (#94)
+
+`QualityFlag` has a new field, `breath_ids`, for a check that judges a
+set of breaths together, such as ten breaths marked as a stable stretch.
+It works like `ParameterResult.breath_ids`. The list reaches
+`quality_flags.csv` and `summary.json`, and `QualityFlag.to_dict()` gives
+the same fields as a dictionary.
+
+A `QualityFlag` or `ParameterResult` sets `breath_id` for one breath or
+`breath_ids` for several breaths. Setting both, or giving an empty
+`breath_ids` list, now raises `ValueError`.
+
+- **Fixes** `DataModelRecorder.record_quality_flag` dropping the flag's
+  breath and time window. The stored `QualityAnnotation` now keeps
+  `start_time`/`end_time` as its time window, and its breaths in the new
+  `QualityAnnotation.breath_ids` field.
+- `validate_store` reports a `QualityAnnotation` whose time window ends
+  before it starts, as it already did for derived features and clinical
+  events.
+
 ### `FilterType` renamed to `ButterworthFilterType` (#90)
 
 `m3resp.processing.filters` holds more than Butterworth filters, so the

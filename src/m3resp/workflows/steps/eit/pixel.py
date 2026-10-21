@@ -27,7 +27,6 @@ from ._shared import (
     _EITPROCESSING,
     _SESSION_ARTIFACT,
     _breaths_used_by,
-    _record_step,
     _upstream_metadata,
     _use_stored_eit_breaths,
 )
@@ -118,6 +117,7 @@ from ._shared import (
             axes=("breath", "row", "column"),
         ),
     ),
+    record=True,
 )
 def pixel_tiv(
     *,
@@ -206,8 +206,11 @@ def pixel_tiv(
     )
     session.interval_data.add(pixel_tiv_result)
 
-    _record_step(session, "eit.pixel_tiv", metadata=metadata)
-    return {"pixel_tiv": result, "pixel_tiv_result": pixel_tiv_result}
+    return {
+        "pixel_tiv": result,
+        "pixel_tiv_result": pixel_tiv_result,
+        "_provenance": metadata,
+    }
 
 
 #: The per-pixel phase correction methods, defined once. The declared
@@ -353,6 +356,7 @@ def _pixel_breath_intervals(
             axes=("breath", "row", "column", "landmark"),
         ),
     ),
+    record=True,
 )
 def pixel_breaths(
     *,
@@ -456,8 +460,8 @@ def pixel_breaths(
     )
     session.interval_data.add(pixel_breath_timing_result)
 
-    _record_step(session, "eit.pixel_breaths", metadata=metadata)
     return {
         "pixel_breaths": result,
         "pixel_breath_timing_result": pixel_breath_timing_result,
+        "_provenance": metadata,
     }

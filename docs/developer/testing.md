@@ -6,11 +6,29 @@ This page shows where the tests are, what each group of tests checks, and how to
 
 Run the three checks from the source folder. All three must pass before a pull request is ready:
 
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
 ```bash
 pytest           # all tests
 ruff check .     # code style
 mypy src         # types
 ```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run pytest           # all tests
+uv run ruff check .     # code style
+uv run mypy src         # types
+```
+:::
+::::
 
 To make mypy pass, change the code. Keep the mypy settings as they are.
 
@@ -20,6 +38,7 @@ To make mypy pass, change the code. Keep the mypy settings as they are.
 tests/
 ├── test_*.py              tests per module or feature: session, adapters, data model, export, workflows, ...
 ├── regression/            comparison tests with eitprocessing and resurfemg
+│   └── real_data/         tests on recorded data, not part of the normal test run
 ├── snapshots/
 │   └── workflow_specs/    saved structure of each example workflow file
 └── data/                  synthetic recordings for the tests and the examples
@@ -37,6 +56,40 @@ The tests in `tests/regression/` compare M3Resp with the original packages. Each
 | `test_ecg_peak_detection_ground_truth.py` | The ECG peak detection with the R peaks of a simulated ECG signal, found by `neurokit2` |
 
 If one of these tests fails, the M3Resp result differs from the original result. Look at the M3Resp function first, before you change the test. See {doc}`adapters`.
+
+## Tests on recorded data
+
+The tests in `tests/regression/real_data/` run M3Resp on full recordings: dataset 3 of the recordings of 27 July 2026 (TestPS3). This dataset has Biopac EMG and airway pressure, FluxMed flow and Dräger EIT. The tests use one minute with the EIT on (37 to 97 s on the Biopac clock) and one minute with the EIT off (140 to 200 s). For each minute, the tests put the FluxMed and EIT recordings on the Biopac clock. They use the cross-correlation of the airway pressure, which all three devices record.
+
+The recordings are kept outside the repository. The tests read them from the folder in the environment variable `M3RESP_REAL_DATA`, with `data/source/Test_PS_27072026` as the default. They check the SHA-256 checksum of each file against `datasets.yaml`, and skip if a file is missing. The tests have the marker `real_data`, and the normal test run leaves them out. To run them:
+
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
+```bash
+pytest -m real_data
+```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run pytest -m real_data
+```
+:::
+::::
+
+The tests make three kinds of check:
+
+- Same as the original packages: each M3Resp step gives exactly the result of `eitprocessing` or `resurfemg`, called directly on the same data.
+- Same as the last time: each number equals the stored value in `reference_values.json`. Counts and sample numbers must be exactly equal. Other numbers can have a relative difference of at most 1e-9.
+- Physiology: the heart rate of the EIT against the ECG in the EMG, the breathing rates and breath starts against the flow, and the EMG filter chains with a notch filter against each other while the EIT is on.
+
+If you change the code to change the results, write the new reference values with `scripts/update_real_data_references.py`. Then look at the changes in `reference_values.json`, which show the numbers that changed.
 
 ## Tests without the optional packages
 

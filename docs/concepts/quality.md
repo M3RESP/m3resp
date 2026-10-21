@@ -24,7 +24,7 @@ To find flags, use `failed`, `for_modality`, `for_category` or `for_signal`.
 | `threshold` | The limit of the check. With `value`, it shows why the check passed or failed. |
 | `message` | A short text about the result |
 | `modality`, `category`, `signal_name` | The device, the physical quantity and the signal that the check is about |
-| `breath_id`, `start_time`, `end_time` | The breath or the time window that the check is about. With none of these, the flag is about the whole signal. |
+| `breath_id`, `breath_ids`, `start_time`, `end_time` | The breath, the breaths or the time window that the check is about. With none of these, the flag is about the whole signal. |
 | `metadata` | Other details, as a dictionary |
 
 If a signal is good except for a noisy period, make one flag per time window, with `start_time` and `end_time`. The same `signal_name` connects the flags to the signal.
@@ -44,6 +44,20 @@ noise = QualityFlag(
 )
 ```
 
+A flag about one breath sets `breath_id`, as a text. A flag about several breaths together sets `breath_ids`, as a list of texts, for example ten breaths in a stable period, or breaths with gaps between them. Set only one of the two fields: both fields, or an empty `breath_ids` list, give a `ValueError`. The steps that check each breath use the position of the breath in its list as the id (`"0"`, `"1"`, ...).
+
+```python
+stable = QualityFlag(
+    name="stable_stretch",
+    passed=True,
+    severity="info",
+    modality="eit",
+    breath_ids=["3", "4", "5", "6"],
+)
+```
+
+In `quality_flags.csv`, `breath_ids` is a Python list (`['3', '4', '5', '6']`), and `ast.literal_eval` reads it back. In `summary.json`, it is a JSON list.
+
 ## Checks that could not run
 
 - The EMG quality steps of a workflow give no flag for a check that they could not run. So their flags always show a real result.
@@ -53,6 +67,6 @@ noise = QualityFlag(
 
 `preprocess_eit` and `postprocess_emg` add flags to `session.quality`. Some workflow steps add flags too, for example `ventilator.pocc_quality`. `session.export_summary` writes the flags to `quality_flags.csv`.
 
-If you use the stored data model (see {doc}`provenance`), M3Resp stores the quality flags in the results of a workflow run as `QualityAnnotation` records.
+If you use the stored data model (see {doc}`provenance`), M3Resp stores the quality flags in the results of a workflow run as `QualityAnnotation` records. Each flag becomes one record. The record keeps the time window of the flag in seconds, and its breaths in `QualityAnnotation.breath_ids`: a list with one id for a flag about one breath, or the full list for a flag about several breaths.
 
 Continue with {doc}`synchronization`.

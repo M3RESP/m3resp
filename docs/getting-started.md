@@ -4,17 +4,53 @@
 
 M3Resp works with Python 3.12, 3.13 and 3.14. In the M3Resp source folder, install the base package:
 
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
 ```bash
 python -m pip install -e .
 ```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv sync
+```
+:::
+::::
 
 Then install the integration for each {term}`modality` that you use:
+
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
 
 ```bash
 python -m pip install -e ".[eit]"       # EIT processing
 python -m pip install -e ".[emg]"       # EMG processing
 python -m pip install -e ".[all]"       # EIT and EMG processing
 ```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv sync --extra eit  # EIT processing
+uv sync --extra emg  # EMG processing
+uv sync --extra all  # Both integrations
+```
+:::
+::::
+
+`uv sync` installs only the extras in the command and removes all other extras. So name each extra that you need, for example `uv sync --extra all --extra dev`.
 
 The base package reads and checks workflow files, synchronizes recordings, makes synthetic EIT data and exports results.
 
@@ -22,17 +58,49 @@ The base package reads and checks workflow files, synchronizes recordings, makes
 
 A {term}`workflow` file is a YAML or JSON file with a list of processing steps. Run the example workflow from the M3Resp source folder:
 
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
 ```bash
 m3resp run examples/multimodal_example/multimodal.workflow.yaml
 ```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run m3resp run examples/multimodal_example/multimodal.workflow.yaml
+```
+:::
+::::
 
 The example uses the synthetic recordings in `tests/data` and writes the results to `output/multimodal-summary`. M3Resp reads the file paths in a workflow file from the folder of that file.
 
 To list all processing steps:
 
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
 ```bash
 m3resp steps
 ```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run m3resp steps
+```
+:::
+::::
 
 ## Use Python
 

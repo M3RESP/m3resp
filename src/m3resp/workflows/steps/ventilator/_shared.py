@@ -8,7 +8,6 @@ import numpy as np
 
 from m3resp.adapters.ventilator_adapter import primary_channel
 from m3resp.core.exceptions import MissingModalityDataError
-from m3resp.core.session import M3Session
 from m3resp.workflows.registry import StepArtifact
 
 #: Ventilator loading/quality steps currently go through ReSurfEMGAdapter
@@ -24,18 +23,6 @@ _SESSION_ARTIFACT = StepArtifact(
     description="Backing M3Session the step reads from and/or records provenance onto.",
     public=False,
 )
-
-
-def _resurfemg_version() -> str | None:
-    """Installed `resurfemg` version, read from package metadata without
-    importing the package itself (so this stays optional-dependency-safe)."""
-
-    from importlib.metadata import PackageNotFoundError, version
-
-    try:
-        return version("resurfemg")
-    except PackageNotFoundError:
-        return None
 
 
 def _upstream_metadata(
@@ -63,28 +50,6 @@ def _upstream_metadata(
         "parameters": parameters,
         "operation": operation,
     }
-
-
-def _record_step(
-    session: M3Session, step_name: str, *, metadata: dict[str, Any]
-) -> None:
-    """Record per-step ventilator provenance through the existing
-    `M3Session._record()` seam."""
-
-    from m3resp.workflows.registry import get_step
-
-    definition = get_step(step_name)
-    session._record(
-        step_name,
-        "ventilator",
-        parameters={
-            "step": step_name,
-            "reads": sorted(definition.reads),
-            "writes": list(definition.writes),
-            "upstream_version": _resurfemg_version(),
-            **metadata,
-        },
-    )
 
 
 def _airway_pressure(ventilator_signals: Any, step_name: str) -> tuple[np.ndarray, str]:

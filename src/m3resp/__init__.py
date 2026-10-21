@@ -55,10 +55,10 @@ from m3resp.presets import (
     get_preset,
     register_preset,
 )
+from m3resp.processing import interpolate_to_time
 from m3resp.synchronization import (
     compute_offsets_from_timestamps,
     link_breaths_by_time,
-    resample_signal,
 )
 from m3resp.workflows import (
     WorkflowResult,
@@ -120,13 +120,13 @@ __all__ = [
     "event_to_dict",
     "export_store",
     "get_preset",
+    "interpolate_to_time",
     "io",
     "link_breaths_by_time",
     "load_spec",
     "pixel_breath_events",
     "register_preset",
     "register_step",
-    "resample_signal",
     "run_spec",
     "run_workflow",
     "validate_store",

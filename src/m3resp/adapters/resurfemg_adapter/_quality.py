@@ -1,4 +1,6 @@
-"""Quality-assessment methods of `ReSurfEMGAdapter`."""
+"""`ReSurfEMGAdapter` methods that run ReSurfEMG's quality checks on EMG
+breaths and Pocc manoeuvres (signal-to-noise ratio, area under the baseline,
+bell-curve fit, timing against the ventilator, ...)."""
 
 from __future__ import annotations
 

@@ -158,6 +158,13 @@ def _compile_step(
         value = resolve_value(raw_value, spec.inputs)
         if name in path_param_names and isinstance(value, str):
             value = str(resolve_optional_path(spec.root, value))
+        elif name in path_param_names and isinstance(value, list):
+            value = [
+                str(resolve_optional_path(spec.root, item))
+                if isinstance(item, str)
+                else item
+                for item in value
+            ]
         return value
 
     resolved_parameters: dict[str, Any] = {}
@@ -294,10 +301,13 @@ def _readiness_diagnostics_for_step(
             value = resolve_value(raw_value, spec.inputs)
         except WorkflowSpecError:
             continue  # already reported structurally
-        if not isinstance(value, str):
-            continue
-        resolved_path = resolve_optional_path(spec.root, value)
-        if resolved_path is not None and not resolved_path.exists():
+        values = value if isinstance(value, list) else [value]
+        for item in values:
+            if not isinstance(item, str):
+                continue
+            resolved_path = resolve_optional_path(spec.root, item)
+            if resolved_path is None or resolved_path.exists():
+                continue
             diagnostics.append(
                 Diagnostic(
                     severity="error",

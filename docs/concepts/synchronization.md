@@ -82,17 +82,19 @@ session.synchronize_multimodal_breaths(method="manual_offset", offset_seconds={"
 
 `offset_seconds` is one number (for the EMG) or an offset per modality. M3Resp stores the shifted breaths in `session.processed["synchronized"]`, and `link_breaths` uses them.
 
-## Change the sampling rate
+## Put two signals on the same time points
 
-Breath linking and the breath timing parameters use times in seconds, so each modality keeps its own sampling rate. To compare two signals sample by sample, use `resample_signal`:
+Breath linking and the breath timing parameters use times in seconds, so each modality keeps its own sampling rate. To compare two signals sample by sample, use `interpolate_to_time`. It gives a copy of a signal with its values at the time points of another signal:
 
 ```python
-from m3resp import resample_signal
+from m3resp import interpolate_to_time
 
-envelope_100hz = resample_signal(envelope, target_frequency_hz=100.0)
+envelope_on_eit_time = interpolate_to_time(envelope, global_impedance.time)
 ```
 
-`resample_signal` uses linear interpolation and no anti-aliasing filter. So apply a low-pass filter before you lower the sampling rate.
+- The two time axes must be on the same clock. The function cannot check this, so with two different clocks the result is wrong and no warning is given. Each signal keeps the clock of its recording (see "Each modality keeps its own clock" above), so put the times of two recordings on the shared clock first.
+- Time points before the first sample or after the last sample of the signal get NaN, with a warning.
+- `interpolate_to_time` uses linear interpolation and no anti-aliasing filter. So apply a low-pass filter before you lower the sampling rate.
 
 ## Linked breaths
 

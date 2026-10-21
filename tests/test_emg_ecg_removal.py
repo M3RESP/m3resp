@@ -19,6 +19,7 @@ from m3resp.workflows.steps.emg import (
     ecg_detect_peaks,
     ecg_gating,
     ecg_wavelet_denoising,
+    envelope,
 )
 from m3resp.workflows.steps.emg.ecg_gating import _build_gate_mask
 
@@ -153,8 +154,8 @@ class TestSeparateFilteredAndCleanedSignals:
 
 
 class TestPreprocessEnvelopeSkipping:
-    """ECG gating recomputes the envelope from the gated signal, so an
-    envelope computed during preprocessing would be discarded."""
+    """The envelope is computed after ECG removal by `emg.envelope`, so
+    preprocessing can skip it."""
 
     @staticmethod
     def _preprocess(**kwargs):
@@ -179,7 +180,7 @@ class TestPreprocessEnvelopeSkipping:
         assert processed["envelope"] is None
         assert processed["filtered"] is not None
 
-    def test_skipping_still_records_the_window_for_gating_to_reuse(self):
+    def test_skipping_still_records_the_envelope_settings(self):
         processed = self._preprocess(
             compute_envelope=False,
             envelope_window_seconds=0.25,
@@ -189,19 +190,18 @@ class TestPreprocessEnvelopeSkipping:
         assert processed["filter"]["envelope_window_seconds"] == 0.25
         assert processed["filter"]["envelope_method"] == "rms"
 
-    def test_gating_recomputes_the_envelope_from_the_gated_signal(self):
+    def test_gating_removes_the_envelope_of_the_ungated_signal(self):
         session = M3Session()
-        processed = self._preprocess(
-            compute_envelope=False, envelope_window_seconds=0.25
-        )
+        processed = self._preprocess()
+        assert processed["envelope"] is not None
         peaks = np.array([1000, 3000, 5000])
 
         result = ecg_gating(session, processed, peaks)
 
         after = result["processed_emg_after_ecg"]
-        assert after["envelope"] is not None
-        assert len(after["envelope"]) == len(processed["filtered"])
-        assert after["filter"]["envelope_window_seconds"] == 0.25
+        assert after["envelope"] is None
+        assert after["ecg_cleaned"] is not None
+        assert session.processed["emg"]["envelope"] is None
 
 
 class TestEcgGating:
@@ -272,59 +272,27 @@ class TestEcgGating:
         assert mask_result.value.shape == gated.shape
         assert mask_result.value.sum() > 0
 
-    def test_recomputed_envelope_reuses_the_preprocessing_envelope_method(self):
-        """The recomputation must not silently switch envelope method: an ARV
-        bundle stays ARV, and the effective choice is carried forward so a
-        later recomputation off the gated bundle agrees too."""
-
+    def test_envelope_step_computes_the_envelope_of_the_gated_signal(self):
         session = M3Session()
         processed_emg = _fake_processed_emg()
-        processed_emg["filter"]["envelope_method"] = "arv"
         peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
+        gated_bundle = ecg_gating(session, processed_emg, peaks)[
+            "processed_emg_after_ecg"
+        ]
 
-        result = ecg_gating(session, processed_emg, peaks)
+        result = envelope(session, gated_bundle, window_seconds=0.5, method="arv")
 
-        gated_bundle = result["processed_emg_after_ecg"]
-        assert gated_bundle["filter"]["envelope_method"] == "arv"
+        with_envelope = result["processed_emg_with_envelope"]
         np.testing.assert_allclose(
-            gated_bundle["envelope"],
+            with_envelope["envelope"],
             rolling_envelope(
-                result["ecg_gated_emg"], window_length=int(0.5 * 2048.0), method="arv"
+                gated_bundle["ecg_cleaned"],
+                window_length=int(0.5 * 2048.0),
+                method="arv",
             ),
         )
-        assert (
-            result["ecg_gate_mask_result"].metadata["effective_envelope_method"]
-            == "arv"
-        )
-
-    def test_envelope_method_can_be_overridden_for_the_recomputation(self):
-        session = M3Session()
-        processed_emg = _fake_processed_emg()
-        processed_emg["filter"]["envelope_method"] = "arv"
-        peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
-
-        result = ecg_gating(session, processed_emg, peaks, envelope_method="rms")
-
-        np.testing.assert_allclose(
-            result["processed_emg_after_ecg"]["envelope"],
-            rolling_envelope(
-                result["ecg_gated_emg"], window_length=int(0.5 * 2048.0), method="rms"
-            ),
-        )
-        assert result["processed_emg_after_ecg"]["filter"]["envelope_method"] == "rms"
-
-    def test_bundle_without_an_envelope_method_falls_back_to_rms(self):
-        """`_fake_processed_emg`'s 'filter' has no 'envelope_method' - i.e. a
-        bundle predating the field. It must default to RMS, not ARV."""
-
-        session = M3Session()
-        processed_emg = _fake_processed_emg()
-        assert "envelope_method" not in processed_emg["filter"]
-        peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
-
-        result = ecg_gating(session, processed_emg, peaks)
-
-        assert result["processed_emg_after_ecg"]["filter"]["envelope_method"] == "rms"
+        assert with_envelope["envelope_source"] == "ecg_cleaned"
+        assert with_envelope["filter"]["envelope_method"] == "arv"
 
     def test_rejects_both_gate_width_forms_at_once(self):
         session = M3Session()
@@ -354,6 +322,21 @@ class TestEcgGating:
         # fill_method=0 zeros gated samples, so every masked sample should
         # be (at least) among the zeroed ones near a peak.
         assert np.all(gated[mask][: len(peaks)] == 0) or mask.sum() > 0
+
+
+@pytest.mark.parametrize("remove_ecg", [ecg_gating, ecg_wavelet_denoising])
+def test_ecg_removal_clears_the_envelope_and_its_source(remove_ecg):
+    session = M3Session()
+    with_envelope = envelope(session, _fake_processed_emg())[
+        "processed_emg_with_envelope"
+    ]
+    assert with_envelope["envelope_source"] == "filtered"
+    peaks = ecg_detect_peaks(session, with_envelope)["ecg_peak_indices"]
+
+    after = remove_ecg(session, with_envelope, peaks)["processed_emg_after_ecg"]
+
+    assert after["envelope"] is None
+    assert after["envelope_source"] is None
 
 
 class TestEcgWaveletDenoising:

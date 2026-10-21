@@ -1,4 +1,4 @@
-"""Registered EMG loading/preprocessing workflow steps."""
+"""Registered EMG steps: loading, breath detection and breath peak indices."""
 
 from __future__ import annotations
 
@@ -15,15 +15,30 @@ from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _record_step,
     _upstream_metadata,
+)
+
+_LOAD_WRITES = ("emg_recording", "raw_emg_signals")
+
+_LOAD_OUTPUTS = (
+    StepArtifact(
+        name="emg_recording",
+        artifact_type="emg_recording",
+        description="Raw upstream EMGRecording object.",
+        compatibility_only=True,
+    ),
+    StepArtifact(
+        name="raw_emg_signals",
+        artifact_type="signal_list",
+        description="Native Signal per raw EMG channel.",
+    ),
 )
 
 
 @register_step(
     "emg.load",
     reads={"session": "session"},
-    writes=("emg_recording", "raw_emg_signals"),
+    writes=_LOAD_WRITES,
     summary="Load an EMG recording into the session.",
     description="Load an EMG recording file through ReSurfEMGAdapter and expose its raw channels as native Signals.",
     category="loading",
@@ -54,19 +69,8 @@ from ._shared import (
             advanced=True,
         ),
     ),
-    output_artifacts=(
-        StepArtifact(
-            name="emg_recording",
-            artifact_type="emg_recording",
-            description="Raw upstream EMGRecording object.",
-            compatibility_only=True,
-        ),
-        StepArtifact(
-            name="raw_emg_signals",
-            artifact_type="signal_list",
-            description="Native Signal per raw EMG channel.",
-        ),
-    ),
+    output_artifacts=_LOAD_OUTPUTS,
+    record=True,
 )
 def load(
     session: M3Session,
@@ -81,8 +85,36 @@ def load(
         )
 
     session.load_emg(file_path, verbose=False, **dict(loader_options or {}))
+    return {
+        **_loaded_recording_outputs(session),
+        "_provenance": _upstream_metadata(
+            source_function="resurfemg.data_connector.converter_functions.load_file",
+            operation="emg.load",
+            parameters={"loader_options": dict(loader_options or {})},
+        ),
+    }
+
+
+def _loaded_recording_outputs(
+    session: M3Session, *, replace_raw_signals: bool = False
+) -> dict[str, Any]:
+    """``emg_recording`` and ``raw_emg_signals`` from the session's recording.
+
+    Adds one raw `Signal` per channel to `session.signals`. With
+    `replace_raw_signals`, the raw EMG signals already in `session.signals`
+    are removed first; the slicing step uses this so only the cut signals
+    remain.
+    """
+
     recording = session.emg
     assert recording is not None
+
+    if replace_raw_signals:
+        session.signals.items[:] = [
+            existing
+            for existing in session.signals.items
+            if not (existing.modality == "emg" and existing.processing_state == "raw")
+        ]
 
     metadata = dict(recording.metadata or {})
     fs = metadata.get("fs")
@@ -112,49 +144,7 @@ def load(
             session.signals.add(signal)
             raw_emg_signals.append(signal)
 
-    _record_step(
-        session,
-        "emg.load",
-        metadata=_upstream_metadata(
-            source_function="resurfemg.data_connector.converter_functions.load_file",
-            operation="emg.load",
-            parameters={"loader_options": dict(loader_options or {})},
-        ),
-    )
     return {"emg_recording": recording, "raw_emg_signals": raw_emg_signals}
-
-
-@register_step(
-    "emg.preprocess",
-    reads={"session": "session"},
-    writes=("processed_emg",),
-    summary="Filter EMG and compute its envelope.",
-    description="Filter the loaded EMG recording and compute its envelope via ReSurfEMGAdapter.preprocess. Accepts arbitrary adapter keyword arguments beyond 'variant'.",
-    category="preprocessing",
-    modality="emg",
-    optional_packages=_RESURFEMG,
-    session_writes=("session.processed.emg", "session.signals"),
-    input_artifacts=(_SESSION_ARTIFACT,),
-    parameters=(
-        StepParameter(
-            name="variant",
-            value_type="string",
-            required=False,
-            default=None,
-            description="Store this preprocessing under a named variant instead of the default slot.",
-            advanced=True,
-        ),
-    ),
-    output_artifacts=(
-        StepArtifact(
-            name="processed_emg",
-            artifact_type="emg_processed_bundle",
-            description="Mapping of 'filtered'/'envelope'/'fs'/'channel'/'metadata'.",
-        ),
-    ),
-)
-def preprocess(session: M3Session, **kwargs: Any) -> dict[str, Any]:
-    return {"processed_emg": session.preprocess_emg(**kwargs)}
 
 
 @register_step(

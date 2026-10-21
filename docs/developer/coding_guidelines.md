@@ -6,7 +6,7 @@ See `AGENTS.md` in the source folder for the rules for docstrings and comments.
 
 ## Extra outputs go into `captures`
 
-A function always returns the same type. To give extra outputs, for example values for a plot or a check, add an optional `captures` argument. The function fills this dictionary with `capture_value` from `m3resp.processing.filters`:
+A function always returns the same type. To give extra outputs, for example values for a plot or a check, add an optional `captures` argument. The function fills this dictionary with `capture_value` from `m3resp.processing.captures`:
 
 ```python
 def detect_peaks(..., captures: dict[str, Any] | None = None) -> np.ndarray:

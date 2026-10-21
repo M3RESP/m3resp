@@ -18,8 +18,8 @@ from m3resp.workflows.steps._per_breath import _per_breath_flags
 from ._shared import (
     _RESURFEMG,
     _SESSION_ARTIFACT,
-    _record_step,
     _upstream_metadata,
+    require_envelope,
 )
 
 
@@ -83,6 +83,7 @@ from ._shared import (
             description="Native QualityFlag for the overall check.",
         ),
     ),
+    record=True,
 )
 def interpeak_dist(
     session: M3Session,
@@ -154,19 +155,15 @@ def interpeak_dist(
         session.parameter_results.add(result)
     session.quality.add(flag)
 
-    _record_step(
-        session,
-        "emg.interpeak_dist",
-        metadata=_upstream_metadata(
-            source_function="resurfemg.postprocessing.quality_assessment.interpeak_dist",
-            operation="emg.interpeak_dist",
-            parameters={"threshold": threshold},
-        ),
-    )
     return {
         "interpeak_dist": valid,
         "interpeak_dist_result": results,
         "interpeak_dist_flag": flag,
+        "_provenance": _upstream_metadata(
+            source_function="resurfemg.postprocessing.quality_assessment.interpeak_dist",
+            operation="emg.interpeak_dist",
+            parameters={"threshold": threshold},
+        ),
     }
 
 
@@ -235,7 +232,7 @@ def interpeak_dist(
 def onoffpeak_baseline_crossing(
     session: M3Session, processed_emg: Any, baseline: Any, peak_indices: Any
 ) -> dict[str, Any]:
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.onoffpeak_baseline_crossing")
     fs = float(processed_emg["fs"])
     start_indices, end_indices, valid_starts, valid_ends, valid_peaks = (
         onoff_from_baseline_crossings(envelope, baseline, peak_indices)
@@ -313,9 +310,8 @@ def onoffpeak_baseline_crossing(
 def onoffpeak_slope_extrapolation(
     processed_emg: Any, peak_indices: Any, *, slope_window_seconds: float = 0.5
 ) -> dict[str, Any]:
-    import numpy as np
 
-    envelope = np.asarray(processed_emg["envelope"], dtype=float)
+    envelope = require_envelope(processed_emg, "emg.onoffpeak_slope_extrapolation")
     fs = float(processed_emg["fs"])
     slope_window_samples = max(1, int(slope_window_seconds * fs))
     result = onoff_from_slope(

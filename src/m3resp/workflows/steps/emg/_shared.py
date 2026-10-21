@@ -22,18 +22,6 @@ _SESSION_ARTIFACT = StepArtifact(
 )
 
 
-def _resurfemg_version() -> str | None:
-    """Installed `resurfemg` version, read from package metadata without
-    importing the package itself (so this stays optional-dependency-safe)."""
-
-    from importlib.metadata import PackageNotFoundError, version
-
-    try:
-        return version("resurfemg")
-    except PackageNotFoundError:
-        return None
-
-
 def _upstream_metadata(
     *,
     source_function: str,
@@ -42,10 +30,11 @@ def _upstream_metadata(
     source_package: str = "resurfemg",
     implementation: str = "upstream_adapter",
 ) -> dict[str, Any]:
-    """Build the Stage 2 EMG provenance metadata schema shared by native
-    `Signal`/`ParameterResult` outputs (see `plan/stage2/
-    2_resurfemg_gap_migration_implementation_plan.md`, "Use one provenance
-    schema"). Mirrors `m3resp.workflows.steps.eit._upstream_metadata`.
+    """The provenance details an EMG step returns under ``"_provenance"``.
+
+    The same fields as `m3resp.workflows.steps.eit._upstream_metadata`: which
+    package and function computed the value, the settings used, and the
+    step name.
 
     `source_package`/`implementation` default to the ReSurfEMG-adapter case;
     pass `source_package="m3resp"`, `implementation="m3resp.processing.<module>"`
@@ -59,28 +48,6 @@ def _upstream_metadata(
         "parameters": parameters,
         "operation": operation,
     }
-
-
-def _record_step(
-    session: M3Session, step_name: str, *, metadata: dict[str, Any]
-) -> None:
-    """Record per-step EMG provenance through `M3Session._record()`, using
-    the step's declared reads/writes from the registry."""
-
-    from m3resp.workflows.registry import get_step
-
-    definition = get_step(step_name)
-    session._record(
-        step_name,
-        "emg",
-        parameters={
-            "step": step_name,
-            "reads": sorted(definition.reads),
-            "writes": list(definition.writes),
-            "upstream_version": _resurfemg_version(),
-            **metadata,
-        },
-    )
 
 
 def resolve_emg_source(processed_emg: Any, source: str | None, step_name: str) -> str:
@@ -113,23 +80,39 @@ def resolve_emg_source(processed_emg: Any, source: str | None, step_name: str) -
     return key
 
 
-def _update_session_after_ecg_removal(
-    session: M3Session,
-    processed_emg_after_ecg: dict[str, Any],
-) -> None:
-    """Update `session.processed["emg"]` and the `EMGRecording` signal fields
-    so existing breath detection operates on the ECG-cleaned data (mirrors
-    what `M3Session.preprocess_emg` does).
+def _store_processed_emg(session: M3Session, processed_emg: dict[str, Any]) -> None:
+    """Make `processed_emg` the session's current processed EMG.
 
-    `filtered` keeps the band-passed signal: ECG removal writes its result to
-    `ecg_cleaned`, so both stages stay available.
+    Sets `session.processed["emg"]`, which breath detection reads, and the
+    trace fields of `session.emg` (mirrors what `M3Session.preprocess_emg`
+    does).
     """
 
-    session.processed["emg"] = processed_emg_after_ecg
+    session.processed["emg"] = processed_emg
     if session.emg is not None:
-        session.emg.filtered = processed_emg_after_ecg.get("filtered")
-        session.emg.ecg_cleaned = processed_emg_after_ecg.get("ecg_cleaned")
-        session.emg.envelope = processed_emg_after_ecg.get("envelope")
+        session.emg.filtered = processed_emg.get("filtered")
+        session.emg.ecg_cleaned = processed_emg.get("ecg_cleaned")
+        session.emg.envelope = processed_emg.get("envelope")
+        session.emg.channel = processed_emg.get("channel")
+        session.emg.fs = processed_emg.get("fs")
+
+
+def require_envelope(processed_emg: Any, step_name: str) -> np.ndarray:
+    """The envelope in a processed EMG bundle, as a float array.
+
+    Raises a ValueError naming `emg.envelope` when the bundle has none: the
+    envelope is computed by its own step, after filtering and ECG removal.
+    """
+
+    envelope = (
+        processed_emg.get("envelope") if isinstance(processed_emg, Mapping) else None
+    )
+    if envelope is None:
+        raise ValueError(
+            f"{step_name} needs an EMG envelope, and the processed EMG has "
+            "none. Add an 'emg.envelope' step after filtering and ECG removal."
+        )
+    return np.asarray(envelope, dtype=float)
 
 
 def _require_positive_seconds(name: str, value: float) -> None:

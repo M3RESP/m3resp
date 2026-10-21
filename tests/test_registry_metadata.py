@@ -7,6 +7,7 @@ so a step declaring none of it must remain fully valid (most built-ins still do)
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
 from typing import Any
 
@@ -17,6 +18,9 @@ from m3resp.core.exceptions import StepMetadataError
 from m3resp.workflows.registry import (
     STEP_REGISTRY,
     StepArtifact,
+    StepDefinition,
+    StepDescription,
+    StepInfo,
     StepParameter,
     describe_step,
     describe_steps,
@@ -295,6 +299,7 @@ _AUDITED_SESSION_STEPS = frozenset(
         "eit.eeli",
         "eit.functional_impedance",
         "eit.load",
+        "eit.load_custom",
         "eit.mdn_filter",
         "eit.normalize_breaths",
         "eit.pixel_breaths",
@@ -309,19 +314,23 @@ _AUDITED_SESSION_STEPS = frozenset(
         "emg.detect_breaths",
         "emg.detect_extreme_time_products",
         "emg.detect_local_high_aub",
+        "emg.bandpass_filter",
         "emg.ecg_detect_peaks",
         "emg.ecg_gating",
         "emg.ecg_wavelet_denoising",
+        "emg.envelope",
         "emg.evaluate_bell_curve_error",
         "emg.evaluate_event_timing",
         "emg.evaluate_respiratory_rates",
         "emg.interpeak_dist",
         "emg.load",
         "emg.moving_baseline",
+        "emg.notch_filter",
         "emg.onoffpeak_baseline_crossing",
         "emg.percentage_under_baseline",
         "emg.preprocess",
         "emg.remove_invalid_breaths",
+        "emg.select_channel",
         "emg.slice_recording",
         "emg.slopesum_baseline",
         "emg.snr_pseudo",
@@ -430,3 +439,48 @@ def test_capability_deprecated_takes_priority(_cleanup):
 
     _cleanup.append("meta_test.deprecated_step")
     assert step_capability_state("meta_test.deprecated_step") == "deprecated"
+
+
+def test_register_step_takes_a_keyword_for_every_step_definition_field():
+    # A field added to StepInfo or StepDefinition without a register_step
+    # keyword (or the other way round) can never be set, so it fails here.
+    keywords = set(inspect.signature(register_step).parameters) - {"aliases"}
+    definition_fields = {f.name for f in dataclasses.fields(StepDefinition)}
+
+    assert keywords == definition_fields - {"func"}
+
+
+def test_step_description_holds_the_step_info_fields_plus_capability():
+    info_fields = [f.name for f in dataclasses.fields(StepInfo)]
+    description_fields = [f.name for f in dataclasses.fields(StepDescription)]
+
+    assert description_fields == [*info_fields, "capability"]
+
+
+def test_describe_step_as_dict_has_every_description_field_in_order(_cleanup):
+    @register_step(
+        "meta_test.full_description",
+        summary="Short.",
+        description="Longer text.",
+        modality="eit",
+        category="quality",
+        parameters=(StepParameter(name="limit", value_type="number", unit="s"),),
+        input_artifacts=(StepArtifact(name="signal", artifact_type="Signal"),),
+        alternatives=("meta_test.other",),
+        optional_packages=("eitprocessing",),
+        version="1",
+    )
+    def _step(limit: float = 1.0) -> dict[str, Any]:
+        return {}
+
+    _cleanup.append("meta_test.full_description")
+    payload = describe_step("meta_test.full_description").as_dict()
+
+    assert list(payload) == [f.name for f in dataclasses.fields(StepDescription)]
+    assert payload["parameters"] == [
+        StepParameter(name="limit", value_type="number", unit="s").as_dict()
+    ]
+    assert payload["input_artifacts"][0]["name"] == "signal"
+    assert payload["alternatives"] == ["meta_test.other"]
+    assert payload["optional_packages"] == ["eitprocessing"]
+    assert payload["parameters_reviewed"] is True

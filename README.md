@@ -24,7 +24,7 @@ M3Resp is a Python package for the analysis of respiratory recordings from three
 - EMG processing: filters, ECG removal, envelope, baseline and breath detection.
 - EIT processing: filters, global impedance, breath detection, tidal impedance variation (TIV), end-expiratory lung impedance (EELI) and pixel maps.
 - Ventilator processing: breath detection and occlusion manoeuvres (Pocc).
-- Synchronization of recordings with an offset that you enter, and matching of breaths across modalities.
+- Synchronization of recordings with an offset that you enter, interpolation of a signal onto the time points of another signal, and matching of breaths across modalities.
 - Workflows in YAML or JSON, with a command-line tool to list the steps and run a workflow.
 - Three presets for a fast start: EIT only, EMG only and multimodal.
 - Export of breaths, parameters, quality flags and figures to CSV, JSON and PNG files, with a record of each processing step.
@@ -58,11 +58,12 @@ session.synchronize_raw_modalities(offset_seconds={"emg": -2.0})
 session.preprocess_eit()
 session.preprocess_emg(channel=1)
 session.detect_eit_breaths()
-session.detect_emg_breaths()
+baseline = session.emg_moving_baseline()  # the quiet level of the EMG envelope
+session.detect_emg_breaths(baseline=baseline)
 session.export_summary(os.path.join("output", "my-first-analysis"))
 ```
 
-To see all workflow steps, run `m3resp steps`.
+To see all workflow steps, run `m3resp steps`. If you installed M3Resp with [uv](https://docs.astral.sh/uv/), put `uv run` in front of each command, for example `uv run m3resp steps`.
 
 ## Installation
 
@@ -85,13 +86,22 @@ The `[all]` option installs the EIT and EMG packages. To install only the part t
 | `python -m pip install -e ".[emg]"` | `resurfemg` | EMG processing, and EMG or ventilator recordings in `.Poly5` files |
 | `python -m pip install -e ".[all]"` | both | all of the above |
 
+With uv, use `uv sync`, `uv sync --extra eit`, `uv sync --extra emg` or `uv sync --extra all`. `uv sync` installs only the extras in the command and removes all other extras. So name each extra that you need, for example `uv sync --extra all --extra dev`.
+
 ### Development version
 
 To change the code or run the tests, install the development tools too:
 
 ```bash
-python -m pip install -e ".[all,dev]"    # or: uv sync --extra all --extra dev
+python -m pip install -e ".[all,dev]"
 pre-commit install
+```
+
+With uv:
+
+```bash
+uv sync --extra all --extra dev
+uv run pre-commit install
 ```
 
 ## Dependencies
@@ -139,7 +149,7 @@ M3RESP/
 └── m3resp          synchronization, multimodal analysis and workflows
 ```
 
-M3Resp uses `eitprocessing` for EIT and `resurfemg` for EMG. Both packages are independent: you can install and use them without M3Resp. Some processing functions in M3Resp come from ReSurfEMG code; [NOTICE.md](NOTICE.md) lists them.
+M3Resp uses `eitprocessing` for EIT and `resurfemg` for EMG. Both packages are independent: you can install and use them without M3Resp. Some processing functions in M3Resp come from `eitprocessing` and ReSurfEMG code; [NOTICE.md](NOTICE.md) lists them.
 
 New methods for one modality go into `eitprocessing` or `resurfemg`. Synchronization, the shared data objects, workflows and export go into M3Resp.
 
@@ -153,6 +163,8 @@ To run the tests and the code checks:
 pytest
 pre-commit run --all-files
 ```
+
+With uv: `uv run pytest` and `uv run pre-commit run --all-files`.
 
 ## Citation
 

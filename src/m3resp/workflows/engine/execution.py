@@ -29,6 +29,7 @@ from m3resp.workflows.lifecycle import (
     utc_now_iso,
 )
 from m3resp.workflows.registry import (
+    PROVENANCE_KEY,
     get_step,
 )
 from m3resp.workflows.spec import WorkflowSpec, load_spec
@@ -164,6 +165,19 @@ def run_workflow(
                 result = definition.func(**kwargs)
                 if result is None:
                     result = {}
+                if (
+                    not definition.record
+                    and isinstance(result, dict)
+                    and PROVENANCE_KEY in result
+                ):
+                    warnings.warn(
+                        f"Step '{compiled_step.operation_id}' returned "
+                        f"'{PROVENANCE_KEY}' details, but it is registered "
+                        "without record=True, so the details are not saved "
+                        "in the session's provenance.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
         except Exception as exc:
             # A warning issued right before the failure must still be
             # captured/re-emitted, not silently dropped - `caught` stays

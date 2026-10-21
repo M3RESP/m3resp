@@ -64,8 +64,9 @@ src/m3resp/
 │   ├── resurfemg_adapter/    split by task: ECG, baseline, quality, defaults
 │   └── ventilator_adapter/   reads ventilator data from EMG, EIT and ventilator files
 ├── processing/         signal tools for all modalities: filters, peaks, windows and envelopes,
-│                           intervals, metrics, ECG removal, ventilator waveforms, slicing
-├── synchronization/    start times, offsets, resampling, breath linking, breath timing parameters
+│                           intervals, metrics, ECG removal, ventilator waveforms, slicing,
+│                           interpolation onto other time points, captures (optional extra results)
+├── synchronization/    start times, offsets, breath linking, breath timing parameters
 ├── modalities/         recording types per modality, loaders, modality names, time windows
 ├── io.py               load_eit and load_emg without a session
 ├── presets/            the "eit", "emg" and "multimodal" presets and their registry

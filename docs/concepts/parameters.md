@@ -37,7 +37,7 @@ session.parameter_results.for_modality("emg")
 
 ## What a value belongs to
 
-The value of a parameter can belong to the whole recording or to a part of it. Set the fields that apply. You can combine them, for example one value per breath in a time window.
+The value of a parameter can belong to the whole recording or to a part of it. Set the fields that apply. You can combine them, for example one value per breath in a time window. The one exception is `breath_id` together with `breath_ids`: a parameter with both gives a `ValueError`.
 
 | Fields | The value belongs to |
 |---|---|

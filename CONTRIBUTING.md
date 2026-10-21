@@ -28,15 +28,26 @@ The recordings in `tests/data` are stored with [Git LFS](https://git-lfs.com). I
 Install M3Resp with the developer tools, and install the pre-commit hooks once:
 
 ```bash
-pip install -e ".[all,dev]"
+python -m pip install -e ".[all,dev]"
 pre-commit install
 ```
+
+With uv:
+
+```bash
+uv sync --extra all --extra dev
+uv run pre-commit install
+```
+
+`uv sync` installs only the extras in the command and removes all other extras. So name each extra that you need, for example `uv sync --extra all --extra dev --extra docs`.
 
 The hooks run the Ruff checks and the Ruff formatter at each commit. To run them on all files:
 
 ```bash
 pre-commit run --all-files
 ```
+
+With uv: `uv run pre-commit run --all-files`.
 
 ## Check a change
 
@@ -47,7 +58,15 @@ pytest
 mypy src
 ```
 
+With uv: `uv run pytest` and `uv run mypy src`.
+
 Write docstrings and comments as `AGENTS.md` describes. See the [testing page](docs/developer/testing.md) for the groups of tests.
+
+## Code taken from eitprocessing or ReSurfEMG
+
+A module with code copied or adapted from `eitprocessing` or `ReSurfEMG` starts its docstring with a "Provenance" block. Use the block in `src/m3resp/processing/filters.py` as the example. The first line of the block is `Portions of this module are derived from eitprocessing.` (or `ReSurfEMG.`). Then the block names the source, the revision, the original functions, the copyright and the licence, and lists the changes in M3Resp.
+
+Also add the file to the list of that project in [NOTICE.md](NOTICE.md). The test `tests/test_notice_provenance.py` checks that the blocks and `NOTICE.md` name the same files.
 
 ## Documentation
 

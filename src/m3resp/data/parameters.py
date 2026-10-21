@@ -1,4 +1,4 @@
-"""``ParameterResult``: a computed respiratory metric (plan_stage2.md Sec 11).
+"""``ParameterResult``: a computed respiratory metric.
 
 Covers both scalar metrics (EIT TIV, EMG amplitude, respiratory rate) and
 array-valued ones (regional ventilation maps), computed by a workflow step
@@ -13,6 +13,7 @@ from typing import Any
 import numpy as np
 
 from m3resp.data.categories import normalize_category
+from m3resp.data.events import check_breath_scope
 from m3resp.data.metrics import normalize_metric_name
 from m3resp.data.units import normalize_unit
 
@@ -21,9 +22,10 @@ from m3resp.data.units import normalize_unit
 class ParameterResult:
     """A named, unit-tagged metric produced by a processing step.
 
-    A parameter can be scoped to whichever of these apply (all are
-    optional and independent, so combinations - e.g. one metric per
-    breath within a time period - are possible):
+    A parameter can be scoped to whichever of these apply. All are
+    optional and can be combined (e.g. one metric per breath within a
+    time period), except ``breath_id`` with ``breath_ids``, which raises
+    ``ValueError``:
 
     - a single breath (``breath_id``);
     - multiple breaths, e.g. a metric computed over a rolling window of
@@ -71,6 +73,7 @@ class ParameterResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        check_breath_scope(self.breath_id, self.breath_ids, "ParameterResult")
         self.unit = normalize_unit(self.unit)
         self.category = normalize_category(self.category) or self.category
         if self.metric_type is None:

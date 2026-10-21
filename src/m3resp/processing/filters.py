@@ -6,7 +6,8 @@ Provenance
 Portions of this module are derived from eitprocessing.
 
     Source:     https://github.com/EIT-ALIVE/eitprocessing
-    Revision:   1.8.7
+    Revision:   m3resp-integration (6d6da6a825a08201ad01c0a7b68f4de07d4501f3),
+                version 1.8.7
     Original:   eitprocessing/filters/butterworth_filters.py::
                 ButterworthFilter.apply_filter
     Copyright:  Copyright (c) Netherlands eScience Center and Erasmus MC
@@ -57,6 +58,7 @@ from typing import Any, Literal, TypeGuard, get_args
 import numpy as np
 
 from m3resp.core.exceptions import OptionalDependencyError
+from m3resp.processing.captures import capture_value
 
 ButterworthFilterType = Literal["lowpass", "highpass", "bandpass", "bandstop"]
 
@@ -489,31 +491,6 @@ def _is_number(value: Any) -> TypeGuard[float]:
 def _is_whole_number(value: Any) -> TypeGuard[int]:
     """Return True for Python and numpy whole numbers, but not for True or False."""
     return isinstance(value, Integral) and not isinstance(value, bool | np.bool_)
-
-
-def capture_value(
-    captures: dict[str, Any] | None,
-    key: str,
-    value: Any,
-    *,
-    append_to_list: bool = False,
-) -> None:
-    """Capture a value in a dictionary.
-
-    Args:
-        captures (dict or None): Dictionary to capture values in.
-            If None, no values will be captured.
-        key (str): Key to use for capturing the value.
-        value (Any): Value to capture.
-        append_to_list (bool): If True, the value will be appended to a list
-            under the given key.
-    """
-    if captures is None:
-        return
-    if append_to_list:
-        captures.setdefault(key, []).append(value)
-    else:
-        captures[key] = value
 
 
 def _capture_butterworth_parameters(
