@@ -33,6 +33,8 @@ session.parameter_results.for_modality("emg")
 | `method` | The calculation that made the value |
 | `metadata` | Other details, as a dictionary |
 
+For example, a parameter with `name="RR"` and one with `name="breath_rate"` both get `metric_type="respiratory_rate"`, so you can group them. A parameter with `name="mean_amplitude"` gets `metric_type=None`.
+
 `is_scalar` is `True` when the value is one number. `to_dict()` gives the content for a JSON file, with arrays as lists.
 
 ## What a value belongs to
