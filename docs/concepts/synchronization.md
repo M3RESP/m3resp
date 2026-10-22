@@ -1,96 +1,35 @@
-# Synchronization and breath timing parameters
+# Synchronization and breath timing
 
-For a one-page summary in tables, see
-[Synchronization at a glance](synchronization-overview.md).
-
-## Plain-language overview
-
-This module's job is lining up data from different modalities (EIT/EMG/
-ventilator) that were recorded on separate clocks or files, so they can be
-compared on one shared time axis. Key pieces:
-
-- `session.synchronize_raw_modalities(...)` gives each recording a start
-  time on one shared clock, using a manual offset you supply (for example
-  "EMG started 5 seconds after EIT"). The offset is a single number in
-  seconds that you provide; the package applies it but never measures it
-  (`estimate_sync_offset` only supports `method="manual"`). The step does
-  not read any signal. How you arrive at the number is up to you, for
-  example by comparing filtered signals from both recordings.
-  No samples are removed: a three-hour pressure recording stays three hours
-  long beside a thirty-minute EIT recording that started 90 minutes in. See
-  "Start times" below.
-- `session.synchronize_multimodal_breaths(...)` does the same thing but for
-  already-detected events (breaths), not raw signals.
-- `interpolate_to_time(signal, time)` puts a signal onto another signal's
-  time points, for the cases where you need two signals on one shared
-  sample grid (e.g. a sample-by-sample comparison). Pass the other
-  signal's `time`. Synchronize the recordings first
-  (`session.synchronize_raw_modalities(...)`): the function cannot check
-  that the two time axes are on the same clock, so with unsynchronized
-  recordings the result is wrong and no warning is given. It
-  uses linear interpolation between the original samples and applies no
-  anti-aliasing filter, so low-pass filter the signal before lowering its
-  sampling rate. Time points outside the signal's recording get NaN, with
-  a warning. You call it yourself when you need it. Breath linking and
-  the breath timing parameters below work on real-world timestamps
-  (`BreathEvent.start_time`/`end_time`/`extremum_time`), so most analysis
-  stays at each modality's original sample rate.
-
-`LinkedBreath` is the object that represents "the same physical breath, as
-seen by different modalities." It is a dictionary-like structure
-(`breaths: dict[str, BreathEvent]`) mapping a modality name to that
-modality's version of the matched breath, plus a `confidence` score based
-on how close in time the matches were. Matching is done by
-`link_breaths_by_time` (or `session.link_breaths()`), which works greedily
-and one-to-one (it matches the closest available pair first, and each
-breath can only be used once) with no clock-drift correction (it assumes
-the recordings' clocks do not slowly drift apart over time, that is
-explicitly out of scope). If a breath from one modality has no match in
-the others, it still produces a `LinkedBreath` with only its own slot
-filled in, so nothing gets silently dropped.
-
-Once you have linked breaths, `session.compute_breath_timing_parameters()`
-turns them into cross-modality `ParameterResult`s using three underlying
-calculations: timing delay (how many seconds apart two modalities' breath
-timings are), breath duration difference (how much longer/shorter one
-modality's breath looks compared to another's), and event agreement (of the
-breaths any of the requested modalities found, what fraction all of them
-found, a rough "did every sensor agree a breath happened here" score).
-
-`m3resp.synchronization` provides manual offsets, timestamp alignment
-and nearest-neighbor breath linking. The alignment assumes a
-constant offset between recordings throughout the measurement.
+EIT, EMG and ventilator recordings come from different devices, and each device has its own clock. {term}`Synchronization` puts the recordings on one shared clock, so you can compare their breaths. For a summary in tables, see {doc}`synchronization-overview`. For the steps, see {doc}`../how-to/synchronize-recordings`.
 
 ## Start times
 
-`session.synchronize_raw_modalities(offset_seconds=..., reference_modality=...)`
-stores one number per recording in `session.start_times`: the time, in
-seconds on the shared clock, at which that recording's first sample was
-taken. The reference recording starts at 0; a negative value means a
-recording started earlier than the reference, a positive value later.
-Calling it again replaces the previously set start times.
+`synchronize_raw_modalities` gives each {term}`recording` a {term}`start time`: the time of its first sample on the shared clock, in seconds. The reference recording starts at 0 s. A negative start time means that the recording started earlier than the reference.
 
-Each modality's own results stay on that recording's own clock, so
-`session.events["emg_breaths"]` still gives times from the start of the EMG
-file. The start times are added only where modalities are compared -
-`synchronize_multimodal_breaths`, `link_breaths` and
-`plot_synchronization_comparison`:
-
-```text
-time on the shared clock = own time - own first time + start time
+```python
+session.synchronize_raw_modalities(
+    method="manual_offset",
+    offset_seconds={"eit": 0.0, "emg": -2.0},
+    reference_modality="eit",
+)
+print(session.start_times)  # {'eit': 0.0, 'emg': -2.0, 'ventilator': 0.0}
 ```
+
+You give the {term}`offset`. M3Resp does not measure it from the signals. For example, you can find it when you compare filtered signals of both recordings.
+
+M3Resp changes and removes no samples. A pressure recording of three hours stays three hours long, also beside an EIT recording of thirty minutes that started 90 minutes later. A second call replaces the start times.
+
+## Each modality keeps its own clock
+
+The results of each modality stay on the clock of their recording. For example, the times in `session.events["emg_breaths"]` count from the start of the EMG file. M3Resp adds the start times only when it compares modalities: in `synchronize_multimodal_breaths`, in `link_breaths` and in `plot_synchronization_comparison`.
 
 $$t_{shared} = t_{modality} - t_{modality}(0) + t_{start}$$
 
-"Own first time" ($t_{modality}(0)$) is 0 s for EMG and ventilator data.
-EIT files carry the time of day instead (a Draeger file can start at 36528.6 s), so the EIT's
-first time value is taken off first. A ventilator recording that came inside
-the EIT or EMG file uses that modality's start time.
+The first time $t_{modality}(0)$ is 0 s for EMG and ventilator data. An EIT file has the time of day instead, for example 36528.6 s in a Dräger file. So M3Resp subtracts the first EIT time.
 
-Standalone ventilator recordings (loaded with `source="ventilator"`) share
-the `"ventilator"` start time. When two of them started at different moments
-- a ventilator export and a separate monitor export, say - give one its own
-start time with `"ventilator:<name>"`, the name it was loaded under:
+## Ventilator recordings
+
+Ventilator data in the EIT or EMG file uses the start time of that file. A separate ventilator file, loaded with `source="ventilator"`, uses the start time `"ventilator"`. If two separate ventilator recordings started at different times, give one of them a name and its own start time:
 
 ```python
 session.load_ventilator("ventilator.txt", source="ventilator")
@@ -101,152 +40,118 @@ session.synchronize_raw_modalities(
 )
 ```
 
-A recording with its own entry uses it; the others use `"ventilator"`. A
-name that is not loaded, or one for ventilator data inside the EIT or EMG
-file, is refused.
+M3Resp refuses a name that is not loaded, and a name of ventilator data in the EIT or EMG file.
 
-Cutting a recording (`slice_emg`, `slice_eit`, `slice_ventilator`) shifts its
-start time forwards by the amount of time cut from the beginning of the signals,
-so it stays lined up with the other recordings. See [Cutting data to a time window](slicing.md).
+## Sliced recordings
+
+When you slice a recording with `slice_eit`, `slice_emg` or `slice_ventilator`, M3Resp moves its start time later by the time that it removed from the start. So the recording stays in line with the other recordings (see {doc}`slicing`).
 
 ## Was each recording synchronized?
 
-A session is meant to hold recordings of the same stretch of real time, so
-steps that compare recordings assume they are on one shared clock. That assumption only holds once each recording has been synchronized.
-`session.sync_methods` records how each recording was placed on the shared clock:
+`session.sync_methods` records how each recording was put on the shared clock:
+
+```python
+print(session.sync_methods)  # {'eit': 'manual', 'emg': 'manual'}
+```
 
 | Key | Recording |
 |---|---|
-| `"eit"`, `"emg"` | the loaded EIT and EMG recordings |
-| `"ventilator:<name>"` | each standalone ventilator recording (loaded with `source="ventilator"`) |
-
-Ventilator data that came inside the EIT or EMG file shares that file's
-clock, so it is always in step with it. The values come from the data
-model's sync vocabulary:
+| `"eit"`, `"emg"` | The EIT and the EMG recording |
+| `"ventilator:<name>"` | Each separate ventilator recording, loaded with `source="ventilator"` |
 
 | Value | Set by | Meaning |
 |---|---|---|
-| `"manual"` | `synchronize_raw_modalities`, `synchronize_multimodal_breaths` | a hand-entered offset |
-| `"none"` | `skip_synchronization()` | used as it is, taken to have started with the others |
+| `"manual"` | `synchronize_raw_modalities`, `synchronize_multimodal_breaths` | An offset that you gave |
+| `"none"` | `skip_synchronization()` | No offset: the recording started together with the others |
 
-Steps that compare recordings on different clocks warn
-(`UnsynchronizedDataWarning`) when one of them has no entry in
-`session.sync_methods`. They still
-run: the warning says their times are compared as if all recordings started
-at the same moment. The steps that check are `link_breaths` (and so the
-breath timing parameters computed from linked breaths) and
-`emg.evaluate_event_timing`. Nothing is warned when the data all comes from
-one clock, such as EMG with the airway pressure recorded in the same file.
+`link_breaths` (and so the breath timing parameters) and `emg.evaluate_event_timing` compare recordings. If one of the recordings has no record in `session.sync_methods`, they give an `UnsynchronizedDataWarning` and compare the recordings as if all started at the same time. Data from one clock gives no warning, for example EMG with the airway pressure in the same file.
 
-If the recordings really did start together - for example when one trigger
-started every device - explicitly say so with `session.skip_synchronization()`
-(the `sync.skip` workflow step). The warnings then stop, and the choice
-stays visible in the provenance log and in the `"synchronization"` section of
-the exported `summary.json`, next to the start times.
+If one trigger started all devices, call `session.skip_synchronization()` (or the step `sync.skip`). The warnings then stop. The provenance log and the `"synchronization"` part of `summary.json` show this choice, next to the start times.
 
-Loading a file again gives a new recording that has not been synchronized:
-its start time and its entry in `session.sync_methods` are cleared.
+If you load a file again, M3Resp removes its start time and its record in `session.sync_methods`.
 
-With a data model recorder attached (`session.datamodel`), every
-`SignalStream` carries the same information for its recording:
-`sync_method` (`"manual"`, `"none"`, or empty when never synchronized) and
-`time_offset_ms` (the recording's start time, in milliseconds). They are
-updated after every session action, so a later synchronization, skip, cut
-or reload is reflected in streams recorded earlier.
+With a data model recorder (`session.datamodel`), each `SignalStream` has the same information: `sync_method` (`"manual"`, `"none"`, or empty) and `time_offset_ms` (the start time, in milliseconds). M3Resp updates them after each session action.
 
-## Aligning raw signals and events
+## Shift the breaths after detection
 
-- `session.synchronize_raw_modalities(...)` sets each recording's start time
-  (see above). Run it before or after per-modality processing; it changes no
-  samples.
-- `session.synchronize_multimodal_breaths(method="manual_offset", offset_seconds=..., reference_modality=...)`
-  shifts already-detected event lists (`session.events`) onto a common time
-  axis. `offset_seconds` accepts either a single float or a per-modality
-  mapping (e.g. `{"emg": 5.0}`).
-- `m3resp.compute_offsets_from_timestamps(reference_modality, timestamps)` /
-  `m3resp.align_events_by_modality_offset(events, offsets)` are the
-  lower-level functions these session methods call.
-- `m3resp.interpolate_to_time(signal, time)` puts a `Signal` onto the
-  given time points in seconds, usually another signal's `time`.
-
-## Linking breaths: `LinkedBreath`
-
-`m3resp.link_breaths_by_time(breaths_by_modality, time_tolerance=0.5)` (or
-`session.link_breaths(time_tolerance=0.5)`) matches `BreathEvent`s across
-any number of modalities by how close their representative times are
-(`extremum_time`, falling back to the start/end midpoint) - greedily and
-one-to-one, no clock-drift correction. A breath with no match in the other
-modalities still produces a result with only its own slot filled, so no
-input breath is silently dropped.
+`synchronize_multimodal_breaths` shifts the detected breaths by an extra offset, on top of the start times. Use it when you find a better offset after the breath detection:
 
 ```python
-@dataclass
-class LinkedBreath:
-    breaths: dict[str, BreathEvent] = field(default_factory=dict)
-    time_tolerance: float = 0.5
-    confidence: float | None = None       # 1 - (time_diff / time_tolerance), or None if unmatched
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def modalities(self) -> list[str]:
-        """Which modalities contributed a breath, e.g. `["eit", "emg"]`."""
+session.synchronize_multimodal_breaths(method="manual_offset", offset_seconds={"emg": 0.2})
 ```
 
-`breaths` maps an arbitrary modality name (`"eit"`, `"emg"`, `"ventilator"`,
-or anything else) to that modality's matched breath. Run
-`session.synchronize_multimodal_breaths(...)` first if the modalities are not already on a
-common time axis - `session.link_breaths()` prefers the aligned event lists
-over the raw ones when both exist.
+`offset_seconds` is one number (for the EMG) or an offset per modality. M3Resp stores the shifted breaths in `session.processed["synchronized"]`, and `link_breaths` uses them.
 
-## Breath timing parameters
+## Put two signals on the same time points
 
-`session.compute_breath_timing_parameters(...)` (`m3resp.synchronization.breath_timing_parameters`)
-turns `session.linked_breaths` into cross-modality [`ParameterResult`](parameters.md)s:
+Breath linking and the breath timing parameters use times in seconds, so each modality keeps its own sampling rate. To compare two signals sample by sample, use `interpolate_to_time`. It gives a copy of a signal with its values at the time points of another signal:
 
 ```python
-session.link_breaths(time_tolerance=0.5)
+from m3resp import interpolate_to_time
+
+envelope_on_eit_time = interpolate_to_time(envelope, global_impedance.time)
+```
+
+- The two time axes must be on the same clock. The function cannot check this, so with two different clocks the result is wrong and no warning is given. Each signal keeps the clock of its recording (see "Each modality keeps its own clock" above), so put the times of two recordings on the shared clock first.
+- Time points before the first sample or after the last sample of the signal get NaN, with a warning.
+- `interpolate_to_time` uses linear interpolation and no anti-aliasing filter. So apply a low-pass filter before you lower the sampling rate.
+
+## Linked breaths
+
+A {term}`linked breath` (`LinkedBreath`) is one breath as each modality sees it. `link_breaths` makes the linked breaths:
+
+```python
+linked_breaths = session.link_breaths(time_tolerance=0.5)
+first = linked_breaths[0]
+print(first.modalities)   # for example ['eit', 'emg']
+print(first.breaths["eit"].extremum_time)
+print(first.confidence)
+```
+
+| Field | Contents |
+|---|---|
+| `breaths` | The breath of each modality, by modality name |
+| `time_tolerance` | The largest time difference for a link, in seconds |
+| `confidence` | 1 - (largest time difference / `time_tolerance`). `None` for a breath with no partner. |
+| `metadata` | Other details, as a dictionary |
+| `modalities` | The names of the modalities that have a breath in this link |
+
+- M3Resp compares the {term}`extremum` times of the breaths. Without an extremum, it uses the middle of the breath.
+- Each breath links once, and the closest pair links first.
+- A breath with no partner within `time_tolerance` gets a linked breath of its own. So M3Resp drops no breath.
+- M3Resp does not correct clocks that drift apart.
+
+`m3resp.link_breaths_by_time` does the same for lists of breaths that you give yourself.
+
+(breath-timing-parameters)=
+## Breath timing parameters
+
+`compute_breath_timing_parameters` calculates {doc}`parameters <parameters>` from the linked breaths and adds them to `session.parameter_results`:
+
+```python
 results = session.compute_breath_timing_parameters()
 ```
 
-Three primitives, usable standalone on any `LinkedBreath`/`list[LinkedBreath]`:
+| Parameter | Value | Unit |
+|---|---|---|
+| `<a>_to_<b>_delay` | For each linked breath: the time of the breath in modality b minus the time in modality a. A positive value means that b comes later. | s |
+| `<a>_<b>_duration_difference` | For each linked breath: the duration in modality a minus the duration in modality b | s |
+| `<a>_<b>_event_agreement` | Of the linked breaths with a breath of a or b, the fraction with both | fraction (0 to 1) |
 
-- `compute_timing_delay(linked, from_modality, to_modality, anchor="start")` -
-  signed delay in seconds between two modalities' breath anchors
-  (`anchor` is `"start"`, `"extremum"`, or `"end"`); `None` if either modality
-  is missing from the link or the selected extremum time is missing. Positive
-  means `to_modality` occurs later.
-- `compute_breath_duration_difference(linked, modality_a, modality_b)` -
-  `duration(modality_a) - duration(modality_b)` in seconds; `None` if either
-  modality is missing.
-- `compute_event_agreement(linked_breaths, modalities)` - of the linked
-  breaths that hold a breath from at least one requested modality, the
-  fraction that hold one from every requested modality, a coarse
-  breath-to-breath timing agreement score. For EIT and EMG, the denominator
-  includes EIT-only, EMG-only and EIT-with-EMG links. The standalone function
-  returns `0.0` when this count is zero or the requested modalities are empty.
+- The results have `modality="multimodal"`. The `breath_id` is the position of the linked breath in the list, as a text.
+- `anchor` selects the moment of the breath for the delay: `"start"` (default), `"extremum"` or `"end"`.
+- By default, M3Resp uses each pair of modalities that has breaths, in alphabetical order. Select pairs with `delay_pairs` and `duration_pairs`. An empty list skips that parameter.
+- A delay or a duration difference needs a breath of both modalities in the linked breath.
+- Each call replaces all earlier timing results. Other parameters stay. An unknown `anchor` raises `ValueError`, and the earlier results stay.
 
-`compute_breath_timing_parameters(linked_breaths, delay_pairs=None, duration_pairs=None, anchor="start")`
-combines all three into `ParameterResult`s (`modality="multimodal"`, one
-result per breath per pair, plus one aggregate event-agreement result per
-delay pair). `delay_pairs`/`duration_pairs` default to every unordered pair
-of observed modalities in alphabetical order. An explicit pair preserves
-the supplied order: delays are second minus first, and duration differences
-are first minus second. An empty pair list disables that type of calculation.
-Per-breath results require both modalities; delays also require both selected
-anchors. Each `breath_id` is the string-valued position in `linked_breaths`.
-The event-agreement result is omitted when its denominator is zero. Empty
-linked breaths produce an empty result list. An unknown `anchor` always raises
-`ValueError`, including for empty linked breaths.
+The three calculations are also available as functions in `m3resp.synchronization`:
 
-`session.compute_breath_timing_parameters()` adds its results to
-`session.parameter_results` (so they export to `parameter_results.csv`
-alongside per-modality parameters) and records a provenance entry with the
-requested `anchor`, `delay_pairs` and `duration_pairs`. `None` in the recorded
-pair settings means pairs were inferred from the linked breaths. Each
-successful call replaces all earlier multimodal breath-timing results,
-including those computed with other pairs or anchors. Empty linked breaths
-clear the earlier timing results. Other parameter results are retained, and
-an invalid anchor leaves existing results unchanged.
+| Function | Result |
+|---|---|
+| `compute_timing_delay(linked, from_modality, to_modality, anchor="start")` | The delay in seconds, or `None` if a breath or its anchor time is missing |
+| `compute_breath_duration_difference(linked, modality_a, modality_b)` | The duration of a minus the duration of b in seconds, or `None` if a breath is missing |
+| `compute_event_agreement(linked_breaths, modalities)` | The fraction of linked breaths with a breath of each modality, of the linked breaths with at least one of them. 0.0 if there are no such linked breaths. |
 
-See [tutorials/multimodal-eit-emg.md](../tutorials/multimodal-eit-emg.md)
-for an end-to-end walkthrough.
+Each modality marks its breath times at its own moment of the breath. For example, the start of the default EMG breath is the time of the highest EMG activity. So use the delays to check the detection and the synchronization.
+
+Continue with {doc}`slicing`.

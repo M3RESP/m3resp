@@ -1,59 +1,67 @@
 # Testing
 
-## Layout
+This page shows where the tests are, what each group of tests checks, and how to run them.
+
+## Run the tests
+
+Run the three checks from the source folder. All three must pass before a pull request is ready:
+
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
+```bash
+pytest           # all tests
+ruff check .     # code style
+mypy src         # types
+```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run pytest           # all tests
+uv run ruff check .     # code style
+uv run mypy src         # types
+```
+:::
+::::
+
+To make mypy pass, change the code. Keep the mypy settings as they are.
+
+## Test folders
 
 ```text
 tests/
-├── test_*.py           Unit/integration tests for a given module or feature
-│                        (session, adapters, data model, exports, workflows, ...)
-├── regression/          Equivalence tests against eitprocessing/resurfemg
-└── snapshots/
-    └── workflow_specs/  Frozen, normalized snapshots of the shipped example specs
+├── test_*.py              tests per module or feature: session, adapters, data model, export, workflows, ...
+├── regression/            comparison tests with eitprocessing and resurfemg
+│   └── real_data/         tests on recorded data, not part of the normal test run
+├── snapshots/
+│   └── workflow_specs/    saved structure of each example workflow file
+└── data/                  synthetic recordings for the tests and the examples
 ```
 
-There is no separate `tests/unit/`, `tests/adapters/`, `tests/workflows/`
-directory split as originally sketched in early Stage 2 planning - the flat
-`tests/test_*.py` layout with one `regression/` subfolder has worked fine at
-the current test count and keeps discovery (`pytest tests/`) simple. Split
-into subfolders if a directory genuinely becomes hard to navigate, not
-preemptively.
+## Comparison tests
 
-## Regression tests (`tests/regression/`)
+The tests in `tests/regression/` compare M3Resp with the original packages. Each test runs an M3Resp function on synthetic data, and the original function with the same settings. Most tests require exactly equal values (`assert_array_equal`, or `atol=0, rtol=0`).
 
-These are the most important tests in the suite for Stage 2's "don't change
-scientific output" guarantee. Each one drives an
-adapter's public API on synthetic data and asserts the result is identical -
-usually `atol=0, rtol=0`, i.e. exact equality - to calling the underlying
-`eitprocessing`/`resurfemg` function directly with the same arguments:
+| Test file | Compares |
+|---|---|
+| `test_eit_equivalence.py`, `test_eit_gap_migration_equivalence.py` | `EITProcessingAdapter` with `eitprocessing` |
+| `test_emg_equivalence.py` | `ReSurfEMGAdapter` with `resurfemg` |
+| `test_processing_filter_equivalence.py`, `test_processing_metric_equivalence.py`, `test_processing_peak_interval_equivalence.py`, `test_processing_quality_equivalence.py`, `test_processing_window_equivalence.py` | The copies in `m3resp.processing` with their originals |
+| `test_ecg_peak_detection_ground_truth.py` | The ECG peak detection with the R peaks of a simulated ECG signal, found by `neurokit2` |
 
-- `test_eit_equivalence.py`, `test_eit_gap_migration_equivalence.py` - EIT adapter vs. `eitprocessing`.
-- `test_emg_equivalence.py` - EMG adapter vs. `resurfemg`.
-- `test_processing_filter_equivalence.py`, `test_processing_metric_equivalence.py`,
-  `test_processing_peak_interval_equivalence.py`,
-  `test_processing_quality_equivalence.py`, `test_processing_window_equivalence.py` -
-  the shared `m3resp.processing` primitives vs. their `resurfemg` originals.
-- `test_ecg_peak_detection_ground_truth.py` - ECG peak detection against a
-  hand-labeled ground truth.
+If one of these tests fails, the M3Resp result differs from the original result. Look at the M3Resp function first, before you change the test. See {doc}`adapters`.
 
-If one of these starts failing, the wrapper output now differs from the
-upstream output - check the diff against the specific
-method involved before assuming the test is wrong. See
-[adapters.md](adapters.md).
+## Tests on recorded data
 
-## Tests on recorded data (`tests/regression/real_data/`)
+The tests in `tests/regression/real_data/` run M3Resp on full recordings: dataset 3 of the recordings of 27 July 2026 (TestPS3). This dataset has Biopac EMG and airway pressure, FluxMed flow and Dräger EIT. The tests use one minute with the EIT on (37 to 97 s on the Biopac clock) and one minute with the EIT off (140 to 200 s). For each minute, the tests put the FluxMed and EIT recordings on the Biopac clock. They use the cross-correlation of the airway pressure, which all three devices record.
 
-These tests run m3resp on full recordings: dataset 3 of the 27 July 2026
-recordings (TestPS3), with Biopac EMG and airway pressure, FluxMed flow and
-Draeger EIT. They use one minute with EIT on (37-97 s on the Biopac clock)
-and one minute with EIT off (140-200 s). The FluxMed and EIT recordings are
-lined up on the Biopac clock, for each window, by cross-correlating the
-airway pressure that all three devices record.
-
-The recordings are not in the repository. The tests read them from the
-folder in the environment variable `M3RESP_REAL_DATA` (default
-`data/source/Test_PS_27072026`), check the SHA-256 checksum of each file
-against `datasets.yaml`, and skip when a file is missing. They have the
-marker `real_data`, and the normal test run leaves them out:
+The recordings are kept outside the repository. The tests read them from the folder in the environment variable `M3RESP_REAL_DATA`, with `data/source/Test_PS_27072026` as the default. They check the SHA-256 checksum of each file against `datasets.yaml`, and skip if a file is missing. The tests have the marker `real_data`, and the normal test run leaves them out. To run them:
 
 ::::{tab-set}
 :sync-group: installer
@@ -75,83 +83,32 @@ uv run pytest -m real_data
 :::
 ::::
 
-There are three kinds of check:
+The tests make three kinds of check:
 
-- Same as upstream: each m3resp step gives exactly what `eitprocessing` or
-  `resurfemg` gives when called directly on the same data.
-- Same as last time: every collected number equals the stored value in
-  `reference_values.json`. Counts and sample indices must match exactly,
-  other numbers to a relative difference of 1e-9.
-- Physiology: heart rate from EIT against the ECG in the EMG, breathing
-  rates and breath onsets against the flow, and the EMG filter chains with a
-  notch filter against each other while EIT runs.
+- Same as the original packages: each M3Resp step gives exactly the result of `eitprocessing` or `resurfemg`, called directly on the same data.
+- Same as the last time: each number equals the stored value in `reference_values.json`. Counts and sample numbers must be exactly equal. Other numbers can have a relative difference of at most 1e-9.
+- Physiology: the heart rate of the EIT against the ECG in the EMG, the breathing rates and breath starts against the flow, and the EMG filter chains with a notch filter against each other while the EIT is on.
 
-After a change that is meant to alter results, rewrite the reference values
-with `scripts/update_real_data_references.py` and check the diff of
-`reference_values.json`: it shows which numbers moved.
+If you change the code to change the results, write the new reference values with `scripts/update_real_data_references.py`. Then look at the changes in `reference_values.json`, which show the numbers that changed.
 
-## Optional-dependency tests
+## Tests without the optional packages
 
-`tests/test_optional_dependency_absence.py` checks that importing `m3resp`
-and listing/validating workflow steps works even when `eitprocessing`/
-`resurfemg` are not installed (capability discovery must not import the
-optional backend - see [../workflows.md](../workflows.md) "Validation and
-readiness"). This simulates absence in-process (`sys.modules[name] = None`)
-inside one environment that actually has both packages installed.
+`tests/test_optional_dependency_absence.py` checks that you can import `m3resp`, list the steps and check a workflow file without `eitprocessing` and `resurfemg`. The test hides the two packages in a Python environment that has them.
 
-The `optional-deps` job in `.github/workflows/tests.yml` complements this
-with a real install-matrix: four legs (no extras, `.[eit]`, `.[emg]`,
-`.[all]`), each installing `m3resp` in its own fresh environment and running
-`python -m m3resp steps` plus
-`scripts/check_optional_dependency_isolation.py <extra>` - which asserts the
-as-installed package set matches the extra, and that every registered
-step's `describe_steps()` capability state (`"available"` vs.
-`"missing_optional_dependency"`) matches what its declared
-`optional_packages` implies for that install.
+The job `optional-deps` in `.github/workflows/tests.yml` installs M3Resp four times in new environments: with no extras, and with `.[eit]`, `.[emg]` and `.[all]`. Each time, it runs `python -m m3resp steps` and `scripts/check_optional_dependency_isolation.py`. The script checks that the installed packages match the extra, and that each step shows the right status: `"available"` or `"missing_optional_dependency"`.
 
-## Frozen example snapshots
+## Snapshots of the example workflows
 
-`tests/test_workflow_spec_baseline.py`/`test_example_specs.py` load and
-validate every shipped example spec (`examples/*/*.workflow.yaml`) and
-compare a normalized, secret-free structure (step order, `in`/`with`/`out`
-bindings, resolved `outputs.dir`) against the frozen JSON files in
-`tests/snapshots/workflow_specs/`. This protects the parser and compiler
-against silent behavior changes while their internals evolve. Regenerate a
-snapshot only after confirming (by diffing with the changed field stripped)
-that nothing else in the normalized structure moved.
+`tests/test_workflow_spec_baseline.py` and `tests/test_example_specs.py` load and check each example workflow file in `examples/`. They compare its structure with the saved JSON files in `tests/snapshots/workflow_specs/`: the order of the steps, the `in`, `with` and `out` of each step, and the results folder. So a change in how M3Resp reads workflow files shows up as a failed test.
 
-## Synthetic fixtures
+Make a new snapshot only after you checked that the change is correct, and that no other part of the structure changed.
 
-`m3resp.synthetic` (`src/m3resp/synthetic/`) generates
-synthetic EIT/EMG/ventilator recordings so tests and examples never depend on
-private clinical data. Examples reference the generated files under
-`data/source/synthetic/`.
+## Test data
 
-## Running the suite
+The recordings in `tests/data` are synthetic. The tests, the tutorials and the example workflows use these files. `m3resp.synthetic` makes synthetic EIT, EMG and ventilator recordings. The `m3resp_multimodal_1_*` files come from the settings in `src/m3resp/synthetic/synthetic_generator_config.yaml`.
 
-::::{tab-set}
-:sync-group: installer
-
-:::{tab-item} pip
-:sync: pip
-
-```bash
-pytest                       # full suite
-ruff check .                 # lint
-mypy src                     # type check
-```
+:::{warning}
+Do not add patient recordings to the repository. Use synthetic recordings for tests and examples.
 :::
 
-:::{tab-item} uv
-:sync: uv
-
-```bash
-uv run pytest                # full suite
-uv run ruff check .          # lint
-uv run mypy src              # type check
-```
-:::
-::::
-
-All three must pass before a change is considered done; do not weaken mypy
-settings or exclude a package to make it pass.
+Continue with {doc}`coding_guidelines`.

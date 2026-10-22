@@ -1,8 +1,8 @@
 # M3Resp Stage 3
 
-Stage 3 is not implemented yet. This page is a rough picture of its destination and boundaries. Treat it as a planning document (a description of intent, not working code yet), not a finished spec (a precise, binding technical description): exact module boundaries (where one folder/package's responsibility ends and another's begins) "may be adjusted during the Stage 3 architecture work" per the plan itself.
+This page is the plan for stage 3. The work has not started, and the folder names can still change.
 
-Stage 1 ([stage1.md](stage1.md)) made `m3resp` a thin wrapper (a layer of code that mostly just forwards calls to another library, adding little of its own) around `eitprocessing`/`resurfemg`. Stage 2 ([stage2.md](stage2.md)) unified the public surface (the set of names/functions other code is meant to call, as opposed to internal details that can change freely): `M3Session`, native `Signal`/`ParameterResult`/`QualityFlag`/`BreathEvent` types (native meaning implemented directly in this codebase, not borrowed from an outside library), and the declarative workflow engine (a system where you describe *what* steps to run in a YAML/config file, rather than writing the step-by-step Python code yourself). Stage 2 still delegates the actual scientific computation to those two upstream (external, maintained-elsewhere) packages behind adapters (wrapper objects that translate calls from `m3resp` into calls on an outside library). Stage 3 removes that delegation: the EIT and EMG algorithms move into `m3resp` itself, and the project stops depending on `eitprocessing`/`resurfemg` at runtime.
+In stage 1, `m3resp` called `eitprocessing` and `resurfemg` for all EIT and EMG processing (see [stage1.md](stage1.md)). Stage 2 added the shared session, the shared data objects (`Signal`, `ParameterResult`, `QualityFlag`, `BreathEvent`) and the workflow engine (see [stage2.md](stage2.md)). The calculations still run in the two packages, through the adapters. In stage 3, the EIT and EMG calculations move into `m3resp`, and M3Resp no longer needs the two packages to run.
 
 ## Goal
 
@@ -54,13 +54,23 @@ EMG follows the same approach in its own Stage 3 plan, sharing only the primitiv
 
 ## What stays as-is
 
-Stage 2 built several things specifically so Stage 3 would not need to touch them. See the [architecture guide](developer/architecture.md) for the full breakdown; in short:
+Stage 2 built these parts so that Stage 3 can keep them:
 
 - `M3Session`'s public method names and signatures (a signature is a function's name plus its expected inputs/outputs; keeping it the same means existing calling code keeps working unmodified).
 - The Layer 1 runtime objects (`Signal`, `ParameterResult`, `QualityFlag`, `BreathEvent`, `LinkedBreath`), meaning the lightweight data objects created fresh each time code runs, as opposed to anything saved to disk.
 - `m3resp.workflows`, the declarative step-registry engine (the system, described above, that runs named, YAML-described steps), which stays the canonical (the one official, intended-to-be-used) public module across both Stage 2 and Stage 3.
 - The Layer 2 persisted/audit data model (`m3resp.datamodel`): a "persisted" record is one meant to be saved and looked up later; an "audit" record is one built so someone can later verify exactly what was done.
 - The provenance schema (a record of what produced a result and how, with a fixed set of fields that record always has), in particular the stable `metadata.operation` identifier (a fixed label naming which operation was run, so tools can rely on it not changing) used by workflows and the GUI.
+
+## What changes inside
+
+These parts keep their names and their arguments, but the code inside them changes:
+
+- The adapters in `adapters/`: each operation calls the new code in `eit/` or `emg/` in place of `eitprocessing` or `resurfemg`, one operation at a time.
+- The loaders in `modalities/`: they call the new readers in `eit/io/` and `emg/io/`.
+- The steps in `workflows/steps/eit/` and `workflows/steps/emg/`: they call the new code directly. The step names, their `reads` and `writes`, and their registry data stay the same.
+- The provenance data: the fields `method`, `metadata.source_package` and `metadata.source_function` name the M3Resp code. Fields named `reference_*` keep the names of the original functions, so the scientific equivalence stays traceable.
+- `session.processed["eit"]` and `processed_variants`: they hold the objects of `eitprocessing` next to the M3Resp objects. When an operation runs in M3Resp code, the M3Resp object is the only one left under the same name.
 
 ## Dependency transition
 
@@ -170,10 +180,10 @@ Stage 3 is done only when:
 - The exact internal folder layout under `eit/`/`emg/` may still change during Stage 3 architecture work; the ownership boundaries (which package is responsible for which behavior) are the firm part, not the file paths.
 - Whether `EITProcessingAdapter`/`ReSurfEMGAdapter` are deleted outright or kept as a thin regression/reference-comparison harness (a minimal test setup built only to run comparisons, not part of the real product) is undecided; adapter injection (passing in a specific adapter object, typically for testing) is expected to remain available for regression tests even after production code stops calling it.
 - Stage 3 does not fuse `eitprocessing`'s and `resurfemg`'s algorithms into one shared implementation, see ["What 'merging EIT and EMG' actually means"](#what-merging-eit-and-emg-actually-means) above; it ports each modality's validated behavior into its own `eit`/`emg` module, sharing only the small set of scientifically-neutral primitives listed there.
-- Whether `m3resp.processing` primitives (`filters`, `windows`, `ecg`, ...) gain a `Signal`/`TimeSeries`-accepting convenience layer, so a caller can pass one object instead of an array plus `sample_frequency` separately, is undecided. Today these stay dependency-free (no import of `m3resp.data`), since most current call sites operate on raw arrays - sometimes upstream `eitprocessing`/`resurfemg` objects - before any `Signal`/`TimeSeries` exists; revisit this once Stage 3's native EIT/EMG containers make it clearer what's actually available at each call site. If this does get built, the shape discussed on [PR #24](https://github.com/M3RESP/m3resp/pull/24) is a thin adapter *on top of* the existing low-level functions (e.g. `apply_to_signal(lowpass_filter, signal)` or a `signal_handler_wrapper` decorator) living in `m3resp.data`, which already depends on `m3resp.processing` - not a change to the low-level functions themselves, which would reintroduce the upward dependency this entry rules out.
+- Whether `m3resp.processing` primitives (`filters`, `windows`, `ecg`, ...) gain a `Signal`/`TimeSeries`-accepting convenience layer, so a caller can pass one object instead of an array plus `sample_frequency` separately, is undecided. Today these stay dependency-free (no import of `m3resp.data`), since most current call sites operate on raw arrays - sometimes upstream `eitprocessing`/`resurfemg` objects - before any `Signal`/`TimeSeries` exists; revisit this once Stage 3's native EIT/EMG containers make it clearer what's actually available at each call site. If this gets built, one possible shape is a thin adapter *on top of* the existing low-level functions (e.g. `apply_to_signal(lowpass_filter, signal)` or a `signal_handler_wrapper` decorator) living in `m3resp.data`, which already depends on `m3resp.processing` - not a change to the low-level functions themselves, which would reintroduce the upward dependency this entry rules out.
 
 ## See also
 
 - [stage1.md](stage1.md) - the wrapper layer Stage 3 eventually removes the runtime dependency on.
 - [stage2.md](stage2.md) - the contracts and native types Stage 3 builds on.
-- [developer/architecture.md](developer/architecture.md) - package map and a detailed per-piece Stage 3 evolution table.
+- [Architecture](architecture.md): the code as it is now.

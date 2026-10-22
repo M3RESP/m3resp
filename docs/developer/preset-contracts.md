@@ -1,91 +1,60 @@
 # Preset contracts
 
-Presets run fixed sequences of processing operations on a loaded session.
-For custom YAML/JSON step sequences, see [Workflows](../workflows.md).
+A {term}`preset` runs a fixed list of session methods on a loaded session. A {doc}`workflow file <../workflows>` runs a list of steps that you choose.
 
-## `Preset` (`src/m3resp/presets/base.py`)
+## The Preset class
+
+Each preset is a subclass of `Preset` in `src/m3resp/presets/base.py`:
 
 ```python
 class Preset(ABC):
     name: str
 
     @abstractmethod
-    def run(
-        self, session: M3Session, *, config: PresetConfig | None = None
-    ) -> M3Session:
+    def run(self, session: M3Session, *, config: PresetConfig | None = None) -> M3Session:
         ...
 ```
 
-`PresetConfig` is `Mapping[str, Mapping[str, Any]]`: keyword arguments
-grouped by the configuration keys defined by each preset (e.g.
-`{"preprocess": {...}, "detect_breaths": {...}}`).
+`PresetConfig` is a dictionary of dictionaries. Each key names one operation of the preset, and its value holds the keyword arguments of that operation. `run` changes the session and returns it.
 
-A concrete `Preset.run` calls session methods or registered steps in a
-fixed order. Those operations store signals, measurements, quality flags
-and provenance on the session. The supplied session is updated and returned.
+## The built-in presets
 
-## Built-in presets and the registry
+| Class | Name | Operations, in order | `config` keys |
+|---|---|---|---|
+| `EITPreset` | `"eit"` | `preprocess_eit`, `detect_eit_breaths` | `preprocess`, `detect_breaths` |
+| `EMGPreset` | `"emg"` | `preprocess_emg`, the steps `emg.ecg_detect_peaks`, `emg.ecg_gating` and `emg.envelope`, `emg_adapter.moving_baseline`, `detect_emg_breaths`, `postprocess_emg` | `preprocess`, `ecg_detect_peaks`, `ecg_gating`, `ecg_removal`, `envelope`, `baseline`, `detect_breaths`, `postprocess` |
+| `MultimodalPreset` | `"multimodal"` | `synchronize_raw_modalities`, `synchronize_multimodal_breaths` | `synchronize_raw`, `align` |
 
-| Preset | `name` | Calls |
-|---|---|---|
-| `EITPreset` | `"eit"` | `session.preprocess_eit(...)`, `session.detect_eit_breaths(...)` |
-| `EMGPreset` | `"emg"` | `session.preprocess_emg(...)`, `emg.ecg_detect_peaks` + `emg.ecg_gating` + `emg.envelope`, a moving baseline (`session.emg_adapter.moving_baseline`), `session.detect_emg_breaths(...)`, `session.postprocess_emg(...)` |
-| `MultimodalPreset` | `"multimodal"` | `session.synchronize_raw_modalities(...)`, `session.synchronize_multimodal_breaths(...)` |
-
-`presets/registry.py` maps each `name` to its class via `register_preset`/
-`get_preset`. `M3Session.run_preset(name, config=...)` looks the preset up
-and calls it:
+`session.run_preset(name, config=...)` finds the preset by its name and runs it:
 
 ```python
 session.run_preset("eit")
-session.run_preset("emg", config={"preprocess": {"variant": "native"}})
-session.run_preset("multimodal")
+session.run_preset("emg", config={"preprocess": {"channel": 1}})
 ```
 
-`EMGPreset` calls the registered steps `emg.ecg_detect_peaks`,
-`emg.ecg_gating` and `emg.envelope`, which update the session's signals and
-provenance. The envelope of the gated signal uses the window and method
-`preprocess_emg` recorded, unless `config={"envelope": {"window_seconds": ...,
-"method": ...}}` sets them.
-Its default processing order is:
-band-pass -> ECG peak detection -> gating -> envelope -> baseline -> breath
-detection -> feature extraction. The baseline is the quiet level of the envelope
-that the breath-detection threshold is measured against, so it is computed
-before breaths are detected; set it with
-`config={"baseline": {"window_seconds": ..., "step_seconds": ..., "percentile": ...}}`
-(defaults: 7.5 s window, 0.2 s step, 33rd percentile).
-`config={"ecg_removal": {"enabled": False}}` skips ECG removal; cardiac
-activity can then remain in the envelope and derived measurements. Pass
-`config={"ecg_detect_peaks": {"ecg_channel": n}}` when a dedicated reference
-ECG channel was recorded, or
-`config={"ecg_removal": {"ecg_peak_indices": [...]}}` to gate already-known
-peaks and skip detection. Supplied peaks and nonempty `ecg_detect_peaks`
-settings are mutually exclusive and raise `TypeError` when combined.
+See {doc}`../how-to/emg-processing-settings` for the settings of the `"emg"` preset.
 
-## Choosing how to run processing
+## Rules of the EMG preset
 
-- `m3resp.run_workflow(spec, session=...)` (module-level) runs a fully
-  custom YAML/JSON step-list spec built from individually composable steps
-  (`eit.mdn_filter`, `emg.ecg_gating`, ...), documented in
-  [Workflows](../workflows.md).
-  Most of these steps take a `session` binding and populate the typed
-  collections and record provenance through the same `M3Session._record()`
-  session method the presets use (steps registered with
-  `register_step(..., record=True)`) - `eit.roi_amplitude_lungspace`,
-  `emg.ecg_gating`, and so on all do this. The exception is the small set of pure per-breath feature
-  steps (e.g. `emg.time_to_peak`, `emg.amplitude`) that operate on
-  extracted arrays and return calculated values. Use this for custom or
-  batch workflows where the sequence of operations varies per project.
-- `session.run_preset("eit" | "emg" | "multimodal", config=...)` (a method
-  on `M3Session`, this page) runs one of the small, built-in
-  presets, each a fixed sequence of processing operations. Use this for
-  running one modality with default behavior or configured options.
+- After the ECG removal, the step `emg.envelope` calculates the envelope of the gated signal. It uses the window and the method that `preprocess_emg` used. `"envelope": {"window_seconds": ..., "method": ...}` changes them.
+- The baseline comes after this envelope, so it gives the quiet level of the gated signal.
+- The baseline comes before the breath detection, because the detection measures the envelope against the baseline. The default baseline is the 33rd percentile in a window of 7.5 s, with a step of 0.2 s.
+- `"ecg_removal": {"enabled": False}` turns the ECG removal off.
+- `"ecg_removal": {"ecg_peak_indices": [...]}` gives the R peaks and skips the peak detection. If you also give settings in `"ecg_detect_peaks"`, the preset raises `TypeError`.
 
-## Adding a new preset
+## Preset or workflow file
 
-1. Add a class in `presets/*.py` implementing `Preset.run`, calling only
-   existing session methods or registered processing steps.
-2. Register it: `register_preset("my_name", MyPreset)` in
-   `presets/registry.py`.
-3. Expose the operations' configurable options through `config` and document
-   the configuration keys used by the preset.
+| Use | When |
+|---|---|
+| `session.run_preset(...)` | You process one modality with the default steps and some changed settings |
+| `run_workflow(spec, session=...)` or `run_spec(...)` | You choose the steps, their order and their settings, for example for one project or a batch of recordings |
+
+Most workflow steps store their results in the session and add a provenance record, as the session methods do. Some EMG feature steps, for example `emg.amplitude` and `emg.time_to_peak`, only calculate values from arrays.
+
+## Add a preset
+
+1. Add a subclass of `Preset` in a new file in `src/m3resp/presets/`. Use only session methods and registered steps in `run`.
+2. Register it with `register_preset("my_name", MyPreset)` in `presets/registry.py`.
+3. Give each operation a `config` key, and list the keys in the docstring of the class.
+
+Continue with {doc}`testing`.

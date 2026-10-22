@@ -1,62 +1,64 @@
-# `QualityFlag`
+# Quality flags
 
-## Plain-language overview
+A {term}`quality flag` is the result of one quality check: did a signal, a breath or a time window pass the check? M3Resp stores each flag as a `QualityFlag` object in `session.quality`.
 
-This represents the result of one quality check: did this signal/breath
-pass or fail some validity test? It's the same idea as
-[`ParameterResult`](parameters.md) - a value tied to a signal/breath/time
-window - but for a pass/fail check instead of a measurement. Key fields:
-
-- `passed`, a true/false verdict.
-- `severity`, how serious a failure is: `"info"`, `"warning"`, `"error"`,
-  or `"critical"`.
-- `threshold`/`value`, the cutoff used and the actual measured value, so
-  you can see why it passed or failed.
-
-An important rule: a check that does not apply (skipped, not computable)
-emits no flag. Every flag records a real pass or fail, so "we did not check
-this" never shows up as "this passed".
-
-`QualityFlag` is the lightweight, in-memory version of a more permanent
-database-style record called `QualityAnnotation` (see
-[provenance.md](provenance.md)); the conversion between the two only
-happens if you opt into the deeper persistence layer (Layer 2, described
-in that document).
-
-The outcome of one quality check against a signal, breath, or run.
+## Look at the quality flags
 
 ```python
-@dataclass
-class QualityFlag:
-    name: str
-    passed: bool
-    severity: Severity        # "info" | "warning" | "error" | "critical"
-    modality: str | None = None
-    category: str | None = None
-    signal_name: str | None = None
-    breath_id: str | None = None
-    breath_ids: list[str] | None = None
-    start_time: float | None = None
-    end_time: float | None = None
-    message: str | None = None
-    value: float | None = None
-    threshold: float | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+for flag in session.quality:
+    print(flag.name, flag.passed, flag.severity)
+
+failed_flags = session.quality.failed()
 ```
 
-A flag covers the whole signal by default. To represent a signal that's only
-bad for part of its duration (e.g. good except for a noisy period in the
-middle), emit one `QualityFlag` per affected window with `start_time`/
-`end_time` set, rather than a single flag for the whole signal -
-`signal_name` ties them all back to the same signal.
+To find flags, use `failed`, `for_modality`, `for_category` or `for_signal`.
 
-A flag about one breath sets `breath_id` (a string). A flag about several breaths
-judged together sets `breath_ids` (a list of strings), for example ten breaths marked as a stable stretch, or a set of breaths with gaps between them. 
-A flag can set either `breath_id` or `breath_ids`, but not both: setting both, or an empty `breath_ids` list, raises `ValueError`. 
-The per-breath steps use the breath's position in its breath list as the id (`"0"`, `"1"`, ...).
+## What a quality flag holds
+
+| Field | Contents |
+|---|---|
+| `name` | The name of the check |
+| `passed` | `True` if the check passed, `False` if it failed |
+| `severity` | How serious a failure is: `"info"`, `"warning"`, `"error"` or `"critical"` |
+| `value` | The measured value |
+| `threshold` | The limit value for passing or failing the check. Taken together with `value`, it shows why the check passed or failed. |
+| `message` | An explanation in words, for example why the check could not run (`"Needs at least two ventilator breaths."`). Most checks leave it empty (`None`). |
+| `modality`, `category`, `signal_name` | The device, the physical quantity and the signal that the check is about |
+| `breath_id`, `breath_ids`, `start_time`, `end_time` | The breath, the breaths or the time window that the check is about. With none of these, the flag is about the whole signal. |
+| `metadata` | Other details, as a dictionary |
+
+The severity is a fixed label that each check sets. The measured value does not change it, and M3Resp does not use it to stop or skip any step.
+
+| Severity | Meaning |
+|---|---|
+| `"info"` | Shows a property of the data. A failure alone does not make the result wrong. |
+| `"warning"` | Look at the data before you use the result. |
+| `"error"` | The result is probably wrong. |
+| `"critical"` | The data cannot be used. |
+
+The current checks use `"info"` and `"warning"` only.
+
+If a signal is good except for a noisy period, make one flag per time window, with `start_time` and `end_time`. The same `signal_name` connects the flags to the signal.
 
 ```python
-QualityFlag(
+from m3resp import QualityFlag
+
+noise = QualityFlag(
+    name="noise_check",
+    passed=False,
+    severity="warning",
+    modality="emg",
+    signal_name="envelope",
+    start_time=42.0,
+    end_time=47.5,
+    message="Movement artefact",
+)
+```
+
+A flag about one breath sets `breath_id`, as a string. A flag about several breaths together sets `breath_ids`, as a list of strings, for example ten breaths in a stable period, or breaths with gaps between them. Set only one of the two fields: both fields, or an empty `breath_ids` list, give a `ValueError`. The steps that check each breath use the position of the breath in its list as the id (`"0"`, `"1"`, ...).
+
+```python
+stable = QualityFlag(
     name="stable_stretch",
     passed=True,
     severity="info",
@@ -65,29 +67,17 @@ QualityFlag(
 )
 ```
 
-In `quality_flags.csv`, `breath_ids` is written as a Python list
-(`['3', '4', '5', '6']`); `ast.literal_eval` reads it back. In
-`summary.json` it is a JSON list.
+In `quality_flags.csv`, `breath_ids` is a Python list (`['3', '4', '5', '6']`), and `ast.literal_eval` reads it back. In `summary.json`, it is a JSON list.
 
-`QualityFlag` mirrors the persisted `QualityAnnotation` entity
-(`m3resp.datamodel.entities`, Layer 2 - see
-[provenance.md](provenance.md)) but is the lightweight, in-memory object a
-quality check actually produces during a workflow run; conversion to
-`QualityAnnotation` happens in `DataModelRecorder`. Each flag becomes one
-annotation that keeps the flag's time window (`start_time`/`end_time`, in
-seconds) and its breaths in `QualityAnnotation.breath_ids`: a one-item list
-for a flag about one breath, the full list for a flag about several
-breaths. A skipped or not-applicable check emits no flag; the native EMG
-quality steps follow this rule.
+## Checks that could not run
 
-## Where `QualityFlag`s come from
+- The EMG quality steps of a workflow give no flag for a check that they could not run: if a flag exists, the check was performed. Their flags only exist for real results.
+- `postprocess_emg` gives a failed flag with severity `"warning"` for a check that it could not run, for example a check that needs ventilator data. The flag has `metadata["skipped"] == True`, and `message` gives the reason.
 
-`EITProcessingAdapter.to_quality_flags`/`ReSurfEMGAdapter.to_quality_flags`
-convert adapter preprocessing output into `QualityFlag`s (see
-[../developer/adapters.md](../developer/adapters.md)); `preprocess_eit`/
-`postprocess_emg` call these and add the results to `session.quality`
-(`m3resp.data.collections.QualityReport`).
+## Where quality flags come from
 
-`session.quality` is queryable via `.failed()`, `.for_modality(name)`,
-`.for_signal(signal_name)`, and exports to `quality_flags.csv` via
-`session.export_summary()`.
+`preprocess_eit` and `postprocess_emg` add flags to `session.quality`. Some workflow steps add flags too, for example `ventilator.pocc_quality`. `session.export_summary` writes the flags to `quality_flags.csv`.
+
+If you use the stored data model (see {doc}`provenance`), M3Resp stores the quality flags in the results of a workflow run as `QualityAnnotation` records. Each flag becomes one record. The record keeps the time window of the flag in seconds, and its breaths in `QualityAnnotation.breath_ids`: a list with one id for a flag about one breath, or the full list for a flag about several breaths.
+
+Continue with {doc}`synchronization`.
