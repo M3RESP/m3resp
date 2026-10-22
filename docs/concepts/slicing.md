@@ -13,7 +13,7 @@ The step names show this: `*.slice_recording` slices a recording, and `*.slice_s
 
 ## All ways to slice
 
-| # | Call | What it slices | Times in | Stays in line with the other recordings |
+| # | Call | What it slices | Time window given as | Alignment with other recordings |
 |---|---|---|---|---|
 | 1 | `session.slice_emg(start, end)`, step `emg.slice_recording` | The EMG recording, and the ventilator channels in the same file (for example the airway pressure in a Biopac export) | Seconds from the first sample | Yes: the EMG start time moves later |
 | 2 | `session.slice_eit(start, end)`, step `eit.slice_recording` | The EIT recording (pixel data, global impedance, other channels, markers), and the ventilator data in the same `.bin` file | Seconds from the first image | Yes: the EIT start time moves later |
