@@ -113,6 +113,7 @@ legacy package output (eitprocessing / resurfemg)
   export, or a future backend/GUI service layer.
 
 ## Package map: where to add new functionality
+
 ```text
 src/m3resp/ 
 ├── core/                               Session, exceptions, provenance, metadata

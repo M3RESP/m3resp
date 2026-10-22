@@ -40,7 +40,7 @@ Each point is the same kind of value set differently in two places. The
 "Suggestion" column is a starting point for the discussion, not a decision.
 
 | # | What | Current values | Suggestion |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | D1 | Butterworth filter order | EIT `eit.butterworth_filter`: **4** (m3resp's own choice; eitprocessing has no default). EMG band-pass: **3** (ReSurfEMG, cannot be changed). | One default order for all band filters, and make the EMG order a setting. |
 | D2 | Shortest breath accepted | EIT `eit.detect_breaths` and `eit.pixel_breaths`: **0.67 s**. EMG `emg.detect_breaths`: **0.5 s** (undeclared). ReSurfEMG's own EMG class: **0.2 s**. Ventilator `ventilator.detect_breaths` and `ventilator.normalize_breaths`: **0.5 s**. Occlusions in `ventilator.find_occluded_breaths`: **0.1 s** (m3resp, fixed). | One value in seconds for all three devices, declared on every breath-detection step. |
 | D3 | Highest breathing rate allowed | EIT rate search, adult: **60 /min** (neonate 85 /min). Ventilator `ventilator.detect_pressure_breaths`: shortest gap 2 s, so **30 /min**. Occlusions in `ventilator.find_occluded_breaths`: shortest gap 0.5 s (m3resp, fixed). A 0.67 s shortest breath (D2) allows **90 /min**. | Take the limits from `subject_type` (adult/neonate), as EIT already does. |
@@ -59,7 +59,7 @@ The libraries give no default for these, so m3resp picked the values. They
 need a short reason in the docs, or a reference.
 
 | Step | Setting | Value |
-|---|---|---|
+| --- | --- | --- |
 | `eit.butterworth_filter` | `mode` / `lowpass_hz` / `highpass_hz` / `order` | `lowpass` / 1.0 Hz / 0.05 Hz / 4 |
 | `emg.detect_breaths` | shortest breath (`min_breath_width_seconds`) | 0.5 s |
 | `ventilator.detect_breaths` | `breath_width_seconds` | 0.5 s |
@@ -74,7 +74,7 @@ need a short reason in the docs, or a reference.
 ### EIT (eitprocessing)
 
 | Step | Setting | Value | Set by |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `eit.detect_breaths` | shortest breath | 0.67 s | m3resp (same as eitprocessing) |
 | | moving-average window | 15 s, Blackman shape | eitprocessing |
 | | smallest breath, as a fraction of the typical breath | 0.25 | eitprocessing |
@@ -98,7 +98,7 @@ need a short reason in the docs, or a reference.
 ### EMG (ReSurfEMG)
 
 | Step | Setting | Value | Set by |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `emg.preprocess`, `emg.select_channel` | channel | picked from the channel labels | m3resp |
 | `emg.preprocess`, `emg.bandpass_filter` | band-pass edges | 20 Hz to the lower of 500 Hz and 0.95 × half the sampling rate | m3resp, same as ReSurfEMG |
 | | band-pass order | 3 | ReSurfEMG |
@@ -131,7 +131,7 @@ need a short reason in the docs, or a reference.
 ### Ventilator
 
 | Step | Setting | Value | Set by |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `ventilator.detect_breaths` | `breath_width_seconds` | 0.5 s (0.25 s from Python, see D9) | m3resp |
 | | height / prominence, first pass (× 90th percentile of volume) | 0.25 / 0.10 | m3resp (fixed) |
 | | height / prominence, second pass (× 90th percentile of volume) | 0.5 / 0.5 | m3resp (fixed) |

@@ -30,7 +30,7 @@ m3resp Signal / BreathEvent / ParameterResult / QualityFlag
 ## `EITProcessingAdapter` (`src/m3resp/adapters/eitprocessing_adapter/`)
 
 | Method | Responsibility |
-|---|---|
+| --- | --- |
 | `load(path, vendor, **kwargs)` | Load a vendor EIT file into an `eitprocessing` sequence. |
 | `get_raw_eit` / `get_global_impedance` | Extract pixel/global impedance from a loaded sequence. |
 | `detect_rates`, `apply_mdn`, `find_pixel_breaths`, `compute_eeli`, `compute_pixel_tiv`, `compute_tiv_lungspace`, `compute_amplitude_lungspace`, `compute_watershed_lungspace`, `filter_roi_by_size` | Individual `eitprocessing` operations, exposed one-to-one so a caller can compose a custom sequence. |
@@ -52,7 +52,7 @@ samples. The last column says whether a value comes from ReSurfEMG (called
 with ReSurfEMG's own settings and defaults) or is computed in m3resp.
 
 | Method | What it does | Computed by |
-|---|---|---|
+| --- | --- | --- |
 | `load(path, **kwargs)` | Read an EMG file into a recording dictionary (also used by `VentilatorAdapter` for ventilator channels stored in the same file). Biopac `.txt` exports are read by m3resp. | ReSurfEMG `load_file` |
 | `select_emg_channel(recording, channel=)` | Take one channel as the trace to analyse; with no channel, choose it from the labels, leaving out ECG/EKG channels. | m3resp |
 | `notch_filter_emg(values, ...)` | Remove a frequency and its harmonics (mains hum, EIT frame-rate comb). | m3resp (`processing.filters`) |
@@ -80,7 +80,7 @@ session as `session.ventilator_adapter`. It does not read files itself: it
 hands each file to the adapter that already knows the format.
 
 | Method | Responsibility |
-|---|---|
+| --- | --- |
 | `load(path, **kwargs)` | Load a ventilator recording from one of three sources: a file shared with the EMG (read by `ReSurfEMGAdapter`), an EIT `.bin` file that stores ventilator waveforms next to the impedance frames (read by `EITProcessingAdapter`), or any other format with a reader registered for its file extension. `source="eit"`/`"emg"`/`"ventilator"` picks the source explicitly; otherwise `.bin` is read as EIT and everything else as EMG. |
 | `preprocess(recording, **kwargs)` | Split the recording into pressure/flow/volume channels and filter them. |
 | `detect_breaths(processed, **kwargs)` | Returns `list[BreathEvent]` directly - already converted. |

@@ -14,9 +14,16 @@ From the command line:
 :::{tab-item} pip
 :sync: pip
 
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
 ```bash
 m3resp run path/to/workflow.yaml
 ```
+
 :::
 
 :::{tab-item} uv
@@ -25,6 +32,7 @@ m3resp run path/to/workflow.yaml
 ```bash
 uv run m3resp run path/to/workflow.yaml
 ```
+
 :::
 ::::
 
@@ -51,9 +59,16 @@ List the available built-in steps:
 :::{tab-item} pip
 :sync: pip
 
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
 ```bash
 m3resp steps
 ```
+
 :::
 
 :::{tab-item} uv
@@ -62,6 +77,7 @@ m3resp steps
 ```bash
 uv run m3resp steps
 ```
+
 :::
 ::::
 
@@ -184,7 +200,7 @@ def my_thing(session, output_dir, **kwargs) -> dict:
 `outputs.mode` states, explicitly, what happens to `outputs.dir` after the workflow runs:
 
 | Mode | Behavior |
-|---|---|
+| --- | --- |
 | `automatic` | The engine calls `export_session_summary` itself once the run succeeds — the same behavior as omitting an explicit export step. Use this when the spec has no `export.*` step, e.g. `eit-full.workflow.yaml`/`emg-full.workflow.yaml`/`multimodal-full.workflow.yaml`. |
 | `explicit` | Declared export steps write their files during execution. The runner also writes the run manifest and requested figures. |
 | `none` | The runner skips automatic exports, figures and the run manifest. Declared export steps still execute according to their own settings. |
@@ -255,7 +271,7 @@ airway-pressure channel, including keys such as `airway_pressure__pod`.
 Run `m3resp steps` to see the full list with descriptions. The main groups are:
 
 | Prefix | What it covers |
-|---|---|
+| --- | --- |
 | `eit.*` | Load, cut (the recording or one signal), filter, detect rates/breaths, compute TIV/EELI/pixel TIV |
 | `emg.*` | Load (EMG/ventilator), preprocess, detect breaths, compute per-function baseline/event-detection/feature/quality-assessment postprocessing steps |
 | `sync.*` | Put the recordings on one shared clock: set each recording's start time (`sync.raw_modalities`), use the recordings as they are (`sync.skip`), or pass on an offset found by hand (`sync.estimate_offset`, `sync.apply_estimated_offset`) |
@@ -265,7 +281,7 @@ Run `m3resp steps` to see the full list with descriptions. The main groups are:
 Cutting steps follow one naming rule:
 
 | Step | What it cuts |
-|---|---|
+| --- | --- |
 | `emg.slice_recording`, `eit.slice_recording` | The whole loaded recording in the session, with anything recorded in the same file. The recording's start time moves with it, so it stays lined up with the other recordings. Times are seconds from the first sample. |
 | `ventilator.slice_recording` | Every standalone ventilator recording (loaded with `source: ventilator`), the same way. Ventilator data that came inside the EIT or EMG file is cut with that file's recording instead. |
 | `eit.slice_signal` | One signal passed along in the workflow (an m3resp `Signal`, or eitprocessing data). The loaded recording is not changed. In time mode, times are the signal's own time values (the time of day, for data read from an EIT file). |
@@ -275,7 +291,7 @@ Cutting steps follow one naming rule:
 Two steps load EIT data:
 
 | Step | Reads |
-|---|---|
+| --- | --- |
 | `eit.load` | A Draeger, Sentec or Timpel file, with eitprocessing. `vendor` is required; `sample_frequency`, `first_frame` and `max_frames` are optional. |
 | `eit.load_custom` | Any other file, with a loader you write in Python. The loader is called as `loader(file_path, vendor=None, **loader_options)` and returns an eitprocessing `Sequence`. |
 
@@ -339,6 +355,26 @@ def my_smooth(session, signal, *, window_seconds: float = 1.0) -> dict:
 
 After each call, one record is added with the step name and modality, its `reads` and `writes`, the installed version of the first package in `optional_packages` (`upstream_version`, None for a step without one), and the details from `"_provenance"`. The `"_provenance"` key is removed from the outputs. This works the same way when the function is called directly and when a workflow runs it.
 
+To log each call in `session.provenance`, register the step with `record=True`. The step must read `session`. It returns its own details (the settings it used, the function it called) under the output key `"_provenance"`:
+
+```python
+@register_step(
+    "my.smooth",
+    reads={"session": "session", "signal": "global_impedance"},
+    writes=("smoothed",),
+    modality="eit",
+    record=True,
+)
+def my_smooth(session, signal, *, window_seconds: float = 1.0) -> dict:
+    smoothed = ...
+    return {
+        "smoothed": smoothed,
+        "_provenance": {"parameters": {"window_seconds": window_seconds}},
+    }
+```
+
+After each call, one record is added with the step name and modality, its `reads` and `writes`, the installed version of the first package in `optional_packages` (`upstream_version`, None for a step without one), and the details from `"_provenance"`. The `"_provenance"` key is removed from the outputs. This works the same way when the function is called directly and when a workflow runs it.
+
 ## Example specs
 
 Worked examples ship with the repository. All except the two smaller introductory ones use `schema_version: 1` and declare an explicit `outputs.mode` (see above); every step in the `schema_version: 1` examples has a stable, explicit `id:`.
@@ -358,6 +394,12 @@ Run them from the repository root:
 :::{tab-item} pip
 :sync: pip
 
+::::{tab-set}
+:sync-group: installer
+
+:::{tab-item} pip
+:sync: pip
+
 ```bash
 m3resp run examples/ROTARC_example/breath-duration.workflow.yaml
 m3resp run examples/eit_full_preprocessing/eit-full.workflow.yaml
@@ -366,6 +408,7 @@ m3resp run examples/multimodal_full/multimodal-full.workflow.yaml
 m3resp run examples/multimodal_example/multimodal.workflow.yaml
 m3resp run examples/multidomain_recording1/recording1_a2.workflow.yaml
 ```
+
 :::
 
 :::{tab-item} uv
@@ -379,6 +422,7 @@ uv run m3resp run examples/multimodal_full/multimodal-full.workflow.yaml
 uv run m3resp run examples/multimodal_example/multimodal.workflow.yaml
 uv run m3resp run examples/multidomain_recording1/recording1_a2.workflow.yaml
 ```
+
 :::
 ::::
 
@@ -389,14 +433,14 @@ Update `inputs.eit_file` in the ROTARC example before running it — it contains
 `m3resp` has four subcommands, plus stable, documented exit codes so a calling script can distinguish failure categories without parsing output:
 
 | Command | Purpose |
-|---|---|
+| --- | --- |
 | `m3resp run spec.yaml [--dry-run] [--debug]` | Execute a spec end-to-end. `--dry-run` compiles and prints the resolved plan (`compile_workflow(...).as_dict()`) without running any step; `--debug` prints a full traceback instead of a short message on error. Ctrl-C cooperatively cancels (finishes the current step, keeps completed work and its manifest, exits `EXIT_CANCELLED`). |
 | `m3resp validate spec.yaml [--readiness] [--json]` | Structural (and, with `--readiness`, capability/file-existence) validation without running anything — see "Validation and readiness" above. |
 | `m3resp steps [--details] [--json]` | List every registered step, tagging any whose optional package isn't installed (e.g. `[missing_optional_dependency]`) without importing it; `--details` adds parameters/artifacts/full capability state per step. |
 | `m3resp describe <operation>` | One step's full discovery description (e.g. `m3resp describe eit.detect_rates`). |
 
 | Exit code | Meaning |
-|---:|---|
+| ---: | --- |
 | `0` | Success. |
 | `1` | Usage error (bad CLI arguments). |
 | `2` | Invalid spec — structural validation failed, or the spec path could not be read. |
@@ -419,6 +463,7 @@ Using any `emg.*`/ventilator step requires the optional `resurfemg` dependency:
 ```bash
 python -m pip install -e ".[emg]"
 ```
+
 :::
 
 :::{tab-item} uv
@@ -426,7 +471,12 @@ python -m pip install -e ".[emg]"
 
 ```bash
 uv sync --extra emg
+uv sync --extra emg
 ```
+
+:::
+::::
+
 :::
 ::::
 
@@ -437,7 +487,7 @@ Steps whose upstream call needs it raise `OptionalDependencyError` with an insta
 Every step also writes its raw/compatibility output(s) unchanged (existing consumers keep working) alongside the native outputs listed here. "Upstream" means the value is `resurfemg`'s own scientific result, passed through with provenance recorded (`method`/`metadata.source_function`); "native" means it comes from an `m3resp.processing` primitive.
 
 | Step | Reads (besides `session`) | Key parameters | Native writes | Implementation |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `emg.load` | — | `file_path`, `loader_options` | `raw_emg_signals` (one `Signal`/channel) | upstream loader |
 | `emg.slice_recording` (formerly `emg.slice`) | — | `start_seconds`, `end_seconds` (optional; default: to the end) | `emg_slice` (kept window, samples removed at each end) | native (cuts `session.raw`; ventilator channels from the same file are cut too) |
 | `ventilator.slice_recording` | — | `start_seconds`, `end_seconds` (optional; default: to the end) | `ventilator_slice` (kept window and samples removed at each end, per recording) | native (cuts every standalone ventilator recording; refuses ventilator data from the EIT/EMG file) |
@@ -446,7 +496,14 @@ Every step also writes its raw/compatibility output(s) unchanged (existing consu
 | `emg.notch_filter` | `processed_emg` | `base_frequency` (Hz, required), `max_frequency` (default Nyquist), `quality_factor` (default 30) | `notch_filtered_signal` | native |
 | `emg.bandpass_filter` | `processed_emg` | `high_pass_hz` (default 20), `low_pass_hz` (default 500, Nyquist-capped) | `bandpass_filtered_signal` | upstream |
 | `emg.envelope` | `processed_emg` | `window_seconds` (default 0.25), `method` (`"rms"` default / `"arv"` / `"median"`), `source` (default: ECG-cleaned trace, else filtered) | `envelope_signal` | native |
+| `emg.preprocess` | — | `channel`, `high_pass_hz` (default 20), `low_pass_hz` (default 500, Nyquist-capped), `notch_base_frequency`, `notch_max_frequency`, `notch_quality_factor`, `notch_before_bandpass` (default `false`) | — (`processed_emg` dict with `"envelope"` None) | `emg.select_channel` + `emg.notch_filter` + `emg.bandpass_filter` in one step |
+| `emg.select_channel` | — | `channel` | — (`processed_emg` dict holding the chosen channel) | native |
+| `emg.notch_filter` | `processed_emg` | `base_frequency` (Hz, required), `max_frequency` (default Nyquist), `quality_factor` (default 30) | `notch_filtered_signal` | native |
+| `emg.bandpass_filter` | `processed_emg` | `high_pass_hz` (default 20), `low_pass_hz` (default 500, Nyquist-capped) | `bandpass_filtered_signal` | upstream |
+| `emg.envelope` | `processed_emg` | `window_seconds` (default 0.25), `method` (`"rms"` default / `"arv"` / `"median"`), `source` (default: ECG-cleaned trace, else filtered) | `envelope_signal` | native |
 | `emg.ecg_detect_peaks` | `processed_emg` | `ecg_channel`, `source` (default `"raw_channel"`), `peak_fraction`, `peak_width_seconds`, `peak_distance_seconds`, `bandpass_filter` | `ecg_peak_events` (one `Event`/peak), `ecg_peak_count_result` | upstream |
+| `emg.ecg_gating` | `processed_emg`, `ecg_peak_indices` | `source` (default `"filtered"`), `gate_width_seconds` **xor** `gate_width_samples`, `fill_method` (0-3) | `ecg_gated_signal`, `ecg_gate_mask_result` (array) | upstream |
+| `emg.ecg_wavelet_denoising` | `processed_emg`, `ecg_peak_indices` | `source`, `hard_thresholding`, `levels`, `wavelet_type`, `fixed_threshold` | `ecg_wavelet_cleaned_signal`, `wavelet_decomposition_result`, `wavelet_thresholds_result`, `wavelet_gate_mask_result` (all arrays) | upstream |
 | `emg.ecg_gating` | `processed_emg`, `ecg_peak_indices` | `source` (default `"filtered"`), `gate_width_seconds` **xor** `gate_width_samples`, `fill_method` (0-3) | `ecg_gated_signal`, `ecg_gate_mask_result` (array) | upstream |
 | `emg.ecg_wavelet_denoising` | `processed_emg`, `ecg_peak_indices` | `source`, `hard_thresholding`, `levels`, `wavelet_type`, `fixed_threshold` | `ecg_wavelet_cleaned_signal`, `wavelet_decomposition_result`, `wavelet_thresholds_result`, `wavelet_gate_mask_result` (all arrays) | upstream |
 | `emg.detect_breaths` | `baseline` (optional; from `emg.moving_baseline`/`emg.slopesum_baseline`) | `min_breath_width_seconds`, `half_window_seconds`, `prominence_factor`, `threshold`, `merge_close_peaks_within_width` (default `false`) | `emg_breath_events` | native |
@@ -470,6 +527,7 @@ Run `m3resp steps` for the full list including the pre-existing feature steps (`
 
 ### Channel selection and time-base rules
 
+- The `channel` of `emg.preprocess` and `emg.select_channel` is an index into the raw channel-major array from `emg.load` (`session.emg.raw[channel]`), not a label.
 - The `channel` of `emg.preprocess` and `emg.select_channel` is an index into the raw channel-major array from `emg.load` (`session.emg.raw[channel]`), not a label.
 - ECG detection's `source` selects a *key* in `processed_emg` (`"raw_channel"`/`"filtered"`/`"envelope"`), while `ecg_channel` (when set) selects a *raw* channel index instead - use `ecg_channel` when a recording has a dedicated reference ECG channel (e.g. the committed `emg_data_synth_quiet_breathing.Poly5` fixture's channel 0), and `source` when ECG is mixed directly into the EMG channel being processed (no separate reference channel).
 - No step assumes EMG and ventilator sample rates are equal - Pocc/timing steps convert each side to seconds using its own `fs` before comparing (`emg.evaluate_event_timing`'s per-pair results record both source sample indices and both sampling frequencies for this reason).
@@ -517,8 +575,51 @@ Every step writes its own output name, so a workflow connects them with `in:` an
   out: { processed_emg_with_envelope: processed_emg }
 ```
 
+### Preprocessing order and the envelope
+
+EMG preprocessing runs in this order:
+
+```
+emg.select_channel -> emg.notch_filter (optional) -> emg.bandpass_filter
+  -> ECG removal (emg.ecg_gating or emg.ecg_wavelet_denoising)
+  -> emg.envelope -> baseline -> emg.detect_breaths
+```
+
+The notch filter can also come after the band-pass filter. `emg.preprocess` runs the first three steps as one step and takes all their settings; use the separate steps to change the order or to add a step of your own between them. Each step passes the processed EMG on as a dictionary (`processed_emg`): the chosen channel (`"raw_channel"`), the filtered trace (`"filtered"`), the ECG-cleaned trace (`"ecg_cleaned"`), the envelope (`"envelope"`), the sampling rate (`"fs"`, Hz) and the settings used (`"filter"`).
+
+The envelope is computed only by `emg.envelope`, from the ECG-cleaned trace when there is one. The filter and ECG-removal steps return the processed EMG without an envelope, because an envelope from an earlier trace no longer matches the signal. Steps that need the envelope (baselines, breath detection, per-breath measures, quality checks) stop with an error naming `emg.envelope` when it is missing.
+
+Every step writes its own output name, so a workflow connects them with `in:` and `out:`. The last step before the baseline writes to `processed_emg`, the name the later steps read:
+
+```yaml
+- uses: emg.select_channel
+  with: { channel: 1 }
+  out: { processed_emg: selected_emg }
+
+- uses: emg.notch_filter
+  in: { processed_emg: selected_emg }
+  with: { base_frequency: 50.0 }
+
+- uses: emg.bandpass_filter
+  in: { processed_emg: processed_emg_after_notch }
+  with: { high_pass_hz: 20.0, low_pass_hz: 500.0 }
+
+- uses: emg.ecg_detect_peaks
+  in: { processed_emg: processed_emg_after_bandpass }
+  with: { source: filtered }
+
+- uses: emg.ecg_wavelet_denoising
+  in: { processed_emg: processed_emg_after_bandpass }
+
+- uses: emg.envelope
+  in: { processed_emg: processed_emg_after_ecg }
+  with: { window_seconds: 0.25, method: rms }
+  out: { processed_emg_with_envelope: processed_emg }
+```
+
 ### ECG-removal alternatives
 
+`emg.ecg_gating` and `emg.ecg_wavelet_denoising` both write `processed_emg_after_ecg`. Pick one, then compute the envelope from its output:
 `emg.ecg_gating` and `emg.ecg_wavelet_denoising` both write `processed_emg_after_ecg`. Pick one, then compute the envelope from its output:
 
 ```yaml
@@ -530,6 +631,10 @@ Every step writes its own output name, so a workflow connects them with `in:` an
 
 - uses: emg.ecg_gating  # or emg.ecg_wavelet_denoising
   in: { processed_emg: processed_emg_before_ecg }
+
+- uses: emg.envelope
+  in: { processed_emg: processed_emg_after_ecg }
+  out: { processed_emg_with_envelope: processed_emg }
 
 - uses: emg.envelope
   in: { processed_emg: processed_emg_after_ecg }
@@ -572,7 +677,7 @@ Array-valued `ParameterResult`s (gate masks, wavelet decomposition/thresholds, b
 ## Architecture
 
 | File | Responsibility |
-|---|---|
+| --- | --- |
 | `workflows/registry.py` | `@register_step` decorator and the global step registry. |
 | `workflows/spec.py` | Parse and validate a YAML or JSON spec into typed dataclasses. |
 | `workflows/context.py` | `WorkflowContext` — the shared artifact store wrapping an `M3Session`. |

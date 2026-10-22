@@ -49,9 +49,21 @@ def _patch_ecg_removal_steps(
     monkeypatch: pytest.MonkeyPatch,
     calls: list[tuple[str, dict[str, Any]]],
 ) -> None:
+<<<<<<< HEAD
     """Spy on the two ECG-removal steps and the envelope step `EMGPreset` calls.
 
     `EMGPreset` imports them lazily from their own modules, so
+=======
+<<<<<<< HEAD
+    """Spy on the two ECG-removal steps `EMGPreset` calls.
+
+    `EMGPreset._remove_ecg` imports them lazily from their own modules, so
+=======
+    """Spy on the two ECG-removal steps and the envelope step `EMGPreset` calls.
+
+    `EMGPreset` imports them lazily from their own modules, so
+>>>>>>> c88707ef98344ba1aecce6ce2688336be75d6b39
+>>>>>>> 0e96f4d (Bring in changes from main)
     patching the module attributes is what the workflow actually looks up.
     """
 

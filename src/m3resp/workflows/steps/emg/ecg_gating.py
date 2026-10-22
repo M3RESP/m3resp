@@ -14,6 +14,7 @@ from ._shared import (
     _SESSION_ARTIFACT,
     _processed_channel_label_and_unit,
     _store_processed_emg,
+    _store_processed_emg,
     _upstream_metadata,
     resolve_emg_source,
 )
@@ -179,7 +180,31 @@ def ecg_gating(
         fill_method=fill_method,
         capture_mask=capture_gate_mask,
     )
-    gate_mask = capture_gate_mask.get("gate_mask", None)
+    gate_mask = capture_gate_mask["gate_mask"]
+
+    original_filter = processed_emg.get("filter") or {}
+    original_window_seconds = original_filter.get("envelope_window_seconds")
+    # effective_envelope_window_seconds = (
+    #     envelope_window_seconds
+    #     if envelope_window_seconds is not None
+    #     else original_window_seconds
+    # )
+    # # Default to whatever method preprocessing used, so the recomputed
+    # # envelope is the same kind of envelope as the one it replaces; a bundle
+    # # without that field falls back to "rms".
+    # effective_envelope_method = (
+    #     envelope_method
+    #     if envelope_method is not None
+    #     else original_filter.get("envelope_method") or "rms"
+    # )
+    # envelope = processed_emg.get("envelope")
+    # if effective_envelope_window_seconds is not None:
+    #     envelope_window_samples = max(1, int(effective_envelope_window_seconds * fs))
+    #     envelope = rolling_envelope(
+    #         gated,
+    #         window_length=envelope_window_samples,
+    #         method=effective_envelope_method,
+    #     )
 
     processed_emg_after_ecg = {
         **processed_emg,
@@ -187,7 +212,13 @@ def ecg_gating(
         # band-passed signal and the gated one lands beside it, so what
         # gating did stays visible and recomputable. An envelope from before
         # gating no longer matches the signal, so it is removed.
+        # gating did stays visible and recomputable. An envelope from before
+        # gating no longer matches the signal, so it is removed.
         "ecg_cleaned": gated,
+        "envelope": None,
+        "envelope_source": None,
+    }
+    _store_processed_emg(session, processed_emg_after_ecg)
         "envelope": None,
         "envelope_source": None,
     }

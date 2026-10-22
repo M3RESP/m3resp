@@ -32,46 +32,6 @@ from m3resp.data.processing import ProcessingHistory
 # from m3resp.adapters.resurfemg_adapter import ReSurfEMG
 from m3resp.emg import ReSurfEMG
 from m3resp.export.session_export import export_session_summary
-from m3resp.modalities.eit import EITRecording
-from m3resp.modalities.eit import load as load_eit_recording
-from m3resp.modalities.emg import EMGRecording
-from m3resp.modalities.emg import load as load_emg_recording
-from m3resp.modalities.ventilator import VentilatorRecording
-from m3resp.modalities.ventilator import load as load_ventilator_recording
-from m3resp.synchronization.alignment import align_events_by_modality_offset
-from m3resp.synchronization.cropping import (
-    VENTILATOR,
-    crop_loaded_modality,
-    normalize_modality,
-    offsets_relative_to_reference,
-    raw_synchronization_traces,
-    resolve_alignment_offsets,
-)
-from m3resp.synchronization.linking import link_breaths_by_time
-from m3resp.synchronization.multimodal_parameters import compute_multimodal_parameters
-from m3resp.synchronization.ventilator import (
->>>>>>> a280cbc (native EMG methods now reside in m3resp.emg and include loaders)
-    infer_ventilator_duration,
-    infer_ventilator_fs,
-    iter_ventilator_detections,
-    normalize_ventilator_breath,
-    primary_channel,
-)
-from m3resp.core.exceptions import MissingModalityDataError, VariantAlreadyExistsError
-from m3resp.core.metadata import SessionMetadata
-from m3resp.core.provenance import ProvenanceRecord, record
-from m3resp.data.collections import (
-    IntervalDataCollection,
-    ParameterResultCollection,
-    PixelMaskCollection,
-    QualityReport,
-    SignalCollection,
-)
-from m3resp.data.events import BreathEvent, reuse_matching_breaths
-from m3resp.data.linked_breath import LinkedBreath
-from m3resp.data.parameters import ParameterResult
-from m3resp.data.processing import ProcessingHistory
-from m3resp.export.session_export import export_session_summary
 from m3resp.modalities.eit import (
     EITLoaderChoice,
     EITRecording,
@@ -1093,6 +1053,138 @@ class M3Session:
         ``<channel>_moving_baseline`` (``<channel>_moving_baseline:<variant>``
         for a variant), replacing the one from an earlier call, and the call
         is recorded in `session.provenance`.
+
+        Args:
+            window_seconds (float): Window length in seconds.
+            step_seconds (float): Time between baseline updates, in seconds.
+            percentile (float): Percentile of the envelope in each window,
+                0 to 100.
+            variant (str | None): Use the `preprocess_emg` result with this
+                name; None uses the current processed EMG.
+
+        Returns:
+            numpy.ndarray: One baseline value per envelope sample, in the
+                units of the envelope.
+
+        Raises:
+            MissingModalityDataError: If there is no processed EMG (or no such
+                variant).
+            ValueError: If the processed EMG has no envelope, or a setting is
+                out of range.
+        """
+
+        from m3resp.workflows.steps.emg.baseline import compute_moving_baseline
+
+        processed = self._processed_emg(variant)
+        if processed is None:
+            raise MissingModalityDataError(
+                "No processed EMG; call preprocess_emg() first."
+            )
+        baseline, signal, parameters = compute_moving_baseline(
+            self,
+            processed,
+            window_seconds=window_seconds,
+            step_seconds=step_seconds,
+            percentile=percentile,
+            variant=variant,
+        )
+        self.signals.items[:] = [
+            existing
+            for existing in self.signals.items
+            if not (existing.modality == "emg" and existing.name == signal.name)
+        ]
+        self.signals.add(signal)
+        self._record("emg_moving_baseline", "emg", variant=variant, **parameters)
+        return baseline
+
+    def emg_slopesum_baseline(
+        self,
+        *,
+        window_seconds: float = 7.5,
+        step_seconds: float = 0.2,
+        percentile: float = 33.0,
+        augmented_percentile: float = 25.0,
+        moving_average_seconds: float = 0.5,
+        percentile_window_seconds: float = 1.0,
+        variant: str | None = None,
+    ) -> Any:
+        """Compute the slope-sum baseline of the EMG envelope (ReSurfEMG).
+
+        The slope-sum baseline is the quiet level of the envelope with its
+        slope added: in each window it is 1.2 times a percentile of the
+        envelope plus its absolute, smoothed slope. The calculation is the
+        same as in the ``emg.slopesum_baseline`` step. Breath detection
+        measures its threshold above this level, so pass it on, with the same
+        ``variant``::
+
+            baseline = session.emg_slopesum_baseline()
+            session.detect_emg_breaths(baseline=baseline)
+
+        Three signals are added to `session.signals`:
+        ``<channel>_slopesum_baseline``, and the running mean and running
+        standard deviation of the moving baseline,
+        ``<channel>_slopesum_baseline_running_mean`` and ``..._running_std``
+        (each with ``:<variant>`` at the end for a variant). They replace the
+        ones from an earlier call. The call is recorded in
+        `session.provenance`.
+
+        Args:
+            window_seconds (float): Window length in seconds.
+            step_seconds (float): Time between updates of the moving
+                baseline, in seconds.
+            percentile (float): Percentile of the envelope in each window for
+                the moving baseline, 0 to 100.
+            augmented_percentile (float): Percentile of the envelope plus its
+                slope in each window, 0 to 100.
+            moving_average_seconds (float): Smoothing window of the envelope
+                slope, in seconds.
+            percentile_window_seconds (float): Time between updates of the
+                slope-sum baseline, in seconds.
+            variant (str | None): Use the `preprocess_emg` result with this
+                name; None uses the current processed EMG.
+
+        Returns:
+            numpy.ndarray: One baseline value per envelope sample, in the
+                units of the envelope.
+
+        Raises:
+            MissingModalityDataError: If there is no processed EMG (or no such
+                variant).
+            ValueError: If the processed EMG has no envelope, or a setting is
+                out of range.
+        """
+
+        from m3resp.workflows.steps.emg.baseline import compute_slopesum_baseline
+
+        processed = self._processed_emg(variant)
+        if processed is None:
+            raise MissingModalityDataError(
+                "No processed EMG; call preprocess_emg() first."
+            )
+        baseline, signals, _detail, parameters = compute_slopesum_baseline(
+            self,
+            processed,
+            window_seconds=window_seconds,
+            step_seconds=step_seconds,
+            percentile=percentile,
+            augmented_percentile=augmented_percentile,
+            moving_average_seconds=moving_average_seconds,
+            percentile_window_seconds=percentile_window_seconds,
+            variant=variant,
+        )
+        names = {signal.name for signal in signals}
+        self.signals.items[:] = [
+            existing
+            for existing in self.signals.items
+            if not (existing.modality == "emg" and existing.name in names)
+        ]
+        for signal in signals:
+            self.signals.add(signal)
+        self._record("emg_slopesum_baseline", "emg", variant=variant, **parameters)
+        return baseline
+
+    def detect_emg_breaths(self, *, variant: str | None = None, **kwargs: Any) -> Any:
+        """Detect EMG breaths and store normalized events.
 
         Args:
             window_seconds (float): Window length in seconds.

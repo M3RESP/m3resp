@@ -138,7 +138,7 @@ methods `load_with_eitprocessing` and `load_with_custom_loader`.
 Four new workflow steps split EMG preprocessing into its parts:
 
 | Step | Does |
-|---|---|
+| --- | --- |
 | `emg.select_channel` | takes one channel of the loaded EMG recording |
 | `emg.notch_filter` | removes a frequency and its harmonics (mains hum, EIT frame-rate comb) |
 | `emg.bandpass_filter` | band-pass filter, 20-500 Hz by default |
@@ -226,7 +226,7 @@ with the other signal operations in `m3resp.processing`. **The old name is
 removed.**
 
 | Before | Now |
-|---|---|
+| --- | --- |
 | `m3resp.resample_signal(emg, eit.sample_frequency)` | `m3resp.interpolate_to_time(emg, eit.time)` |
 | `from m3resp.synchronization import resample_signal` | `from m3resp.processing import interpolate_to_time` |
 
@@ -315,7 +315,7 @@ modalities' breaths, the difference in breath duration, and how often the
 modalities agree that a breath happened. **The old names are removed.**
 
 | Before | Now |
-|---|---|
+| --- | --- |
 | `session.compute_multimodal_parameters()` | `session.compute_breath_timing_parameters()` |
 | `m3resp.synchronization.compute_multimodal_parameters` | `m3resp.synchronization.compute_breath_timing_parameters` |
 | Module `m3resp.synchronization.multimodal_parameters` | `m3resp.synchronization.breath_timing_parameters` |
@@ -363,7 +363,7 @@ other pressures next to it did (`esophageal_pressure`, ...). It is now
 `airway_pressure`, the same as its category. **The old names are removed.**
 
 | Before | Now |
-|---|---|
+| --- | --- |
 | `session.ventilator.pressure` (`VentilatorRecording.pressure`) | `session.ventilator.airway_pressure` |
 | Channel key `"pressure"`: `bundle["pressure"]`, `channels=("pressure", "flow", "volume")`, `Signal.channel == "pressure"` | `"airway_pressure"` |
 | A second airway pressure `"pressure__pod"`, `"pressure__<recording>"` | `"airway_pressure__pod"`, `"airway_pressure__<recording>"` |
@@ -406,7 +406,7 @@ are a different thing from a YAML workflow, so they are now called
 **presets**, like the package they live in. **The old names are removed.**
 
 | Before | Now |
-|---|---|
+| --- | --- |
 | `run_pipeline(spec, session=...)`, `compile_pipeline`, `validate_pipeline` | `run_workflow`, `compile_workflow`, `validate_workflow` |
 | `PipelineSpec`, `PipelineResult`, `PipelineContext`, `PipelineService`, `PipelineGraph`, `CompiledPipeline`, `PipelineStatus` | `WorkflowSpec`, `WorkflowResult`, `WorkflowContext`, `WorkflowService`, `WorkflowGraph`, `CompiledWorkflow`, `WorkflowStatus` |
 | `PipelineError`, `PipelineSpecError`, `PipelineExecutionError` | `WorkflowError`, `WorkflowSpecError`, `WorkflowExecutionError` |
@@ -438,7 +438,7 @@ of an occlusion, which turn at a minimum. "Extremum" covers both. **The old
 names are removed:**
 
 | Before | Now |
-|---|---|
+| --- | --- |
 | `BreathEvent.peak_time`, `BreathEvent.peak_index` | `BreathEvent.extremum_time`, `BreathEvent.extremum_index` |
 | Breath and linked-breath export columns `peak_time`, `peak_index`, `eit_peak_time`, `emg_peak_time`, `ventilator_peak_time` | `extremum_time`, `extremum_index`, `eit_extremum_time`, `emg_extremum_time`, `ventilator_extremum_time`; linked breaths also gain `eit_extremum_index`, `emg_extremum_index`, `ventilator_extremum_index` |
 | `compute_breath_timing_parameters(anchor="peak")`, `compute_timing_delay(anchor="peak")` | `anchor="extremum"` (the first is called `compute_multimodal_parameters` before #116, see above) |
@@ -462,7 +462,7 @@ was. TIV, EELI, pixel TIV and pixel breath timing now keep each value next to
 its breath, and masks have their own type.
 
 | Step | Before | Now |
-|---|---|---|
+| --- | --- | --- |
 | `eit.continuous_tiv` | upstream `SparseData` only | also `continuous_tiv_result`: `IntervalData`, one TIV per breath |
 | `eit.eeli` | `eeli_result`: array `ParameterResult` | `IntervalData`, one EELI per breath |
 | `eit.pixel_tiv` | `pixel_tiv_result`: (breath, row, column) `ParameterResult` | `IntervalData`, one `PixelMap` per breath |
@@ -472,7 +472,7 @@ its breath, and masks have their own type.
 New:
 
 | Name | What it is |
-|---|---|
+| --- | --- |
 | `PixelMap` | One number per EIT pixel, a 2D (row, column) grid |
 | `PixelMask` | Which pixels belong to a region: NaN (left out), 1, or a weight between 0 and 1. A 0, or a number outside 0 to 1, raises `ValueError`. |
 | `session.interval_data` | `IntervalDataCollection` holding the `IntervalData` results |
@@ -537,7 +537,7 @@ value per breath were kept as bare arrays that lost which breath each value
 belonged to.
 
 | New | What it is |
-|---|---|
+| --- | --- |
 | `Interval` | Something that lasts: `modality`, `start_time`, `end_time`, and a required `name` such as `"occlusion"` |
 | `IntervalData` | One value (a number or an array, such as a pixel map) per interval, in the same order |
 | `EventData` | One value per `Event`, in the same order |
@@ -568,7 +568,7 @@ the `m3resp.data` package existed. They now live with the other data types.
 **The old path is removed**, so imports from it need updating:
 
 | Before | Now |
-|---|---|
+| --- | --- |
 | `from m3resp.core.events import BreathEvent` | `from m3resp.data.events import BreathEvent` |
 | `from m3resp.core import BreathEvent` (also `Event`, `coerce_*`, `event_to_dict`) | `from m3resp.data import ...` |
 | `from m3resp.data import Breath` | `from m3resp.data import BreathEvent` |
@@ -589,7 +589,7 @@ anyone noticing. `export_store` now runs the same checks first. If one fails,
 attribute).
 
 | Call | What it does |
-|---|---|
+| --- | --- |
 | `export_store(store, path)` | Checks that every record points at records that exist and that no time window ends before it starts, then writes |
 | `export_store(store, path, require_complete=True)` | Also checks that every record has the details a finished dataset needs (units, sampling rate, start time, file checksums) |
 | `export_store(store, path, validate=False)` | Writes without checking, as before |
@@ -605,7 +605,7 @@ Every synchronization step is now a `sync.*` step, in one file
 (`m3resp.workflows.steps.sync`):
 
 | Before | Now |
-|---|---|
+| --- | --- |
 | `session.sync_raw` | `sync.raw_modalities` |
 | - | `sync.skip` (new, see #115 below) |
 
@@ -620,7 +620,7 @@ ventilator breath detections into `BreathEvent`s. It moved to the ventilator
 adapter. For code that imported from it:
 
 | Was in `m3resp.synchronization.ventilator` | Now in |
-|---|---|
+| --- | --- |
 | `iter_ventilator_detections`, `normalize_ventilator_breath` | `m3resp.adapters.ventilator_adapter` (still importable from `m3resp.synchronization`) |
 | `infer_ventilator_fs`, `infer_ventilator_duration` | `m3resp.adapters.ventilator_adapter` |
 
@@ -672,7 +672,7 @@ start time" below), so the module named after cutting was split up. For code
 that imported from it:
 
 | Was in `m3resp.synchronization.cropping` | Now in |
-|---|---|
+| --- | --- |
 | `VENTILATOR`, `normalize_modality` | `m3resp.modalities.names` |
 | `DEFAULT_VENTILATOR_NAME`, `ventilator_raw`, `ventilator_payload`, `ventilator_clock`, `ventilator_recordings` | `m3resp.modalities.ventilator` |
 | `resolve_alignment_offsets`, `offsets_relative_to_reference`, `normalize_offset_key`, `ventilator_start_key` | `m3resp.synchronization.alignment` |
@@ -694,7 +694,7 @@ its step folder. See docs/concepts/slicing.md.
 signal passed along in a workflow. The names now say which:
 
 | Before | Now | What it cuts |
-|---|---|---|
+| --- | --- | --- |
 | `emg.slice` | `emg.slice_recording` | The loaded EMG recording |
 | - | `eit.slice_recording` (new, below) | The loaded EIT recording |
 | `eit.slice` | `eit.slice_signal` | One EIT signal in a workflow |
@@ -968,7 +968,7 @@ come from several devices.
   discoverable under their own prefix instead of buried among the EMG steps:
 
   | Was | Now |
-  |---|---|
+  | --- | --- |
   | `emg.load_ventilator` | `ventilator.load` |
   | `emg.ventilator_channels` | `ventilator.channels` |
   | `emg.detect_ventilator_breath` | `ventilator.detect_breaths` |

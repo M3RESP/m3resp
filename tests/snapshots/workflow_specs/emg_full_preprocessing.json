@@ -50,6 +50,13 @@
       "with": {
         "airway_pressure_channel": 0,
         "flow_channel": 1,
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+        "airway_pressure_channel": 0,
+=======
+>>>>>>> c88707ef98344ba1aecce6ce2688336be75d6b39
+>>>>>>> 0e96f4d (Bring in changes from main)
         "volume_channel": 2
       }
     },

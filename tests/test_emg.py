@@ -7,7 +7,6 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from known_divergences import MISSING_TEST_DATA_FILE
 
 from m3resp import BreathEvent, M3Session
 from m3resp.emg import ReSurfEMG

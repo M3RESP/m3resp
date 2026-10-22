@@ -380,7 +380,6 @@ def test_record_quality_flag_without_breaths_leaves_breath_ids_empty():
     assert annotation.time_window_end is None
 
 
-@MISSING_TEST_DATA_FILE
 def test_record_processing_step_resolves_input_file_ids_from_recorded_signals():
     session = M3Session()
     store = DataModelStore()

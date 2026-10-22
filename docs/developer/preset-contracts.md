@@ -27,7 +27,7 @@ and provenance on the session. The supplied session is updated and returned.
 ## Built-in presets and the registry
 
 | Preset | `name` | Calls |
-|---|---|---|
+| --- | --- | --- |
 | `EITPreset` | `"eit"` | `session.preprocess_eit(...)`, `session.detect_eit_breaths(...)` |
 | `EMGPreset` | `"emg"` | `session.preprocess_emg(...)`, `emg.ecg_detect_peaks` + `emg.ecg_gating` + `emg.envelope`, a moving baseline (`session.emg_adapter.moving_baseline`), `session.detect_emg_breaths(...)`, `session.postprocess_emg(...)` |
 | `MultimodalPreset` | `"multimodal"` | `session.synchronize_raw_modalities(...)`, `session.synchronize_multimodal_breaths(...)` |

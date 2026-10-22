@@ -25,6 +25,18 @@ uv sync
 :::
 ::::
 
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv sync
+```
+
+:::
+::::
+
 Install the modality integrations that you need:
 
 ::::{tab-set}
@@ -48,6 +60,24 @@ uv sync --extra eit  # EIT processing
 uv sync --extra emg  # EMG processing
 uv sync --extra all  # Both integrations
 ```
+:::
+::::
+
+`uv sync` installs only the extras named in the command and removes the
+others, so name every extra you need, for example
+`uv sync --extra all --extra dev`.
+
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv sync --extra eit  # EIT processing
+uv sync --extra emg  # EMG processing
+uv sync --extra all  # Both integrations
+```
+
 :::
 ::::
 
@@ -83,6 +113,18 @@ uv run m3resp run examples/multimodal_example/multimodal.workflow.yaml
 :::
 ::::
 
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run m3resp run examples/multimodal_example/multimodal.workflow.yaml
+```
+
+:::
+::::
+
 List the registered processing steps:
 
 ::::{tab-set}
@@ -102,6 +144,18 @@ m3resp steps
 ```bash
 uv run m3resp steps
 ```
+:::
+::::
+
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```bash
+uv run m3resp steps
+```
+
 :::
 ::::
 

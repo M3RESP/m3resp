@@ -39,6 +39,11 @@ def _upstream_metadata(
     The same fields as `m3resp.workflows.steps.eit._upstream_metadata`: which
     package and function computed the value, the settings used, and the
     step name.
+    """The provenance details an EMG step returns under ``"_provenance"``.
+
+    The same fields as `m3resp.workflows.steps.eit._upstream_metadata`: which
+    package and function computed the value, the settings used, and the
+    step name.
 
     `source_package`/`implementation` default to the ReSurfEMG-adapter case;
     pass `source_package="m3resp"`, `implementation="m3resp.processing.<module>"`
@@ -90,9 +95,39 @@ def _store_processed_emg(session: M3Session, processed_emg: dict[str, Any]) -> N
     Sets `session.processed["emg"]`, which breath detection reads, and the
     trace fields of `session.emg` (mirrors what `M3Session.preprocess_emg`
     does).
+def _store_processed_emg(session: M3Session, processed_emg: dict[str, Any]) -> None:
+    """Make `processed_emg` the session's current processed EMG.
+
+    Sets `session.processed["emg"]`, which breath detection reads, and the
+    trace fields of `session.emg` (mirrors what `M3Session.preprocess_emg`
+    does).
     """
+
     session.processed["emg"] = processed_emg
     if session.emg is not None:
+        session.emg.filtered = processed_emg.get("filtered")
+        session.emg.ecg_cleaned = processed_emg.get("ecg_cleaned")
+        session.emg.envelope = processed_emg.get("envelope")
+        session.emg.channel = processed_emg.get("channel")
+        session.emg.fs = processed_emg.get("fs")
+
+
+def require_envelope(processed_emg: Any, step_name: str) -> np.ndarray:
+    """The envelope in a processed EMG bundle, as a float array.
+
+    Raises a ValueError naming `emg.envelope` when the bundle has none: the
+    envelope is computed by its own step, after filtering and ECG removal.
+    """
+
+    envelope = (
+        processed_emg.get("envelope") if isinstance(processed_emg, Mapping) else None
+    )
+    if envelope is None:
+        raise ValueError(
+            f"{step_name} needs an EMG envelope, and the processed EMG has "
+            "none. Add an 'emg.envelope' step after filtering and ECG removal."
+        )
+    return np.asarray(envelope, dtype=float)
         session.emg.filtered = processed_emg.get("filtered")
         session.emg.ecg_cleaned = processed_emg.get("ecg_cleaned")
         session.emg.envelope = processed_emg.get("envelope")
