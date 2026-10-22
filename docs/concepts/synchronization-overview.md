@@ -1,6 +1,6 @@
 # Synchronization at a glance
 
-This page lists in tables how M3Resp puts recordings on one shared clock. For the explanation with examples, see {doc}`synchronization`. To cut recordings, see {doc}`slicing`.
+This page lists in tables how M3Resp puts recordings on one shared clock. For the explanation with examples, see {doc}`synchronization`. To slice recordings, see {doc}`slicing`.
 
 All methods use an {term}`offset` that you give. M3Resp does not measure the offset from the data.
 
@@ -43,8 +43,8 @@ time on the shared clock = own time - own first time + start time
 |---|---|---|---|
 | EIT (`.bin`) | The time of day in the file, for example 36528.6 s. M3Resp subtracts the time of the first image. | Its own (`"eit"`) | |
 | EMG | 0 s at the first sample (sample number / sampling rate) | Its own (`"emg"`) | |
-| Ventilator data in the EMG file, for example the airway pressure in a Biopac export | 0 s | The clock of the EMG. M3Resp cuts it together with the EMG. | Each file that does not end in `.bin` |
-| Ventilator data in the EIT `.bin` file | 0 s, one sample per EIT image | The clock of the EIT. M3Resp cuts it together with the EIT. | Each `.bin` file |
+| Ventilator data in the EMG file, for example the airway pressure in a Biopac export | 0 s | The clock of the EMG. M3Resp slices it together with the EMG. | Each file that does not end in `.bin` |
+| Ventilator data in the EIT `.bin` file | 0 s, one sample per EIT image | The clock of the EIT. M3Resp slices it together with the EIT. | Each `.bin` file |
 | A separate ventilator or monitor file | 0 s | Its own: `"ventilator"`, or `"ventilator:<name>"` | Only if you load it with `source="ventilator"` |
 
 ## Assumptions

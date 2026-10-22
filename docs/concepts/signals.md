@@ -73,7 +73,7 @@ Both fields accept any name. M3Resp changes a known other name of a category to 
 | `processing_state` | Meaning |
 |---|---|
 | `"raw"` | The signal as the device or the loader gave it |
-| `"intermediate"` | After one or more processing steps, for example a filter or a cut to a {term}`time window`. More steps follow. |
+| `"intermediate"` | After one or more processing steps, for example a filter or a slice to a {term}`time window`. More steps follow. |
 | `"processed"` | The final signal of a channel, ready for the calculation of parameters |
 | `"derived"` | Calculated from other signals, for example the difference of two signals. `derived_from` gives the state of those signals. |
 

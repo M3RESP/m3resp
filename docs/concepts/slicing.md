@@ -1,23 +1,23 @@
-# Cutting data to a time window
+# Slicing data to a time window
 
-M3Resp can cut your data to a {term}`time window`, for example to analyse one ventilator setting of a protocol, or to leave out a period with interference from another device. This page lists all ways to cut and says which one to use.
+M3Resp can slice your data to a {term}`time window`, for example to analyse one ventilator setting of a protocol, or to leave out a period with interference from another device. This page lists all ways to slice and says which one to use.
 
-## Cut a recording or a signal
+## Slice a recording or a signal
 
-First decide what you want to cut:
+First decide what you want to slice:
 
-- A {term}`recording` is all data from one file: for an EIT `.bin` file, the pixel data, the global impedance, the other channels in the file (airway pressure, flow, CO2, pod pressures) and the markers. A recording has its own clock and a {term}`start time` in `session.start_times` (see {doc}`synchronization`). A cut removes the samples from the loaded recording, and all later steps use the cut recording. M3Resp moves the start time, so the recording stays in line with the other recordings. To get the removed samples back, load the file again.
-- A {term}`signal` is one quantity over time, for example the global impedance or an EMG envelope. One recording can give many signals. A cut of a signal makes a copy of the part for the next workflow steps. The signal and the recording do not change.
+- A {term}`recording` is all data from one file: for an EIT `.bin` file, the pixel data, the global impedance, the other channels in the file (airway pressure, flow, CO2, pod pressures) and the markers. A recording has its own clock and a {term}`start time` in `session.start_times` (see {doc}`synchronization`). The slice cannot be undone: the samples outside the time window are removed from the loaded recording, and M3Resp moves the start time, so the recording stays in line with the other recordings. To get the removed samples back, load the file again.
+- A {term}`signal` is one quantity over time, for example the global impedance or an EMG envelope. One recording can give many signals. A slice of a signal is a copy of the selected segment, available to the next workflow steps. The signal and the recording do not change, and no samples are removed.
 
-The step names show this: `*.slice_recording` cuts a recording, and `*.slice_signal` cuts one signal.
+The step names show this: `*.slice_recording` slices a recording, and `*.slice_signal` slices one signal.
 
-## All ways to cut
+## All ways to slice
 
-| # | Call | What it cuts | Times in | Stays in line with the other recordings |
+| # | Call | What it slices | Times in | Stays in line with the other recordings |
 |---|---|---|---|---|
 | 1 | `session.slice_emg(start, end)`, step `emg.slice_recording` | The EMG recording, and the ventilator channels in the same file (for example the airway pressure in a Biopac export) | Seconds from the first sample | Yes: the EMG start time moves later |
 | 2 | `session.slice_eit(start, end)`, step `eit.slice_recording` | The EIT recording (pixel data, global impedance, other channels, markers), and the ventilator data in the same `.bin` file | Seconds from the first image | Yes: the EIT start time moves later |
-| 3 | `session.slice_ventilator(start, end, name=None)`, step `ventilator.slice_recording` | The separate ventilator recordings (loaded with `source="ventilator"`): the one with this name, or all | Seconds from the first sample | Yes: the start time of each cut recording moves later |
+| 3 | `session.slice_ventilator(start, end, name=None)`, step `ventilator.slice_recording` | The separate ventilator recordings (loaded with `source="ventilator"`): the one with this name, or all | Seconds from the first sample | Yes: the start time of each sliced recording moves later |
 | 4 | Step `eit.slice_signal` | One signal in a workflow: an M3Resp `Signal`, or `eitprocessing` data (raw EIT, global impedance, a `Sequence`). The loaded recording does not change. | Sample numbers (`mode: index`), or the time values of the signal (`mode: time`) | No |
 | 5 | `session.load_eit(..., first_frame=, max_frames=)`, step `eit.load` | Reads only a part of the EIT file | Image numbers | Not needed: it happens before the synchronization |
 
@@ -26,30 +26,30 @@ The step names show this: `*.slice_recording` cuts a recording, and `*.slice_sig
 - Way 5 takes the number of the first image and the number of images.
 - `slice_eit` uses `eitprocessing` (`Sequence.select_by_index`). `eit.slice_signal` uses `eitprocessing` for its data and M3Resp for a `Signal`. The other ways are part of M3Resp.
 
-## Cut ventilator data
+## Slice ventilator data
 
-The file of the ventilator data gives its clock, so it also gives the way to cut it:
+The file of the ventilator data gives its clock, so it also gives the way to slice it:
 
-| Ventilator data from | Cut it with |
+| Ventilator data from | Slice it with |
 |---|---|
 | The EMG file, for example the airway pressure in a Biopac export | 1, `emg.slice_recording`, together with the EMG |
 | The EIT `.bin` file | 2, `eit.slice_recording`, together with the EIT |
 | Its own file, loaded with `source="ventilator"` | 3, `ventilator.slice_recording` |
 
-`slice_ventilator` refuses ventilator data from the EIT or EMG file, because a separate cut would move it out of line with its recording. Each separate ventilator recording can have its own start time (`"ventilator:<name>"`), so `slice_ventilator` can cut one of them and leave the others.
+`slice_ventilator` refuses ventilator data from the EIT or EMG file, because a separate slice would move it out of line with its recording. Each separate ventilator recording can have its own start time (`"ventilator:<name>"`), so `slice_ventilator` can slice one of them and leave the others.
 
 ## Rules
 
-- Cut the recordings before the preprocessing. `slice_eit` and `slice_ventilator` refuse to run after the preprocessing of that modality, because the preprocessed results cover the whole recording. `slice_emg` runs, but it cuts only the loaded EMG: the filtered EMG and the envelope in `session.signals` keep their full length.
-- A cut removes the samples from the loaded recording. Load the file again to get them back.
-- In a workflow, the steps after a cut use the cut recording. `eit.slice_recording` gives it under the names of `eit.load` (`raw_eit`, `raw_global_impedance`, `eit_sequence` and the two raw signals). `emg.slice_recording` gives it under the names of `emg.load` (`emg_recording`, `raw_emg_signals`). The raw signals of the cut recording replace the full ones in `session.signals`.
+- Slice the recordings before the preprocessing. `slice_eit` and `slice_ventilator` refuse to run after the preprocessing of that modality, because the preprocessed results cover the whole recording. `slice_emg` runs, but it slices only the loaded EMG: the filtered EMG and the envelope in `session.signals` keep their full length.
+- A slice removes the samples outside the time window from the loaded recording. Load the file again to get them back.
+- In a workflow, the steps after a slice use the sliced recording. `eit.slice_recording` gives it under the names of `eit.load` (`raw_eit`, `raw_global_impedance`, `eit_sequence` and the two raw signals). `emg.slice_recording` gives it under the names of `emg.load` (`emg_recording`, `raw_emg_signals`). The raw signals of the sliced recording replace the full ones in `session.signals`.
 - `eit.slice_signal` with `mode: time` uses the time values of the signal. An EIT file can have the time of day as its times: a Dräger file can start at 36528.6 s. The `slice_recording` steps always use seconds from the start.
 - `slice_eit` selects the images by their times. The times of a device can be a little uneven, so 100 s can hold a slightly different number of images than the image rate × 100 s.
 - The older step names still work: `emg.slice` runs `emg.slice_recording`, and `eit.slice` runs `eit.slice_signal`.
 
-## Example: cut two recordings to the same time
+## Example: slice two recordings to the same time
 
-Put an EIT recording and a separate ventilator file on the shared clock, then cut both to the same period:
+Put an EIT recording and a separate ventilator file on the shared clock, then slice both to the same period:
 
 ```python
 session.load_eit("recording.bin", vendor="draeger")
@@ -61,7 +61,7 @@ session.synchronize_raw_modalities(offset_seconds={"eit": 0.0, "ventilator": -40
 session.slice_eit(600.0, 900.0)         # 10 to 15 minutes into the EIT file
 session.slice_ventilator(640.0, 940.0)  # the same period on the clock of the ventilator
 
-# Both cut recordings now start at 600 s on the shared clock.
+# Both sliced recordings now start at 600 s on the shared clock.
 ```
 
 The same in a {term}`workflow` file:
@@ -77,9 +77,9 @@ The same in a {term}`workflow` file:
   with: { start_seconds: 640.0, end_seconds: 940.0 }
 ```
 
-## Example: cut one signal
+## Example: slice one signal
 
-Cut the global impedance for a breath detection window, and keep the recording whole:
+Slice the global impedance for a breath detection window, and keep the recording whole:
 
 ```yaml
 - id: detection_window
@@ -94,9 +94,9 @@ Cut the global impedance for a breath detection window, and keep the recording w
 | What | File |
 |---|---|
 | The session methods `slice_emg`, `slice_eit` and `slice_ventilator` | `src/m3resp/core/session.py` |
-| The cut of one recording | `src/m3resp/modalities/emg.py`, `eit.py`, `ventilator.py` (`sample_window`, `frame_window`, `keep_samples`, `keep_frames`), and `TimeWindow` in `modalities/time_window.py` |
-| The `eitprocessing` call that cuts EIT data | `src/m3resp/adapters/eitprocessing_adapter/__init__.py` (`EITProcessingAdapter.slice_sequence`) |
-| The cut of one signal | `src/m3resp/processing/slicing.py` (`slice_by_index`, `slice_by_time`) |
+| The slice of one recording | `src/m3resp/modalities/emg.py`, `eit.py`, `ventilator.py` (`sample_window`, `frame_window`, `keep_samples`, `keep_frames`), and `TimeWindow` in `modalities/time_window.py` |
+| The `eitprocessing` call that slices EIT data | `src/m3resp/adapters/eitprocessing_adapter/__init__.py` (`EITProcessingAdapter.slice_sequence`) |
+| The slice of one signal | `src/m3resp/processing/slicing.py` (`slice_by_index`, `slice_by_time`) |
 | The workflow steps | `src/m3resp/workflows/steps/emg/slicing.py`, `eit/slicing.py`, `ventilator/slicing.py` |
 | Start times | `src/m3resp/synchronization/start_times.py` |
 

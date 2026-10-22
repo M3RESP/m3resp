@@ -198,16 +198,16 @@ Run `m3resp steps` for the list of all steps. The groups are:
 
 | Group | Steps for |
 |---|---|
-| `eit.*` | Load and cut EIT data, filter, find the rates and the breaths, calculate TIV, EELI, pixel TIV and lung regions |
-| `emg.*` | Load and cut EMG data, filter, remove the ECG, find the baseline and the breaths, calculate the parameters and the quality checks |
-| `ventilator.*` | Load and cut ventilator data, select the channels, find the breaths and the occlusions (Pocc) |
+| `eit.*` | Load and slice EIT data, filter, find the rates and the breaths, calculate TIV, EELI, pixel TIV and lung regions |
+| `emg.*` | Load and slice EMG data, filter, remove the ECG, find the baseline and the breaths, calculate the parameters and the quality checks |
+| `ventilator.*` | Load and slice ventilator data, select the channels, find the breaths and the occlusions (Pocc) |
 | `sync.*` | Put the recordings on the shared clock: `sync.raw_modalities`, `sync.skip`, `sync.estimate_offset`, `sync.apply_estimated_offset` (see {doc}`concepts/synchronization-overview`) |
 | `metric.*` | Calculations on lists, for example the coefficient of variation of the breath durations |
 | `export.*` | Write results to files: values, JSON, the session summary and the ROTARC result |
 
-The steps that cut data (see {doc}`concepts/slicing`):
+The steps that slice data (see {doc}`concepts/slicing`):
 
-| Step | What it cuts |
+| Step | What it slices |
 |---|---|
 | `emg.slice_recording`, `eit.slice_recording` | The loaded recording, with all data in the same file. The start time of the recording moves, so it stays in line with the other recordings. Times in seconds from the first sample. |
 | `ventilator.slice_recording` | Each separate ventilator recording (loaded with `source: ventilator`) |
@@ -248,7 +248,7 @@ A device can split one recording into several files. The `file_path` of both ste
 - Each file must start after the end of the file before it. If the files are in the wrong order or overlap, the workflow stops with an error that names the two files.
 - A pause between two files stays in the time axis and gives a warning with its length, because the filters and the breath detection run across the pause.
 - The files must come from the same device, with the same image size and sampling rate.
-- `first_frame` and `max_frames` work only with one file, because `eitprocessing` would apply them to each file. To cut the joined recording, use `eit.slice_recording`.
+- `first_frame` and `max_frames` work only with one file, because `eitprocessing` would apply them to each file. To slice the joined recording, use `eit.slice_recording`.
 - `eit.load_custom` gives the list to the loader as it is.
 
 ### Ventilator channels
@@ -269,7 +269,7 @@ Each step also writes its result in the form that `resurfemg` gives, beside the 
 | Step | Reads (besides the session) | Main settings | M3Resp results | Calculation |
 |---|---|---|---|---|
 | `emg.load` | | `file_path`, `loader_options` | `raw_emg_signals` (one signal per channel) | resurfemg |
-| `emg.slice_recording` | | `start_seconds`, `end_seconds` (default: to the end) | `emg_slice` | M3Resp. Also cuts the ventilator channels from the same file. |
+| `emg.slice_recording` | | `start_seconds`, `end_seconds` (default: to the end) | `emg_slice` | M3Resp. Also slices the ventilator channels from the same file. |
 | `ventilator.slice_recording` | | `start_seconds`, `end_seconds` (default: to the end) | `ventilator_slice` | M3Resp. Refuses ventilator data from the EIT or EMG file. |
 | `emg.preprocess` | | `channel`, `high_pass_hz` (20), `low_pass_hz` (500, at most 95% of the Nyquist frequency), `notch_base_frequency`, `notch_max_frequency`, `notch_quality_factor`, `notch_before_bandpass` (`false`) | `processed_emg`, without an envelope | `emg.select_channel`, `emg.notch_filter` and `emg.bandpass_filter` in one step |
 | `emg.select_channel` | | `channel` | `processed_emg` with the selected channel | M3Resp |

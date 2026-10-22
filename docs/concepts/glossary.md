@@ -90,7 +90,7 @@ synchronization
   The process that puts recordings from different devices on one shared clock. M3Resp gives each recording a {term}`start time` from the {term}`offset` that you enter. All samples of each recording stay.
 
 time window
-  A part of a recording between a start time and an end time, in seconds. To cut a recording to a time window, use a slice step such as `emg.slice_recording`.
+  A part of a recording between a start time and an end time, in seconds. To slice a recording to a time window, use a step such as `emg.slice_recording`.
 
 ventilator
   The {term}`modality` for airway pressure, flow and volume. The data can come from a ventilator export, or from channels inside an EMG or EIT file.

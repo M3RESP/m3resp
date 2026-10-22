@@ -42,9 +42,9 @@ session.synchronize_raw_modalities(
 
 M3Resp refuses a name that is not loaded, and a name of ventilator data in the EIT or EMG file.
 
-## Cut recordings
+## Sliced recordings
 
-When you cut a recording with `slice_eit`, `slice_emg` or `slice_ventilator`, M3Resp moves its start time later by the time that it cut from the start. So the recording stays in line with the other recordings (see {doc}`slicing`).
+When you slice a recording with `slice_eit`, `slice_emg` or `slice_ventilator`, M3Resp moves its start time later by the time that it removed from the start. So the recording stays in line with the other recordings (see {doc}`slicing`).
 
 ## Was each recording synchronized?
 

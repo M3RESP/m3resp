@@ -28,14 +28,14 @@ session.parameter_results.for_modality("emg")
 | `category` | The physical quantity that the parameter is calculated from (see {doc}`signals`) |
 | `unit` | The unit, for example `"Hz"` or `"s"` |
 | `metric_type` | The standard name of the parameter. M3Resp sets it from `name` for a known parameter, and leaves it `None` for a name of your own. |
-| `breath_id`, `breath_ids`, `event_id`, `start_time`, `end_time` | What the value belongs to (see below) |
+| `breath_id`, `breath_ids`, `event_id`, `start_time`, `end_time` | The breath, event, or time window the value refers to (see [below](#what-a-value-belongs-to)) |
 | `region`, `channel` | The lung region or the channel of the value |
 | `method` | The calculation that made the value |
 | `metadata` | Other details, as a dictionary |
 
 For example, a parameter with `name="RR"` and one with `name="breath_rate"` both get `metric_type="respiratory_rate"`, so you can group them. A parameter with `name="mean_amplitude"` gets `metric_type=None`.
 
-`is_scalar` is `True` when the value is one number. `to_dict()` gives the content for a JSON file, with arrays as lists.
+`is_scalar` is `True` when the value is one number. `to_dict()` converts the contents of the `ParameterResult` object to a dictionary that can be written into a JSON file, with arrays serialized to lists.
 
 ## What a value belongs to
 

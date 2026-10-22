@@ -14,7 +14,7 @@ M3Resp makes the folder if it does not exist. Files with the same names in the f
 
 | File | Contents |
 |---|---|
-| `summary.json` | The session metadata, the quality flags, `session.parameters`, the processing history and the {term}`start time` of each {term}`recording`. `session.parameters` holds the results of `postprocess_emg` and the settings of synchronization and of each cut to a {term}`time window`. |
+| `summary.json` | The session metadata, the quality flags, `session.parameters`, the processing history and the {term}`start time` of each {term}`recording`. `session.parameters` holds the results of `postprocess_emg` and the settings of synchronization and of each slice to a {term}`time window`. |
 | `<name>.csv` | One file for each list of {term}`events <event>` in `session.events`, for example `eit_breaths.csv` and `emg_breaths.csv`. |
 | `parameters.csv` | The values in `session.parameters`, one row per value. |
 | `session_metadata.json` | The session metadata. |

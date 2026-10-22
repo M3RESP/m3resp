@@ -21,11 +21,22 @@ To find flags, use `failed`, `for_modality`, `for_category` or `for_signal`.
 | `passed` | `True` if the check passed, `False` if it failed |
 | `severity` | How serious a failure is: `"info"`, `"warning"`, `"error"` or `"critical"` |
 | `value` | The measured value |
-| `threshold` | The limit of the check. With `value`, it shows why the check passed or failed. |
-| `message` | A short text about the result |
+| `threshold` | The limit value for passing or failing the check. Taken together with `value`, it shows why the check passed or failed. |
+| `message` | An explanation in words, for example why the check could not run (`"Needs at least two ventilator breaths."`). Most checks leave it empty (`None`). |
 | `modality`, `category`, `signal_name` | The device, the physical quantity and the signal that the check is about |
 | `breath_id`, `breath_ids`, `start_time`, `end_time` | The breath, the breaths or the time window that the check is about. With none of these, the flag is about the whole signal. |
 | `metadata` | Other details, as a dictionary |
+
+The severity is a fixed label that each check sets. The measured value does not change it, and M3Resp does not use it to stop or skip any step.
+
+| Severity | Meaning |
+|---|---|
+| `"info"` | Shows a property of the data. A failure alone does not make the result wrong. |
+| `"warning"` | Look at the data before you use the result. |
+| `"error"` | The result is probably wrong. |
+| `"critical"` | The data cannot be used. |
+
+The current checks use `"info"` and `"warning"` only.
 
 If a signal is good except for a noisy period, make one flag per time window, with `start_time` and `end_time`. The same `signal_name` connects the flags to the signal.
 
@@ -44,7 +55,7 @@ noise = QualityFlag(
 )
 ```
 
-A flag about one breath sets `breath_id`, as a text. A flag about several breaths together sets `breath_ids`, as a list of texts, for example ten breaths in a stable period, or breaths with gaps between them. Set only one of the two fields: both fields, or an empty `breath_ids` list, give a `ValueError`. The steps that check each breath use the position of the breath in its list as the id (`"0"`, `"1"`, ...).
+A flag about one breath sets `breath_id`, as a string. A flag about several breaths together sets `breath_ids`, as a list of strings, for example ten breaths in a stable period, or breaths with gaps between them. Set only one of the two fields: both fields, or an empty `breath_ids` list, give a `ValueError`. The steps that check each breath use the position of the breath in its list as the id (`"0"`, `"1"`, ...).
 
 ```python
 stable = QualityFlag(
@@ -60,7 +71,7 @@ In `quality_flags.csv`, `breath_ids` is a Python list (`['3', '4', '5', '6']`), 
 
 ## Checks that could not run
 
-- The EMG quality steps of a workflow give no flag for a check that they could not run. So their flags always show a real result.
+- The EMG quality steps of a workflow give no flag for a check that they could not run: if a flag exists, the check was performed. Their flags only exist for real results.
 - `postprocess_emg` gives a failed flag with severity `"warning"` for a check that it could not run, for example a check that needs ventilator data. The flag has `metadata["skipped"] == True`, and `message` gives the reason.
 
 ## Where quality flags come from
