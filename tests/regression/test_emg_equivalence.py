@@ -156,7 +156,10 @@ def _synthetic_ecg_contaminated_signal(
     neurokit2 = pytest.importorskip("neurokit2")
     ecg = np.asarray(
         neurokit2.ecg_simulate(
-            duration=duration_seconds, sampling_rate=fs, heart_rate=75, random_state=42
+            duration=duration_seconds,
+            sampling_rate=fs,
+            heart_rate=75,
+            random_state=42,
         ),
         dtype=float,
     )

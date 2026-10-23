@@ -33,7 +33,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pywt
-from scipy.signal import find_peaks
+
 
 from m3resp.core.utilities import capture_value
 from m3resp.processing.filters import bandpass_filter
@@ -238,6 +238,8 @@ def detect_ecg_peaks(
     Returns:
         numpy.ndarray: ECG peak indices.
     """
+    from scipy.signal import find_peaks  # noqa: PLC0415
+
     _signal = _require_1d_array("signal", signal)
     fs = _require_integer_valued_sample_frequency(sample_frequency)
 

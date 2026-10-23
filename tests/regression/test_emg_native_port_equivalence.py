@@ -37,13 +37,13 @@ import pytest
 pytest.importorskip("resurfemg")
 pytest.importorskip("pywt")
 
+from known_divergences import *
+
 from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
 from m3resp.adapters.resurfemg_adapter import _signals as adapter_signals
 from m3resp.data.events import BreathEvent
 from m3resp.emg import ReSurfEMG as ReSurfEMGNative
 from m3resp.emg.processing import signals as native_signals
-
-from known_divergences import *
 
 EMG_FS = 2048
 VENT_FS = 100
@@ -172,7 +172,10 @@ def _ecg_contaminated_signal(fs: int, duration_seconds: float) -> np.ndarray:
     neurokit2 = pytest.importorskip("neurokit2")
     ecg = np.asarray(
         neurokit2.ecg_simulate(
-            duration=duration_seconds, sampling_rate=fs, heart_rate=75, random_state=42
+            duration=duration_seconds,
+            sampling_rate=fs,
+            heart_rate=75,
+            random_state=42,
         ),
         dtype=float,
     )

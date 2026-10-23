@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
-from m3resp.emg import ReSurfEMG as ReSurfEMGNative
 from m3resp.adapters.ventilator_adapter import (
     VentilatorAdapter,
     infer_ventilator_duration,
@@ -20,7 +20,9 @@ from m3resp.core.exceptions import MissingModalityDataError, VariantAlreadyExist
 from m3resp.core.metadata import SessionMetadata
 from m3resp.core.provenance import ProvenanceRecord, record
 from m3resp.data.collections import (
+    IntervalDataCollection,
     ParameterResultCollection,
+    PixelMaskCollection,
     QualityReport,
     SignalCollection,
 )
@@ -28,8 +30,6 @@ from m3resp.data.events import BreathEvent, reuse_matching_breaths
 from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
 from m3resp.data.processing import ProcessingHistory
-
-# from m3resp.adapters.resurfemg_adapter import ReSurfEMG
 from m3resp.emg import ReSurfEMG
 from m3resp.export.session_export import export_session_summary
 from m3resp.modalities.eit import (
@@ -87,7 +87,6 @@ from m3resp.synchronization.sync_methods import (
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
-    from pathlib import Path
 
     from m3resp.data.events import BreathEvent
     from m3resp.data.linked_breath import LinkedBreath

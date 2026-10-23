@@ -23,7 +23,9 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
 dependencies = [
+  "complexipy>=8.1.0",
   "loguru",
+  "neurokit2>=0.2.13",
   "numpy",
   "pandas",
   "pydantic>=2",
@@ -89,12 +91,7 @@ packages = ["src/m3resp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Tests on the full recordings are slow and need files outside the
-# repository; run them with `pytest -m real_data`.
-addopts = "-m 'not real_data'"
-markers = [
-  "real_data: runs on recorded data from tests/regression/real_data/datasets.yaml",
-]
+pythonpath = ["tests"]
 # Tests on the full recordings are slow and need files outside the
 # repository; run them with `pytest -m real_data`.
 addopts = "-m 'not real_data'"

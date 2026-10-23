@@ -110,6 +110,37 @@ FEATURES_FUNCTIONS = {
 }
 
 
+def default_low_pass_hz(sample_frequency: float) -> float:
+    """Default EMG low-pass cutoff in Hz: 500 Hz, or 95 % of Nyquist if lower."""
+
+    return min(sample_frequency / 2 * 0.95, 500)
+
+
+def notch_max_frequency_hz(
+    sample_frequency: float, max_frequency: float | None
+) -> float:
+    """Highest harmonic the notch filter removes, in Hz.
+
+    None or zero gives the Nyquist frequency (half the sampling rate). A value
+    above the Nyquist frequency is lowered to it, with a warning, because the
+    filter removes no harmonics above it.
+    """
+
+    nyquist = sample_frequency / 2
+    if not max_frequency:
+        return nyquist
+    if max_frequency > nyquist:
+        warnings.warn(
+            f"Notch filter max_frequency ({max_frequency} Hz) is above the "
+            f"Nyquist frequency ({nyquist} Hz for a sampling rate of "
+            f"{sample_frequency} Hz); harmonics are removed up to {nyquist} Hz.",
+            UserWarning,
+            stacklevel=3,
+        )
+        return nyquist
+    return max_frequency
+
+
 def _preprocess_default(
     recording: Any,
     *,
@@ -217,8 +248,8 @@ def _preprocess_default(
         channel = _choose_emg_channel(len(array), metadata.get("labels"))
     raw = np.asarray(array[channel], dtype=float)
 
-    high_pass_hz: float = kwargs.pop("high_pass_hz", 20.0)
-    low_pass_hz: float = kwargs.pop("low_pass_hz", min(fs / 2 * 0.95, 500))
+    high_pass_hz: float = kwargs.pop("high_pass_hz", None) or 20.0
+    low_pass_hz: float = kwargs.pop("low_pass_hz", None) or min(fs / 2 * 0.95, 500)
     compute_envelope: bool = kwargs.pop("compute_envelope", True)
     remove_ecg: bool = kwargs.pop("remove_ecg", True)
     envelope_window_seconds = kwargs.pop("envelope_window_seconds", 0.25)
@@ -375,6 +406,40 @@ def _get_enabled_functions(
         dict(context.selected_functions.items()) or functions
     )
     return _normalize_selected_postprocessing(selected_functions).__contains__
+
+
+def select_emg_channel(recording: Any, *, channel: int | None = None) -> dict[str, Any]:
+    """Take one channel of a loaded EMG recording as the trace to analyse.
+
+    Args:
+        recording: Loaded dictionary with a channel-major array
+            (n_channels, n_samples) and metadata containing fs in Hz.
+        channel: Zero-based channel index. When None, channel labels select
+            a breathing-muscle channel, excluding ECG/EKG labels.
+
+    Returns:
+        dict[str, Any]: The recording fields plus ``channel``, ``fs`` (Hz),
+            ``raw_channel`` (the channel's samples, in the file's units)
+            and an empty ``filter`` record that the filter steps fill in.
+
+    Raises:
+        TypeError: If recording lacks the required array or metadata.
+        UnresolvedChannelError: If channel labels do not select an
+            unambiguous EMG channel and channel is None.
+    """
+    _require_emg_recording(recording)
+    metadata = dict(recording["metadata"])
+    fs = float(metadata["fs"])
+    array = recording["array"]
+    if channel is None:
+        channel = _choose_emg_channel(len(array), metadata.get("labels"))
+    return {
+        **recording,
+        "channel": channel,
+        "fs": fs,
+        "raw_channel": np.asarray(array[channel], dtype=float),
+        "filter": {},
+    }
 
 
 @dataclass
@@ -938,3 +1003,6 @@ class _DefaultsMixin:
     _preprocess_default = staticmethod(_preprocess_default)
     _postprocess_default = staticmethod(_postprocess_default)
     _detect_breaths_default = staticmethod(_detect_breaths_default)
+    default_low_pass_hz = staticmethod(default_low_pass_hz)
+    notch_max_frequency_hz = staticmethod(notch_max_frequency_hz)
+    select_emg_channel = staticmethod(select_emg_channel)

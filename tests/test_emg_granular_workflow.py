@@ -67,10 +67,7 @@ GRANULAR_SPEC = {
 }
 
 
-<<<<<<< HEAD
 # NOTE AssertionError
-=======
->>>>>>> c88707ef98344ba1aecce6ce2688336be75d6b39
 def test_granular_emg_workflow_matches_monolithic_postprocess():
     result = run_workflow(GRANULAR_SPEC)
 
