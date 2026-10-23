@@ -52,7 +52,7 @@ dev = [
   "pytest",
   "pytest-cov",
   "ruff>=0.16,<0.17",
-  "mypy",
+  "ty",
   "types-PyYAML",
   "pandas-stubs",
   "scipy-stubs",
@@ -98,6 +98,7 @@ addopts = "-m 'not real_data'"
 markers = [
   "real_data: runs on recorded data from tests/regression/real_data/datasets.yaml",
 ]
+
 
 [tool.marimo.runtime]
 # Raise the cell-output size cap (marimo default 8 MB) so the multimodal viewer
@@ -164,6 +165,9 @@ extend-safe-fixes = [
 ]
 pylint.max-args = 9
 
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
 [tool.ruff.lint.per-file-ignores]
 # marimo stores notebooks as plain Python: every cell is a function that ends in
 # a bare expression (its output) and a `return` of the variables other cells
@@ -176,24 +180,28 @@ pylint.max-args = 9
     'RUF018', # Assignment expressions in assert are fine here
 ]
 
-[tool.mypy]
-python_version = "3.12"
-packages = ["m3resp"]
-strict = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_any_generics = true
-check_untyped_defs = true
-no_implicit_reexport = true
-warn_redundant_casts = true
-warn_unused_ignores = true
+[tool.ty.environment]
+python-version = "3.12"
 
-[[tool.mypy.overrides]]
-module = [
-  "eitprocessing.*",
-  "matplotlib.*",
-  "resurfemg.*",
+[tool.ty.src]
+include = ["m3resp"]  # use "src/m3resp" if you have a src layout
+
+[tool.ty.analysis]
+allowed-unresolved-imports = [
+  "eitprocessing.**",
+  "matplotlib.**",
+  "resurfemg.**",
 ]
-ignore_missing_imports = true
+
+[tool.ty.rules]
+redundant-cast = "error"
+unused-ignore-comment = "error"
+
+[tool.ty.terminal]
+error-on-warning = true
+[dependency-groups]
+dev = [
+    "ty>=0.0.91",
+]
 
 
