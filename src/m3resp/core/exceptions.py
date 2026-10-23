@@ -9,6 +9,10 @@ class OptionalDependencyError(M3RespError, ImportError):
     """Raised when an optional modality package is not installed."""
 
 
+class InvalidM3respModuleError(M3RespError, ImportError):
+    """Raised when a module or class cannot be imported from m3resp."""
+
+
 class MissingModalityDataError(M3RespError):
     """Raised when a workflow step needs missing modality data."""
 

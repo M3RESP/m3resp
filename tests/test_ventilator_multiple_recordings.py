@@ -106,7 +106,7 @@ class TestPositionalProducersNowResolveByName:
         # Postprocessing used to pass columns 0/1/2 itself, which overrode the
         # labels. The same recording with its columns shuffled (and labelled)
         # must now give the same ventilator breaths and Poccs.
-        pytest.importorskip("resurfemg")
+        # pytest.importorskip("resurfemg")
         data = os.path.join(os.path.dirname(__file__), "data")
         session = M3Session()
         session.load_emg(

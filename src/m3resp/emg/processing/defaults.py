@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import copy
 import warnings
-from typing import TYPE_CHECKING, Any, Callable, Literal
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
-from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
+import m3resp.processing.intervals
+from m3resp.core.exceptions import UnsupportedWorkflowError
 from m3resp.processing.filters import bandpass_filter, harmonic_notch_filter
-from m3resp.processing.intervals import (
-    onoff_from_baseline_crossings,
-    onoff_from_slope,
-)
 from m3resp.processing.metrics import (
     amplitude_at_peaks,
     area_under_baseline,
@@ -43,20 +41,19 @@ from .quality import (
     evaluate_bell_curve_error,
     evaluate_event_timing,
     evaluate_respiratory_rates,
+    interpeak_distance,
     percentage_under_baseline,
     snr_pseudo,
 )
 from .shared import (
-    _category_for_function,
     _choose_emg_channel,
-    _mask_invalid,
     _normalize_selected_postprocessing,
     _require_emg_recording,
 )
 from .signals import peak_indices_from_events, ventilator_signals
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
     from m3resp.data.events import BreathEvent
 
@@ -67,23 +64,30 @@ BASELINE_FUNCTIONS = {
     }
 }
 
-EVENT_DETECTION_FUNCTIONS = {
+EMG_EVENT_DETECTION_FUNCTIONS = {
     "event_detection": {
         "onoffpeak_baseline_crossing": True,
         "onoffpeak_slope_extrapolation": True,
     }
 }
+VENTILATOR_EVENT_DETECTION_FUNCTIONS = {
+    "event_detection": {
+        "detect_ventilator_breath": True,
+        "find_occluded_breaths": True,
+    }
+}
+
 VENTILATOR_QUALITY_ASSESSMENT_FUNCTIONS = {
     "quality_assessment": {
         "detect_non_consecutive_manoeuvres": True,
         "evaluate_respiratory_rates": True,
+        "ventilator_respiratory_rate": True,
     }
 }
 MULTIMODAL_QUALITY_ASSESSMENT_FUNCTIONS = {
     "quality_assessment": {
         "evaluate_event_timing": True,
         "evaluate_respiratory_rates": True,
-        "ventilator_respiratory_rate": True,
     }
 }
 
@@ -96,23 +100,34 @@ EMG_QUALITY_ASSESSMENT_FUNCTIONS = {
         "evaluate_bell_curve_error": True,
         "evaluate_event_timing": True,
         "evaluate_respiratory_rates": True,
+        "interpeak_distance": True,
     }
 }
 
 FEATURES_FUNCTIONS = {
     "features": {
-        "amplitude_at_peaks": True,
+        "amplitude": True,
         "area_under_baseline": True,
         "pseudo_slope": True,
         "time_to_peak": True,
-        "window_integral": True,
+        "time_product": True,
+        "respiratory_rate": True,
     }
 }
 
 
+def _merge_selections(
+    *selections: dict[str, dict[str, bool]],
+) -> dict[str, dict[str, bool]]:
+    merged: dict[str, dict[str, bool]] = {}
+    for selection in selections:
+        for category, functions in selection.items():
+            merged.setdefault(category, {}).update(functions)
+    return merged
+
+
 def default_low_pass_hz(sample_frequency: float) -> float:
     """Default EMG low-pass cutoff in Hz: 500 Hz, or 95 % of Nyquist if lower."""
-
     return min(sample_frequency / 2 * 0.95, 500)
 
 
@@ -125,7 +140,6 @@ def notch_max_frequency_hz(
     above the Nyquist frequency is lowered to it, with a warning, because the
     filter removes no harmonics above it.
     """
-
     nyquist = sample_frequency / 2
     if not max_frequency:
         return nyquist
@@ -142,7 +156,7 @@ def notch_max_frequency_hz(
 
 
 def _preprocess_default(
-    recording: Any,
+    recording: Mapping,
     *,
     channel: int | None = None,
     **kwargs,
@@ -345,7 +359,7 @@ def _detect_breaths_default(
     *,
     min_breath_width_seconds: float = 0.2,
     baseline: np.ndarray | None = None,
-    **kwargs: Any,
+    **kwargs,
 ) -> list[dict[str, Any]]:
     """Run ReSurfEMG EMG breath detection and return common rows."""
     if not isinstance(processed_emg, dict) or "envelope" not in processed_emg:
@@ -400,15 +414,15 @@ def _detect_breaths_default(
 
 
 def _get_enabled_functions(
-    functions: dict[str, dict[str, bool]], context: _PostprocessingContext
-) -> Any:
-    selected_functions: dict[str, dict[str, bool]] | None = (
-        dict(context.selected_functions.items()) or functions
-    )
-    return _normalize_selected_postprocessing(selected_functions).__contains__
+    functions: dict[str, dict[str, bool]],  # noqa: ARG001
+    context: _PostprocessingContext,
+) -> Callable[[tuple[str, str]], bool]:
+    return lambda key: _is_selected(context, *key)
 
 
-def select_emg_channel(recording: Any, *, channel: int | None = None) -> dict[str, Any]:
+def select_emg_channel(
+    recording: Mapping, *, channel: int | None = None
+) -> dict[str, Any]:
     """Take one channel of a loaded EMG recording as the trace to analyse.
 
     Args:
@@ -447,6 +461,7 @@ class _PostprocessingContext:
     envelope: np.ndarray
     baseline: np.ndarray
     peak_indices: np.ndarray
+    ecg_peak_indices: np.ndarray
     fs: float
     baseline_window_seconds: float
     baseline_step_seconds: float
@@ -467,6 +482,19 @@ class _PostprocessingContext:
     indices: dict[str, np.ndarray]
 
 
+def _is_selected(context: _PostprocessingContext, category: str, function: str) -> bool:
+    return bool(context.selected_functions.get(category, {}).get(function, False))
+
+
+def _disable_selected_function(
+    context: _PostprocessingContext, category: str, function: str, reason: str
+) -> None:
+    """Disable a selected postprocessing function, recording the reason."""
+    if _is_selected(context, category, function):
+        context.selected_functions[category][function] = False
+        context.skipped[f"{category}.{function}"] = reason
+
+
 def _build_context(
     envelope: np.ndarray, fs: float, peak_indices: np.ndarray, **kwargs
 ) -> _PostprocessingContext:
@@ -476,6 +504,7 @@ def _build_context(
         "peak_indices": peak_indices,
         "baseline": None,
     }
+    context["ecg_peak_indices"] = kwargs.pop("ecg_peak_indices", None)
     context["baseline_window_seconds"] = kwargs.pop("baseline_window_seconds", 7.5)
     context["baseline_step_seconds"] = kwargs.pop("baseline_step_seconds", 0.2)
     context["baseline_percentile"] = kwargs.pop("baseline_percentile", 33.0)
@@ -491,19 +520,23 @@ def _build_context(
 
     context["ventilator_signals"] = ventilator_signals(
         ventilator=kwargs.pop("ventilator", None),
-        airway_pressure_channel=kwargs.pop("ventilator_pressure_channel", 0),
-        flow_channel=kwargs.pop("ventilator_flow_channel", 1),
-        volume_channel=kwargs.pop("ventilator_volume_channel", 2),
+        airway_pressure_channel=kwargs.pop("ventilator_pressure_channel", None),
+        flow_channel=kwargs.pop("ventilator_flow_channel", None),
+        volume_channel=kwargs.pop("ventilator_volume_channel", None),
     )
-    context["ventilator_fs"] = context["ventilator_signals"]["fs"] or None
-    context["peep"] = kwargs.pop(
-        "peep",
-        float(np.nanmedian(context["ventilator_signals"]["pressure"]))
+    context["ventilator_fs"] = (
+        context["ventilator_signals"]["fs"]
         if context["ventilator_signals"] is not None
-        else 0.0,
+        else None
     )
-    context["vent_width_samples"] = max(
-        1, int(context["ventilator_breath_width_seconds"] * context["ventilator_fs"])
+    context["peep"] = kwargs.pop("peep", np.nan)
+    context["vent_width_samples"] = (
+        max(
+            1,
+            int(context["ventilator_breath_width_seconds"] * context["ventilator_fs"]),
+        )
+        if context["ventilator_fs"] is not None
+        else None
     )
 
     context["slope_window_seconds"] = kwargs.pop("slope_window_seconds", 0.5)
@@ -511,16 +544,19 @@ def _build_context(
         1, int(context["slope_window_seconds"] * context["fs"])
     )
     context["aub_window_seconds"] = kwargs.pop("aub_window_seconds", 5.0)
-    context["selected_functions"] = kwargs.pop(
-        "selected_functions",
-        {
-            **BASELINE_FUNCTIONS,
-            **EVENT_DETECTION_FUNCTIONS,
-            **VENTILATOR_QUALITY_ASSESSMENT_FUNCTIONS,
-            **FEATURES_FUNCTIONS,
-            **EMG_QUALITY_ASSESSMENT_FUNCTIONS,
-            **MULTIMODAL_QUALITY_ASSESSMENT_FUNCTIONS,
-        },
+    context["selected_functions"] = copy.deepcopy(
+        kwargs.pop(
+            "selected_functions",
+            _merge_selections(
+                BASELINE_FUNCTIONS,
+                EMG_EVENT_DETECTION_FUNCTIONS,
+                VENTILATOR_EVENT_DETECTION_FUNCTIONS,
+                VENTILATOR_QUALITY_ASSESSMENT_FUNCTIONS,
+                FEATURES_FUNCTIONS,
+                EMG_QUALITY_ASSESSMENT_FUNCTIONS,
+                MULTIMODAL_QUALITY_ASSESSMENT_FUNCTIONS,
+            ),
+        )
     )
     context["computed"] = {
         "baseline": {},
@@ -540,7 +576,7 @@ def _build_context(
 
 def _compute_baseline_default(
     context: _PostprocessingContext,
-) -> _PostprocessingContext:
+) -> None:
 
     enabled = _get_enabled_functions(BASELINE_FUNCTIONS, context)
 
@@ -572,30 +608,21 @@ def _compute_baseline_default(
             "running_std": slopesum_baseline[2],
             "series": slopesum_baseline[3],
         }
-    return context
 
 
 def _ventilator_breaths_default(
     context: _PostprocessingContext,
-) -> _PostprocessingContext:
+) -> None:
 
     enabled = _get_enabled_functions(
-        functions={
-            **EVENT_DETECTION_FUNCTIONS,
-            **VENTILATOR_QUALITY_ASSESSMENT_FUNCTIONS,
-        },
+        functions=_merge_selections(
+            VENTILATOR_EVENT_DETECTION_FUNCTIONS,
+            VENTILATOR_QUALITY_ASSESSMENT_FUNCTIONS,
+        ),
         context=context,
     )
     if context.ventilator_signals is None:
-        context.skipped.update(
-            {
-                "event_detection.find_occluded_breaths": "Needs ventilator pressure and PEEP inputs.",
-                "event_detection.detect_ventilator_breath": "Needs ventilator volume input.",
-                "quality_assessment.detect_non_consecutive_manoeuvres": "Needs ventilator breath and manoeuvre indices.",
-                "quality_assessment.ventilator_respiratory_rate": "Needs ventilator volume input.",
-            }
-        )
-        return context
+        return
     ventilator_breath_indices = np.asarray([], dtype=int)
     if enabled(("event_detection", "detect_ventilator_breath")):
         ventilator_breath_indices = np.asarray(
@@ -616,7 +643,7 @@ def _ventilator_breaths_default(
     if enabled(("event_detection", "find_occluded_breaths")):
         pocc_indices = np.asarray(
             a=detect_occluded_breath_peaks(
-                pressure=context.ventilator_signals["pressure"],
+                pressure=context.ventilator_signals["airway_pressure"],
                 sample_frequency=context.ventilator_fs,
                 peep=context.peep,
             ),
@@ -624,67 +651,47 @@ def _ventilator_breaths_default(
         )
         context.computed["event_detection"]["find_occluded_breaths"] = pocc_indices
 
-    if enabled(("quality_assessment", "detect_non_consecutive_manoeuvres")):
-        if len(ventilator_breath_indices) and len(pocc_indices):
-            context.computed["quality_assessment"][
-                "detect_non_consecutive_manoeuvres"
-            ] = detect_non_consecutive_manoeuvres(
-                ventilator_breath_indices,
-                pocc_indices,
-            )
-        else:
-            context.skipped["quality_assessment.detect_non_consecutive_manoeuvres"] = (
-                "Needs ventilator breath and manoeuvre indices."
-            )
-
-    if (
-        enabled(("quality_assessment", "evaluate_respiratory_rates"))
-        and len(ventilator_breath_indices) >= 2
-    ):
+    if len(ventilator_breath_indices) < 2:
+        _disable_selected_function(
+            context,
+            "quality_assessment",
+            "ventilator_respiratory_rate",
+            "Needs at least two ventilator breaths.",
+        )
+    if len(ventilator_breath_indices) == 0 or len(pocc_indices) == 0:
+        _disable_selected_function(
+            context,
+            "quality_assessment",
+            "detect_non_consecutive_manoeuvres",
+            "Needs ventilator breath and manoeuvre indices.",
+        )
+    if enabled(("quality_assessment", "ventilator_respiratory_rate")):
         context.computed["quality_assessment"]["ventilator_respiratory_rate"] = (
             respiratory_rate_from_indices(
                 indices=ventilator_breath_indices,
                 sample_frequency=context.ventilator_fs,
             )
         )
-    else:
-        context.skipped["quality_assessment.ventilator_respiratory_rate"] = (
-            "Needs at least two ventilator breaths."
+
+    if enabled(("quality_assessment", "detect_non_consecutive_manoeuvres")):
+        context.computed["quality_assessment"]["detect_non_consecutive_manoeuvres"] = (
+            detect_non_consecutive_manoeuvres(
+                ventilator_breath_indices,
+                pocc_indices,
+            )
         )
-    return context
-
-
-def _check_baseline_and_peaks(
-    context: _PostprocessingContext,
-    selected_functions: dict[str, dict[str, bool]],
-    enabled: Callable[[tuple[str, str]], bool],
-) -> tuple[_PostprocessingContext, int]:
-    skipped: int = 0
-    if len(context.peak_indices) < 2 or context.baseline is None:
-        for category, functions in selected_functions.items():
-            for name in functions:
-                if enabled:
-                    context.skipped[f"{category}.{name}"] = (
-                        "Needs detected EMG breath peaks and baseline."
-                    )
-                    skipped += 1
-    return context, skipped
 
 
 def _detect_emg_events_default(
     context: _PostprocessingContext,
-) -> _PostprocessingContext:
+) -> None:
     enabled = _get_enabled_functions(
-        functions=EVENT_DETECTION_FUNCTIONS, context=context
+        functions=EMG_EVENT_DETECTION_FUNCTIONS, context=context
     )
-    context, skipped_update = _check_baseline_and_peaks(
-        context, selected_functions=EVENT_DETECTION_FUNCTIONS, enabled=enabled
-    )
-    if skipped_update:
-        return context
+
     if enabled(("event_detection", "onoffpeak_baseline_crossing")):
         context.computed["event_detection"]["onoffpeak_baseline_crossing"] = (
-            onoff_from_baseline_crossings(
+            m3resp.processing.intervals.onoff_from_baseline_crossings(
                 signal=context.envelope,
                 baseline=context.baseline,
                 peak_indices=context.peak_indices,
@@ -699,7 +706,7 @@ def _detect_emg_events_default(
     slope_window_samples = max(1, int(context.slope_window_seconds * context.fs))
     if enabled(("event_detection", "onoffpeak_slope_extrapolation")):
         context.computed["event_detection"]["onoffpeak_slope_extrapolation"] = (
-            onoff_from_slope(
+            m3resp.processing.intervals.onoff_from_slope(
                 signal=context.envelope,
                 sample_frequency=context.fs,
                 peak_indices=context.peak_indices,
@@ -712,51 +719,66 @@ def _detect_emg_events_default(
         context.indices["start_indices"] = start_indices
         context.indices["end_indices"] = end_indices
         context.indices["start_end_validity"] = np.asarray(valid_peaks, dtype=bool)
-    return context
+
+
+_BOUNDS_REASON = "Needs detected EMG breath start and end indices."
 
 
 def _compute_emg_features_default(
     context: _PostprocessingContext,
-) -> _PostprocessingContext:
+) -> None:
     enabled = _get_enabled_functions(FEATURES_FUNCTIONS, context)
-    context, skipped_updated = _check_baseline_and_peaks(
-        context, FEATURES_FUNCTIONS, enabled
-    )
-    if (
-        context.indices["start_indices"] is None
-        or context.indices["end_indices"] is None
-    ):
-        context.skipped["features"] += (
-            "Needs detected EMG breath start and end indices."
-        )
-        return context
-    if skipped_updated:
-        return context
 
-    if enabled(("features", "time_to_peak")):
-        context.computed["features"]["time_to_peak"] = time_to_peak(
-            values=context.envelope,
-            start_indices=context.indices["start_indices"],
-            end_indices=context.indices["end_indices"],
-        )
-    if enabled(("features", "pseudo_slope")):
-        context.computed["features"]["pseudo_slope"] = pseudo_slope(
-            values=context.envelope,
-            start_indices=context.indices["start_indices"],
-            end_indices=context.indices["end_indices"],
-        )
+    starts = context.indices["start_indices"]
+    ends = context.indices["end_indices"]
+    has_bounds = len(starts) > 0 and len(ends) > 0
+
     if enabled(("features", "amplitude")):
         context.computed["features"]["amplitude"] = amplitude_at_peaks(
             values=context.envelope,
             peak_indices=context.peak_indices,
             baseline=context.baseline,
         )
+
+    if enabled(("features", "respiratory_rate")):
+        _, context.computed["features"]["respiratory_rate"] = (
+            respiratory_rate_from_indices(
+                indices=context.peak_indices, sample_frequency=context.fs
+            )
+        )
+    if not has_bounds:
+        for name in (
+            "time_to_peak",
+            "pseudo_slope",
+            "time_product",
+            "area_under_baseline",
+        ):
+            _disable_selected_function(
+                context,
+                "features",
+                name,
+                _BOUNDS_REASON,
+            )
+        return
+
+    if enabled(("features", "time_to_peak")):
+        context.computed["features"]["time_to_peak"] = time_to_peak(
+            values=context.envelope,
+            start_indices=starts,
+            end_indices=ends,
+        )
+    if enabled(("features", "pseudo_slope")):
+        context.computed["features"]["pseudo_slope"] = pseudo_slope(
+            values=context.envelope,
+            start_indices=starts,
+            end_indices=ends,
+        )
     if enabled(("features", "time_product")):
         context.computed["features"]["time_product"] = window_integral(
             values=context.envelope,
             sample_frequency=context.fs,
-            start_indices=context.indices["start_indices"],
-            end_indices=context.indices["end_indices"],
+            start_indices=starts,
+            end_indices=ends,
             baseline=context.baseline,
         )
     if enabled(("features", "area_under_baseline")):
@@ -764,38 +786,46 @@ def _compute_emg_features_default(
             values=context.envelope,
             sample_frequency=context.fs,
             peak_indices=context.peak_indices,
-            start_indices=context.indices["start_indices"],
-            end_indices=context.indices["end_indices"],
+            start_indices=starts,
+            end_indices=ends,
             window=max(1, int(context.aub_window_seconds * context.fs)),
             baseline=context.baseline,
         )
-    if enabled(("features", "respiratory_rate")) and len(context.peak_indices) >= 2:
-        _, context.computed["features"]["respiratory_rate"] = (
-            respiratory_rate_from_indices(
-                indices=context.peak_indices, sample_frequency=context.fs
-            )
-        )
-
-    elif enabled(("features", "respiratory_rate")):
-        context.skipped["features"] += "Needs at least two EMG breaths."
-
-    return context
 
 
 def _compute_emg_quality_default(
     context: _PostprocessingContext,
-) -> _PostprocessingContext:
+) -> None:
 
     enabled = _get_enabled_functions(
         functions=EMG_QUALITY_ASSESSMENT_FUNCTIONS, context=context
     )
-    context, skipped_updated = _check_baseline_and_peaks(
-        context=context,
-        selected_functions=EMG_QUALITY_ASSESSMENT_FUNCTIONS,
-        enabled=enabled,
-    )
-    if not skipped_updated:
-        return context
+
+    starts = context.indices["start_indices"]
+    ends = context.indices["end_indices"]
+    is_bounded = len(starts) > 0 and len(ends) > 0
+
+    features = context.computed["features"]
+    if not is_bounded:
+        for name in ("percentage_under_baseline", "evaluate_bell_curve_error"):
+            _disable_selected_function(
+                context, "quality_assessment", name, _BOUNDS_REASON
+            )
+    if "time_product" not in features:
+        for name in ("detect_extreme_time_products", "evaluate_bell_curve_error"):
+            _disable_selected_function(
+                context,
+                "quality_assessment",
+                name,
+                "Needs computed EMG breath time products.",
+            )
+    if "area_under_baseline" not in features:
+        _disable_selected_function(
+            context,
+            "quality_assessment",
+            "detect_local_high_aub",
+            "Needs computed EMG breath area-under-baseline.",
+        )
     if enabled(("quality_assessment", "snr_pseudo")):
         context.computed["quality_assessment"]["snr_pseudo"] = snr_pseudo(
             envelope=context.envelope,
@@ -803,83 +833,66 @@ def _compute_emg_quality_default(
             baseline=context.baseline,
             sample_frequency=context.fs,
         )
-    if (
-        enabled(("quality_assessment", "percentage_under_baseline"))
-        and context.indices["start_indices"] is not None
-        and context.indices["end_indices"] is not None
-    ):
+    if enabled(("quality_assessment", "percentage_under_baseline")):
         context.computed["quality_assessment"]["percentage_under_baseline"] = (
             percentage_under_baseline(
                 signal=context.envelope,
                 peak_indices=context.peak_indices,
-                start_indices=context.indices["start_indices"],
-                end_indices=context.indices["end_indices"],
+                start_indices=starts,
+                end_indices=ends,
                 baseline=context.baseline,
                 sample_frequency=context.fs,
             )
         )
-    if (
-        enabled(("quality_assessment", "detect_local_high_aub"))
-        and "area_under_baseline" in context.computed["features"]
-    ):
+    if enabled(("quality_assessment", "detect_local_high_aub")):
         aubs = context.computed["features"]["area_under_baseline"][0]
         context.computed["quality_assessment"]["detect_local_high_aub"] = (
             detect_local_high_aub(aubs)
         )
-    if (
-        enabled(("quality_assessment", "detect_extreme_time_products"))
-        and "time_product" in context.computed["features"]
-    ):
+    if enabled(("quality_assessment", "detect_extreme_time_products")):
         time_products = context.computed["features"]["time_product"]
         context.computed["quality_assessment"]["detect_extreme_time_products"] = (
             detect_extreme_time_products(time_products)
         )
-    if (
-        enabled(("quality_assessment", "evaluate_bell_curve_error"))
-        and context.indices["start_indices"] is not None
-        and context.indices["end_indices"] is not None
-        and "time_product" in context.computed["features"]
-    ):
+    if enabled(("quality_assessment", "evaluate_bell_curve_error")):
         time_products = context.computed["features"]["time_product"]
         context.computed["quality_assessment"]["evaluate_bell_curve_error"] = (
             evaluate_bell_curve_error(
                 peak_indices=context.peak_indices,
-                start_indices=context.indices["start_indices"],
-                end_indices=context.indices["end_indices"],
+                start_indices=starts,
+                end_indices=ends,
                 signal=context.envelope,
                 time_products=time_products,
                 sample_frequency=context.fs,
             )
         )
-    return context
+    if enabled(("quality_assessment", "interpeak_distance")):
+        context.computed["quality_assessment"]["interpeak_distance"] = (
+            interpeak_distance(
+                ecg_peak_indices=context.ecg_peak_indices,
+                emg_peak_indices=context.peak_indices,
+            )
+        )
 
 
 def _compute_multimodal_quality_default(
     context: _PostprocessingContext,
-) -> _PostprocessingContext:
+) -> None:
     enabled = _get_enabled_functions(
         functions=MULTIMODAL_QUALITY_ASSESSMENT_FUNCTIONS, context=context
     )
-    skipped: dict[str, str] = {}
-
-    context, skipped_updated = _check_baseline_and_peaks(
-        context=context,
-        selected_functions=MULTIMODAL_QUALITY_ASSESSMENT_FUNCTIONS,
-        enabled=enabled,
-    )
-    if not skipped_updated:
-        return context
     ventilator_breath_indices = context.computed.get("event_detection", {}).get(
         "detect_ventilator_breath", np.asarray(a=[], dtype=int)
     )
-    if (
-        enabled(("quality_assessment", "evaluate_event_timing"))
-        and context.ventilator_signals is not None
-        and len(ventilator_breath_indices)
-    ):
-        peak_indices = context.computed.get("event_detection", {}).get(
-            "detect_peaks", np.asarray(a=[], dtype=int)
+    if not len(ventilator_breath_indices):
+        _disable_selected_function(
+            context,
+            "quality_assessment",
+            "evaluate_event_timing",
+            "Needs ventilator breath timing.",
         )
+    if enabled(("quality_assessment", "evaluate_event_timing")):
+        peak_indices = context.peak_indices
         paired_count = min(len(peak_indices), len(ventilator_breath_indices))
         context.computed["quality_assessment"]["evaluate_event_timing"] = (
             evaluate_event_timing(
@@ -887,23 +900,14 @@ def _compute_multimodal_quality_default(
                 ventilator_breath_indices[:paired_count] / float(context.ventilator_fs),
             )
         )
-    elif enabled(("quality_assessment", "evaluate_event_timing")):
-        skipped["quality_assessment.evaluate_event_timing"] = (
-            "Needs ventilator breath timing."
+    if "ventilator_respiratory_rate" not in context.computed["quality_assessment"]:
+        _disable_selected_function(
+            context,
+            "quality_assessment",
+            "evaluate_respiratory_rates",
+            "Needs computed ventilator respiratory rate.",
         )
-
-    # Deliberately independent of 'evaluate_event_timing' above: its
-    # only real prerequisite is that 'ventilator_respiratory_rate' was
-    # computed (near the top of this function), which does not
-    # require 'evaluate_event_timing' to be selected. Nesting this
-    # under that block previously meant selecting
-    # 'evaluate_respiratory_rates' alone (without also selecting
-    # 'evaluate_event_timing') silently produced nothing - no result,
-    # no skip reason.
-    if (
-        enabled(("quality_assessment", "evaluate_respiratory_rates"))
-        and "ventilator_respiratory_rate" in context.computed["quality_assessment"]
-    ):
+    if enabled(("quality_assessment", "evaluate_respiratory_rates")):
         rr_vent = context.computed["quality_assessment"]["ventilator_respiratory_rate"][
             0
         ]
@@ -914,27 +918,14 @@ def _compute_multimodal_quality_default(
                 rr_vent,
             )
         )
-    elif enabled(("quality_assessment", "evaluate_respiratory_rates")):
-        skipped["quality_assessment.evaluate_respiratory_rates"] = (
-            "Needs ventilator respiratory rate (requires "
-            "'evaluate_respiratory_rates' selected together with at "
-            "least two ventilator breaths)."
-        )
-
-    return context
 
 
 # TODO
 def _postprocess_default(
-    processed_emg: Any,
+    processed_emg: Mapping,
     events: Sequence[BreathEvent] | None = None,
     **kwargs,
 ) -> dict[str, Any]:
-    try:
-        import numpy as np
-    except ImportError as exc:
-        msg = "EMG postprocessing requires numpy."
-        raise OptionalDependencyError(msg) from exc
 
     if not isinstance(processed_emg, dict) or "envelope" not in processed_emg:
         msg = (
@@ -945,45 +936,23 @@ def _postprocess_default(
     context: _PostprocessingContext = _build_context(
         envelope=processed_emg["envelope"],
         fs=processed_emg["fs"],
-        peak_indices=peak_indices_from_events(events, processed_emg["fs"]),
+        peak_indices=np.asarray(peak_indices_from_events(events, processed_emg["fs"])),
         **kwargs,
     )
+    _normalize_selected_postprocessing(context.selected_functions)
+    _compute_baseline_default(context)
+    _disable_unavailable_postprocessing(context)
+    _ventilator_breaths_default(context)
 
-    selected = _normalize_selected_postprocessing(context.selected_functions)
-    enabled = selected.__contains__
+    _detect_emg_events_default(context)
 
-    # since EMG methods are now native, there's no need for the ReSurfEMG dependency check
-    context = _compute_baseline_default(context)
+    _compute_emg_features_default(context)
 
-    context = _ventilator_breaths_default(context)
+    _compute_emg_quality_default(context)
 
-    context = _detect_emg_events_default(context)
-
-    context = _compute_emg_features_default(context)
-
-    context = _compute_emg_quality_default(context)
-
-    context = _compute_multimodal_quality_default(context)
-    if context.baseline is None or len(context.peak_indices) < 2:
-        if enabled(("quality_assessment", "evaluate_event_timing")):
-            context.skipped["quality_assessment.evaluate_event_timing"] = (
-                "Needs detected EMG breath peaks."
-            )
-        if enabled(("quality_assessment", "evaluate_respiratory_rates")):
-            context.skipped["quality_assessment.evaluate_respiratory_rates"] = (
-                "Needs detected EMG breath peaks."
-            )
-        if enabled(("quality_assessment", "pocc_quality")):
-            context.skipped["quality_assessment.pocc_quality"] = (
-                "Needs Pocc ventilator inputs."
-            )
-        if enabled(("quality_assessment", "interpeak_dist")):
-            context.skipped["quality_assessment.interpeak_dist"] = (
-                "Needs ECG peak indices."
-            )
+    _compute_multimodal_quality_default(context)
     # TODO update settings
     return {
-        # "available": available_postprocessing(),
         "computed": context.computed,
         "skipped": context.skipped,
         "peak_indices": context.peak_indices,
@@ -997,6 +966,99 @@ def _postprocess_default(
             "peep": context.peep,
         },
     }
+
+
+def _disable_unavailable_postprocessing(context: _PostprocessingContext) -> None:
+
+    if context.ventilator_signals is None:
+        _disable_selected_function(
+            context,
+            "event_detection",
+            "detect_ventilator_breath",
+            "Needs ventilator volume input.",
+        )
+        _disable_selected_function(
+            context,
+            "event_detection",
+            "find_occluded_breaths",
+            "Needs ventilator pressure and PEEP inputs.",
+        )
+        _disable_selected_function(
+            context,
+            "quality_assessment",
+            "detect_non_consecutive_manoeuvres",
+            "Needs ventilator breath and manoeuvre indices.",
+        )
+        _disable_selected_function(
+            context,
+            "quality_assessment",
+            "ventilator_respiratory_rate",
+            "Needs ventilator volume input.",
+        )
+
+    if context.ecg_peak_indices is None or len(context.ecg_peak_indices) < 2:
+        _disable_selected_function(
+            context,
+            "quality_assessment",
+            "interpeak_distance",
+            "Needs detected ECG peaks.",
+        )
+
+    if context.peep is None or np.isnan(context.peep):
+        _disable_selected_function(
+            context,
+            "event_detection",
+            "find_occluded_breaths",
+            "Needs ventilator PEEP input.",
+        )
+
+    if context.baseline is None or len(context.peak_indices) < 2:
+        # quality assessment:
+        for function in [
+            "evaluate_event_timing",
+            "evaluate_respiratory_rates",
+            "interpeak_distance",
+            "detect_extreme_time_products",
+            "evaluate_bell_curve_error",
+            "percentage_under_baseline",
+            "snr_pseudo",
+        ]:
+            _disable_selected_function(
+                context,
+                "quality_assessment",
+                function,
+                "Needs detected EMG breath peaks and baseline.",
+            )
+
+        # EVENT DETECTION
+        for function in [
+            "onoffpeak_baseline_crossing",
+            "onoffpeak_slope_extrapolation",
+        ]:
+            _disable_selected_function(
+                context,
+                "event_detection",
+                function,
+                "Needs detected EMG breath peaks and baseline.",
+            )
+        # FEATURES
+        for function in [
+            "time_to_peak",
+            "pseudo_slope",
+            "time_product",
+            "area_under_baseline",
+            "amplitude",
+        ]:
+            _disable_selected_function(
+                context,
+                "features",
+                function,
+                "Needs detected EMG breath peaks and baseline.",
+            )
+    if len(context.peak_indices) < 2:
+        _disable_selected_function(
+            context, "features", "respiratory_rate", "Needs detected EMG breath peaks."
+        )
 
 
 class _DefaultsMixin:
