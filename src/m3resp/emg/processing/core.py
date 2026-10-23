@@ -8,15 +8,16 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
-from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
+from m3resp.core.exceptions import (
+    InvalidM3respModuleError,
+    OptionalDependencyError,
+    UnsupportedWorkflowError,
+)
 from m3resp.data import ParameterResult, QualityFlag, Signal
 from m3resp.data.events import BreathEvent, coerce_breath_events
-
-# from m3resp.emg.io.loaders import load
 from m3resp.processing.quality import quality_flag_from_result, skipped_quality_flag
 
 from .shared import (
-    _POSTPROCESSING_MODULES,
     POSTPROCESSING_FUNCTIONS,
     _as_parameter_value,
     _computed_category,
@@ -145,8 +146,7 @@ class _CoreMixin:
 
     # TODO
     def to_quality_flags(self, postprocessed: dict[str, Any]) -> list[QualityFlag]:
-        """Convert computed EMG quality-assessment results into `QualityFlag`
-        objects.
+        """Convert EMG quality-assessment results into `QualityFlag` objects.
 
         ReSurfEMG's ``quality_assessment`` functions return heterogeneous
         shapes (booleans, SNR floats, per-breath arrays), so this performs a

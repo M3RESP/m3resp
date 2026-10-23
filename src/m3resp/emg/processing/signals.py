@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from m3resp.core.exceptions import OptionalDependencyError
+from m3resp.adapters.ventilator_adapter import DEFAULT_CHANNELS, split_channels
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -20,52 +21,63 @@ if TYPE_CHECKING:
 def ventilator_signals(
     ventilator: Any | None,
     *,
-    airway_pressure_channel: int,
-    flow_channel: int,
-    volume_channel: int,
+    airway_pressure_channel: int | None = None,
+    flow_channel: int | None = None,
+    volume_channel: int | None = None,
+    channels: Any = DEFAULT_CHANNELS,
     fs: float | None = None,
 ) -> dict[str, Any] | None:
+    """Extract the ventilator channels used for EMG postprocessing.
+
+    Args:
+        ventilator (Any | None): Dict with array and metadata, or a numeric array
+            with shape (channels, samples). None indicates unavailable data.
+        airway_pressure_channel (int | None): Explicit zero-based pressure index.
+        flow_channel (int | None): Explicit zero-based flow index.
+        volume_channel (int | None): Explicit zero-based volume index.
+        channels (Any): Names to extract; defaults to airway_pressure, flow and
+            volume. Labels and fallback positions follow `split_channels`.
+        fs (float | None): Sampling rate in Hz; overrides metadata fs.
+
+    Returns:
+        dict[str, Any] | None: Channel bundle from `split_channels`, including
+            per-channel units and fs in Hz, or None when ventilator is None.
+
+    Raises:
+        TypeError: If the array or sampling rate is missing.
+        ValueError: If a channel name or index selection is invalid.
+        UnresolvedChannelError: If a requested channel cannot be identified.
+        IndexError: If a resolved index exceeds the available channels.
+    """
     if ventilator is None:
         return None
-
-    try:
-        import numpy as np
-    except ImportError as exc:
-        msg = "EMG postprocessing requires numpy."
-        raise OptionalDependencyError(msg) from exc
 
     metadata = ventilator.get("metadata", {}) if isinstance(ventilator, dict) else {}
     array = ventilator.get("array") if isinstance(ventilator, dict) else ventilator
     if array is None:
-        msg = "Ventilator postprocessing input needs an array."
-        raise TypeError(msg)
+        raise TypeError("Ventilator postprocessing input needs an array.")
 
-    vent_fs = fs if fs is not None else metadata.get("fs")
-    if vent_fs is None:
-        msg = "Ventilator postprocessing input needs a sampling rate."
-        raise TypeError(msg)
+    if fs is None and not metadata.get("fs"):
+        raise TypeError("Ventilator postprocessing input needs a sampling rate.")
 
-    array = np.asarray(array, dtype=float)
-    return {
-        "pressure": np.asarray(array[airway_pressure_channel], dtype=float),
-        "flow": np.asarray(array[flow_channel], dtype=float),
-        "volume": np.asarray(array[volume_channel], dtype=float),
-        "fs": float(vent_fs),
-        "metadata": metadata,
-    }
+    return split_channels(
+        {"array": array, "metadata": metadata},
+        channels=channels,
+        airway_pressure_channel=airway_pressure_channel,
+        flow_channel=flow_channel,
+        volume_channel=volume_channel,
+        fs=fs,
+    )
 
 
 def peak_indices_from_events(
     events: Sequence[BreathEvent] | None, fs: float
-) -> np.ndarray:
+) -> list[int]:
     """Get the sample indices of the peak times of `events` at sampling rate `fs`."""
     if events is None:
-        return np.array([], dtype=int)
-    return np.asarray(
-        [
-            int(event.extremum_time * fs)
-            for event in events
-            if event.extremum_time is not None
-        ],
-        dtype=int,
-    )
+        return []
+    return [
+        int(event.extremum_time * fs)
+        for event in events
+        if event.extremum_time is not None
+    ]
