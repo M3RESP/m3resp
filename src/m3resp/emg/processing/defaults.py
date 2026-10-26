@@ -1,4 +1,9 @@
-"""Native fallback implementations of `ReSurfEMGAdapter`, used when the optional `resurfemg` package is unavailable."""
+"""Default EMG preprocessing and postprocessing functions for the ReSurfEMG workflow.
+
+The original copyright and license notices are retained per Apache-2.0 §4.
+Full attribution notice: see top-level NOTICE.md.
+---------------------------------------------------------------------------
+"""  # noqa: CPY001
 
 from __future__ import annotations
 
@@ -46,6 +51,14 @@ from .quality import (
     snr_pseudo,
 )
 from .shared import (
+    BASELINE_FUNCTIONS,
+    EMG_EVENT_DETECTION_FUNCTIONS,
+    EMG_PROCESSING_DEFAULT_PARAMETERS,
+    EMG_QUALITY_ASSESSMENT_FUNCTIONS,
+    FEATURES_FUNCTIONS,
+    MULTIMODAL_QUALITY_ASSESSMENT_FUNCTIONS,
+    VENTILATOR_EVENT_DETECTION_FUNCTIONS,
+    VENTILATOR_QUALITY_ASSESSMENT_FUNCTIONS,
     _choose_emg_channel,
     _normalize_selected_postprocessing,
     _require_emg_recording,
@@ -56,64 +69,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
     from m3resp.data.events import BreathEvent
-
-BASELINE_FUNCTIONS = {
-    "baseline": {
-        "moving_baseline": True,
-        "slopesum_baseline": True,
-    }
-}
-
-EMG_EVENT_DETECTION_FUNCTIONS = {
-    "event_detection": {
-        "onoffpeak_baseline_crossing": True,
-        "onoffpeak_slope_extrapolation": True,
-    }
-}
-VENTILATOR_EVENT_DETECTION_FUNCTIONS = {
-    "event_detection": {
-        "detect_ventilator_breath": True,
-        "find_occluded_breaths": True,
-    }
-}
-
-VENTILATOR_QUALITY_ASSESSMENT_FUNCTIONS = {
-    "quality_assessment": {
-        "detect_non_consecutive_manoeuvres": True,
-        "evaluate_respiratory_rates": True,
-        "ventilator_respiratory_rate": True,
-    }
-}
-MULTIMODAL_QUALITY_ASSESSMENT_FUNCTIONS = {
-    "quality_assessment": {
-        "evaluate_event_timing": True,
-        "evaluate_respiratory_rates": True,
-    }
-}
-
-EMG_QUALITY_ASSESSMENT_FUNCTIONS = {
-    "quality_assessment": {
-        "snr_pseudo": True,
-        "percentage_under_baseline": True,
-        "detect_local_high_aub": True,
-        "detect_extreme_time_products": True,
-        "evaluate_bell_curve_error": True,
-        "evaluate_event_timing": True,
-        "evaluate_respiratory_rates": True,
-        "interpeak_distance": True,
-    }
-}
-
-FEATURES_FUNCTIONS = {
-    "features": {
-        "amplitude": True,
-        "area_under_baseline": True,
-        "pseudo_slope": True,
-        "time_to_peak": True,
-        "time_product": True,
-        "respiratory_rate": True,
-    }
-}
 
 
 def _merge_selections(
@@ -505,19 +460,14 @@ def _build_context(
         "baseline": None,
     }
     context["ecg_peak_indices"] = kwargs.pop("ecg_peak_indices", None)
-    context["baseline_window_seconds"] = kwargs.pop("baseline_window_seconds", 7.5)
-    context["baseline_step_seconds"] = kwargs.pop("baseline_step_seconds", 0.2)
-    context["baseline_percentile"] = kwargs.pop("baseline_percentile", 33.0)
+    for param, default in EMG_PROCESSING_DEFAULT_PARAMETERS.items():
+        context[f"{param}"] = kwargs.pop(f"{param}", default)
     context["window_samples"] = max(
         1, int(context["baseline_window_seconds"] * context["fs"])
     )
     context["step_samples"] = max(
         1, int(context["baseline_step_seconds"] * context["fs"])
     )
-    context["ventilator_breath_width_seconds"] = kwargs.pop(
-        "ventilator_breath_width_seconds", 0.1
-    )
-
     context["ventilator_signals"] = ventilator_signals(
         ventilator=kwargs.pop("ventilator", None),
         airway_pressure_channel=kwargs.pop("ventilator_pressure_channel", None),
@@ -538,12 +488,10 @@ def _build_context(
         if context["ventilator_fs"] is not None
         else None
     )
-
-    context["slope_window_seconds"] = kwargs.pop("slope_window_seconds", 0.5)
     context["slope_window_samples"] = max(
         1, int(context["slope_window_seconds"] * context["fs"])
     )
-    context["aub_window_seconds"] = kwargs.pop("aub_window_seconds", 5.0)
+
     context["selected_functions"] = copy.deepcopy(
         kwargs.pop(
             "selected_functions",
@@ -920,13 +868,166 @@ def _compute_multimodal_quality_default(
         )
 
 
-# TODO
 def _postprocess_default(
     processed_emg: Mapping,
     events: Sequence[BreathEvent] | None = None,
     **kwargs,
 ) -> dict[str, Any]:
+    """Run the default EMG postprocessing pipeline and return a dictionary of results.
 
+    Args:
+        processed_emg: the processed EMG bundle returned by `_preprocess_default`;
+            must contain "envelope" and "fs"
+        events (Sequence[BreathEvent], Optional): detected EMG breaths, e.g. from
+            `_detect_breaths_default`. Their extremum indices are the breath
+            peaks every peak-based step uses. If None or fewer than two, the
+            peak-based steps are skipped.
+        **kwargs: optional keyword arguments for postprocessing customization
+
+    Returns:
+        dict[str, Any]: a dictionary containing the postprocessing results
+            - "computed": the results, grouped by category ("baseline",
+                "event_detection", "features", "quality_assessment") and keyed
+                by function name
+            - "skipped": the selected functions that did not run, keyed by
+                "category.function", with the reason as value
+            - "peak_indices": the EMG breath peak indices (samples) taken from
+                ``events``
+            - "settings": the window, percentile and PEEP settings used
+
+    Raises:
+        UnsupportedWorkflowError: if ``processed_emg`` is not a dictionary with
+            an "envelope" entry.
+
+    Without any additional arguments, the function runs every function listed
+    below on the EMG envelope. Functions whose inputs are missing (e.g. no
+    ventilator recording, fewer than two breaths, no ECG peaks) are skipped
+    and listed in "skipped" with the reason, instead of raising an error.
+    Every selected function therefore appears in exactly one of "computed"
+    or "skipped".
+
+    The pipeline runs in this order:
+    -- baseline computation
+    -- ventilator breath and occlusion detection (if a ventilator is given)
+    -- EMG breath onset and offset detection
+    -- EMG breath features
+    -- EMG quality assessment
+    -- multimodal (EMG + ventilator) quality assessment
+
+    # Postprocessing pipeline customization
+    ## Function selection
+    - ``selected_functions``: nested mapping ``{category: {function: bool}}``
+        of the functions to run (default: all functions listed below). The
+        mapping is copied, so the caller's dictionary is never modified.
+
+    ## Baseline
+    Functions (category "baseline"):
+    - ``moving_baseline``: running percentile of the envelope
+    - ``slopesum_baseline``: slope-sum baseline; also returns its running
+        mean, running standard deviation and slope series
+    When both are selected, the slope-sum baseline is the one used by all
+    later steps.
+
+    Parameters:
+    - ``baseline_window_seconds``: window length in seconds (default: 7.5)
+    - ``baseline_step_seconds``: step between windows in seconds (default: 0.2)
+    - ``baseline_percentile``: percentile of the envelope used as baseline
+        (default: 33.0)
+
+    ## Event detection
+    EMG functions (category "event_detection"), which need at least two breath
+    peaks and a baseline:
+    - ``onoffpeak_baseline_crossing``: breath onsets and offsets where the
+        envelope crosses the baseline
+    - ``onoffpeak_slope_extrapolation``: breath onsets and offsets
+        extrapolated from the slope around each peak
+    When both are selected, the slope-extrapolated onsets and offsets are the
+    ones used by the features and quality steps.
+
+    Ventilator functions (category "event_detection"):
+    - ``detect_ventilator_breath``: breath peaks in the ventilator volume
+    - ``find_occluded_breaths``: occlusion manoeuvres in the airway pressure;
+        needs ``peep``
+
+    Parameters:
+    - ``slope_window_seconds``: window for slope extrapolation in seconds
+        (default: 0.5)
+    - ``ventilator_breath_width_seconds``: minimum ventilator breath width in
+        seconds (default: 0.1)
+
+    ## Ventilator input
+    - ``ventilator``: the loaded ventilator recording (default: None). Without
+        it, all ventilator and multimodal functions are skipped.
+    - ``ventilator_pressure_channel``, ``ventilator_flow_channel``,
+        ``ventilator_volume_channel``: channels to use from the ventilator
+        recording (default: None, chosen automatically)
+    - ``peep``: positive end-expiratory pressure, in the pressure channel's
+        units (default: NaN). Without it, ``find_occluded_breaths`` is skipped,
+        because PEEP cannot be estimated reliably from the pressure trace.
+
+    ## Features
+    Functions (category "features"):
+    - ``amplitude``: envelope amplitude above baseline at each breath peak
+    - ``respiratory_rate``: per-breath respiratory rate from the peak
+        intervals; needs only two or more peaks
+    - ``time_to_peak``: time from breath onset to peak
+    - ``pseudo_slope``: rise of the envelope from onset to peak
+    - ``time_product``: envelope integral above baseline between onset and
+        offset
+    - ``area_under_baseline``: area of the envelope below the baseline
+        around each breath
+    ``time_to_peak``, ``pseudo_slope``, ``time_product`` and
+    ``area_under_baseline`` also need breath onsets and offsets.
+
+    Parameters:
+    - ``aub_window_seconds``: window for the area under the baseline in
+        seconds (default: 5.0)
+
+    ## Quality assessment
+    EMG functions (category "quality_assessment"):
+    - ``snr_pseudo``: signal-to-noise ratio of each breath against the baseline
+    - ``percentage_under_baseline``: share of each breath below the baseline;
+        needs onsets and offsets
+    - ``detect_local_high_aub``: breaths with an unusually high area under the
+        baseline; needs ``area_under_baseline``
+    - ``detect_extreme_time_products``: outlier time products; needs
+        ``time_product``
+    - ``evaluate_bell_curve_error``: deviation of each breath from a bell
+        shape; needs onsets, offsets and ``time_product``
+    - ``interpeak_distance``: distance between EMG breath peaks and ECG peaks;
+        needs ``ecg_peak_indices``
+
+    Ventilator functions (category "quality_assessment"):
+    - ``ventilator_respiratory_rate``: respiratory rate from the ventilator
+        breaths; needs at least two ventilator breaths
+    - ``detect_non_consecutive_manoeuvres``: occlusion manoeuvres not
+        separated by normal breaths; needs ventilator breaths and occlusions
+
+    Multimodal functions (category "quality_assessment"):
+    - ``evaluate_event_timing``: timing difference between EMG and ventilator
+        breaths, paired in order of occurrence
+    - ``evaluate_respiratory_rates``: agreement between the EMG and
+        ventilator respiratory rates; needs ``ventilator_respiratory_rate``
+
+    Parameters:
+    - ``ecg_peak_indices``: ECG R-peak indices in envelope samples, e.g. from
+        ECG removal during preprocessing (default: None). At least two are
+        needed for ``interpeak_distance``.
+
+    # Additional information
+    All indices are in samples of the envelope, except the ventilator
+    indices, which are in samples of the ventilator recording. Durations are
+    converted to samples with the respective sampling rate.
+
+    ``evaluate_event_timing`` pairs the first EMG breath with the first
+    ventilator breath, the second with the second, and so on. It assumes both
+    recordings are synchronized and that neither modality has missed or extra
+    breaths; check ``evaluate_respiratory_rates`` before relying on it.
+
+    The default parameter values are defined in
+    ``EMG_PROCESSING_DEFAULT_PARAMETERS``; the values used are returned in
+    "settings".
+    """
     if not isinstance(processed_emg, dict) or "envelope" not in processed_emg:
         msg = (
             "Default EMG postprocessing expects processed EMG data from "
@@ -943,13 +1044,9 @@ def _postprocess_default(
     _compute_baseline_default(context)
     _disable_unavailable_postprocessing(context)
     _ventilator_breaths_default(context)
-
     _detect_emg_events_default(context)
-
     _compute_emg_features_default(context)
-
     _compute_emg_quality_default(context)
-
     _compute_multimodal_quality_default(context)
     # TODO update settings
     return {

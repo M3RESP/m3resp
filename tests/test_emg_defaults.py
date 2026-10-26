@@ -23,6 +23,7 @@ import pytest
 
 from m3resp.core.exceptions import UnsupportedWorkflowError
 from m3resp.emg.processing import defaults
+from m3resp.processing import intervals
 
 # --------------------------------------------------------------------------- #
 # Synthetic data
@@ -233,7 +234,7 @@ def test_build_context_without_ventilator(peaks, processed_emg):
     assert context.ventilator_signals is None
     assert context.ventilator_fs is None
     assert context.vent_width_samples is None
-    assert context.peep == 0.0
+    assert np.isnan(context.peep)
     assert context.baseline is None
 
 
@@ -275,28 +276,26 @@ def test_disable_ignores_unselected_functions(processed_emg, peaks):
     assert not (set(context.skipped) & VENTILATOR_ONLY)
 
 
-def test_disable_follows_time_product_dependency(processed_emg, peaks):
+def test_quality_skips_functions_needing_time_products(processed_emg, peaks):
     selection = {
-        "features": {"time_product": False},
         "quality_assessment": {
             "detect_extreme_time_products": True,
             "evaluate_bell_curve_error": True,
         },
     }
     context = _context_with_baseline(processed_emg, peaks, selected_functions=selection)
-    defaults._disable_unavailable_postprocessing(context)
+    defaults._compute_emg_quality_default(context)  # no features computed
     assert "quality_assessment.detect_extreme_time_products" in context.skipped
     assert "quality_assessment.evaluate_bell_curve_error" in context.skipped
+    assert context.computed["quality_assessment"] == {}
 
 
-def test_disable_follows_area_under_baseline_dependency(processed_emg, peaks):
-    selection = {
-        "features": {"area_under_baseline": False},
-        "quality_assessment": {"detect_local_high_aub": True},
-    }
+def test_quality_skips_local_high_aub_without_area_under_baseline(processed_emg, peaks):
+    selection = {"quality_assessment": {"detect_local_high_aub": True}}
     context = _context_with_baseline(processed_emg, peaks, selected_functions=selection)
-    defaults._disable_unavailable_postprocessing(context)
+    defaults._compute_emg_quality_default(context)
     assert "quality_assessment.detect_local_high_aub" in context.skipped
+    assert context.computed["quality_assessment"] == {}
 
 
 # --------------------------------------------------------------------------- #
@@ -454,7 +453,7 @@ def test_postprocess_returns_peak_indices_and_settings(processed_emg, peaks):
     )
     np.testing.assert_array_equal(result["peak_indices"], peaks)
     assert result["settings"]["baseline_window_seconds"] == 5.0
-    assert result["settings"]["peep"] == 0.0
+    assert np.isnan(result["settings"]["peep"])
 
 
 @pytest.mark.usefixtures("inject_peaks")
@@ -532,10 +531,9 @@ def test_missing_onoffsets_skip_dependent_functions_without_error(
     empty = np.asarray([], dtype=int)
     no_bounds = (empty, empty, empty, empty, np.asarray([], dtype=bool))
     monkeypatch.setattr(
-        defaults, "onoff_from_baseline_crossings", lambda **_: no_bounds
+        intervals, "onoff_from_baseline_crossings", lambda **_: no_bounds
     )
-    monkeypatch.setattr(defaults, "onoff_from_slope", lambda **_: no_bounds)
-
+    monkeypatch.setattr(intervals, "onoff_from_slope", lambda **_: no_bounds)
     result = _run(processed_emg, peaks, ecg_peak_indices=peaks + 50)
 
     for name in ("time_to_peak", "pseudo_slope", "time_product", "area_under_baseline"):
