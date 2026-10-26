@@ -1,0 +1,38 @@
+
+<div class="appbar">
+  <div class="appbar-left">
+  <div class="brand">
+    <!-- ☰ menu: the session and its actions (js/core/session.js) -->
+    <div class="app-menu">
+      <button type="button" class="app-menu-btn" id="appMenuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="appMenu" title="Session menu">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 5.5h12M4 10h12M4 14.5h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+      </button>
+      <div class="menu-pop app-menu-pop" id="appMenu" role="menu" hidden>
+        <div class="app-menu-head">
+          <span class="dot"></span>
+          <div><div class="app-menu-title">Session <b id="appMenuSessionId">2026-06-10_153009</b></div><div class="app-menu-sub"><span id="appMenuStarted"></span> · multimodal</div></div>
+        </div>
+        <button type="button" role="menuitem" data-session-act="new" data-icon="plus">New session</button>
+        <button type="button" role="menuitem" data-session-act="save" data-icon="save">Save session</button>
+        <button type="button" role="menuitem" data-session-act="load" data-icon="folder">Load session…</button>
+      </div>
+      <input type="file" id="sessionLoadInput" accept=".json,application/json" hidden>
+    </div>
+    <!-- the logo and the tag sit on one baseline -->
+    <span class="brand-name">
+      <span class="brand-mark" role="img" aria-label="M3RESP">M<span class="brand-3">3</span>RESP</span>
+      <span class="brand-tag">workspace</span>
+    </span>
+  </div>
+  <div class="tabs" id="tabs">
+    <button class="tab-btn active" data-view="prepare">1 · Prepare</button>
+    <button class="tab-btn" data-view="design">2 · Design</button>
+    <button class="tab-btn locked" data-view="check" id="checkTab" title="Run the workflow on 2 · Design first">3 · Check<svg class="tab-lock" width="12" height="12" viewBox="0 0 20 20" fill="none" aria-label="locked"><path d="M6.5 9V6.8a3.5 3.5 0 0 1 7 0V9M5 9h10v8H5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg></button>
+    <button class="tab-btn locked" data-view="results" id="resultsTab" title="Confirm the quality checks on 3 · Check first">4 · Results<svg class="tab-lock" width="12" height="12" viewBox="0 0 20 20" fill="none" aria-label="locked"><path d="M6.5 9V6.8a3.5 3.5 0 0 1 7 0V9M5 9h10v8H5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg></button>
+  </div>
+  </div>
+  <div class="appbar-right">
+    <span class="mock-badge">mockup — not wired to backend</span>
+  </div>
+</div>
+

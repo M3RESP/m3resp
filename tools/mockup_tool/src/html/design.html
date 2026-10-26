@@ -1,0 +1,203 @@
+<!-- ============ 2. DESIGN (node editor) ============ -->
+<div class="view" id="view-design">
+  <div class="design-grid">
+    <div class="palette" id="palettePanel">
+      <div class="side-panel-topbar">
+        <span class="side-panel-topbar-title">
+          <span class="side-panel-topbar-label">Palette</span>
+        </span>
+        <button class="side-collapse-btn" id="paletteCollapseBtn" title="Collapse this panel"></button>
+      </div>
+      <!-- upper half: the steps and workflows that can go on the canvas -->
+      <div class="pal-pane" id="stepsPane" data-pane="steps" style="--grow:50">
+        <button type="button" class="pal-pane-head" title="Open or close this panel">
+          <span class="pal-pane-chevron"></span><span class="pal-pane-title">Steps</span>
+        </button>
+        <div class="pal-pane-body">
+          <div class="pal-tabs" id="palTabs">
+            <button class="pal-tab active" data-paltab="ops">Operations</button>
+            <button class="pal-tab" data-paltab="blocks">Workflows</button>
+          </div>
+
+          <div class="pal-tab-panel active" data-paltab="ops">
+            <div class="palette-search">
+              <input type="search" placeholder="Search operations…" id="paletteSearchInput" />
+              <div class="pal-view-seg" id="palViewSeg" role="group" aria-label="Palette view">
+                <button class="on" data-palview="grid" title="Show the steps as icons">▦</button>
+                <button data-palview="list" title="Show the steps as a list">☰</button>
+              </div>
+            </div>
+            <div class="palette-scroll" id="palette"></div>
+          </div>
+
+          <div class="pal-tab-panel" data-paltab="blocks">
+            <div class="palette-search">
+              <input type="search" placeholder="Search workflows…" id="blocksSearchInput" />
+              <div class="pal-view-seg" id="blocksViewSeg" role="group" aria-label="workflows view">
+                <button class="on" data-palview="grid" title="Show the workflows as icons">▦</button>
+                <button data-palview="list" title="Show the workflows as a list">☰</button>
+              </div>
+            </div>
+            <div class="palette-scroll" id="blocksTab"></div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- lower half: the data made on the canvas and the saved sequences -->
+      <div class="pal-pane" id="dataPane" data-pane="data" style="--grow:50">
+        <button type="button" class="pal-pane-head" title="Open or close this panel">
+          <span class="pal-pane-chevron"></span><span class="pal-pane-title">Available data</span><span class="pal-pane-count" id="dataPaneCount"></span>
+        </button>
+        <div class="pal-pane-body">
+          <div class="palette-search">
+            <input type="search" placeholder="Search data…" id="dataSearchInput" />
+            <div class="pal-view-seg" id="dataViewSeg" role="group" aria-label="data view">
+              <button data-palview="grid" title="Show the data as icons">▦</button>
+              <button class="on" data-palview="list" title="Show the data as a list">☰</button>
+            </div>
+          </div>
+          <div class="palette-scroll" id="dataTab"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="canvas-wrap" id="canvasWrap">
+      <div class="canvas-toolbar">
+        <button class="tb-btn" id="examplesBtn" title="Start again: an empty canvas, a pipeline file, an example or a recent file">Examples…</button>
+        <button class="tb-btn" id="arrangeBtn" title="Put the steps in columns by graph order, with one lane per modality. Steps, links and settings stay the same.">⇶ Arrange</button>
+        <button class="tb-btn tb-icon-btn" id="noteBtn" title="Add a note: then click on the canvas, or drag to make a bigger box" aria-label="Add a note">✎</button>
+        <button class="tb-btn tb-icon-btn" id="arrowBtn" title="Draw an arrow: then drag on the canvas from where it starts to where it points" aria-label="Draw an arrow">↗</button>
+        <button class="tb-btn" id="clearBoardBtn" title="Remove every node and connection from the canvas. Does not affect saved sequences or anything already run.">🗑 Clear</button>
+        <button class="tb-btn" id="deleteSelectedBtn" disabled title="Remove every currently-selected node (and its connections) from the canvas. Shift/Ctrl-click nodes or drag a box over them to select more than one.">🗑 Delete</button>
+        <div class="tb-sep"></div>
+        <div class="tb-seg" id="nodeViewSeg" role="group" aria-label="Node view">
+          <button class="on" data-nodeview="compact" title="Each step as a small circle">◯ Compact</button>
+          <button data-nodeview="detailed" title="Each step as a card that lists all its inputs and outputs">▭ Detailed</button>
+        </div>
+        <div class="tb-sep"></div>
+        <button class="tb-btn" id="validateBtn" title="Check the graph for missing bindings, artifact-type mismatches, and session-ordering issues without running it — validate_pipeline(). Every problem found appears in the Problems tab below, pinned to the node that caused it.">Validate</button>
+        <button class="tb-btn" title="Resolve the graph into the ordered, executable step list the engine will actually run — compile_pipeline(). Fails with the same diagnostics as Validate if the graph isn't runnable yet.">Compile</button>
+        <div class="tb-sep"></div>
+        <label class="tb-toggle" title="Run the out-of-date steps again as soon as a setting or a link changes">
+          <input type="checkbox" id="autoRunToggle"><span class="tb-toggle-track" aria-hidden="true"></span>Auto-run
+        </label>
+        <button class="tb-btn primary" id="runPipelineBtn" title="Run all steps in graph order">▶ Run workflow</button>
+      </div>
+      <!-- the same control as the time range on 1 · Prepare (.tb-seg) -->
+      <div class="canvas-hud tb-seg small">
+        <span class="tb-seg-readout" id="stepCountPill" title="15 of 45 steps shown · multimodal-full.pipeline.yaml">15/45</span>
+        <button id="canvasZoomOutBtn" title="Zoom out" aria-label="Zoom out" data-icon="minus"></button>
+        <span class="tb-seg-readout hud-zoom" id="canvasZoomPill" title="Current zoom level">100%</span>
+        <button id="canvasZoomInBtn" title="Zoom in" aria-label="Zoom in" data-icon="plus"></button>
+        <button id="canvasZoomFitBtn" title="Fit to view" aria-label="Fit to view" data-icon="fit"></button>
+        <span class="info-dot bare hud-help" tabindex="0" title="Mouse and keys" aria-label="Mouse and keys" data-icon="help"><span class="info-pop info-pop-end">
+          <span class="key-list">
+            <span><b>Click</b> or <b>drag</b> a palette step</span><span>add it to the canvas</span>
+            <span><b>Double-click</b> or <b>right-click</b> the canvas</span><span>open the quick menu to add a step</span>
+            <span><b>Drag</b> from a dot to a step</span><span>connect two steps</span>
+            <span><b>Drop</b> a link on empty canvas</span><span>choose a step for it</span>
+            <span><b>Click</b> a link</span><span>remove it</span>
+            <span><b>Click</b> a workflow box</span><span>open it; <b>Pack</b> on its frame closes it</span>
+            <span><b>Click</b> a step</span><span>show its settings in the Inspector</span>
+            <span><b>Double-click</b> a step</span><span>open its window: settings and a preview</span>
+            <span><b>Shift/Ctrl-click</b>, or <b>drag a box</b></span><span>select several steps</span>
+            <span><b>✎ Note</b> / <b>↗ Arrow</b>, then click or drag</span><span>add a note or an arrow</span>
+            <span><b>Delete</b></span><span>remove the selected steps, note or arrow</span>
+            <span><b>Ctrl + scroll</b></span><span>zoom at the mouse</span>
+            <span><b>Space + drag</b></span><span>move the view</span>
+          </span>
+        </span></span>
+      </div>
+      <div class="canvas-scroll" id="canvasScroll">
+        <div class="canvas-inner" id="canvasInner">
+          <svg class="edges" id="edgesSvg"></svg>
+          <!-- nodes injected by JS -->
+        </div>
+      </div>
+      <div class="dock">
+        <div class="dock-tabs">
+          <div class="dock-tab active" data-dock="problems">Problems <span class="n">1</span></div>
+          <div class="dock-tab" data-dock="log">Run log <span class="n">—</span></div>
+        </div>
+        <div class="dock-body" id="dockProblems" data-dock="problems">
+        </div>
+        <div class="dock-body hidden" id="dockLog" data-dock="log">
+          <div class="log-line"><span class="t">12:04:01</span>load_eit → raw_eit (eit_pixel_signal)</div>
+          <div class="log-line"><span class="t">12:04:01</span>load_emg → emg_recording (emg_recording)</div>
+          <div class="log-line"><span class="t">12:04:01</span>load_ventilator → ventilator_raw (ventilator_recording)</div>
+          <div class="log-line"><span class="t">12:04:02</span>sync_raw → offsets applied (eit 0.0s, emg −2.0s, vent 0.0s)</div>
+          <div class="log-line ok"><span class="t">12:04:07</span>16/16 steps completed — awaiting run</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="inspector" id="inspector">
+      <div class="side-panel-topbar">
+        <span class="side-panel-topbar-title">
+          <span class="side-panel-topbar-label">Details</span>
+        </span>
+        <button class="side-collapse-btn" id="inspectorCollapseBtn" title="Collapse this panel"></button>
+      </div>
+      <!-- the settings of the selected step -->
+      <div class="pal-pane" id="inspectorPane" data-pane="inspector" style="--grow:45">
+        <button type="button" class="pal-pane-head" title="Open or close this panel">
+          <span class="pal-pane-chevron"></span><span class="pal-pane-title">Inspector</span>
+        </button>
+        <div class="pal-pane-body">
+          <div class="insp-body" id="inspectorBody"></div>
+        </div>
+      </div>
+
+
+      <!-- what the marks on the canvas mean -->
+      <div class="pal-pane" id="legendPane" data-pane="legend" style="--grow:33">
+        <button type="button" class="pal-pane-head" title="Open or close this panel">
+          <span class="pal-pane-chevron"></span><span class="pal-pane-title">Edge legend</span>
+        </button>
+        <div class="pal-pane-body">
+          <div class="legend-side">
+            <div class="lg-title">Link colour: type of data</div>
+            <div class="lg-row"><svg width="22" height="10" aria-hidden="true"><line x1="1" y1="5" x2="21" y2="5" stroke="var(--type-signal)" stroke-width="2.5"/></svg><span>signal, recording</span></div>
+            <div class="lg-row"><svg width="22" height="10" aria-hidden="true"><line x1="1" y1="5" x2="21" y2="5" stroke="var(--type-index)" stroke-width="2.5"/></svg><span>events, breaths, indices</span></div>
+            <div class="lg-row"><svg width="22" height="10" aria-hidden="true"><line x1="1" y1="5" x2="21" y2="5" stroke="var(--type-mask)" stroke-width="2.5"/></svg><span>mask (ROI)</span></div>
+            <div class="lg-row"><svg width="22" height="10" aria-hidden="true"><line x1="1" y1="5" x2="21" y2="5" stroke="var(--type-result)" stroke-width="2.5"/></svg><span>result, number</span></div>
+            <div class="lg-row"><svg width="22" height="10" aria-hidden="true"><line x1="1" y1="5" x2="21" y2="5" stroke="var(--generic)" stroke-width="2.5"/></svg><span>session, file, folder</span></div>
+
+            <div class="lg-title">Links</div>
+            <div class="lg-row"><svg width="22" height="10" aria-hidden="true"><line x1="1" y1="5" x2="14" y2="5" stroke="var(--text-dim)" stroke-width="2"/><path d="M14 1.5 L21 5 L14 8.5 Z" fill="var(--text-dim)"/></svg><span>The arrow points at the step that gets the data.</span></div>
+            <div class="lg-row"><span class="lg-label">raw_eit</span><span>Name of the data on the link. Point at it for the full name and type.</span></div>
+            <div class="lg-row"><svg width="22" height="10" aria-hidden="true"><line x1="1" y1="5" x2="21" y2="5" stroke="var(--generic)" stroke-width="2.5" stroke-dasharray="2 4"/></svg><span>Shared-data link: the step reads data that an earlier step wrote to the session. It cannot be removed.</span></div>
+            <div class="lg-row"><span class="lg-label lg-label-session">processed.emg</span><span>Session data on a shared-data link.</span></div>
+            <div class="lg-row lg-note">Click a link to remove it.</div>
+
+            <div class="lg-title">Ports</div>
+            <div class="lg-row"><svg width="22" height="10" aria-hidden="true"><circle cx="5" cy="5" r="3.6" fill="var(--surface)" stroke="var(--type-signal)" stroke-width="2"/></svg><span>Input, on the left of a step.</span></div>
+            <div class="lg-row"><svg width="22" height="10" aria-hidden="true"><circle cx="5" cy="5" r="4" fill="var(--type-signal)"/></svg><span>Output, on the right of a step.</span></div>
+            <div class="lg-row lg-note">Drag from a port to make a link.</div>
+
+            <div class="lg-title">Steps</div>
+            <div class="lg-row"><span class="lg-mods"><i style="background:var(--eit)"></i><i style="background:var(--emg)"></i><i style="background:var(--vent)"></i><i style="background:var(--generic)"></i></span><span>Step colour: EIT, EMG, ventilator, other.</span></div>
+            <div class="lg-row"><span class="lg-badge" style="background:var(--ok)">✓</span><span>Done</span></div>
+            <div class="lg-row"><span class="lg-badge" style="background:var(--warn);color:var(--on-warn)">!</span><span>Done, with a warning</span></div>
+            <div class="lg-row"><span class="lg-badge" style="background:var(--crit)">×</span><span>Failed</span></div>
+            <div class="lg-row"><span class="lg-badge lg-stale">↻</span><span>Out of date: run it again</span></div>
+            <div class="lg-row"><span class="shared-badge"><svg width="10" height="10" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 5c0-1.4 2.7-2.5 6-2.5s6 1.1 6 2.5-2.7 2.5-6 2.5S4 6.4 4 5zM4 5v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V5M4 10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>Reads or writes the shared session data (M3Session). Point at it to see which data, and to mark the other steps that use the same data.</span></div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- what the item under the mouse is -->
+      <div class="pal-pane" id="helpPane" data-pane="help" style="--grow:22">
+        <button type="button" class="pal-pane-head" title="Open or close this panel">
+          <span class="pal-pane-chevron"></span><span class="pal-pane-title">Help</span>
+        </button>
+        <div class="pal-pane-body">
+          <div class="help-box" id="helpBox" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+

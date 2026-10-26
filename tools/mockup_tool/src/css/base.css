@@ -1,0 +1,228 @@
+:root{
+  /* M3Resp colour palette (landing page tokens) */
+  --bone:#d9d8d5;          /* page ground */
+  --stone:#cdccc7;         /* alternate ground; also the hairline (ink 12 %) on light surfaces */
+  --ink:#17161a;           /* text, dark panels */
+  --muted:#6f6b65;         /* secondary text */
+  --clay:#a85f4d;          /* the accent */
+  --muted-strong:#5a5652;  /* secondary text at small sizes: 5.1:1 on bone */
+  --clay-strong:#7e473a;   /* clay text at small sizes: 5.17:1 on bone */
+  --muted-on-ink:#848078;  /* secondary text on ink: 4.58:1 */
+  --clay-on-ink:#b56e5d;   /* clay text on ink: 4.59:1 */
+  --slate-700:#485a71;     /* logo slate, for data colours */
+  --slate-500:#687e9a;
+  --slate-400:#8a96a1;
+  --slate-200:#c7d0d9;
+
+  /* the GUI tokens, built from the palette */
+  --bg:#eeedec;            /* page ground: white 55 % over bone */
+  --surface:#f7f7f6;       /* cards, panels, top bar and plots: white 80 % over bone */
+  --surface-2:#f0efee;     /* fields, buttons, panel heads: white 60 % over bone */
+  --surface-3:#e6e5e3;     /* pressed buttons: white 35 % over bone */
+  --border:var(--bone);    /* lines: the hairline (ink 12 %) over these light grounds */
+  --text:var(--ink);
+  --text-dim:var(--muted-strong);
+  --text-faint:var(--muted);
+  --accent:var(--clay);
+  --accent-strong:var(--clay-strong);
+  --accent-soft:color-mix(in srgb, var(--clay) 14%, var(--surface));
+  /* selections (current step, chosen file, sections, picked steps, the time cursor):
+     the green of the kept windows */
+  --select:#4f7a5a;
+  --select-strong:#3d6147;
+  --select-soft:color-mix(in srgb, var(--select) 14%, var(--surface));
+  /* modality colours: blue for EIT, orange clay for EMG, violet for the ventilator */
+  --eit:#4a78b5;
+  --emg:#d4825a;
+  --vent:#7b6ba6;
+  --generic:var(--muted);
+  --custom:var(--slate-500);
+  --type-signal:var(--slate-700);
+  --type-index:var(--slate-400);
+  --type-mask:var(--clay-strong);
+  --type-result:#4f7a5a;
+  --ok:#4f7a5a;
+  --warn:#c09a3a;
+  --warn-ink:#6b5214;      /* warning text on a light background */
+  --on-warn:#2e2306;       /* icon or text on a --warn fill */
+  --crit:#b5473f;
+  --canvas-dot:#d3d2ce;
+  --plot-grid:rgba(23,22,26,0.08);  /* grid lines inside signal plots: ink 8 % */
+  /* plot area with 4 horizontal and 6 vertical grid bands; the
+     vertical lines meet the 7 labels of the time axis under each plot */
+  --plot-bg:
+    repeating-linear-gradient(to bottom, transparent 0 calc(25% - 1px), var(--plot-grid) calc(25% - 1px) 25%),
+    repeating-linear-gradient(to right, transparent 0 calc(100%/6 - 1px), var(--plot-grid) calc(100%/6 - 1px) calc(100%/6)),
+    var(--surface);
+  --ctl-h:30px;            /* height of buttons, fields and switches */
+  --side-w:270px;          /* width of the side panels, line included */
+  --bar-h:47px;            /* height of the canvas toolbar and the side panel top bars, line included */
+  --r-ctl:4px;             /* corner radius of controls */
+  --r-card:6px;            /* corner radius of cards */
+  --r-chip:999px;          /* chips and tags */
+  --shadow: 0 1px 2px rgba(23,22,26,0.06), 0 4px 16px rgba(23,22,26,0.06);
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", "Consolas", "Roboto Mono", monospace;
+  --sans: "Roboto", -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+/* Body font: Roboto (variable, 100 to 900), SIL Open Font License
+   (src/fonts/OFL-Roboto.txt). The file holds the Latin letters only. */
+@font-face{
+  font-family:"Roboto";
+  font-weight:100 900;
+  font-display:block;
+  src:url("../fonts/roboto-latin.woff2") format("woff2");
+}
+/* Light mode only: this mockup has one theme. */
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--sans);
+  font-size:14px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  height:100vh;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+}
+::selection{background:var(--accent-soft);}
+button{font-family:inherit;}
+h1,h2,h3{text-wrap:balance;}
+/* one weight for emphasis: medium (500). Bold is kept for the logo. */
+h1,h2,h3,h4,h5,h6,b,strong,th{font-weight:500;}
+em,i{font-style:normal;}
+
+/* ---------- App bar ---------- */
+/* the ☰ menu, brand and tabs on the left, the mockup badge on the right */
+.appbar{
+  display:flex;
+  align-items:center;
+  gap:20px;
+  padding:0 18px;
+  height:52px;
+  flex:none;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+}
+/* Logo font: Orbitron ExtraBold, SIL Open Font License (src/fonts/OFL-Orbitron.txt).
+   The file holds the Latin letters only. */
+@font-face{
+  font-family:"Orbitron";
+  font-weight:800;
+  font-display:block;
+  src:url("../fonts/orbitron-800-latin.woff2") format("woff2");
+}
+/* the brand fills the space above the left side panel, so the tab bar
+   starts at the line of that panel (18 px padding of .appbar + 20 px gap of .appbar-left) */
+.brand{display:flex;align-items:center;gap:10px;flex:none;white-space:nowrap;width:calc(var(--side-w) - 38px);}
+.brand-mark{
+  font-family:"Orbitron", var(--mono);
+  font-weight:800;
+  font-size:16px;
+  line-height:1;
+  letter-spacing:0.08em;
+  color:var(--text);
+}
+.brand-3{color:var(--clay);}
+/* ☰ menu left of the logo; its list uses .menu-pop (css/prepare.css) */
+.app-menu{position:relative;display:flex;}
+.app-menu-btn{
+  appearance:none;border:1px solid transparent;background:transparent;color:var(--text-dim);cursor:pointer;
+  width:30px;height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center;padding:0;
+}
+.app-menu-btn:hover, .app-menu-btn[aria-expanded="true"]{background:var(--surface-2);border-color:var(--border);color:var(--text);}
+.app-menu-pop{top:calc(100% + 8px);z-index:500;min-width:250px;}
+.app-menu-pop button{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:400;}
+.app-menu-pop button svg{display:block;flex:none;}
+.app-menu-head{
+  display:flex;align-items:flex-start;gap:9px;padding:8px 10px 10px;margin-bottom:4px;
+  border-bottom:1px solid var(--border);font-size:12.5px;color:var(--text-dim);white-space:nowrap;
+}
+.app-menu-head .dot{width:7px;height:7px;margin-top:5px;border-radius:50%;background:var(--ok);flex:none;box-shadow:0 0 0 3px var(--accent-soft);}
+.app-menu-head b{color:var(--text);font-weight:500;}
+.app-menu-sub{font-size:11px;color:var(--text-faint);margin-top:2px;}
+.brand-name{display:flex;align-items:baseline;gap:9px;}
+/* the tag: small capitals in the logo's letter spacing, on the logo's baseline */
+.brand-tag{
+  font-size:10.5px;
+  font-weight:500;
+  line-height:1;
+  color:var(--text-faint);
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+}
+.tabs{display:flex;gap:2px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-ctl);padding:2px;}
+.tab-btn{
+  appearance:none;border:none;background:transparent;color:var(--text-dim);
+  padding:6px 14px;border-radius:3px;font-size:13px;font-weight:400;cursor:pointer;
+  letter-spacing:0.01em;
+}
+.tab-btn.active{background:var(--surface);color:var(--text);box-shadow:inset 0 -2px 0 var(--clay), 0 1px 2px rgba(23,22,26,0.06);}
+.tab-btn:not(.active):hover{color:var(--text);}
+.tab-btn.locked{color:var(--text-faint);cursor:not-allowed;}
+.tab-btn.locked:hover{color:var(--text-faint);}
+.tab-lock{display:inline-block;vertical-align:-1px;margin-left:6px;}
+.hidden{display:none !important;}
+.appbar-left{display:flex;align-items:center;gap:20px;flex:none;}
+.appbar-right{display:flex;align-items:center;justify-content:flex-end;flex:1;min-width:0;}
+.appbar-right .mock-badge{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mock-badge{
+  font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;
+  color:var(--text-faint);border:1px dashed var(--border);border-radius:5px;padding:3px 7px;
+}
+
+/* ---------- Shared controls (all tabs) ----------
+   .tb-btn: one button shape. Kinds: normal (grey fill), .quiet (no fill),
+   .primary (filled accent), .icon (square, for an icon alone).
+   .tb-seg: a row of joined buttons; .on marks the chosen one. */
+.tb-btn{
+  font-size:12px;font-weight:400;border:1px solid var(--border);background:var(--surface-2);color:var(--text);
+  padding:0 12px;border-radius:var(--r-ctl);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  height:var(--ctl-h);flex:none;white-space:nowrap;font-family:var(--sans);
+  transition:border-color .12s, background-color .12s, transform .08s;
+}
+.tb-btn:hover{border-color:var(--accent);}
+.tb-btn:active:not(:disabled){transform:translateY(1px);}
+.tb-btn.quiet{background:transparent;border-color:transparent;color:var(--text-dim);}
+.tb-btn.quiet:hover{background:var(--surface-2);border-color:var(--border);color:var(--text);}
+.tb-btn.icon{width:var(--ctl-h);padding:0;}
+.tb-btn.small{--ctl-h:26px;font-size:11.5px;padding:0 9px;}
+.tb-btn.small.icon{padding:0;}
+.tb-btn.primary{background:var(--clay);border-color:var(--clay);color:#fff;}
+.tb-btn.primary:hover{background:var(--clay-strong);border-color:var(--clay-strong);}
+.tb-btn:disabled{opacity:0.45;cursor:not-allowed;}
+.tb-btn:disabled:hover{border-color:var(--border);background:var(--surface-2);}
+.tb-btn.quiet:disabled:hover{border-color:transparent;background:transparent;}
+.tb-btn svg, .tb-seg button svg{display:block;flex:none;}
+.tb-sep{width:1px;align-self:stretch;background:var(--border);margin:0 2px;}
+.tb-spacer{flex:1;}
+.tb-seg{display:flex;border:1px solid var(--border);border-radius:var(--r-ctl);overflow:hidden;height:var(--ctl-h);flex:none;}
+.tb-seg button{
+  appearance:none;border:none;background:var(--surface-2);color:var(--text-dim);font-family:var(--sans);
+  font-size:12px;font-weight:400;padding:0 10px;cursor:pointer;white-space:nowrap;
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;transition:background-color .12s, color .12s;
+}
+.tb-seg button + button, .tb-seg button + .tb-seg-readout, .tb-seg .tb-seg-readout + button{border-left:1px solid var(--border);}
+.tb-seg button:hover:not(:disabled){background:var(--surface);color:var(--text);}
+.tb-seg button:active:not(:disabled){background:var(--surface-3);}
+.tb-seg button:disabled{color:var(--text-faint);opacity:0.6;cursor:not-allowed;}
+.tb-seg button.on{background:var(--surface);color:var(--accent-strong);box-shadow:inset 0 -2px 0 var(--accent);}
+.tb-seg.small{--ctl-h:26px;}
+.tb-seg.small button{font-size:11.5px;padding:0 8px;}
+/* a value shown inside a .tb-seg, between its buttons */
+.tb-seg-readout{
+  display:flex;align-items:center;padding:0 10px;background:var(--surface);
+  font-family:var(--mono);font-size:11px;color:var(--text-dim);white-space:nowrap;font-variant-numeric:tabular-nums;
+}
+/* keyboard focus: one ring for every control */
+:where(button, input, select, textarea, [tabindex]):focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{transition-duration:0s !important;animation-duration:0s !important;}
+}
+
+/* ---------- Panels / views ---------- */
+.view{flex:1;min-height:0;display:none;}
+.view.active{display:flex;}
+

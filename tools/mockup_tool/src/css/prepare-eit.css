@@ -1,0 +1,188 @@
+/* ---- EIT analysis workspace (images + stacked ROI plots, Dräger-style layout) ---- */
+.eit-workspace{display:flex;gap:20px;align-items:flex-start;}
+.eit-images{flex:0 0 258px;display:flex;flex-direction:column;gap:14px;}
+.eit-img-block{display:flex;flex-direction:column;gap:6px;}
+.eit-img-title{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-faint);}
+.eit-img-row{display:flex;gap:8px;align-items:stretch;}
+.eit-colorbar{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:8.5px;font-family:var(--mono);color:var(--text-faint);}
+.eit-colorbar .cb-scale{
+  flex:1;width:11px;border-radius:3px;border:1px solid var(--border);
+  background:linear-gradient(to top,#0b1430 0%,#173a8f 28%,#3f6fdb 58%,#a9c4f4 82%,#ffffff 100%);
+}
+.eit-img{
+  flex:1;aspect-ratio:1/1;background:#05070a;border:1px solid var(--border);border-radius:7px;overflow:hidden;
+}
+.eit-img svg{width:100%;height:100%;display:block;}
+
+
+.eit-plots{flex:1;min-width:0;display:flex;flex-direction:column;}
+.eit-plots-title{margin-bottom:6px;}
+.eit-img-title{color:var(--text-dim);}
+.eit-plot-stack{position:relative;display:flex;flex-direction:column;gap:5px;}
+.eit-panel{
+  position:relative;background:var(--plot-bg);border:1px solid var(--border);
+  border-left:3px solid var(--eit);border-radius:7px;overflow:hidden;
+}
+.eit-panel.is-global{border-left-color:var(--select);}
+.eit-panel svg{width:100%;height:100%;display:block;}
+.eit-panel-head{
+  position:absolute;top:5px;left:9px;right:9px;display:flex;align-items:baseline;gap:10px;
+  font-size:11px;pointer-events:none;z-index:1;text-shadow:0 0 3px var(--surface), 0 0 3px var(--surface);
+}
+.eit-panel-head .nm{font-weight:500;color:var(--text);}
+.eit-panel-head .mtv{color:var(--text-dim);font-family:var(--mono);font-size:10.5px;}
+.eit-panel-head .mx{margin-left:auto;color:var(--text-faint);font-family:var(--mono);font-size:10px;}
+.eit-cursor{
+  position:absolute;top:0;bottom:0;width:0;border-left:2px solid var(--select-strong);
+  z-index:3;pointer-events:none;
+}
+.eit-cursor::after{
+  content:"";position:absolute;top:-3px;left:-4px;width:6px;height:6px;border-radius:50%;
+  background:var(--select-strong);
+}
+.eit-time-axis{display:flex;justify-content:space-between;margin-top:5px;font-size:10.5px;font-family:var(--mono);color:var(--text-dim);font-variant-numeric:tabular-nums;}
+.eit-readout{display:flex;align-items:center;gap:16px;margin-top:12px;flex-wrap:wrap;}
+.eit-transport button{width:32px;padding:0;}
+
+.eit-readout-spacer{flex:1;}
+.eit-readout-field{display:flex;align-items:baseline;gap:7px;}
+.eit-readout-field .k{font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-faint);font-weight:500;}
+.eit-readout-field .v{font-family:var(--mono);font-size:12.5px;font-weight:500;font-variant-numeric:tabular-nums;}
+
+/* ---- shared zoom / range-select controls ---- */
+
+.zoom-stack{position:relative;cursor:crosshair;}
+.zoom-band{
+  position:absolute;top:0;bottom:0;z-index:4;pointer-events:none;display:none;
+  background:color-mix(in srgb, var(--select) 18%, transparent);
+  border-left:1px solid var(--select-strong);border-right:1px solid var(--select-strong);
+}
+.zoom-band.on{display:block;}
+
+
+/* ---- files of one modality (EIT, EMG): one lane per file, sections, merge order (js/prepare/file-merge.js) ---- */
+.eit-files{margin-bottom:16px;padding:12px;border:1px solid var(--border);border-radius:var(--r-card);background:var(--surface-2);}
+.ef-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+.ef-count{font-family:var(--mono);font-size:11px;color:var(--text-dim);}
+.ef-list{display:flex;flex-direction:column;gap:8px;}
+/* EMG: the signal chips and "+ Add signal" for the file lanes and the plots */
+.ef-lane-signals{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap;margin:-2px 0 10px;}
+.ef-lane-label{
+  position:absolute;left:6px;margin-top:2px;font-size:10px;font-weight:400;color:var(--text);z-index:1;
+  pointer-events:none;text-shadow:0 0 3px var(--plot-bg), 0 0 3px var(--plot-bg);
+}
+.ef-seg .ef-lane-label{display:none;}
+.ef-file{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-ctl);padding:6px 8px 8px;}
+.ef-file-head{display:flex;align-items:center;gap:8px;margin-bottom:5px;min-width:0;}
+.ef-no, .ef-sec-no{
+  width:18px;height:18px;border-radius:5px;flex:none;display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:10.5px;font-weight:500;color:var(--eit);border:1.5px solid color-mix(in srgb, var(--eit) 50%, var(--border));
+}
+.ef-name{font-family:var(--mono);font-size:11.5px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+.ef-meta{font-family:var(--mono);font-size:11px;color:var(--text-dim);white-space:nowrap;}
+.ef-lane{
+  position:relative;height:56px;border:1px solid var(--border);border-left:3px solid var(--eit);border-radius:6px;
+  background:var(--plot-bg);cursor:crosshair;overflow:hidden;
+}
+.ef-lane svg{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;}
+/* section bands: drawn like the windows of the working window (fill, 2 px
+   sides, a grip at each edge, number badge, delete on hover) */
+.ef-band{
+  position:absolute;top:0;bottom:0;background:color-mix(in srgb, var(--select) 18%, transparent);
+  border-left:2px solid var(--select);border-right:2px solid var(--select);cursor:grab;
+}
+.ef-band.active{background:color-mix(in srgb, var(--select) 30%, transparent);}
+.ef-band.ghost{pointer-events:none;border-style:dashed;}
+.ef-band.dragging, .ef-lane.dragging{cursor:grabbing;}
+.ef-band:focus-visible{outline:2px solid var(--select-strong);outline-offset:-2px;}
+.ef-edge{
+  position:absolute;top:0;bottom:0;width:12px;margin-left:-6px;cursor:ew-resize;z-index:3;
+  display:flex;align-items:center;justify-content:center;
+}
+.ef-edge[data-edge="start"]{left:0%;}
+.ef-edge[data-edge="end"]{left:100%;}
+.ef-edge::after{content:"";width:4px;height:100%;border-radius:3px;background:var(--select);box-shadow:var(--shadow);}
+.ef-edge:hover::after, .ef-band.dragging .ef-edge::after{background:var(--text);}
+.ef-lane.dragging .ef-edge{cursor:inherit;}
+.ef-band-no{
+  position:absolute;bottom:3px;left:3px;width:16px;height:16px;border-radius:5px;z-index:4;background:var(--select);color:#fff;
+  font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;pointer-events:none;
+}
+.ef-band-remove{
+  position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:5px;z-index:4;
+  border:none;background:var(--surface);color:var(--text-faint);padding:0;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity .12s;
+  box-shadow:0 0 0 1px var(--border);
+}
+.ef-band:hover .ef-band-remove, .ef-band-remove:focus-visible{opacity:1;}
+.ef-band-remove:hover{background:var(--crit);color:#fff;box-shadow:0 0 0 1px var(--crit);}
+/* start–end of the band while the mouse is on it or drags it */
+.ef-band-range{
+  position:absolute;top:4px;left:50%;transform:translateX(-50%);z-index:4;padding:0 5px;border-radius:5px;
+  background:var(--surface);box-shadow:0 0 0 1px var(--border);color:var(--text);
+  font-family:var(--mono);font-size:10.5px;line-height:16px;font-variant-numeric:tabular-nums;
+  white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .12s;
+}
+.ef-band:hover .ef-band-range, .ef-band.dragging .ef-band-range, .ef-band:focus-visible .ef-band-range{opacity:1;}
+.ef-merge{margin-top:12px;}
+.ef-merge-head{display:flex;align-items:center;gap:10px;margin-bottom:6px;cursor:pointer;user-select:none;}
+.ef-merge-toggle{
+  flex:none;background:none;border:none;padding:3px;margin:-3px -4px -3px -3px;border-radius:6px;
+  color:var(--text-faint);display:flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.ef-merge-head:hover .ef-merge-toggle{background:var(--surface-2);color:var(--text);}
+.ef-merge-toggle svg{display:block;transition:transform .15s ease;}
+.ef-merge.collapsed .ef-merge-toggle svg{transform:rotate(-90deg);}
+.ef-merge.collapsed .ef-merge-head{margin-bottom:0;}
+.ef-merge.collapsed .ef-sections, .ef-merge.collapsed .ef-preview, .ef-merge.collapsed .ef-merge-foot{display:none;}
+.ef-summary{font-family:var(--mono);font-size:11px;color:var(--text-dim);}
+.ef-sections{display:flex;flex-direction:column;gap:4px;}
+.ef-sec{
+  display:flex;align-items:center;gap:7px;padding:4px 6px 4px 8px;border-radius:var(--r-ctl);
+  background:var(--surface);border:1px solid var(--border);font-size:12px;cursor:pointer;
+}
+.ef-sec.active{border-color:var(--select);box-shadow:0 0 0 2px var(--select-soft);}
+.ef-sec .ef-sec-no{color:#fff;background:var(--select);border-color:var(--select);}
+.ef-sec-file{font-weight:400;width:44px;flex:none;}
+.ef-sec input{
+  width:66px;height:26px;padding:0 6px;font-family:var(--mono);font-size:12px;text-align:right;
+  border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);
+}
+.ef-dash, .ef-unit{color:var(--text-dim);font-family:var(--mono);font-size:11.5px;}
+.ef-sec-len{font-family:var(--mono);font-size:11.5px;color:var(--text-dim);margin-left:8px;}
+.ef-order button{width:26px;padding:0;}
+.ef-preview{display:flex;gap:3px;height:44px;margin-top:8px;}
+.ef-preview[hidden]{display:none;}
+.ef-seg{
+  position:relative;min-width:24px;border:1px solid var(--border);border-top:3px solid var(--select);border-radius:5px;
+  background:var(--plot-bg);overflow:hidden;
+}
+.ef-seg svg{position:absolute;inset:0;width:100%;height:100%;}
+.ef-seg-no{position:absolute;top:2px;left:4px;font-size:10px;font-weight:500;color:var(--select-strong);z-index:1;}
+.ef-merge-foot{display:flex;align-items:center;gap:10px;margin-top:8px;}
+.ef-warn{font-size:11.5px;color:var(--warn-ink);}
+
+/* the recording that the plots and images show */
+.tb-select{
+  height:26px;max-width:240px;padding:0 6px;font-family:var(--sans);font-size:12px;font-weight:400;color:var(--text);
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-ctl);cursor:pointer;
+}
+.tb-select:hover{border-color:var(--accent);}
+.card-toolbar .tb-sep{align-self:center;height:20px;margin:0 4px;}
+.ef-show{
+  appearance:none;border:none;background:none;padding:2px 6px 2px 2px;margin:-2px 0;border-radius:6px;cursor:pointer;
+  display:flex;align-items:center;gap:8px;min-width:0;font:inherit;color:inherit;text-align:left;
+}
+.ef-show:hover{background:var(--accent-soft);}
+.ef-file.shown{border-color:var(--select);box-shadow:0 0 0 2px var(--select-soft);}
+.ef-file.shown .ef-no{background:var(--eit);color:#fff;border-color:var(--eit);}
+/* EMG card: the same block in the EMG colour */
+.mod-emg .ef-lane{border-left-color:var(--emg);}
+.mod-emg .ef-file.shown .ef-no{background:var(--emg);border-color:var(--emg);}
+/* ventilator card: the same block in the ventilator colour */
+.mod-vent .ef-lane{border-left-color:var(--vent);}
+.mod-vent .ef-file.shown .ef-no{background:var(--vent);border-color:var(--vent);}
+.ef-file.shown .ef-file-head::after{content:"shown below";order:2;font-size:10.5px;font-weight:400;color:var(--select-strong);}
+.ef-preview{cursor:pointer;border-radius:6px;}
+.ef-preview.shown{box-shadow:0 0 0 2px var(--select);}
+.eit-join{position:absolute;top:0;bottom:0;width:0;border-left:1.5px dashed var(--text-dim);z-index:2;pointer-events:none;}

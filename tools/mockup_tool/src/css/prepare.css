@@ -1,0 +1,262 @@
+/* ===== Data preparation ===== */
+#view-prepare{padding:0;gap:0;overflow:hidden;flex-direction:row;align-items:stretch;}
+/* left side panel: the same top bar, part heads and collapse arrow as the
+   palette on 2 · Design (css/design.css). Parts marked .fit take the height
+   of their content until the first resize or close; the last part fills the
+   rest. Closed parts sit at the bottom (js/design/palette-panes.js). */
+.prep-sidebar .pal-pane.fit{flex:none;}
+.prep-sidebar .pal-pane:last-child{border-bottom:1px solid var(--border);}
+.prep-sidebar .pal-pane-body{overflow:auto;}
+
+.rec-list{margin:0;padding:8px 12px 10px;display:flex;flex-direction:column;gap:5px;}
+.rec-row{display:flex;align-items:baseline;gap:8px;min-width:0;}
+.rec-row dt{font-size:11px;color:var(--text-dim);flex:none;width:78px;}
+.rec-row dd{margin:0;font-size:12px;font-weight:400;color:var(--text);min-width:0;flex:1;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rec-row dd.mono{font-family:var(--mono);font-size:11.5px;}
+.rec-row:has(select){align-items:center;}
+.rec-select{
+  width:100%;height:26px;padding:0 6px;font-family:var(--sans);font-size:12px;font-weight:400;color:var(--text);
+  background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-ctl);cursor:pointer;
+}
+.rec-select:hover{border-color:var(--accent);}
+
+.mod-list{padding:6px 6px 2px;}
+.mod-list-row{
+  display:flex;align-items:center;gap:9px;padding:6px 6px 6px 8px;border-radius:var(--r-ctl);cursor:pointer;
+  position:relative;transition:background-color .12s;
+}
+.mod-list-row:hover{background:var(--surface-2);}
+.mod-list-row .swatch{width:3px;align-self:stretch;border-radius:2px;flex:none;}
+.mod-list-row .swatch.eit{background:var(--eit);}
+.mod-list-row .swatch.emg{background:var(--emg);}
+.mod-list-row .swatch.vent{background:var(--vent);}
+.mod-list-row .swatch.custom{background:var(--custom);}
+.mod-list-row .info{flex:1;min-width:0;}
+.mod-list-row .info .nm{font-size:12px;font-weight:400;line-height:1.3;}
+.mod-list-row .info .file{font-family:var(--mono);font-size:10.5px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mod-list-row .st{width:7px;height:7px;border-radius:50%;flex:none;background:var(--text-faint);}
+.mod-list-row .st.on{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent);}
+/* the remove button shows on mouse-over; a load button always shows */
+.mod-list-row .remove{opacity:0;transition:opacity .12s;}
+.mod-list-row:hover .remove, .mod-list-row .remove:focus-visible{opacity:1;}
+.mod-list-row .remove:hover{color:var(--crit);border-color:color-mix(in srgb, var(--crit) 40%, var(--border));}
+.mod-list-row.unloaded .info .nm{color:var(--text-faint);}
+.mod-list-row.unloaded .swatch{opacity:0.35;}
+.mod-list-row.unloaded{cursor:default;}
+.add-modality{padding:2px 6px 8px;}
+.add-modality-open{width:100%;justify-content:flex-start;padding:0 8px;}
+.add-modality-form{
+  display:flex;flex-direction:column;gap:8px;margin:4px 2px 2px;padding:10px;
+  border:1px solid var(--border);border-radius:var(--r-ctl);background:var(--surface-2);
+}
+.add-modality-form[hidden]{display:none;}
+.add-modality-form .field input{font-family:var(--sans);font-size:12px;height:var(--ctl-h);padding:0 9px;background:var(--surface);}
+.add-modality-actions{display:flex;justify-content:flex-end;gap:6px;}
+
+/* "Steps": 1 Signals with one row per modality under it, then 2 and 3 */
+.prep-steps{display:flex;flex-direction:column;padding:6px;}
+.step-item{
+  appearance:none;border:none;background:none;display:flex;align-items:center;gap:9px;width:100%;
+  padding:7px 8px;border-radius:var(--r-ctl);font-family:var(--sans);font-size:12px;font-weight:400;
+  color:var(--text-dim);cursor:pointer;text-align:left;position:relative;transition:background-color .12s, color .12s;
+}
+.step-item:hover{background:var(--surface-2);color:var(--text);}
+.step-item .num{
+  width:18px;height:18px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:10px;font-weight:500;border:1.5px solid var(--border);color:var(--text-dim);background:var(--surface);
+}
+.step-item .step-name{flex:1;min-width:0;}
+.step-item .step-meta{font-family:var(--mono);font-size:10.5px;font-weight:400;color:var(--text-faint);}
+.step-item.current{color:var(--select-strong);}
+.step-item.current .num{border-color:var(--select);background:var(--select);color:#fff;}
+.step-item[data-section="cardSync"].current, .step-item[data-section="cardWindow"].current{background:var(--select-soft);}
+.step-item[data-section="cardSync"].current::before, .step-item[data-section="cardWindow"].current::before{
+  content:"";position:absolute;left:0;top:7px;bottom:7px;width:3px;border-radius:2px;background:var(--select);
+}
+/* the modality rows hang under "1 Signals", on a thin guide line */
+.step-children{margin:0 0 4px 17px;padding-left:6px;border-left:1.5px solid var(--border);}
+.step-children .mod-list{padding:2px 0 0;}
+.step-children .add-modality{padding:0 0 4px;}
+.mod-list-row.current{background:var(--select-soft);}
+.mod-list-row.current .nm{color:var(--select-strong);}
+
+/* main column: one section at a time, with a title line above it and
+   Back / Next under it */
+#prepMain .card:not(.is-shown){display:none;}
+#customModalityCards{display:contents;}
+@keyframes section-in{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+#prepMain .card.is-shown{animation:section-in .18s ease-out;}
+.prep-crumb{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:500;min-height:24px;}
+.prep-crumb .crumb-sep{color:var(--text-faint);font-weight:400;}
+.prep-crumb .crumb-sub{color:var(--text);}
+.prep-crumb .crumb-pos{margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:400;color:var(--text-dim);}
+.prep-pager{display:flex;align-items:center;gap:12px;padding-top:4px;}
+.pager-hint{font-size:12px;color:var(--text-dim);}
+
+.seq-list{padding:6px;}
+.seq-empty{
+  margin:4px 2px;padding:14px 10px;border:1px dashed var(--border);border-radius:var(--r-ctl);
+  text-align:center;font-size:11.5px;color:var(--text-dim);line-height:1.45;
+}
+.seq-empty svg{display:block;margin:0 auto 6px;color:var(--text-faint);}
+.seq-row{
+  display:flex;align-items:center;gap:9px;padding:6px 6px 6px 8px;border-radius:var(--r-ctl);
+  transition:background-color .12s;
+}
+.seq-row:hover{background:var(--surface-2);}
+.seq-row .seq-icon{
+  width:24px;height:24px;border-radius:6px;background:var(--accent-soft);color:var(--accent-strong);
+  display:flex;align-items:center;justify-content:center;flex:none;
+}
+.seq-row .seq-text{flex:1;min-width:0;}
+.seq-row .seq-name{font-weight:400;font-family:var(--mono);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.seq-row .seq-meta{color:var(--text-dim);font-size:10.5px;}
+.seq-row .remove{opacity:0;transition:opacity .12s;}
+.seq-row:hover .remove, .seq-row .remove:focus-visible{opacity:1;}
+.seq-row .remove:hover{color:var(--crit);}
+@keyframes seq-new{0%{background:color-mix(in srgb, var(--accent) 22%, var(--surface));}100%{background:transparent;}}
+.seq-row.is-new{animation:seq-new .9s ease-out;}
+
+.prep-main{flex:1;min-width:0;padding:20px 24px 40px;gap:20px;overflow:auto;display:flex;flex-direction:column;}
+/* every card head on this page has the same height */
+#prepMain .card-head{min-height:52px;}
+#prepMain .card-head .hint{font-family:var(--mono);font-size:11px;}
+/* step numbers: the same badge as "On this page" in the side panel */
+.step-num{
+  width:20px;height:20px;border-radius:50%;flex:none;display:inline-flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:10.5px;font-weight:500;color:var(--accent-strong);
+  border:1.5px solid color-mix(in srgb, var(--accent) 60%, var(--border));background:var(--surface);
+}
+.card-head h3{display:flex;align-items:center;gap:9px;}
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  box-shadow:var(--shadow);
+}
+.card-head{
+  display:flex;align-items:center;gap:10px;
+  padding:13px 16px;border-bottom:1px solid var(--border);
+}
+.card-head h3{margin:0;font-size:13.5px;font-weight:500;flex:1;min-width:0;}
+.card-head .hint{font-size:11.5px;color:var(--text-faint);}
+.card-body{padding:14px 16px;}
+.card.collapsed .card-body{display:none;}
+.card-head.collapsible-head{cursor:pointer;user-select:none;}
+.collapse-toggle{
+  flex:none;background:none;border:none;padding:5px;border-radius:6px;margin:-5px -3px -5px 4px;
+  color:var(--text-faint);display:flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.collapse-toggle:hover{background:var(--surface-2);color:var(--text);}
+.collapse-toggle svg{transition:transform .15s ease;display:block;}
+.card.collapsed .collapse-toggle svg{transform:rotate(-90deg);}
+
+/* modality cards: a colour bar on the left edge, the name and device on one
+   line, the file details in mono under it; status and "Load file…" on the right */
+.mod-card{position:relative;}
+.mod-card.mod-eit{--mod:var(--eit);}
+.mod-card.mod-emg{--mod:var(--emg);}
+.mod-card.mod-vent{--mod:var(--vent);}
+.mod-card.mod-custom{--mod:var(--custom);}
+.mod-card::before{
+  content:"";position:absolute;left:-1px;top:-1px;bottom:-1px;width:4px;
+  border-radius:var(--r-card) 0 0 var(--r-card);background:var(--mod, var(--generic));
+}
+.mod-card .card-head{gap:12px;}
+.mod-head-left{display:flex;align-items:center;gap:12px;min-width:0;flex:1;}
+.modal-info{min-width:0;}
+.modal-info .name{display:flex;align-items:baseline;gap:8px;min-width:0;}
+.modal-info .mod-name{font-weight:500;font-size:13.5px;color:var(--text);}
+.modal-info .mod-device{font-size:12px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.modal-info .meta{font-size:11px;color:var(--text-dim);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
+.pill{
+  display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:400;
+  padding:3px 9px;border-radius:var(--r-chip);background:var(--surface-2);color:var(--text-dim);
+  border:1px solid var(--border);white-space:nowrap;flex:none;
+}
+.pill.ok{color:var(--ok);border-color:color-mix(in srgb, var(--ok) 40%, var(--border));background:color-mix(in srgb, var(--ok) 10%, var(--surface));}
+.pill.busy{color:var(--warn-ink);border-color:color-mix(in srgb, var(--warn) 40%, var(--border));background:color-mix(in srgb, var(--warn) 10%, var(--surface));}
+.mod-card .pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;}
+.mod-head-right{display:flex;align-items:center;gap:8px;flex:none;}
+
+/* one toolbar row per modality card: chips or tools on the left, the time
+   range on the right. The left side wraps; the right side stays on line 1. */
+.card-toolbar{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;}
+.ct-left{flex:1;min-width:0;display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;}
+.ct-right{flex:none;display:flex;align-items:center;gap:4px;}
+.ct-label{font-size:10.5px;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim);margin-right:2px;}
+.view-seg .tb-seg-readout{min-width:132px;justify-content:center;}
+
+/* "?" next to a title: the mouse over it, or a click on it, opens a panel
+   with the help text of that part of the page */
+.help-tip{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;flex:none;
+  width:20px;height:20px;border-radius:5px;margin:-3px 0;color:var(--text-faint);cursor:help;
+  font-size:11.5px;font-weight:400;text-transform:none;letter-spacing:normal;
+}
+.help-tip:hover, .help-tip:focus{color:var(--accent-strong);background:var(--surface-2);outline:none;}
+.help-tip:focus-visible{box-shadow:0 0 0 2px var(--accent);}
+.help-pop{
+  display:none;position:absolute;z-index:60;top:calc(100% + 6px);left:-6px;
+  width:400px;max-width:70vw;padding:10px 12px;border:1px solid var(--border);border-radius:8px;
+  background:var(--surface);box-shadow:var(--shadow);
+  color:var(--text-dim);line-height:1.5;text-align:left;white-space:normal;cursor:auto;
+}
+/* covers the gap under the "?", so the panel stays open on the way to it */
+.help-pop::before{content:"";position:absolute;left:0;right:0;top:-8px;height:8px;}
+.help-tip:hover > .help-pop, .help-tip:focus > .help-pop{display:block;}
+.help-pop.end{left:auto;right:-6px;}
+.help-pop.wide{width:480px;}
+.help-pop b{color:var(--text);}
+.help-pop code{font-family:var(--mono);font-size:10.5px;}
+.hp-p{display:block;}
+.hp-p + .hp-p, .hp-p + .hp-li, .hp-li + .hp-p{margin-top:6px;}
+.hp-li{display:block;position:relative;padding-left:12px;}
+.hp-li + .hp-li{margin-top:3px;}
+.hp-li::before{content:"";position:absolute;left:2px;top:0.65em;width:4px;height:4px;border-radius:50%;background:var(--text-faint);}
+/* a title with its "?" on one line */
+.title-help{display:flex;align-items:center;gap:6px;}
+.view-seg button{width:28px;padding:0;}
+
+/* "+ Add signal": a dashed chip at the end of the chips, with a small panel under it */
+.chip-add{
+  display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px 0 8px;border-radius:var(--r-ctl);
+  border:1px dashed color-mix(in srgb, var(--accent) 55%, var(--border));background:transparent;
+  font-family:var(--sans);font-size:11.5px;font-weight:400;color:var(--accent-strong);cursor:pointer;
+  transition:background-color .12s;
+}
+.chip-add:hover, .chip-add[aria-expanded="true"]{background:var(--accent-soft);}
+.chip-add:active{transform:translateY(1px);}
+.pop-wrap, .menu-wrap{position:relative;}
+.pop-panel{
+  position:absolute;top:calc(100% + 6px);left:0;z-index:40;width:280px;
+  display:flex;flex-direction:column;gap:10px;padding:12px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);
+  box-shadow:0 8px 28px rgba(23,22,26,0.16);
+}
+.pop-panel[hidden]{display:none;}
+.pop-title{font-size:12px;font-weight:500;}
+.pop-panel .field select{height:var(--ctl-h);padding:0 8px;font-size:12px;background:var(--surface-2);}
+.pop-actions{display:flex;justify-content:flex-end;gap:6px;}
+
+/* a small menu under a toolbar button */
+.menu-btn .caret{margin-left:2px;display:inline-flex;color:var(--text-dim);}
+.menu-pop{
+  position:absolute;top:calc(100% + 4px);left:0;z-index:40;min-width:160px;padding:4px;
+  display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-ctl);box-shadow:0 8px 28px rgba(23,22,26,0.16);
+}
+.menu-pop[hidden]{display:none;}
+.menu-pop button{
+  appearance:none;border:none;background:none;text-align:left;font-family:var(--sans);font-size:12px;
+  padding:7px 10px;border-radius:5px;color:var(--text);cursor:pointer;
+}
+.menu-pop button:hover, .menu-pop button:focus-visible{background:var(--accent-soft);color:var(--accent-strong);}
+.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
+.field{display:flex;flex-direction:column;gap:5px;}
+.field label{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;font-weight:500;}
+.field .val, .field select, .field input{
+  font-family:var(--mono);font-size:12.5px;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:6px;padding:7px 9px;color:var(--text);
+}
+.field select, .field input{width:100%;}
+

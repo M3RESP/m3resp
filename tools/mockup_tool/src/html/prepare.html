@@ -1,0 +1,515 @@
+<!-- ============ 1. PREPARE ============ -->
+<div class="view active" id="view-prepare">
+
+  <div class="palette prep-sidebar" id="prepSidebar">
+    <div class="side-panel-topbar">
+      <span class="side-panel-topbar-title">
+        <span class="side-panel-topbar-label">Session</span>
+      </span>
+      <button class="side-collapse-btn" id="prepSidebarCollapseBtn" title="Collapse this panel"></button>
+    </div>
+
+    <!-- the recording the session reads -->
+    <div class="pal-pane fit" data-pane="recording">
+      <button type="button" class="pal-pane-head" title="Open or close this panel">
+        <span class="pal-pane-chevron"></span><span class="pal-pane-title">Recording</span>
+      </button>
+      <div class="pal-pane-body">
+        <dl class="rec-list">
+          <div class="rec-row"><dt><label for="recSubjectType">Subject type</label></dt><dd><select id="recSubjectType" class="rec-select" title="Sets the breathing-rate limits of the EIT steps (subject_type)"><option value="adult" selected>Adult</option><option value="neonate">Neonate</option></select></dd></div>
+          <div class="rec-row"><dt>Vendor</dt><dd title="draeger">Dräger</dd></div>
+          <div class="rec-row"><dt>Length</dt><dd>60.0 s</dd></div>
+          <div class="rec-row"><dt>Source</dt><dd class="mono" title="m3resp_multimodal_1_*">m3resp_multimodal_1_*</dd></div>
+        </dl>
+      </div>
+    </div>
+
+    <!-- the steps of this page; a click shows one section in the main column -->
+    <div class="pal-pane fit" data-pane="steps">
+      <button type="button" class="pal-pane-head" title="Open or close this panel">
+        <span class="pal-pane-chevron"></span><span class="pal-pane-title">Steps</span>
+      </button>
+      <div class="pal-pane-body">
+        <nav class="prep-steps" id="prepSteps" aria-label="Steps of 1 · Prepare">
+          <button type="button" class="step-item" data-section="signals"><span class="num">1</span><span class="step-name">Signals</span><span class="step-meta" id="modCount"></span></button>
+          <div class="step-children">
+            <div class="mod-list" id="modList">
+              <div class="mod-list-row" id="modRow-eit" data-mod="eit" data-target="cardEit" title="Show the EIT section">
+                <span class="swatch eit"></span>
+                <div class="info"><div class="nm">EIT</div><div class="file">m3resp_multimodal_1_eit_draeger.bin</div></div>
+                <span class="st on" title="Loaded"></span>
+                <button class="tb-btn small icon quiet remove" data-action="remove" data-mod="eit" data-icon="close" title="Remove EIT" aria-label="Remove EIT"></button>
+              </div>
+              <div class="mod-list-row" id="modRow-emg" data-mod="emg" data-target="cardEmg" title="Show the EMG section">
+                <span class="swatch emg"></span>
+                <div class="info"><div class="nm">EMG</div><div class="file">m3resp_multimodal_1_emg.Poly5</div></div>
+                <span class="st on" title="Loaded"></span>
+                <button class="tb-btn small icon quiet remove" data-action="remove" data-mod="emg" data-icon="close" title="Remove EMG" aria-label="Remove EMG"></button>
+              </div>
+              <div class="mod-list-row" id="modRow-vent" data-mod="vent" data-target="cardVent" title="Show the ventilator section">
+                <span class="swatch vent"></span>
+                <div class="info"><div class="nm">Ventilator</div><div class="file">m3resp_multimodal_1_ventilator.Poly5</div></div>
+                <span class="st on" title="Loaded"></span>
+                <button class="tb-btn small icon quiet remove" data-action="remove" data-mod="vent" data-icon="close" title="Remove the ventilator" aria-label="Remove the ventilator"></button>
+              </div>
+            </div>
+            <div class="add-modality">
+              <button class="tb-btn small quiet add-modality-open" id="addModalityOpenBtn" data-icon="plus">Add modality</button>
+              <div class="add-modality-form" id="addModalityForm" hidden>
+                <div class="field"><label for="customModName">Name</label><input type="text" id="customModName" placeholder="e.g. Capnography"></div>
+                <div class="field"><label for="customModVendor">File or vendor</label><input type="text" id="customModVendor" placeholder="e.g. custom.csv"></div>
+                <div class="add-modality-actions">
+                  <button class="tb-btn small quiet" id="addCustomModCancel">Cancel</button>
+                  <button class="tb-btn small primary" id="addCustomModBtn">Add</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="step-item" data-section="cardSync"><span class="num">2</span><span class="step-name">Synchronization</span></button>
+          <button type="button" class="step-item" data-section="cardWindow"><span class="num">3</span><span class="step-name">Working window</span></button>
+        </nav>
+      </div>
+    </div>
+
+    <!-- sequences saved from the working window; 2 · Design lists them under Available data -->
+    <div class="pal-pane" data-pane="sequences">
+      <button type="button" class="pal-pane-head" title="Open or close this panel">
+        <span class="pal-pane-chevron"></span><span class="pal-pane-title">Saved sequences</span>
+        <span class="pal-pane-count" id="savedSequencesCount"></span>
+      </button>
+      <div class="pal-pane-body">
+        <div class="seq-list" id="savedSequencesList"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="prep-main" id="prepMain">
+
+  <div class="prep-crumb" id="prepCrumb" aria-live="polite"></div>
+
+  <!-- EIT -->
+  <div class="card mod-card mod-eit" id="cardEit">
+    <div class="card-head">
+      <div class="mod-head-left">
+        <div class="modal-info">
+          <div class="name"><span class="mod-name">EIT</span><span class="mod-device">Dräger PulmoVista</span></div>
+          <div class="meta">m3resp_multimodal_1_eit_draeger.bin · 60.0 s · 20 Hz</div>
+        </div>
+      </div>
+      <div class="mod-head-right">
+        <span class="pill ok">Loaded</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <!-- several EIT files; sections of them merge into one recording (js/prepare/eit-files.js) -->
+      <div class="eit-files" id="eitFiles">
+        <div class="ef-head">
+          <span class="ct-label">Files</span><span class="ef-count" id="eitFileCount"></span>
+          <span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: files"><span class="help-pop" role="tooltip"><span class="hp-li">Drag on a file to select a section.</span><span class="hp-li">Drag a section to slide it, or drag its edge to change its length. The arrow keys move a selected section by 0.1 s (with Shift: 1.0 s). The × removes it.</span><span class="hp-li"><b>Merge order</b> sets the order of the sections. <b>Merge sections</b> joins them into one recording.</span></span></span>
+          <div class="tb-spacer"></div>
+          <div class="tb-seg small" role="group" aria-label="Load EIT files">
+            <button id="eitAddFilesBtn" title="Choose one or more .bin / .stp / .zip files"><span data-icon="plus"></span>Add files…</button>
+            <button id="eitAddFolderBtn" title="Add every EIT file in a folder"><span data-icon="folder"></span>Add folder…</button>
+          </div>
+        </div>
+        <div class="ef-list" id="eitFileList"></div>
+        <div class="ef-merge">
+          <div class="ef-merge-head">
+            <span class="ct-label">Merge order</span>
+            <span class="ef-summary" id="eitMergeSummary"></span>
+          </div>
+          <div class="ef-sections" id="eitSectionList"></div>
+          <div class="ef-preview" id="eitMergePreview" aria-label="Merged recording"></div>
+          <div class="ef-merge-foot">
+            <span class="ef-warn" id="eitMergeWarn" hidden></span>
+            <div class="tb-spacer"></div>
+            <button class="tb-btn small primary" id="eitMergeBtn" data-icon="check">Merge sections</button>
+          </div>
+        </div>
+      </div>
+      <div class="card-toolbar" data-zoom-toolbar="eit">
+        <div class="ct-left">
+          <label class="ct-label" for="eitSourceSelect">Show</label>
+          <select id="eitSourceSelect" class="tb-select" title="The recording that the plots and images below show"></select>
+          <span class="tb-sep"></span>
+          <button class="tb-btn small" data-icon="roi">Set ROI…</button>
+          <div class="menu-wrap">
+            <button class="tb-btn small menu-btn" data-icon="sliders" aria-haspopup="true" aria-expanded="false">Display<span class="caret" data-icon="chevron-down"></span></button>
+            <div class="menu-pop" role="menu" hidden>
+              <button role="menuitem">Auto rescale</button>
+              <button role="menuitem">y-scales…</button>
+              <button role="menuitem">Baseline…</button>
+            </div>
+          </div>
+        </div>
+        <div class="ct-right">
+          <div class="tb-seg small view-seg" role="group" aria-label="Time range">
+            <button data-z="out" title="Zoom out" aria-label="Zoom out"><span data-icon="minus"></span></button>
+            <span class="tb-seg-readout" data-zoom-readout="eit">—</span>
+            <button data-z="in" title="Zoom in" aria-label="Zoom in"><span data-icon="plus"></span></button>
+            <button data-z="reset" title="Show the whole recording" aria-label="Show the whole recording"><span data-icon="reset"></span></button>
+          </div>
+          <button class="tb-btn small icon quiet" data-icon="help" title="Drag across the plots to zoom in on a range · Click to place the cursor · Ctrl-scroll to zoom" aria-label="Mouse actions: Drag across the plots to zoom in on a range · Click to place the cursor · Ctrl-scroll to zoom"></button>
+        </div>
+      </div>
+      <div class="eit-workspace">
+
+        <!-- left: images + controls -->
+        <div class="eit-images">
+          <div class="eit-img-block">
+            <div class="eit-img-title">Dynamic image</div>
+            <div class="eit-img-row">
+              <div class="eit-colorbar"><span class="cb-hi">+23.9</span><div class="cb-scale"></div><span class="cb-lo">−23.9</span></div>
+              <div class="eit-img" id="eitDynamicImg"></div>
+            </div>
+          </div>
+          <div class="eit-img-block">
+            <div class="eit-img-title">Minute image</div>
+            <div class="eit-img-row">
+              <div class="eit-colorbar"><span class="cb-hi">+23.9</span><div class="cb-scale"></div><span class="cb-lo">−23.9</span></div>
+              <div class="eit-img" id="eitMinuteImg"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- right: stacked ROI plots on one shared time axis -->
+        <div class="eit-plots" id="eitPlots">
+          <div class="eit-img-title eit-plots-title title-help">Impedance signal<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: impedance signal"><span class="help-pop" role="tooltip"><span class="hp-p" id="eitDetailNote"></span></span></span></div>
+          <div class="eit-plot-stack zoom-stack" id="eitPlotStack" data-zoom="eit">
+            <div class="eit-cursor" id="eitCursor"></div>
+          </div>
+          <div class="eit-time-axis" data-zoom-axis="eit"></div>
+          <div class="eit-readout">
+            <div class="eit-transport tb-seg small">
+              <button class="eit-tbtn" data-t="start" data-icon="start" title="Jump to start" aria-label="Jump to start"></button>
+              <button class="eit-tbtn" data-t="back" data-icon="back" title="Step back" aria-label="Step back"></button>
+              <button class="eit-tbtn play" data-t="play" title="Play / pause" aria-label="Play or pause"></button>
+              <button class="eit-tbtn" data-t="fwd" data-icon="fwd" title="Step forward" aria-label="Step forward"></button>
+              <button class="eit-tbtn" data-t="end" data-icon="end" title="Jump to end" aria-label="Jump to end"></button>
+            </div>
+            <div class="eit-readout-spacer"></div>
+            <div class="eit-readout-field"><span class="k">Cursor time</span><span class="v" id="eitCursorTime">0.00 s</span></div>
+            <div class="eit-readout-field"><span class="k">Image No.</span><span class="v" id="eitImageNo">1</span></div>
+            <div class="eit-readout-field"><span class="k">Rate</span><span class="v" id="eitRate">— br/min</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <!-- EMG -->
+  <div class="card mod-card mod-emg" id="cardEmg">
+    <div class="card-head">
+      <div class="mod-head-left">
+        <div class="modal-info">
+          <div class="name"><span class="mod-name">EMG</span><span class="mod-device">surface array (Poly5)</span></div>
+          <div class="meta">m3resp_multimodal_1_emg.Poly5 · 60.0 s · 2048 Hz</div>
+        </div>
+      </div>
+      <div class="mod-head-right">
+        <span class="pill ok">Loaded</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <!-- several EMG files; sections of them merge into one recording (js/prepare/emg-files.js) -->
+      <div class="eit-files mod-files" id="emgFiles">
+        <div class="ef-head">
+          <span class="ct-label">Files</span><span class="ef-count" id="emgFileCount"></span>
+          <span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: files"><span class="help-pop" role="tooltip"><span class="hp-li">Drag on a file to select a section.</span><span class="hp-li">Drag a section to slide it, or drag its edge to change its length. The arrow keys move a selected section by 0.1 s (with Shift: 1.0 s). The × removes it.</span><span class="hp-li"><b>Merge order</b> sets the order of the sections. <b>Merge sections</b> joins them into one recording.</span></span></span>
+          <div class="tb-spacer"></div>
+          <div class="tb-seg small" role="group" aria-label="Load EMG files">
+            <button id="emgAddFilesBtn" title="Choose one or more .Poly5 files"><span data-icon="plus"></span>Add files…</button>
+            <button id="emgAddFolderBtn" title="Add every EMG file in a folder"><span data-icon="folder"></span>Add folder…</button>
+          </div>
+        </div>
+        <!-- the EMG signals: ticked ones show on the file lanes (envelope) and in the plots below -->
+        <div class="ef-lane-signals">
+          <span class="ct-label">Signals</span>
+          <span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: EMG signals"><span class="help-pop" role="tooltip"><span class="hp-p">Tick a signal to show it. The file lanes show the envelope of each ticked signal, with the ECG removed. The plots below show the raw signals.</span><span class="hp-p"><b>Add signal</b> adds a signal from a channel of the file, with its muscle and side.</span></span></span>
+          <div class="vent-checks" id="emgChecks"></div>
+          <div class="pop-wrap">
+            <button class="chip-add" id="emgAddOpen" data-icon="plus" aria-haspopup="dialog" aria-expanded="false">Add signal</button>
+            <div class="emg-add pop-panel" id="emgAdd" hidden>
+              <div class="pop-title">Add an EMG signal</div>
+              <div class="field"><label>Muscle</label>
+                <select id="emgAddMuscle">
+                  <option value="di">EMGdi — diaphragm</option>
+                  <option value="para">EMGpara — parasternal</option>
+                  <option value="scm">EMGscm — sternocleidomastoid</option>
+                  <option value="scal">EMGscal — scalene</option>
+                  <option value="abd">EMGabd — abdominal</option>
+                  <option value="alae">EMGan — alae nasi</option>
+                </select>
+              </div>
+              <div class="field"><label>Side</label>
+                <select id="emgAddSide">
+                  <option value="">—</option>
+                  <option value="L">left</option>
+                  <option value="R">right</option>
+                </select>
+              </div>
+              <div class="field"><label>Source channel</label>
+                <select id="emgAddChannel">
+                  <option>ch 0</option><option>ch 1</option><option selected>ch 2</option><option>ch 3</option>
+                  <option>ch 4</option><option>ch 5</option><option>ch 6</option><option>ch 7</option>
+                </select>
+              </div>
+              <div class="pop-actions"><button class="tb-btn small quiet" id="emgAddCancel">Cancel</button><button class="tb-btn small primary" id="emgAddBtn">Add</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="ef-list" id="emgFileList"></div>
+        <div class="ef-merge">
+          <div class="ef-merge-head">
+            <span class="ct-label">Merge order</span>
+            <span class="ef-summary" id="emgMergeSummary"></span>
+          </div>
+          <div class="ef-sections" id="emgSectionList"></div>
+          <div class="ef-preview" id="emgMergePreview" aria-label="Merged recording"></div>
+          <div class="ef-merge-foot">
+            <span class="ef-warn" id="emgMergeWarn" hidden></span>
+            <div class="tb-spacer"></div>
+            <button class="tb-btn small primary" id="emgMergeBtn" data-icon="check">Merge sections</button>
+          </div>
+        </div>
+      </div>
+      <div class="card-toolbar" data-zoom-toolbar="emg">
+        <div class="ct-left">
+          <label class="ct-label" for="emgSourceSelect">Show</label>
+          <select id="emgSourceSelect" class="tb-select" title="The recording that the EMG plots below show"></select>
+        </div>
+        <div class="ct-right">
+          <div class="tb-seg small view-seg" role="group" aria-label="Time range">
+            <button data-z="out" title="Zoom out" aria-label="Zoom out"><span data-icon="minus"></span></button>
+            <span class="tb-seg-readout" data-zoom-readout="emg">—</span>
+            <button data-z="in" title="Zoom in" aria-label="Zoom in"><span data-icon="plus"></span></button>
+            <button data-z="reset" title="Show the whole recording" aria-label="Show the whole recording"><span data-icon="reset"></span></button>
+          </div>
+          <button class="tb-btn small icon quiet" data-icon="help" title="Drag across the plots to zoom in on a range · Ctrl-scroll to zoom" aria-label="Mouse actions: Drag across the plots to zoom in on a range · Ctrl-scroll to zoom"></button>
+        </div>
+      </div>
+
+      <div class="eit-img-title eit-plots-title title-help">EMG signals<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: EMG signals"><span class="help-pop" role="tooltip"><span class="hp-p" id="emgSourceNote"></span><span class="hp-p">Each EMG signal is one channel of the loaded Poly5 file, labelled with the muscle it records from. All signals share one time axis, so they line up below each other.</span><span class="hp-p">Channel 1 (<code>EMGdi</code>) is the diaphragm signal. <code>emg.preprocess</code> and <code>emg.ecg_gating</code> use it by default. The raw signals still contain the ECG; <code>emg.ecg_gating</code> removes it before <code>emg.detect_breaths</code> runs.</span></span></span></div>
+      <div class="vent-stack zoom-stack" id="emgStack" data-zoom="emg"></div>
+      <div class="eit-time-axis" data-zoom-axis="emg"></div>
+    </div>
+  </div>
+  <!-- Ventilator -->
+  <div class="card mod-card mod-vent" id="cardVent">
+    <div class="card-head">
+      <div class="mod-head-left">
+        <div class="modal-info">
+          <div class="name"><span class="mod-name">Ventilator</span><span class="mod-device">Poly5 export</span></div>
+          <div class="meta">m3resp_multimodal_1_ventilator.Poly5 · 60.0 s · 200 Hz</div>
+        </div>
+      </div>
+      <div class="mod-head-right">
+        <span class="pill ok">Loaded</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <!-- several ventilator files; sections of them merge into one recording (js/prepare/vent-files.js) -->
+      <div class="eit-files mod-files" id="ventFiles">
+        <div class="ef-head">
+          <span class="ct-label">Files</span><span class="ef-count" id="ventFileCount"></span>
+          <span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: files"><span class="help-pop" role="tooltip"><span class="hp-li">Drag on a file to select a section.</span><span class="hp-li">Drag a section to slide it, or drag its edge to change its length. The arrow keys move a selected section by 0.1 s (with Shift: 1.0 s). The × removes it.</span><span class="hp-li"><b>Merge order</b> sets the order of the sections. <b>Merge sections</b> joins them into one recording.</span></span></span>
+          <div class="tb-spacer"></div>
+          <div class="tb-seg small" role="group" aria-label="Load ventilator files">
+            <button id="ventAddFilesBtn" title="Choose one or more .Poly5 files"><span data-icon="plus"></span>Add files…</button>
+            <button id="ventAddFolderBtn" title="Add every ventilator file in a folder"><span data-icon="folder"></span>Add folder…</button>
+          </div>
+        </div>
+        <!-- the ventilator channels: ticked ones show on the file lanes and in the plots below -->
+        <div class="ef-lane-signals">
+          <span class="ct-label">Channels</span>
+          <span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: ventilator channels"><span class="help-pop" role="tooltip"><span class="hp-p">Tick a channel to show it on the file lanes and in the plots below.</span><span class="hp-p">Esophageal, gastric and transpulmonary pressure are also known categories. Tick them to show the extra signals of a recording with an esophageal pressure (P_es) catheter.</span></span></span>
+          <div class="vent-checks" id="ventChecks"></div>
+        </div>
+        <div class="ef-list" id="ventFileList"></div>
+        <div class="ef-merge">
+          <div class="ef-merge-head">
+            <span class="ct-label">Merge order</span>
+            <span class="ef-summary" id="ventMergeSummary"></span>
+          </div>
+          <div class="ef-sections" id="ventSectionList"></div>
+          <div class="ef-preview" id="ventMergePreview" aria-label="Merged recording"></div>
+          <div class="ef-merge-foot">
+            <span class="ef-warn" id="ventMergeWarn" hidden></span>
+            <div class="tb-spacer"></div>
+            <button class="tb-btn small primary" id="ventMergeBtn" data-icon="check">Merge sections</button>
+          </div>
+        </div>
+      </div>
+      <div class="card-toolbar" data-zoom-toolbar="vent">
+        <div class="ct-left">
+          <label class="ct-label" for="ventSourceSelect">Show</label>
+          <select id="ventSourceSelect" class="tb-select" title="The recording that the ventilator plots below show"></select>
+        </div>
+        <div class="ct-right">
+          <div class="tb-seg small view-seg" role="group" aria-label="Time range">
+            <button data-z="out" title="Zoom out" aria-label="Zoom out"><span data-icon="minus"></span></button>
+            <span class="tb-seg-readout" data-zoom-readout="vent">—</span>
+            <button data-z="in" title="Zoom in" aria-label="Zoom in"><span data-icon="plus"></span></button>
+            <button data-z="reset" title="Show the whole recording" aria-label="Show the whole recording"><span data-icon="reset"></span></button>
+          </div>
+          <button class="tb-btn small icon quiet" data-icon="help" title="Drag across the plots to zoom in on a range · Ctrl-scroll to zoom" aria-label="Mouse actions: Drag across the plots to zoom in on a range · Ctrl-scroll to zoom"></button>
+        </div>
+      </div>
+
+      <div class="eit-img-title eit-plots-title title-help">Ventilator signals<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: ventilator signals"><span class="help-pop" role="tooltip"><span class="hp-p" id="ventSourceNote"></span><span class="hp-p">The channel numbers come from <code>ventilator.channels</code> (<code>pressure_channel</code>, <code>flow_channel</code>, <code>volume_channel</code>). Each signal is labelled with its category from <code>m3resp.data.categories</code>.</span></span></span></div>
+      <div class="vent-stack zoom-stack" id="ventStack" data-zoom="vent"></div>
+      <div class="eit-time-axis" data-zoom-axis="vent"></div>
+    </div>
+  </div>
+
+  <div id="customModalityCards"></div>
+
+  <!-- Sync -->
+  <div class="card" id="cardSync">
+    <div class="card-head"><h3>Raw synchronization<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: raw synchronization"><span class="help-pop" role="tooltip"><span class="hp-p">The ventilator is the reference. The offset of a recording, in seconds, is where its first sample sits on the ventilator time line. The bar of each row shows it.</span><span class="hp-li"><b>Recording</b> is the loaded file or the merged recording that the row uses. <b>Merge sections</b> on a card sets its row to the merged recording.</span><span class="hp-li"><b>Signal</b> is the signal of the row; <b>Compared with</b> is the ventilator signal it is matched to. EMG signals are compared as their envelope (RMS over 0.3 s, ECG removed).</span><span class="hp-li">An empty offset field uses the estimated offset: the cross-correlation of the two signals, over −5.0 to +5.0 s. A change of signal gives a new estimate.</span><span class="hp-li">Drag a bar to move its recording, or click it and use the arrow keys (0.1 s; with Shift 1.0 s). The offset field shows the new value.</span><span class="hp-li">Type a value to replace the estimate. With the method <code>estimate_offset</code>, <b>Estimate</b> finds the offsets of all rows again and clears the typed values.</span><span class="hp-li"><b>Match</b> is the correlation at the offset in use (1 is the same shape).</span><span class="hp-p"><code>session.sync_raw</code> applies the offsets.</span></span></span></h3><span class="hint">session.sync_raw</span></div>
+    <div class="card-body">
+      <div class="sync-controls">
+        <div class="field"><label for="syncMethod">Method</label><select id="syncMethod"><option>manual_offset</option><option>estimate_offset (cross-correlation)</option></select></div>
+        <div class="field"><label for="syncReference">Reference modality</label><select id="syncReference"><option>ventilator</option><option>eit</option><option>emg</option></select></div>
+        <button class="tb-btn" id="syncEstimate" disabled title="Find the offset where each recording matches the ventilator best, and use it">Estimate</button>
+      </div>
+      <!-- each bar is one recording on the time line of the reference; the
+           offset moves it left or right (js/prepare/sync-strip.js) -->
+      <div class="sync-strip" id="syncStrip">
+        <div class="sync-row sync-ruler-row" aria-hidden="true">
+          <span class="sync-name"></span>
+          <span class="sync-col-head sync-src">Recording</span>
+          <span class="sync-col-head sync-sig">Signal</span>
+          <span class="sync-col-head sync-vs">Compared with</span>
+          <span class="sync-col-head sync-field">Offset</span>
+          <div class="sync-ruler" id="syncRuler"></div>
+          <span class="sync-match-head">Match</span>
+        </div>
+        <div class="sync-row mod-vent">
+          <span class="sync-name"><i></i>Ventilator</span>
+          <span class="sync-src"><select class="sync-sel" id="syncSrcVent" aria-label="Ventilator recording used for the synchronization" title="Loaded Ventilator file or the merged Ventilator recording"></select></span>
+          <span class="sync-sig"><span class="sync-ref-tag" title="The other recordings move against this one. Each row chooses the ventilator signal it is compared with.">Reference</span></span>
+          <span class="sync-vs"></span>
+          <span class="sync-field"></span>
+          <div class="sync-track"><div class="sync-bar" id="syncBarVent" data-offset="0"><span class="v">0.0 s</span></div></div>
+          <span class="sync-match"></span>
+        </div>
+        <div class="sync-row mod-eit">
+          <span class="sync-name"><i></i>EIT</span>
+          <span class="sync-src"><select class="sync-sel" id="syncSrcEit" aria-label="EIT recording used for the synchronization" title="Loaded EIT file or the merged EIT recording"></select></span>
+          <span class="sync-sig"><select class="sync-sel" id="syncSigEit" aria-label="EIT signal used for the match" title="EIT signal used for the match"></select></span>
+          <span class="sync-vs"><select class="sync-sel" id="syncRefEit" aria-label="Ventilator signal compared with EIT" title="Ventilator signal compared with the EIT signal"></select></span>
+          <label class="sync-field sync-offset-wrap"><input class="sync-offset" type="number" step="0.1" id="syncOffsetEit" aria-label="EIT offset in seconds"><span class="unit">s</span></label>
+          <div class="sync-track"><div class="sync-bar" id="syncBarEit"><span class="v"></span><span class="tag"></span></div></div>
+          <span class="sync-match" id="syncMatchEit"></span>
+        </div>
+        <div class="sync-row mod-emg">
+          <span class="sync-name"><i></i>EMG</span>
+          <span class="sync-src"><select class="sync-sel" id="syncSrcEmg" aria-label="EMG recording used for the synchronization" title="Loaded EMG file or the merged EMG recording"></select></span>
+          <span class="sync-sig"><select class="sync-sel" id="syncSigEmg" aria-label="EMG signal used for the match" title="EMG signal used for the match (its envelope after ECG removal)"></select></span>
+          <span class="sync-vs"><select class="sync-sel" id="syncRefEmg" aria-label="Ventilator signal compared with EMG" title="Ventilator signal compared with the EMG envelope"></select></span>
+          <label class="sync-field sync-offset-wrap"><input class="sync-offset" type="number" step="0.1" id="syncOffsetEmg" aria-label="EMG offset in seconds"><span class="unit">s</span></label>
+          <div class="sync-track"><div class="sync-bar" id="syncBarEmg"><span class="v"></span><span class="tag"></span></div></div>
+          <span class="sync-match" id="syncMatchEmg"></span>
+        </div>
+      </div>
+
+      <!-- the signals on one time line, with the offsets above applied -->
+      <div class="sync-check">
+        <div class="sync-check-head" data-zoom-toolbar="sync">
+          <span class="ct-label">Check alignment</span>
+          <span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: check alignment"><span class="help-pop" role="tooltip"><span class="hp-p">The lanes show the ventilator signals ticked on the ventilator card and the ones the rows are compared with, the EIT signal and the EMG envelope on one time line, with the offsets above applied.</span><span class="hp-p">The dashed lines are the breath starts of the reference. With a good offset, each signal starts its breath on a line.</span></span></span>
+          <div class="tb-spacer"></div>
+          <div class="tb-seg small view-seg" role="group" aria-label="Time range">
+            <button data-z="out" title="Zoom out" aria-label="Zoom out"><span data-icon="minus"></span></button>
+            <span class="tb-seg-readout" data-zoom-readout="sync">—</span>
+            <button data-z="in" title="Zoom in" aria-label="Zoom in"><span data-icon="plus"></span></button>
+            <button data-z="reset" title="Show the whole recording" aria-label="Show the whole recording"><span data-icon="reset"></span></button>
+          </div>
+          <button class="tb-btn small icon quiet" data-icon="help" title="Drag across the plots to zoom in on a range · Ctrl-scroll to zoom" aria-label="Mouse actions: Drag across the plots to zoom in on a range · Ctrl-scroll to zoom"></button>
+        </div>
+        <div class="sync-check-plot zoom-stack" id="syncCheckPlot" data-zoom="sync"></div>
+        <div class="sync-check-axis" id="syncCheckAxis" data-zoom-axis="sync"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Working-window slicer -->
+  <div class="card" id="cardWindow">
+    <div class="card-head"><h3>Working window<span class="help-tip" tabindex="0" data-icon="help" aria-label="Help: working window"><span class="help-pop wide" role="tooltip"><span class="hp-p">Cut out the part of the recording that 2 · Design analyses.</span><span class="hp-li"><b>Recording</b> chooses the loaded file or the merged recording of each modality. These are the same lists as on the Synchronization rows, so a change in one place changes both. <b>None</b> leaves a modality out of the working window and of the sequence you save; its synchronization stays. The lanes use the offsets of the synchronization, and the time line is the ventilator recording.</span><span class="hp-li">Each lane is an overview (minimum and maximum) of the signal in the section of that modality. The ventilator lanes follow the channels ticked there.</span><span class="hp-li"><b>Keep window</b> adds a span to keep. Drag its band to move it, or a handle to change its length. Click a window, on the lanes or in the list, to edit it with the Start and End fields.</span><span class="hp-li"><b>Remove window</b> adds a span to cut out (hatched red). Everything around it is kept. Use it to remove a cough or a disconnection from the middle of a recording.</span><span class="hp-li"><b>Whole signal</b> makes one keep window over the whole recording and joins the other keep windows into it. On its own it saves the recording unchanged. With remove windows, it keeps everything except those spans.</span><span class="hp-li">With only remove windows, the whole recording minus those spans is saved.</span><span class="hp-li">The <b>keep</b>/<b>remove</b> chip of a row changes it between the two.</span><span class="hp-p"><b>Save as new sequence</b> joins the segments, in time order, into one named sequence (<code>eit.slice</code> followed by <code>Sequence.concatenate()</code>). It adds the sequence to <b>Saved sequences</b>, under this card and in the side panel. The saved windows turn grey and are locked. New windows make the next sequence. Remove a sequence to unlock its windows.</span></span></span></h3><span class="hint">eit.slice</span></div>
+    <div class="card-body">
+      <div class="slice-toolbar">
+        <div class="slice-group" role="group" aria-label="Edit the selected window">
+          <div class="slice-field"><label>Mode</label>
+            <div class="tb-seg" id="sliceMode">
+              <button class="on" data-mode="time">Time</button>
+              <button data-mode="index">Index</button>
+            </div>
+          </div>
+          <div class="slice-field"><label id="sliceStartLabel" for="sliceStartInput">Start (s)</label><input type="number" id="sliceStartInput" step="0.1"></div>
+          <div class="slice-field"><label id="sliceEndLabel" for="sliceEndInput">End (s)</label><input type="number" id="sliceEndInput" step="0.1"></div>
+          <div class="slice-field"><label>Length</label><div class="slice-duration" id="sliceDuration"></div></div>
+          <span class="slice-active-hint" id="sliceActiveHint"></span>
+        </div>
+        <div class="slice-field slice-add"><label>Add</label>
+          <div class="tb-seg add-seg">
+            <button id="addWindowBtn" title="Select a span to KEEP. With no keep windows at all, everything outside the remove windows is kept."><i class="win-mark keep"></i>Keep window</button>
+            <button id="addCutWindowBtn" title="Select a span to REMOVE. Everything else is saved; the removed spans are cut out and the remainder joined."><i class="win-mark cut"></i>Remove window</button>
+            <button id="fullWindowBtn" title="Keep the whole signal: one keep window over the entire recording. Remove windows stay, so this means &quot;everything except the removed spans&quot;."><span data-icon="whole"></span>Whole signal</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- the recording of each modality; the same lists as on the
+           synchronization rows (js/prepare/sync-strip.js) -->
+      <div class="slice-sources" role="group" aria-label="Recordings in the working window">
+        <span class="slice-sources-head">Recording</span>
+        <label class="slice-src mod-vent"><i></i>Ventilator<select class="sync-sel" id="sliceSrcVent" aria-label="Ventilator recording in the working window"></select></label>
+        <label class="slice-src mod-eit"><i></i>EIT<select class="sync-sel" id="sliceSrcEit" aria-label="EIT recording in the working window"></select></label>
+        <label class="slice-src mod-emg"><i></i>EMG<select class="sync-sel" id="sliceSrcEmg" aria-label="EMG recording in the working window"></select></label>
+        <span class="slice-sources-hint">The same recordings as on Synchronization. None leaves a modality out. The time line is the ventilator recording.</span>
+      </div>
+      <div class="slice-track" id="sliceTrack"></div>
+      <div class="slice-axis" id="sliceAxis"></div>
+
+      <div class="windows-panel">
+        <div class="windows-panel-head">
+          <h4>Selected windows</h4>
+          <span class="hint" id="windowsCount"></span>
+        </div>
+        <div id="windowsList"></div>
+        <!-- saves the coloured windows above as one sequence; saved windows
+             are grey and locked (js/prepare/window-slicer.js) -->
+        <div class="windows-panel-foot">
+          <label for="sequenceNameInput">Sequence name</label>
+          <input type="text" id="sequenceNameInput" placeholder="e.g. clean_breaths_1">
+          <div class="tb-spacer"></div>
+          <button class="tb-btn small primary" id="saveSequenceBtn" data-icon="check"><span class="save-label">Save as new sequence</span></button>
+        </div>
+      </div>
+
+      <div class="save-summary hidden" id="saveSummary"></div>
+
+    </div>
+    <!-- the same list as Saved sequences in the side panel -->
+    <div class="card-seqs">
+      <div class="windows-panel">
+        <div class="windows-panel-head">
+          <h4>Saved sequences</h4>
+          <span class="hint" id="windowSequencesCount"></span>
+        </div>
+        <div id="windowSequencesList"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="prep-pager">
+    <button class="tb-btn" id="prepBackBtn">Back</button>
+    <div class="tb-spacer"></div>
+    <span class="pager-hint" id="prepNextHint"></span>
+    <button class="tb-btn primary" id="prepNextBtn">Next</button>
+  </div>
+
+  </div>
+</div>
+

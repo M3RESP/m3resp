@@ -1,0 +1,465 @@
+/* ---- small "i" hover-popover carrying the helper text that would otherwise
+   sit inline (canvas usage hints, the edge-colour legend, palette tab notes) ---- */
+.info-dot{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;
+  width:19px;height:19px;border-radius:50%;flex:none;
+  border:1px solid var(--border);background:var(--surface-2);color:var(--text-faint);
+  font-size:12px;font-weight:500;cursor:default;
+}
+.info-dot:hover, .info-dot:focus{color:var(--accent-strong);border-color:var(--accent);outline:none;}
+.info-pop{
+  display:none;position:absolute;z-index:60;top:calc(100% + 8px);left:0;
+  width:360px;max-width:80vw;background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  box-shadow:var(--shadow);padding:10px 12px;font-size:11.5px;font-weight:400;color:var(--text-dim);
+  line-height:1.5;white-space:normal;text-align:left;cursor:auto;
+}
+.info-dot:hover .info-pop, .info-dot:focus .info-pop{display:block;}
+.info-pop b{color:var(--text);}
+.info-pop-legend{flex-direction:column;gap:6px;width:320px;}
+.info-dot:hover .info-pop-legend, .info-dot:focus .info-pop-legend{display:flex;}
+.info-pop-legend .legend-item{color:var(--text-dim);}
+.info-pop-end{left:auto;right:0;}
+/* inside the narrow palette column a 360px popover would hang off the left edge
+   of the window — open it to the side instead, over the canvas */
+.info-pop-side{top:-8px;left:calc(100% + 10px);right:auto;width:300px;}
+/* bare variant — the glyph's own ring is enough, no second circle around it */
+.info-dot.bare{width:auto;height:auto;border:none;background:none;font-size:13px;}
+.palette.collapsed .info-dot.bare{display:none;}
+.side-panel-topbar-title{display:flex;align-items:center;gap:6px;min-width:0;}
+
+/* Edge legend in the right panel */
+.legend-side{padding:4px 12px 12px;font-size:11.5px;color:var(--text-dim);}
+.lg-title{
+  font-size:9.5px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-faint);
+  margin:10px 0 5px;
+}
+.lg-row{display:flex;align-items:center;gap:8px;line-height:1.4;padding:2px 0;}
+.lg-row > svg, .lg-row > .lg-label, .lg-row > .lg-badge, .lg-row > .lg-mods{flex:none;}
+.lg-row > svg{width:22px;}
+.lg-note{color:var(--text-faint);font-size:11px;}
+.lg-label{font-family:var(--mono);font-size:10px;color:var(--text-dim);background:var(--surface-2);border-radius:3px;padding:0 3px;}
+.lg-label-session{color:var(--generic);}
+.lg-row > .shared-badge{margin:0 3px;}
+.lg-badge{
+  width:16px;height:16px;border-radius:50%;margin:0 3px;display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:10px;font-weight:500;
+}
+.lg-stale{background:var(--surface);color:var(--text-faint);border:1.5px solid var(--text-faint);box-sizing:border-box;}
+.lg-mods{display:flex;gap:2px;width:22px;flex-wrap:wrap;}
+.lg-mods i{width:10px;height:10px;border-radius:50%;}
+
+.canvas-scroll{flex:1;overflow:auto;position:relative;background-color:var(--bg);
+  background-image:radial-gradient(var(--canvas-dot) 1px, transparent 1px);
+  background-size:22px 22px;
+}
+.canvas-inner{position:relative;width:1420px;height:520px;transform-origin:0 0;}
+/* an <svg> is a replaced element, so `inset:0` alone leaves it at its intrinsic
+   300x150 — it only *looked* right because the overflow is visible. Size it to
+   the canvas explicitly so its user units line up 1:1 with node coordinates. */
+svg.edges{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible;pointer-events:none;}
+.edge-path{fill:none;stroke-width:2;opacity:0.85;pointer-events:none;transition:stroke-width .1s, opacity .1s;}
+.edge-hit{fill:none;stroke:transparent;stroke-width:14;pointer-events:stroke;cursor:pointer;}
+.edge-hit:not(.session):hover + .edge-path{stroke-width:3.5;opacity:1;filter:brightness(1.15);}
+.edge-hit.session{cursor:help;}
+.edge-hit.session:hover + .edge-path{opacity:0.85;}
+.edge-note{
+  position:fixed;transform:translate(-50%,calc(-100% - 10px));z-index:50;max-width:280px;
+  background:var(--text);color:var(--surface);font-size:11.5px;line-height:1.45;
+  padding:9px 11px;border-radius:8px;box-shadow:var(--shadow);
+  opacity:0;pointer-events:none;transition:opacity .15s;
+}
+.edge-note::after{
+  content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);
+  border:6px solid transparent;border-top-color:var(--text);
+}
+.edge-note.on{opacity:1;}
+.edge-drag{fill:none;stroke-width:2.5;stroke-dasharray:5 4;opacity:0.9;pointer-events:none;}
+.edge-path.session{stroke-dasharray:2 4;opacity:0.55;}
+.edge-arrow{pointer-events:none;opacity:0.85;}
+.edge-arrow.session{opacity:0.5;}
+.edge-hit:not(.session):hover ~ .edge-arrow{opacity:1;}
+
+.node{
+  position:absolute;width:208px;background:var(--surface);border:1px solid var(--border);
+  border-radius:9px;box-shadow:var(--shadow);cursor:grab;user-select:none;
+}
+.node:hover{border-color:var(--accent);}
+.node.dragging{cursor:grabbing;z-index:5;box-shadow:0 8px 24px rgba(23,22,26,0.18);}
+.node.selected{border-color:var(--select);box-shadow:0 0 0 3px var(--select-soft), var(--shadow);}
+.node.multi-picked{border-color:var(--select);box-shadow:0 0 0 2px var(--select), var(--shadow);}
+.node.multi-picked::after{
+  content:'✓';position:absolute;top:-8px;right:-8px;width:18px;height:18px;border-radius:50%;
+  background:var(--select);color:#fff;font-size:10.5px;font-weight:500;
+  display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);z-index:2;
+}
+.selection-box{
+  position:absolute;display:none;border:1px dashed var(--select);
+  background:color-mix(in srgb, var(--select) 12%, transparent);
+  border-radius:3px;pointer-events:none;z-index:6;
+}
+/* The head height, port row height and port padding below are mirrored by the
+   layout constants in js/design/graph-data.js (HEAD_H / PORT_H / PORTS_PAD_*),
+   so an edge endpoint can be computed from node.x / node.y alone. Keep the two
+   in step: a fixed head height is what makes that arithmetic exact instead of
+   font-dependent. */
+.node-head{
+  display:flex;flex-direction:column;gap:1px;padding:7px 10px 6px;border-bottom:1px solid var(--border);
+  border-radius:9px 9px 0 0;position:relative;height:48px;overflow:hidden;
+}
+.node-head::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:9px 0 0 0;}
+.node.mod-eit .node-head::before{background:var(--eit);}
+.node.mod-emg .node-head::before{background:var(--emg);}
+.node.mod-vent .node-head::before{background:var(--vent);}
+.node.mod-generic .node-head::before{background:var(--generic);}
+.node-head-row{display:flex;align-items:center;gap:6px;padding-left:4px;}
+/* detailed card: a light tint of the modality colour, and the category icon */
+.node:not(.compact) .node-head{background:color-mix(in srgb, var(--mod, var(--generic)) 9%, var(--surface));}
+.node-head .cnode-icon{flex:none;color:var(--mod, var(--generic));}
+.node-head .id{font-size:12px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;}
+.node-head .op{
+  font-family:var(--mono);font-size:9.5px;color:var(--text-faint);padding-left:4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.node-remove{
+  flex:none;width:16px;height:16px;border-radius:4px;border:none;background:transparent;color:var(--text-faint);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;line-height:1;
+  opacity:0;transition:opacity .12s;
+}
+.node:hover .node-remove, .node.selected .node-remove{opacity:1;}
+.node-remove:hover{background:var(--crit);color:#fff;}
+.node-ports{padding:6px 0 8px;}
+/* one fixed-height line per port index; the in/out rows stretch to fill it, so
+   both dots sit on the exact centre of the line PORT_H arithmetic predicts */
+.port-line{display:flex;justify-content:space-between;height:18px;}
+.port-row{
+  display:flex;align-items:center;gap:6px;font-size:10.5px;padding:0 10px;color:var(--text-dim);
+  position:relative;max-width:100%;
+  /* without this a long port name pushes the row past the fixed node width, and
+     the dot — positioned against the row's right edge — drifts off the node */
+  min-width:0;
+}
+.port-row.out{justify-content:flex-end;text-align:right;}
+.port-row span:not(.port-dot){white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+/* entry points are hollow, exit points are solid — so which side of a node
+   takes data in and which hands it on is readable without hovering */
+/* dots sit ON the node border (centred on it), so an edge drawn to node.x /
+   node.x+NODE_W lands exactly on the circle it belongs to */
+.port-dot{
+  box-sizing:border-box;width:10px;height:10px;border-radius:50%;flex:none;cursor:crosshair;
+  position:absolute;top:50%;transform:translateY(-50%);z-index:3;
+  background:var(--port-color, var(--text-faint));box-shadow:0 0 0 1px var(--surface);
+  transition:transform .1s, opacity .1s, box-shadow .1s;
+}
+.port-dot[data-side="in"]{
+  left:-6px;background:var(--surface);border:2.5px solid var(--port-color, var(--text-faint));box-shadow:none;
+}
+.port-row.out .port-dot{right:-6px;}
+.port-dot:hover{box-shadow:0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent);}
+/* while a connection is being dragged: dim the ports it cannot land on, and
+   ring the ones carrying the same artifact type */
+.canvas-inner.connecting .port-dot.port-invalid{opacity:0.2;}
+.canvas-inner.connecting .port-dot.port-match{
+  transform:translateY(-50%) scale(1.35);box-shadow:0 0 0 4px var(--accent-soft), 0 0 0 1px var(--accent);
+}
+
+/* ---- workflow groups: one box standing in for several steps ---- */
+.node.group-node{
+  background:color-mix(in srgb, var(--surface) 82%, transparent);
+  border-style:dashed;border-width:1.5px;
+  border-color:color-mix(in srgb, var(--accent) 45%, var(--border));
+  backdrop-filter:blur(1px);
+}
+.node.group-node .node-head{border-bottom-style:dashed;}
+.node.group-node:hover{border-color:var(--accent);}
+.node.group-node .op{color:var(--text-dim);}
+/* the transparent boundary drawn around an expanded group */
+.group-frame{
+  position:absolute;z-index:0;border:1.5px dashed color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius:14px;background:color-mix(in srgb, var(--accent) 4%, transparent);
+  pointer-events:none;
+}
+.group-frame-head{
+  position:absolute;top:8px;left:12px;display:flex;align-items:center;gap:8px;pointer-events:auto;
+}
+.group-frame .group-name{font-size:11.5px;font-weight:500;color:var(--text-dim);}
+.group-frame .group-meta{font-size:10.5px;font-family:var(--mono);color:var(--text-faint);}
+.group-collapse{
+  height:20px;padding:0 7px 0 5px;gap:3px;border-radius:5px;border:1px solid var(--border);background:var(--surface);
+  color:var(--text-dim);font-size:10.5px;font-weight:400;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.group-frame-head{cursor:default;user-select:none;}
+.group-collapse:hover{border-color:var(--accent);color:var(--accent-strong);}
+
+/* ---- shared-data badge: the step reads or writes the shared session data ---- */
+.shared-badge{
+  flex:none;width:16px;height:16px;border-radius:50%;box-sizing:border-box;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--surface);color:var(--generic);
+  border:1px solid color-mix(in srgb, var(--generic) 45%, var(--border));cursor:help;
+}
+.shared-badge svg{display:block;}
+.node.compact .shared-badge{position:absolute;left:50%;bottom:-6px;margin-left:-8px;z-index:2;}
+.canvas-inner.shared-focus .node:not(.shared-hl){opacity:0.35;}
+.node.shared-hl .shared-badge{background:var(--generic);color:var(--surface);border-color:var(--generic);}
+
+/* ---- run state of a node (js/design/run-state.js): badge, progress ---- */
+.run-badge{
+  position:absolute;top:-7px;right:-7px;z-index:3;width:18px;height:18px;border-radius:50%;
+  display:none;align-items:center;justify-content:center;color:#fff;
+  border:2px solid var(--surface);box-shadow:0 1px 3px rgba(23,22,26,0.2);
+}
+.run-badge.on{display:flex;}
+.run-badge svg{display:block;}
+.node[data-status="ok"] .run-badge{background:var(--ok);}
+.node[data-status="warn"] .run-badge{background:var(--warn);color:var(--on-warn);}
+.node[data-status="error"] .run-badge{background:var(--crit);}
+.node[data-status="stale"] .run-badge{background:var(--surface);color:var(--text-faint);border-color:var(--text-faint);}
+.node.compact .run-badge{top:-4px;right:-4px;}
+.node.compact[data-status="stale"] .cnode-ring{filter:saturate(0.3);opacity:0.75;}
+.node.compact[data-status="error"] .cnode-ring{border-color:var(--crit);}
+/* compact: a ring around the circle fills up while the step runs */
+.run-progress{position:absolute;left:-8.5px;top:-8.5px;display:none;overflow:visible;transform:rotate(-90deg);pointer-events:none;}
+.run-progress circle{
+  fill:none;stroke:var(--accent);stroke-width:3;stroke-linecap:round;
+  stroke-dasharray:213.63px;stroke-dashoffset:calc(213.63px * (1 - var(--run-p, 0)));
+}
+.node[data-status="running"] .run-progress{display:block;}
+/* detailed: a bar along the bottom of the card */
+.run-bar{
+  position:absolute;left:0;bottom:0;height:3px;border-radius:0 0 0 9px;background:var(--accent);
+  width:calc(var(--run-p, 0) * 100%);display:none;
+}
+.node[data-status="running"] .run-bar{display:block;}
+.node:not(.compact)[data-status="stale"]{opacity:0.75;}
+.node:not(.compact)[data-status="error"]{border-color:var(--crit);outline:1px solid var(--crit);}
+/* a node found from the Problems list blinks */
+@keyframes node-blink{50%{box-shadow:0 0 0 7px color-mix(in srgb, var(--accent) 45%, transparent);}}
+.node.compact.blink .cnode-ring, .node:not(.compact).blink{animation:node-blink 0.6s ease-in-out 3;}
+
+/* ---- compact view: a circle with the step name under it. The sizes below
+   are mirrored by CNODE_* in js/design/graph-data.js, so the port dots and
+   the link ends can be computed from node.x / node.y alone. ---- */
+.node.mod-eit{--mod:var(--eit);}
+.node.mod-emg{--mod:var(--emg);}
+.node.mod-vent{--mod:var(--vent);}
+.node.mod-generic{--mod:var(--generic);}
+.node.mod-custom{--mod:var(--custom);}
+.node.compact{
+  width:132px;background:none;border:none;border-radius:0;box-shadow:none;
+}
+.node.compact:hover, .node.compact.selected, .node.compact.multi-picked{border:none;box-shadow:none;}
+.cnode-ring{
+  position:absolute;left:36px;top:0;width:60px;height:60px;border-radius:50%;
+  box-sizing:border-box;border:2.5px solid var(--mod, var(--generic));
+  background:color-mix(in srgb, var(--mod, var(--generic)) 12%, var(--surface));
+  color:var(--mod, var(--generic));box-shadow:var(--shadow);
+  display:flex;align-items:center;justify-content:center;
+  transition:box-shadow .12s, transform .12s;
+}
+.node.compact:hover .cnode-ring{box-shadow:0 0 0 3px color-mix(in srgb, var(--mod) 22%, transparent), var(--shadow);}
+.node.compact.selected .cnode-ring{box-shadow:0 0 0 4px var(--select-soft), 0 0 0 5.5px var(--select), var(--shadow);}
+.node.compact.multi-picked .cnode-ring{box-shadow:0 0 0 3px var(--select), var(--shadow);}
+.node.compact.multi-picked::after{top:-6px;right:30px;}
+.node.compact.dragging{box-shadow:none;}
+.node.compact.dragging .cnode-ring{transform:scale(1.06);box-shadow:0 8px 24px rgba(23,22,26,0.22);}
+.node.compact.drop-match .cnode-ring{box-shadow:0 0 0 4px var(--accent-soft), 0 0 0 5.5px var(--accent);}
+.node:not(.compact).drop-match{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft), 0 0 0 5px var(--accent);}
+.cnode-icon{display:block;}
+.node.compact .status-dot{top:-1px;right:-1px;}
+.node.compact .node-remove{
+  position:absolute;top:-6px;left:-6px;width:18px;height:18px;border-radius:50%;
+  background:var(--surface);box-shadow:0 0 0 1px var(--border);
+}
+.node.compact.group-node .cnode-ring{border-style:dashed;}
+.cnode-count{
+  position:absolute;bottom:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;
+  background:var(--mod, var(--generic));color:#fff;font-size:10px;font-weight:500;font-family:var(--mono);
+  display:flex;align-items:center;justify-content:center;border:2px solid var(--surface);
+}
+.cnode-arcs{position:absolute;left:0;top:0;overflow:visible;pointer-events:none;}
+.cnode-arcs path{fill:none;stroke:color-mix(in srgb, var(--mod, var(--generic)) 35%, transparent);stroke-width:5;stroke-linecap:round;}
+.cnode-label{
+  position:absolute;left:0;right:0;top:66px;height:30px;overflow:hidden;
+  font-size:11.5px;font-weight:400;line-height:15px;text-align:center;color:var(--text);
+  overflow-wrap:anywhere;
+}
+.node.compact.selected .cnode-label{color:var(--select-strong);}
+/* compact port dots sit on the circle edge at a computed left/top */
+.port-dot.cport{
+  width:9px;height:9px;transform:translate(-50%,-50%);
+}
+.port-dot.cport[data-side="in"]{border-width:2px;}
+.canvas-inner.connecting .port-dot.cport.port-match{
+  transform:translate(-50%,-50%) scale(1.45);
+}
+/* name of the data on a link */
+.edge-label{
+  font-family:var(--sans);font-size:10.5px;font-weight:400;fill:var(--text-dim);text-anchor:middle;
+  paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round;pointer-events:auto;cursor:default;
+}
+.edge-label.session{font-family:var(--mono);font-size:10px;fill:var(--generic);}
+.canvas-inner.labels-off .edge-label{display:none;}
+
+.dock{
+  flex:none;height:150px;border-top:1px solid var(--border);background:var(--surface);
+  display:flex;min-height:0;
+}
+.dock-tabs{width:120px;flex:none;border-right:1px solid var(--border);display:flex;flex-direction:column;padding:8px;gap:2px;}
+.dock-tab{font-size:11.5px;font-weight:400;padding:6px 8px;border-radius:6px;color:var(--text-dim);cursor:pointer;display:flex;justify-content:space-between;}
+.dock-tab.active{background:var(--surface-2);color:var(--text);}
+.dock-tab .n{font-family:var(--mono);font-weight:500;}
+.dock-tab.warn .n{color:var(--warn-ink);}
+.dock-body{flex:1;overflow:auto;padding:8px 14px;min-width:0;}
+.diag-row{display:flex;align-items:flex-start;gap:9px;padding:6px 0;border-bottom:1px solid var(--surface-2);font-size:12px;}
+.diag-row:last-child{border-bottom:none;}
+.sev-stripe{width:3px;align-self:stretch;border-radius:2px;flex:none;}
+.sev-stripe.warn{background:var(--warn);}
+.sev-stripe.ok{background:var(--ok);}
+.sev-stripe.error{background:var(--crit);}
+.diag-row[data-node]{cursor:pointer;}
+.diag-row[data-node]:hover{background:var(--surface-2);}
+.dock-empty{font-size:12px;color:var(--text-faint);padding:6px 0;}
+.diag-row b{cursor:pointer;color:var(--accent);font-weight:400;}
+.diag-row .msg{color:var(--text-dim);}
+.log-line{font-family:var(--mono);font-size:11.5px;color:var(--text-dim);padding:2px 0;white-space:pre;}
+.log-line .t{color:var(--text-faint);margin-right:8px;}
+.log-line.ok{color:var(--ok);}
+.log-line.warnl{color:var(--warn-ink);}
+.log-line.crit{color:var(--crit);}
+.log-line.muted{color:var(--text-faint);}
+
+.inspector{
+  width:var(--side-w);flex:none;background:var(--surface);border-left:1px solid var(--border);
+  display:flex;flex-direction:column;min-height:0;
+}
+.inspector.collapsed{width:36px;}
+.inspector.collapsed .pal-pane, .inspector.collapsed .pal-splitter{display:none;}
+#legendPane .pal-pane-body{overflow:auto;}
+.insp-body{display:flex;flex-direction:column;min-height:0;flex:1;}
+.insp-head{padding:12px 14px;border-bottom:1px solid var(--border);}
+.insp-head .op{font-family:var(--mono);font-size:11px;color:var(--text-faint);}
+.insp-head h3{margin:3px 0 0;font-size:14.5px;}
+.insp-head p{margin:6px 0 0;font-size:11.5px;color:var(--text-dim);line-height:1.5;}
+.insp-scroll{flex:1;overflow:auto;padding:12px 14px;}
+.insp-section-title{font-size:10.5px;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-faint);font-weight:500;margin:14px 0 8px;}
+.insp-section-title:first-child{margin-top:0;}
+.param-row{margin-bottom:11px;}
+.param-row label{display:flex;justify-content:space-between;font-size:12px;font-weight:400;margin-bottom:5px;}
+.param-row label .unit{font-family:var(--mono);color:var(--text-faint);font-weight:400;font-size:10.5px;}
+.param-row .desc{font-size:10.5px;color:var(--text-faint);margin-top:4px;line-height:1.4;}
+.param-row select, .param-row input[type=text], .param-row input[type=number]{
+  width:100%;font-family:var(--mono);font-size:12px;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:6px;padding:6px 8px;color:var(--text);
+}
+.seg{display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;}
+.seg button{flex:1;padding:6px 0;font-size:11.5px;background:var(--surface-2);border:none;color:var(--text-dim);cursor:pointer;font-weight:400;}
+.seg button.on{background:var(--accent-strong);color:#fff;}
+.port-line{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;padding:5px 0;border-bottom:1px solid var(--surface-2);}
+.port-line:last-child{border-bottom:none;}
+.type-chip{font-family:var(--mono);font-size:9.5px;padding:2px 6px;border-radius:4px;background:var(--surface-2);color:var(--text-dim);border:1px solid var(--border);}
+
+
+/* ---- quick menu and link chooser (js/design/quick-menu.js) ---- */
+.pick-list{
+  position:fixed;z-index:300;display:none;flex-direction:column;width:290px;max-height:380px;
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  box-shadow:0 12px 36px rgba(23,22,26,0.22);overflow:hidden;outline:none;
+}
+.pick-list.on{display:flex;}
+.pl-head{
+  padding:8px 11px;font-size:11.5px;color:var(--text-dim);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;flex-wrap:wrap;gap:5px;line-height:1.4;
+}
+.pl-head code{font-family:var(--mono);font-size:10.5px;}
+.pl-head b{color:var(--text);}
+.pl-head .type-dot, .pl-row .type-dot, .pl-empty .type-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+.pl-search{
+  margin:8px 8px 4px;font-size:12.5px;padding:6px 9px;border-radius:7px;border:1px solid var(--border);
+  background:var(--surface-2);color:var(--text);font-family:var(--sans);
+}
+.pl-search:focus{outline:none;border-color:var(--accent);}
+.pl-rows{overflow:auto;padding:2px 4px 6px;}
+.pl-group{
+  font-size:9.5px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-faint);
+  padding:8px 8px 3px;
+}
+.pl-row{
+  display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:12px;
+}
+.pl-row.active{background:var(--select-soft);}
+.pl-icon{width:22px;height:22px;border-width:1.5px;}
+.pl-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);}
+.pl-meta{flex:none;font-size:10.5px;color:var(--text-faint);}
+.pl-empty{padding:14px 10px;font-size:11.5px;color:var(--text-faint);display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.pl-empty code{font-family:var(--mono);font-size:10.5px;}
+
+/* a step that was just added pops in */
+@keyframes node-pop{from{transform:scale(0.6);opacity:0;}to{transform:scale(1);opacity:1;}}
+.node.node-new{animation:node-pop 0.22s ease-out;}
+.node.compact.node-new{transform-origin:66px 30px;}
+
+/* ---- shared parameter form (js/design/param-form.js) ---- */
+.pf-none{font-size:11.5px;color:var(--text-faint);margin:0;}
+.pf-check{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);cursor:pointer;}
+.pf-advanced{margin-top:4px;border-top:1px solid var(--surface-2);padding-top:6px;}
+.pf-advanced summary{font-size:11px;font-weight:400;color:var(--text-dim);cursor:pointer;margin-bottom:8px;}
+.param-row input::placeholder{color:var(--text-faint);}
+.insp-open-btn{
+  margin-top:9px;font-size:11.5px;font-weight:400;color:var(--accent-strong);background:var(--accent-soft);
+  border:1px solid color-mix(in srgb, var(--accent) 35%, var(--border));border-radius:6px;padding:4px 10px;cursor:pointer;
+}
+.insp-open-btn:hover{border-color:var(--accent);}
+
+/* ---- node window (js/design/node-window.js) ---- */
+.node-window{
+  position:fixed;width:860px;height:540px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);
+  display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  box-shadow:0 18px 50px rgba(23,22,26,0.28);overflow:hidden;outline:none;
+}
+.nw-head{
+  display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border);
+  background:var(--surface-2);cursor:move;user-select:none;flex:none;
+}
+.nw-icon{width:28px;height:28px;}
+.nw-title{display:flex;align-items:baseline;gap:8px;min-width:0;flex:1;}
+.nw-title b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.nw-title code{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);white-space:nowrap;}
+.nw-status{font-size:10.5px;font-weight:400;padding:2px 8px;border-radius:999px;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);white-space:nowrap;}
+.nw-status[data-status="ok"]{color:var(--ok);border-color:color-mix(in srgb, var(--ok) 40%, var(--border));}
+.nw-status[data-status="warn"]{color:var(--warn-ink);border-color:color-mix(in srgb, var(--warn) 40%, var(--border));}
+.nw-status[data-status="error"]{color:var(--crit);border-color:color-mix(in srgb, var(--crit) 40%, var(--border));}
+.nw-status[data-status="running"]{color:var(--accent-strong);border-color:var(--accent);}
+.nw-close{
+  width:26px;height:26px;border-radius:6px;border:none;background:transparent;color:var(--text-dim);
+  font-size:17px;line-height:1;cursor:pointer;flex:none;
+}
+.nw-close:hover{background:var(--crit);color:#fff;}
+.nw-body{flex:1;min-height:0;display:flex;}
+.nw-side{width:290px;flex:none;border-right:1px solid var(--border);overflow:auto;padding:12px 14px;}
+.nw-summary{margin:0 0 10px;font-size:12px;line-height:1.5;color:var(--text);}
+.nw-section{font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-faint);margin:6px 0 8px;}
+.nw-main{flex:1;min-width:0;overflow:auto;padding:12px 16px;}
+.nw-outs{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;}
+.nw-outs button{
+  display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;
+  padding:3px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-dim);cursor:pointer;
+}
+.nw-outs button.on{background:var(--select-soft);border-color:var(--select);color:var(--text);}
+.nw-outs.single{align-items:center;font-size:11.5px;}
+.nw-outs.single code{font-family:var(--mono);}
+.nw-type{font-family:var(--mono);font-size:10px;color:var(--text-faint);}
+.nw-outs .type-dot, .nw-in .type-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+.nw-plot{margin-bottom:14px;}
+.nw-empty{padding:30px 10px;text-align:center;color:var(--text-faint);font-size:12px;}
+.nw-in{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--text-dim);padding:3px 0;}
+.nw-in code{font-family:var(--mono);font-size:11px;color:var(--text);}
+.nw-in.none{color:var(--text-faint);}
+.nw-arrow{color:var(--text-faint);}
+.nw-missing{color:var(--crit);}
+.nw-foot{
+  display:flex;align-items:center;gap:12px;padding:8px 12px;border-top:1px solid var(--border);
+  background:var(--surface-2);flex:none;
+}
+.nw-apply{height:28px;}
+.nw-info{font-size:11.5px;color:var(--text-dim);margin-left:auto;font-family:var(--mono);}
