@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Interactive plotly figures
+
+`plot_session_overview`, `plot_synchronization_comparison` and
+`plot_eit_processing_summary` take `backend="plotly"` and then return an
+interactive plotly figure: zoom, pan and read the values with the mouse. The
+default `backend="matplotlib"` gives the same static figure as before. For a
+plotly figure, `max_points` (default 5000) sets the largest number of points
+drawn for one signal; a longer signal keeps the lowest and the highest value
+of each short time bin. The tutorials use the plotly figures. The `eit`,
+`emg` and `all` extras install plotly, and the `docs` extra also installs
+kaleido, which needs Chrome to save the PNG thumbnails of the tutorials.
+
 ### Tests on recorded data (part of #92)
 
 New tests run m3resp on dataset 3 of the 27 July 2026 recordings (TestPS3):

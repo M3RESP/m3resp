@@ -1,187 +1,86 @@
-# `Signal` and `TimeSeries`
+# Signals
 
-## Plain-language overview
+A {term}`signal` is one time series with a {term}`sampling rate` and a unit, for example the global impedance of an EIT recording or the envelope of an EMG channel. M3Resp stores each signal as a `Signal` object in `session.signals`.
 
-`TimeSeries` is the base building block for anything that changes over time
-and was recorded continuously (as opposed to a single instantaneous event).
-It is a dataclass (a Python shortcut for defining a simple object that just
-holds a fixed set of fields):
-
-- `values`, the actual numbers, stored as a numpy array (a fast,
-  multi-dimensional grid of numbers used throughout scientific Python).
-- `time`, the timestamp for each value, so you know when each number was
-  recorded.
-- `sample_frequency`, how many measurements were taken per second.
-- `unit`, what the numbers mean physically (for example `"µV"` for
-  microvolts). This gets normalized (converted to one consistent spelling)
-  so `"uV"` from one device and `"µV"` written differently by another both
-  end up as the same thing, and can safely be compared.
-
-`values` does not have to be a simple list of numbers. It can be 1D (one
-number per moment in time, like total lung impedance), 2D (one number per
-moment per channel, like one column per electrode), or higher-dimensional
-(an EIT frame is a 2D image at every moment in time, so it is 3D overall:
-time by rows by columns). Whatever the shape, the first axis is time: its
-length must match the length of the `time` axis.
-
-`Signal` builds on top of `TimeSeries` (in Python this is called
-subclassing: `Signal` gets everything `TimeSeries` has, plus extra fields)
-by adding:
-
-- `modality`, which **device or technique** recorded this (`"eit"`, `"emg"`,
-  `"ventilator"`, or any custom string).
-- `category`, what the numbers **physically are** (`"impedance"`,
-  `"airway_pressure"`, `"airflow"`, `"volume"`, ...). This is different from
-  `channel`: `category` groups signals by physical quantity regardless of
-  which device produced them, while `channel` tells apart individual
-  channels from the same device. This matters most when two different
-  devices measure the same quantity - for example, both a standalone
-  pressure monitor and a ventilator can report airway pressure. Both signals
-  get `category="airway_pressure"` (so a query like "give me all airway
-  pressure signals" finds both), but different `channel`/`source` values (so
-  you can still tell which one came from which device).
-- `processing_state`, where this signal sits in its journey from raw to
-  usable: `"raw"` means straight off the device, untouched; `"intermediate"`
-  means one or more pre-processing steps have run (e.g. filtering,
-  segmentation, slicing) and more steps follow; `"processed"` means the
-  final, ready-to-use version; `"derived"` means computed from other signals
-  (like a difference between two signals).
-- `channel`, which specific physical/logical channel this is (e.g. an EMG
-  lead name, `"global_impedance"` for EIT).
-- `source`, where the data originally came from - the upstream tool/loader
-  that produced it (e.g. `"resurfemg"`, `"eitprocessing"`). This is
-  different from `method`: `source` says who produced it, `method` says
-  what was done to it.
-- `method`, which distinguishes two signals that are both, say,
-  `"intermediate"` but used different filtering techniques.
-
-Where they come from: the adapters (the wrapper objects that translate
-calls from `m3resp` into calls on an outside library) have `to_signals()`
-methods that convert whatever the outside library returns into these
-standard `Signal` objects. `session.preprocess_eit()`/`preprocess_emg()`
-call that conversion automatically and add the results to `session.signals`.
-
-`m3resp.data.timeseries.TimeSeries` is the base runtime type every
-continuous signal in `m3resp` is represented as, whatever its modality: a
-value array paired with its time axis, plus sampling rate, unit, and
-free-form metadata. `values`'s leading axis must line up with `time` (one
-entry per timepoint), but there's no constraint on its remaining
-dimensions - a 1D array (one scalar per timepoint, e.g. global impedance), a
-2D array (one value per timepoint per channel/region), or
-higher-dimensional arrays (e.g. EIT pixel-impedance frames: time × rows ×
-cols) are all valid. `unit` is normalized via
-`m3resp.data.units.normalize_unit` (e.g. `"uV"` -> `"µV"`), so equivalent
-units from different loaders end up comparable instead of drifting into
-incompatible spellings.
+## Look at a signal
 
 ```python
-@dataclass
-class TimeSeries:
-    values: np.ndarray
-    time: np.ndarray
-    sample_frequency: float | None = None
-    unit: str | None = None
-    name: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+signal = session.signals.for_modality("eit")[0]
+print(signal.name)               # Global impedance (raw)
+print(signal.sample_frequency)   # 20.0
+print(signal.unit)               # a.u.
+print(signal.values.shape)       # (1200,)
+print(signal.time[:3])           # [0.   0.05 0.1 ]
 ```
 
-`m3resp.data.signals.Signal` subclasses `TimeSeries`, adding modality and
-provenance context:
+## What a signal holds
+
+| Field | Contents |
+|---|---|
+| `values` | The measured values, as a NumPy array |
+| `time` | The time of each sample on the clock of its recording, in seconds |
+| `sample_frequency` | The sampling rate, in Hz |
+| `unit` | The unit of the values, for example `"µV"` |
+| `name` | The name of the signal |
+| `modality` | The device that recorded it: `"eit"`, `"emg"`, `"ventilator"`, or another name |
+| `category` | The physical quantity, for example `"impedance"`, `"airway_pressure"`, `"airflow"` or `"volume"` |
+| `channel` | The channel of the device, for example an EMG channel name |
+| `source` | The package or loader that made the signal, for example `"resurfemg"` |
+| `processing_state` | How far the processing is: `"raw"`, `"intermediate"`, `"processed"` or `"derived"` |
+| `derived_from` | For a derived signal: the processing state of the signals that it was calculated from |
+| `method` | The calculation that made the signal |
+| `metadata` | Other details, as a dictionary |
+
+The first axis of `values` is time, so its length is equal to the length of `time`. `values` can have more axes. For example, the EIT pixel data has one 32 × 32 image per time point: time × rows × columns.
+
+`Signal` adds the fields from `modality` to `method` to the basic time series, `TimeSeries`. A `TimeSeries` has only `values`, `time`, `sample_frequency`, `unit`, `name` and `metadata`.
+
+## Units
+
+M3Resp writes each unit in one form, so units from different devices can be compared. For example, `"uV"` becomes `"µV"`:
 
 ```python
-@dataclass
-class Signal(TimeSeries):
-    modality: Modality = "unknown"        # "eit" | "emg" | "ventilator" | "monitor" | "unknown" | any str
-    category: Category | None = None      # "impedance" | "airway_pressure" | "airflow" | "volume" | ... | any str
-    channel: str | None = None
-    source: str | None = None
-    processing_state: ProcessingState = "raw"   # "raw" | "intermediate" | "processed" | "derived"
-    derived_from: ProcessingState | None = None
-    method: str | None = None
+import numpy as np
+
+from m3resp import Signal
+
+signal = Signal(values=np.zeros(3), time=np.arange(3) / 10, sample_frequency=10.0, unit="uV")
+print(signal.unit)  # µV
 ```
 
-`method` names the algorithm that produced the signal, formatted
-`"<library>.<function_or_class_name>"` (e.g. `"resurfemg.moving_baseline"`,
-`"eitprocessing.RateDetection"`). The prefix disambiguates functions that
-share a name across libraries; it is convention only - a plain string with no
-runtime validation - so each adapter/step adds the library prefix itself,
-also to names that come from an upstream library.
+To add a spelling of your own, use `register_unit_alias` in `m3resp.data.units`. To read a list of spellings from a YAML or JSON file, use `load_unit_aliases`.
 
-### `modality` vs `category`: two independent axes
+## Modality and category
 
-`modality` is the **device/technique**; `category` is the **physical
-quantity**. They are separate fields because they do not nest:
+The `modality` is the device that recorded the signal. The `category` is the physical quantity. These are two separate fields, because one device records several quantities, and one quantity can come from several devices:
 
-- one device emits several quantities (a ventilator produces pressure *and*
-  flow *and* volume);
-- one quantity comes from several devices (airway pressure can come from a
-  ventilator or a standalone monitor).
+- A ventilator records airway pressure, flow and volume.
+- Airway pressure can come from a ventilator, from a separate pressure monitor or from an EIT device.
 
-Collapsing them into a single string makes some combinations inexpressible.
-Ventilator volume is the concrete case: with only `modality`, a volume channel
-had to be tagged either `"ventilator"` (losing which quantity it was) or
-`"volume"` (losing which device produced it). The persisted Layer 2 model has
-always kept the two apart - `Device.device_type` and `SignalStream.signal_type`
-- so a single Layer 1 string had to be split heuristically on the way in, and
-`"ventilator_volume"` was unreachable in practice.
-
-The same split answers a question that comes up with EIT devices: some EIT
-monitors also record pressure or flow (a Timpel device records flow and
-pressure alongside impedance; a Dräger device can record pressure). These
-channels are still tagged `modality="eit"` - that's the device that produced
-them - with `category="airway_pressure"` or `category="airflow"` identifying
-what they physically are. `for_modality("eit")` then returns everything that
-device produced, impedance included; `for_category("airway_pressure")`
-returns this channel alongside any airway pressure recorded by a ventilator
-or a standalone monitor, regardless of device.
-
-`modality`'s vocabulary lines up 1:1 with Layer 2's `Device.device_type`.
-`category`'s vocabulary is *modality-agnostic*, following the same
-principle as `eitprocessing`'s shared category catalogue: a taxonomy of
-physical quantities with no notion of which device measured them.
-
-Both are open vocabularies, not enums - a loader/adapter can use any string.
-A known alias is canonicalized on construction (`category="paw"` is stored as
-`"airway_pressure"`); an unrecognized value is kept verbatim, so a custom or
-experimental category is never silently dropped or relabelled.
-
-Query either axis independently:
+Airway pressure from an EIT device has `modality="eit"` and `category="airway_pressure"`. You can search on each field:
 
 ```python
-session.signals.for_modality("ventilator")      # every ventilator channel
-session.signals.for_category("airway_pressure") # pressure, whatever recorded it
+session.signals.for_modality("ventilator")       # all ventilator signals
+session.signals.for_category("airway_pressure")  # airway pressure from all devices
 ```
 
-`for_category` is available on `session.signals`, `session.parameter_results`,
-and `session.quality`, and accepts aliases (`for_category("paw")` works).
+`for_category` is also available on `session.parameter_results` and `session.quality`.
 
-The category vocabulary is extensible without editing the package - see
-`m3resp.data.categories.register_category_alias` for a single addition, and
-`load_category_aliases` to adopt an externally-maintained catalogue from a
-YAML/JSON file.
+Both fields accept any name. M3Resp changes a known other name of a category to its main name: `category="paw"` is stored as `"airway_pressure"`, and `for_category("paw")` also works. M3Resp keeps an unknown name as it is. To add a name of your own, use `register_category_alias` or `load_category_aliases` in `m3resp.data.categories`.
 
-`processing_state`:
+## Processing state
 
-- `"raw"` - untouched, straight from the source/loader.
-- `"intermediate"` - some pre-processing step has been applied (not
-  necessarily a filter - e.g. segmentation, slicing); not yet the final
-  signal a downstream parameter computation should use.
-- `"processed"` - the final signal for this channel, ready to compute
-  parameters/results from.
-- `"derived"` - computed from other signals (e.g. a difference between two
-  signals); `derived_from` records which state it was derived from.
+| `processing_state` | Meaning |
+|---|---|
+| `"raw"` | The signal as the device or the loader gave it |
+| `"intermediate"` | After one or more processing steps, for example a filter or a slice to a {term}`time window`. More steps follow. |
+| `"processed"` | The final signal of a channel, ready for the calculation of parameters |
+| `"derived"` | Calculated from other signals, for example the difference of two signals. `derived_from` gives the state of those signals. |
 
-Multiple differently produced signals can share the same `channel` and
-`processing_state` (e.g. two "intermediate" variants using different filter
-methods) - use `method` to tell them apart, not a new state.
+Two signals can have the same channel and the same processing state, for example two filtered signals that use different filters. The field `method` then tells them apart. M3Resp writes `method` as `"<package>.<function>"`, for example `"resurfemg.moving_baseline"` or `"eitprocessing.RateDetection"`.
 
-## Where `Signal`s come from
+## Where signals come from
 
-Adapters (`EITProcessingAdapter.to_signals`/`ReSurfEMGAdapter.to_signals`,
-see [../developer/adapters.md](../developer/adapters.md)) convert whatever
-`eitprocessing`/`resurfemg` return into `Signal` instances at the public
-boundary - everything downstream (session storage, workflow steps, export)
-operates on this type.
-`session.preprocess_eit()`/`session.preprocess_emg()` call this conversion
-by default and add the results to `session.signals`
-(`m3resp.data.collections.SignalCollection`).
+`preprocess_eit`, `preprocess_emg` and `preprocess_ventilator` add signals to `session.signals`. Many workflow steps also add signals, for example `emg.ecg_gating` adds the EMG signal after ECG removal.
+
+Continue with {doc}`events-and-breaths`.

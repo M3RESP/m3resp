@@ -1,0 +1,16 @@
+{#- "On this page" on every page: the sections of the page, or the page title
+    when the page has no sections. -#}
+{%- set page_toc = generate_toc_html() -%}
+{%- set heading_id = unique_html_id("pst-page-navigation-heading") -%}
+<div id="{{ heading_id }}" class="page-toc tocsection onthispage">
+  <i class="fa-solid fa-list"></i> {{ _("On this page") }}
+</div>
+<nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="{{ heading_id }}">
+{%- if page_toc | length >= 1 %}
+  {{ page_toc }}
+{%- else %}
+  <ul class="visible nav section-nav flex-column">
+    <li class="toc-h1 nav-item toc-entry active"><a class="reference internal nav-link active" href="#" aria-current="true">{{ title | striptags }}</a></li>
+  </ul>
+{%- endif %}
+</nav>

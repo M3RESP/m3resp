@@ -35,15 +35,18 @@ dynamic = ["version"]
 [project.optional-dependencies]
 eit = [
   "eitprocessing @ git+https://github.com/M3RESP/eitprocessing.git@m3resp-integration",
+  "plotly>=6.1",
 ]
 emg = [
   "resurfemg @ git+https://github.com/M3RESP/ReSurfEMG.git@m3resp-integration",
   "ipywidgets",
+  "plotly>=6.1",
 ]
 all = [
   "eitprocessing @ git+https://github.com/M3RESP/eitprocessing.git@m3resp-integration",
   "resurfemg @ git+https://github.com/M3RESP/ReSurfEMG.git@m3resp-integration",
   "ipywidgets",
+  "plotly>=6.1",
 ]
 dev = [
   "pre-commit",
@@ -59,9 +62,12 @@ docs = [
   "Sphinx>=8.2",
   "myst-parser>=4",
   "pydata-sphinx-theme>=0.16",
+  "sphinx-copybutton>=0.5",
   "sphinx-design>=0.6",
   "sphinx-gallery>=0.19",
   "matplotlib>=3.9",
+  "plotly>=6.1",
+  "kaleido>=1.0",
 ]
 
 [project.scripts]
@@ -121,6 +127,7 @@ packages = ["m3resp"]
 module = [
   "eitprocessing.*",
   "matplotlib.*",
+  "plotly.*",
   "resurfemg.*",
 ]
 ignore_missing_imports = true
