@@ -30,6 +30,7 @@ from m3resp.processing.peaks import (
     detect_occluded_breath_peaks,
     detect_ventilator_breath_peaks,
 )
+from m3resp.processing.ventilator import estimate_peep
 from m3resp.processing.windows import rolling_envelope
 
 from .baseline import (
@@ -59,6 +60,7 @@ from .shared import (
     MULTIMODAL_QUALITY_ASSESSMENT_FUNCTIONS,
     VENTILATOR_EVENT_DETECTION_FUNCTIONS,
     VENTILATOR_QUALITY_ASSESSMENT_FUNCTIONS,
+    _choose_ecg_channel,
     _choose_emg_channel,
     _normalize_selected_postprocessing,
     _require_emg_recording,
@@ -213,8 +215,9 @@ def _preprocess_default(
     metadata = dict(recording["metadata"])
     fs = float(metadata["fs"])
     array = recording["array"]
+    channel_labels = metadata.get("labels")
     if channel is None:
-        channel = _choose_emg_channel(len(array), metadata.get("labels"))
+        channel = _choose_emg_channel(len(array), channel_labels)
     raw = np.asarray(array[channel], dtype=float)
 
     high_pass_hz: float = kwargs.pop("high_pass_hz", None) or 20.0
@@ -264,7 +267,16 @@ def _preprocess_default(
 
     clean = filtered
     if remove_ecg:
-        ecg_peak_indexes = detect_ecg_peaks(clean, sample_frequency=fs)
+        ecg_channel = kwargs.pop(
+            "ecg_channel",
+            _choose_ecg_channel(channel_labels) if channel_labels else None,
+        )
+        ecg_signal = (
+            np.asarray(array[ecg_channel[0]], dtype=float)
+            if ecg_channel is not None
+            else clean
+        )
+        ecg_peak_indexes = detect_ecg_peaks(ecg_signal, sample_frequency=fs)
         if ecg_removal_method == "gating":
             clean = gate_ecg(clean, ecg_peak_indexes, fill_method=fill_method)
         elif ecg_removal_method == "wavelet":
@@ -310,7 +322,7 @@ def _preprocess_default(
 
 
 def _detect_breaths_default(
-    processed_emg: dict[str, Any],
+    processed_emg: Mapping,
     *,
     min_breath_width_seconds: float = 0.2,
     baseline: np.ndarray | None = None,
@@ -479,7 +491,15 @@ def _build_context(
         if context["ventilator_signals"] is not None
         else None
     )
-    context["peep"] = kwargs.pop("peep", np.nan)
+    context["peep"] = kwargs.pop(
+        "peep",
+        estimate_peep(
+            context["ventilator_signals"]["airway_pressure"],
+            context["ventilator_signals"]["volume"],
+        )
+        if context["ventilator_signals"] is not None
+        else float("nan"),
+    )
     context["vent_width_samples"] = (
         max(
             1,
@@ -1050,6 +1070,7 @@ def _postprocess_default(
     _compute_multimodal_quality_default(context)
     # TODO update settings
     return {
+        "available": m3resp.emg.processing.core.available_postprocessing(),
         "computed": context.computed,
         "skipped": context.skipped,
         "peak_indices": context.peak_indices,

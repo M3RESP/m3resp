@@ -401,6 +401,23 @@ def _unavailable_postprocessing_result(
 _ECG_LABELS = ("ecg", "ekg")
 
 
+def _choose_ecg_channel(labels: Sequence[str]) -> int | list[int] | None:
+    """Pick the ECG channel to gate when the user did not name one.
+
+    Search for channel(s) whose name says ECG/EKG.
+    """
+    names = list(labels)
+
+    candidates = [
+        index
+        for index, name in enumerate(names)
+        if str(name).strip().lower() in _ECG_LABELS
+    ]
+    if len(candidates) >= 1:
+        return candidates
+    return None
+
+
 def _choose_emg_channel(n_channels: int, labels: Sequence[str] | None) -> int:
     """Pick the EMG channel to analyse when the user did not name one.
 

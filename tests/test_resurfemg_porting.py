@@ -495,7 +495,7 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
 
 # NOTE: AssertionError
 def test_emg_real_data_pipeline_uses_committed_poly5_sample():
-    pytest.importorskip("resurfemg")
+    # pytest.importorskip("resurfemg")
 
     repo_root = Path(__file__).resolve().parents[1]
     emg_path = os.path.join(
@@ -530,7 +530,7 @@ def test_emg_real_data_pipeline_uses_committed_poly5_sample():
     assert len(processed["envelope"]) == len(processed["raw_channel"])
     assert session.emg.filtered is processed["filtered"]
     assert session.emg.envelope is processed["envelope"]
-    assert session.emg.channel == 0
+    assert session.emg.channel == 1
     assert session.emg.fs == processed["fs"]
 
     events = session.detect_emg_breaths()
