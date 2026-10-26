@@ -34,7 +34,6 @@ import numpy as np
 import pandas as pd
 import pywt
 
-
 from m3resp.core.utilities import capture_value
 from m3resp.processing.filters import bandpass_filter
 from m3resp.processing.windows import rolling_rms  # TODO: check correctness
@@ -113,9 +112,12 @@ def _gate_fill_interp(gating_context: _GateContext) -> np.ndarray:
     if gating_context.gated_indexes.size == 0:
         return gating_context.array_gated
     # get the indices of the samples right before and after each gate
-    half = gating_context.half_gate_width
-    pre_idx = gating_context.peaks - half - 1
-    post_idx = gating_context.peaks + half + 1
+    left = (gating_context.gate_width_samples - 1) // 2  # 102 for 205, 101 for 204
+    right = gating_context.gate_width_samples // 2  # 102 for both
+    pre_idx = gating_context.peaks - left - 1  # sample before gate
+    post_idx = (
+        gating_context.peaks + right + 1
+    )  # sample after gate (upstream uses +2; see above)
     max_s = gating_context.max_samples
     pre_in = (pre_idx >= 0) & (pre_idx < max_s)
     post_in = (post_idx >= 0) & (post_idx < max_s)
@@ -272,7 +274,6 @@ def _build_gate_context(
     signal: np.ndarray,
     peak_indices: np.ndarray,
     gate_width_samples: int,
-    fill_method: int,
 ) -> _GateContext:
     array_original = _require_1d_array("signal", signal)
     peaks = _convert_to_1d_array(
@@ -284,13 +285,14 @@ def _build_gate_context(
     # the half_gate_width is computed via integer division for methods 0, 1, and 2,
     # but via float division for methods 3 and 4.
     # The rest of the mask computation is identical for all methods.
-    half_gate_width = (
-        gate_width_samples / 2
-        if fill_method == _GATE_FILL_RMS  # was `is` — use `==`
-        else gate_width_samples // 2
-    )
-    starts = np.clip(peaks - half_gate_width, 0, max_samples - 1).astype(np.int64)
-    ends = np.clip(peaks + half_gate_width, 0, max_samples - 1).astype(np.int64)
+    half_gate_width = gate_width_samples // 2
+
+    left = (gate_width_samples - 1) // 2  # 102 for 205, 101 for 204
+    right = gate_width_samples // 2  # 102 for both
+    half_gate_width = right  # still used by interp frac / prior-mean windows
+
+    starts = np.clip(peaks - left, 0, max_samples).astype(np.int64)
+    ends = np.clip(peaks + right + 1, 0, max_samples).astype(np.int64)  # exclusive
     delta = np.zeros(max_samples + 1, dtype=np.int64)
     np.add.at(delta, starts, 1)  # +1 entering each gate
     np.add.at(delta, ends, -1)  # -1 exiting each gate
@@ -356,9 +358,7 @@ def gate_ecg(
         raise ValueError(msg_0)
     # build the gating context: depending on the selected fill method, construct the
     #  necessary gating mask and other relevant data structures
-    gating_context = _build_gate_context(
-        signal, peak_indices, gate_width_samples, fill_method
-    )
+    gating_context = _build_gate_context(signal, peak_indices, gate_width_samples)
     if capture_mask is not None:
         capture_value(capture_mask, "gate_mask", gating_context.gate_mask)
     # now, fill the gates according to the selected method
