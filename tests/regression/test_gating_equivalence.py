@@ -91,6 +91,8 @@ def _ctx(signal, peaks, width, half, gated_idxs, gate_mask=None):
     if gate_mask is None:
         gate_mask = np.zeros(n, dtype=bool)
         gate_mask[gated_idxs] = True
+    left = (width - 1) // 2
+    right = width // 2
     return new._GateContext(
         array_original=sig,
         array_gated=sig.copy(),
@@ -98,8 +100,8 @@ def _ctx(signal, peaks, width, half, gated_idxs, gate_mask=None):
         max_samples=n,
         gate_width_samples=width,
         half_gate_width=half,
-        gate_start_indexes=np.clip(peaks - half, 0, n).astype(np.int64),
-        gate_end_indexes=np.clip(peaks + half, 0, n).astype(np.int64),
+        gate_start_indexes=np.clip(peaks - left, 0, n).astype(np.int64),
+        gate_end_indexes=np.clip(peaks + right + 1, 0, n).astype(np.int64),
         gate_mask=gate_mask,
         gated_indexes=gated_idxs,
     )
@@ -115,30 +117,15 @@ def assert_same(a, b):
 @pytest.mark.parametrize("method", [0, 1, 2])
 def test_gated_indices_methods_012(peaks, width, method):
     expected = np.unique(O("_compute_gated_indices")(peaks, width, N))
-    ctx = new._build_gate_context(_signal(), peaks, width, method)
+    ctx = new._build_gate_context(_signal(), peaks, width)
     np.testing.assert_array_equal(ctx.gated_indexes, expected)
 
 
 def test_gate_mask_method_3(peaks, width):
     exp_mask, exp_idxs = O("_compute_gate_mask")(peaks, width, N)
-    ctx = new._build_gate_context(_signal(), peaks, width, 3)
+    ctx = new._build_gate_context(_signal(), peaks, width)
     np.testing.assert_array_equal(ctx.gate_mask, exp_mask)
     np.testing.assert_array_equal(ctx.gated_indexes, exp_idxs)
-
-
-# --------------------------------------------------------------------------
-# Small helpers
-# --------------------------------------------------------------------------
-def test_find_corresponding_peaks(peaks, width):
-    gated = np.unique(O("_compute_gated_indices")(peaks, width, N))
-    ctx = _ctx(_signal(), peaks, width, width // 2, gated)
-    got = new._find_corresponding_peaks(ctx)
-    np.testing.assert_array_equal(
-        got, O("_find_corresponding_peak")(peaks, gated, width, N)
-    )
-    np.testing.assert_array_equal(
-        got, O("_compute_gate_peak_mapping")(peaks, gated, width, N)
-    )
 
 
 @pytest.mark.parametrize("width_", [11, 204, 205])
@@ -245,7 +232,7 @@ def test_fill_rms(peaks, width):
     sig = _signal()
     mask, gated = O("_compute_gate_mask")(peaks, width, N)
     expected = O("_gate_fill_rms")(sig.copy(), mask, gated, width)
-    got = new._gate_fill_rms(_ctx(sig, peaks, width, width / 2, gated, mask))
+    got = new._gate_fill_rms(_ctx(sig, peaks, width, width // 2, gated, mask))
     assert_same(got, expected)
 
 

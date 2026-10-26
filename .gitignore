@@ -19,7 +19,9 @@ analysis/
 
 # Documentation build products
 docs/_build/
+docs/build/
 docs/api/generated/
+docs/api/backreferences/
 docs/generated/
 docs/tutorials/
 
