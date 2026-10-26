@@ -69,7 +69,7 @@ from m3resp.workflows import (
     run_workflow,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "BreathEvent",
