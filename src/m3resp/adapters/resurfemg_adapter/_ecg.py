@@ -41,7 +41,6 @@ class _EcgMixin:
 
         Returns:
             numpy.ndarray: ECG peak indices."""
-
         try:
             from resurfemg.preprocessing.ecg_removal import detect_ecg_peaks
         except ImportError as exc:
@@ -89,7 +88,6 @@ class _EcgMixin:
         Returns:
             numpy.ndarray: The gated result.
         """
-
         try:
             from resurfemg.preprocessing.ecg_removal import gating
         except ImportError as exc:

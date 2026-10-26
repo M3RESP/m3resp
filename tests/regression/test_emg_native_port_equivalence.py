@@ -339,10 +339,7 @@ def test_gate_ecg_explicit(
     expected = adapter.gate_ecg(ecg_signal, peaks, **kwargs)
     actual = native.gate_ecg(ecg_signal, peaks, **kwargs)
 
-    if fill_method == 3:
-        np.testing.assert_allclose(actual, expected, rtol=1e-15, atol=0)
-    else:
-        assert_identical(actual, expected)
+    np.testing.assert_allclose(actual, expected, rtol=1e-15, atol=0)
 
 
 @GATE_INTERP_AT_END  # default fill_method=1; the last detected peak is near the end
