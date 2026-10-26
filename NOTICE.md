@@ -38,3 +38,12 @@ Portions of `src/m3resp/processing/filters.py`,
 `src/m3resp/processing/peaks.py`, and `src/m3resp/data/pixel_maps.py`
 are derived from eitprocessing; see the per-module "Provenance"
 notes in those files for the specific functions and upstream revision.
+
+## Test data
+
+`tests/data/sentec_healthy_volunteer_1b.zri` and `tests/data/timpel_healthy_volunteer_1_60-120s.txt` come from "Test data for the eitprocessing software package", version 1.0, by Peter Somhorst (2025), https://doi.org/10.5281/zenodo.17423608.
+
+License: Creative Commons Attribution 4.0 International (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/
+
+- `sentec_healthy_volunteer_1b.zri` is the original file, unchanged.
+- `timpel_healthy_volunteer_1_60-120s.txt` holds lines 3001 to 6000 of `timpel_healthy_volunteer_1.txt`, which is 60 s to 120 s of the recording at 50 Hz. The lines are unchanged.
