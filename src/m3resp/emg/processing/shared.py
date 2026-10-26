@@ -46,8 +46,74 @@ if TYPE_CHECKING:
 # }  # noqa: ERA001
 import collections
 
-# dict[str, dict[str, tuple[str, str]]]
-PostProcessingFunction = collections.namedtuple(
+EMG_PROCESSING_DEFAULT_PARAMETERS = {
+    "baseline_window_seconds": 7.5,
+    "baseline_step_seconds": 0.2,
+    "baseline_percentile": 33.0,
+    "ventilator_breath_width_seconds": 0.1,
+    "slope_window_seconds": 0.5,
+    "aub_window_seconds": 5.0,
+}
+
+
+BASELINE_FUNCTIONS = {
+    "baseline": {
+        "moving_baseline": True,
+        "slopesum_baseline": True,
+    }
+}
+
+EMG_EVENT_DETECTION_FUNCTIONS = {
+    "event_detection": {
+        "onoffpeak_baseline_crossing": True,
+        "onoffpeak_slope_extrapolation": True,
+    }
+}
+VENTILATOR_EVENT_DETECTION_FUNCTIONS = {
+    "event_detection": {
+        "detect_ventilator_breath": True,
+        "find_occluded_breaths": True,
+    }
+}
+
+VENTILATOR_QUALITY_ASSESSMENT_FUNCTIONS = {
+    "quality_assessment": {
+        "detect_non_consecutive_manoeuvres": True,
+        "evaluate_respiratory_rates": True,
+        "ventilator_respiratory_rate": True,
+    }
+}
+MULTIMODAL_QUALITY_ASSESSMENT_FUNCTIONS = {
+    "quality_assessment": {
+        "evaluate_event_timing": True,
+        "evaluate_respiratory_rates": True,
+    }
+}
+
+EMG_QUALITY_ASSESSMENT_FUNCTIONS = {
+    "quality_assessment": {
+        "snr_pseudo": True,
+        "percentage_under_baseline": True,
+        "detect_local_high_aub": True,
+        "detect_extreme_time_products": True,
+        "evaluate_bell_curve_error": True,
+        "evaluate_event_timing": True,
+        "evaluate_respiratory_rates": True,
+        "interpeak_distance": True,
+    }
+}
+
+FEATURES_FUNCTIONS = {
+    "features": {
+        "amplitude": True,
+        "area_under_baseline": True,
+        "pseudo_slope": True,
+        "time_to_peak": True,
+        "time_product": True,
+        "respiratory_rate": True,
+    }
+}
+PostProcessingFunction = collections.namedtuple(  # noqa: PYI024
     "PostProcessingFunction", ["module", "function"]
 )
 POSTPROCESSING_FUNCTIONS: dict[str, dict[str, PostProcessingFunction]] = {

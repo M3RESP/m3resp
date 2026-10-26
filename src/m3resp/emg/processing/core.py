@@ -35,13 +35,6 @@ class _CoreMixin:
     def __init__(self, loader: Callable[..., Any] | None = None):
         self._loader = loader
 
-    # def load(self, path: str, **kwargs: Any) -> Any:
-    #     # """Load EMG data through m3resp or an injected loader."""
-    #     # if self._loader is not None:
-    #     #     return self._loader(path, **kwargs)
-
-    #     return load(path, **kwargs)
-
     # TODO
     def preprocess(self, signal: Any, **kwargs: Any) -> Any:
         """Preprocess EMG data through ReSurfEMG or a provided callable."""
@@ -217,9 +210,8 @@ class _CoreMixin:
                 except (ModuleNotFoundError, AttributeError):
                     sub_package = "." + name_parts.pop() + sub_package
                     if not name_parts:
-                        raise InvalidM3respModuleError(
-                            f"Could not find {object_to_import}."
-                        )
+                        msg_0 = f"Could not find {object_to_import}."
+                        raise InvalidM3respModuleError(msg_0)
                     return _iter_module_parts(sub_package), sub_package
 
             return _iter_module_parts("")[0]
