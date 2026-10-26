@@ -25,10 +25,12 @@ classifiers = [
 dependencies = [
   "complexipy>=8.1.0",
   "loguru",
-  "neurokit2>=0.2.13",
+  "neurokit2==0.2.13",
   "numpy",
   "pandas",
+  "prettytable>=3.18.0",
   "pydantic>=2",
+  "pytest>=9.1.1",
   "PyYAML",
   "scipy",
   "sphinx>=9.1.1",
@@ -202,6 +204,7 @@ unused-ignore-comment = "error"
 error-on-warning = true
 [dependency-groups]
 dev = [
+    "pytest>=9.1.1",
     "ty>=0.0.91",
 ]
 
