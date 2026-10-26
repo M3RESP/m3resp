@@ -10,7 +10,7 @@ The file [CITATION.cff](https://github.com/M3RESP/m3resp/blob/main/CITATION.cff)
 @software{m3resp,
   title   = {M3Resp},
   author  = {{M3Resp contributors}},
-  version = {0.2.0},
+  version = {0.2.1},
   year    = {2026},
   url     = {https://github.com/M3RESP/m3resp},
   license = {Apache-2.0}
