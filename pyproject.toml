@@ -23,7 +23,7 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
 dependencies = [
-  "complexipy>=8.1.0",
+  "complexipy>8.2.0",
   "loguru",
   "neurokit2==0.2.13",
   "numpy",
@@ -32,6 +32,7 @@ dependencies = [
   "pydantic>=2",
   "pytest>=9.1.1",
   "PyYAML",
+  "resurfemg",
   "scipy",
   "sphinx>=9.1.1",
 ]
@@ -43,7 +44,7 @@ eit = [
   "plotly>=6.1",
 ]
 emg = [
-  "resurfemg @ git+https://github.com/M3RESP/ReSurfEMG.git@m3resp-integration",
+  "resurfemg @ git+https://github.com/M3RESP/ReSurfEMG.git@fix/gating_window_computation",
   "ipywidgets",
   "plotly>=6.1",
 ]
