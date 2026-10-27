@@ -4,7 +4,7 @@ This page lists the `eitprocessing` calls and the M3Resp calls that do the same 
 
 ## Load a recording
 
-`session.load_eit` calls `load_eit_data` of `eitprocessing`, with the same `vendor`:
+`session.load_eit` reads Draeger, Sentec and Timpel files with M3Resp's readers, using the same `vendor` names as `load_eit_data`:
 
 ```python
 # eitprocessing
@@ -17,6 +17,21 @@ session.load_eit("recording.bin", vendor="draeger")
 ```
 
 `m3resp.io.load_eit(path, vendor=...)` loads a recording without a session.
+
+The recording in `session.eit` holds native data:
+
+| Field | Data |
+|---|---|
+| `pixel_impedance` | EIT images as a `Signal`, with shape (frames, rows, columns) |
+| `signals` | Recorded global impedance and device waveforms, keyed by vendor label |
+| `events` | Device marks as `EventData`, including marker values and text |
+| `intervals` | Device breaths as `IntervalData`; Timpel breaths are `BreathEvent`s with a turning point |
+| `raw_global_impedance` | Recorded global waveform, or the sum of the native images |
+| `data` | The `eitprocessing` Sequence used by the remaining processing calls |
+
+The raw EIT Signals identify the vendor in `source`. `eit.load` and `eit.slice_recording` expose the native images as `raw_eit` and the global waveform as `raw_global_impedance`. Their older `*_signal` output names refer to the same objects. Device marks and breaths are available through the recording fields above.
+
+`session.slice_eit(start, end)` cuts native images, waveforms, marks and breaths using seconds from the first image. See {doc}`../../concepts/slicing` for boundary rules. Ventilator waveforms can be read from the native recording or an `EITFileData` with `ventilator_payload_from_sequence` in `m3resp.adapters.ventilator_adapter`.
 
 ## Filter and detect breaths
 

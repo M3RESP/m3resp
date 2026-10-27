@@ -8,12 +8,32 @@
 
 The steps after `eit.load` still read an eitprocessing `Sequence`. `m3resp.adapters.eitprocessing_adapter.file_data_to_sequence` builds it from the reader result, field by field, so the `eit` extra still installs eitprocessing. The provenance record of `eit.load` names `m3resp.eit.io.read_eit_file`.
 
+A recording loaded with `M3Session().load_eit` holds the m3resp data next to the `Sequence`: `EITRecording.pixel_impedance`, `signals`, `events`, `intervals` and `sample_frequency`. `m3resp.eit.io.join_eit_files` joins files recorded one after the other. A custom loader may return an `EITFileData`.
+
+### The EIT steps pass Signals
+
+The EIT images and impedance waveforms that the EIT steps give and read are `Signal`s: `raw_eit`, `raw_global_impedance`, `filtered_eit`, `global_impedance`, `regional_impedance` and `functional_impedance`. Before, these were eitprocessing `EITData` and `ContinuousData` objects. The artifact types keep their names: `eit_pixel_signal` is a `Signal` with EIT images (frames, rows, columns) and `eit_impedance_waveform` a `Signal` with one impedance value per frame. They are no longer marked as compatibility types. The outputs with the same Signal under a second name (`raw_pixel_impedance_signal`, `filtered_eit_signal`, ...) stay and have the same artifact type. A step input of type `signal` accepts both EIT types; an input of type `eit_pixel_signal` refuses a waveform before the workflow runs. A step that calls eitprocessing turns its `Signal` inputs into eitprocessing objects first; `m3resp.adapters.eitprocessing_adapter` has the conversions (`signal_to_eit_data`, `signal_to_continuous_data` and back).
+
+`eit.global_impedance` sums the pixels with `m3resp.eit.processing.global_impedance`, a copy of eitprocessing's `EITData.get_summed_impedance` that gives the same values.
+
+`eit.regional_impedance` and `eit.functional_impedance` sum masked images with `m3resp.eit.processing.regional_impedance`. `PixelMask.apply` multiplies the last two axes of an array, a `Signal` or a `PixelMap` by the mask. Masked pixels and regional waveforms have the same values as in eitprocessing.
+
+### Native EIT slicing and device data
+
+`session.slice_eit` and `eit.slice_recording` cut the native images, waveforms, device marks and breaths, then rebuild the eitprocessing Sequence. `eit.slice_signal` cuts native Signals and accepts `start_inclusive` and `end_inclusive` in time mode. The time-selection rules match eitprocessing 1.8.7, including its zero-second interval-boundary behaviour.
+
+Ventilator waveforms can be read from `EITRecording.signals` or an `EITFileData`. Device marks and Timpel breaths remain available in `session.eit.events` and `session.eit.intervals`. Raw EIT Signals record the vendor in `source`. The raw global waveform is available as `session.eit.raw_global_impedance`; when the file has none, m3resp sums the native images.
+
 ### Fixed: EIT reading options that stopped with an error
 
 - Sentec: `first_frame` above 0 together with `max_frames` gives `max_frames` frames from `first_frame` on. eitprocessing 1.8.7 stops with an IndexError.
 - Timpel: with no frame left after `first_frame`, the reader gives a ValueError about `first_frame`. With one frame left, it reads that frame. eitprocessing 1.8.7 stops with an IndexError in both cases.
 - Timpel: when the device minima give fewer than two breath starts, the list of device breaths is empty. eitprocessing 1.8.7 stops with a ValueError.
 - `vendor="simulated"` gives the "No loading method" error of an unknown vendor. eitprocessing 1.8.7 stops with a KeyError.
+
+### Fixed: equal signals with NaN values
+
+`TimeSeries ==`, `Signal ==` and `ParameterResult ==` count a NaN at the same place in both values as equal. Before, two copies of the same Sentec or Timpel images were "not equal", because the pixels outside the chest are NaN. A NaN at a place where the other signal has a number still makes the signals different. Text values compare as before.
 
 ## 0.2.1 (2026-10-26)
 

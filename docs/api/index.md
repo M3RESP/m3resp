@@ -141,7 +141,7 @@ These functions load one recording without a session.
 
 ## Read EIT files
 
-These functions read one EIT file of a Draeger, Sentec or Timpel device. Each returns an `EITFileData` with the images, the waveforms, the marks of the device and, for Timpel, the breaths found by the device. `read_eit_file` picks the reader from the device maker.
+These functions read one EIT file of a Draeger, Sentec or Timpel device. Each returns an `EITFileData` with the images, the waveforms, the marks of the device and, for Timpel, the breaths found by the device. `read_eit_file` picks the reader from the device maker, and `join_eit_files` joins the data of files recorded one after the other.
 
 ```{eval-rst}
 .. autosummary::
@@ -153,6 +153,26 @@ These functions read one EIT file of a Draeger, Sentec or Timpel device. Each re
    m3resp.eit.io.read_sentec
    m3resp.eit.io.read_timpel
    m3resp.eit.io.EITFileData
+   m3resp.modalities.eit.EITRecording
+   m3resp.eit.io.join_eit_files
+```
+
+## EIT calculations
+
+`global_impedance` sums the pixels of each EIT image into the global impedance waveform. `regional_impedance` and `functional_impedance` sum the pixels inside a mask. Each function returns a `Signal`.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   m3resp.eit.processing.global_impedance
+   m3resp.eit.processing.regional_impedance
+   m3resp.eit.processing.functional_impedance
+   m3resp.eit.processing.slicing.slice_file_data
+   m3resp.processing.slicing.slice_by_index
+   m3resp.processing.slicing.slice_by_time
+   m3resp.processing.slicing.time_slice_indices
 ```
 
 ## Plots

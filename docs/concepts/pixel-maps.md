@@ -22,7 +22,7 @@ A waveform inside a mask is regional. The regional waveform of the ventilated (f
 
 `eit.regional_impedance` and `eit.functional_impedance` do the same calculation. Both store the waveform as a {term}`signal` in `session.signals`, with the result name as its `channel`.
 
-The steps for breath detection, TIV, EELI, pixel TIV, pixel breaths and the lung space masks accept each of the three waveforms as input. Their input is named `eit_impedance_waveform`.
+Each of the three waveforms is a {term}`signal` with the artifact type `eit_impedance_waveform`. The steps for breath detection, TIV, EELI, pixel TIV, pixel breaths and the lung space masks accept each of them as input. The EIT images have the artifact type `eit_pixel_signal`.
 
 ## Pixel maps
 
@@ -70,6 +70,10 @@ M3Resp checks the values as `eitprocessing` does:
 ```python
 weighted = PixelMask(name="ventral_weights", values=grid, keep_zeros=True)
 ```
+
+`lung.apply(data)` multiplies the last two axes of a NumPy array, a `Signal` or a `PixelMap` by the mask, returning the same kind of object. A masked `Signal` or `PixelMap` keeps its other fields. The image size must match the mask size.
+
+`m3resp.eit.processing.regional_impedance(pixel_impedance, lung)` sums the masked images into one value per frame. `functional_impedance` performs the same calculation for a functional lung-space mask. Both return a `Signal` with the time, sampling frequency and device source of the images, in arbitrary units (`a.u.`). NaN pixels are left out of the sum; an image with only NaNs gives 0.
 
 Masks from `eitprocessing`, and masks that M3Resp gives to `eitprocessing`, keep their values, also the zeros.
 
