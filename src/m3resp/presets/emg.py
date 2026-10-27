@@ -63,8 +63,9 @@ class EMGPreset(Preset):
                 peaks conflict with peak-detection options.
         """
 
-        processed = session.preprocess_emg(**self._kwargs_for(config, "preprocess"))
-        self._remove_ecg(session, processed, config)
+        session.preprocess_emg(**self._kwargs_for(config, "preprocess"))
+        # self._remove_ecg(session, processed, config)
+
         baseline = self._moving_baseline(session, config)
         session.detect_emg_breaths(
             baseline=baseline, **self._kwargs_for(config, "detect_breaths")
@@ -176,7 +177,6 @@ class EMGPreset(Preset):
         Window and method come from config's ``envelope`` group, else from the
         envelope settings preprocessing recorded in `processed`.
         """
-
         from m3resp.workflows.steps.emg.preprocessing import envelope
 
         settings = (

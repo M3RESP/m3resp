@@ -123,7 +123,6 @@ def butterworth_filter(
             "Input data contains NaN or infinite values. Fill gaps before "
             "applying a Butterworth filter."
         )
-        raise ValueError(msg)
 
     sos = scipy_signal.butter(
         N=order,

@@ -626,7 +626,6 @@ def test_emg_real_data_workflow_uses_committed_poly5_sample():
     )
 
 
-# NOTE: AssertionError
 def test_emg_preset_runs_end_to_end_and_reports_respiratory_rate():
     """`session.run_pipeline("emg")` on a made-up recording breathing at
     12 breaths/min. This once crashed while saving the respiratory rate.
@@ -663,20 +662,3 @@ def test_emg_preset_runs_end_to_end_and_reports_respiratory_rate():
     assert rates["respiratory_rate"].value == pytest.approx(12.0, abs=1.0)
     per_breath = rates["respiratory_rate_breath_to_breath"].value
     assert len(per_breath) == len(session.events["emg_breaths"]) - 1
-
-
-# def test_run_postprocessing_function_exposes_resurfemg_functions():
-#     pytest.importorskip("resurfemg")
-#     np = pytest.importorskip("numpy")
-
-#     adapter = ReSurfEMG()
-#     baseline = adapter.run_postprocessing_function(
-#         "baseline",
-#         "moving_baseline",
-#         np.asarray([0.0, 1.0, 0.0]),
-#         3,
-#         1,
-#     )
-
-#     assert len(baseline) == 3
-#     assert "quality_assessment" in adapter.available_postprocessing()

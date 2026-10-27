@@ -16,7 +16,10 @@ import numpy as np
 
 import m3resp.processing.intervals
 from m3resp.core.exceptions import UnsupportedWorkflowError
-from m3resp.processing.filters import bandpass_filter, harmonic_notch_filter
+from m3resp.processing.filters import (
+    bandpass_filter,
+    harmonic_notch_filter,
+)
 from m3resp.processing.metrics import (
     amplitude_at_peaks,
     area_under_baseline,
@@ -112,8 +115,112 @@ def notch_max_frequency_hz(
     return max_frequency
 
 
+def notch_filter_emg(
+    values: np.ndarray,
+    *,
+    sample_frequency: float,
+    base_frequency: float,
+    max_frequency: float | None = None,
+    quality_factor: float = 30.0,
+) -> np.ndarray:
+    """Notch-filter an EMG trace at a base frequency and its harmonics.
+
+    Removes mains hum (e.g. 50 Hz) or the harmonic comb a co-recorded EIT
+    device adds at its frame rate and multiples of it.
+
+    Args:
+        values: EMG samples, one value per sample.
+        sample_frequency: Sampling rate in Hz.
+        base_frequency: Lowest frequency to remove, in Hz.
+        max_frequency: Highest harmonic to remove, in Hz. None or zero
+            uses the Nyquist frequency, so a harmonic near the low-pass
+            cutoff (which the low-pass filter only partly removes) is
+            still notched.
+        quality_factor: Quality factor of each notch; higher is narrower.
+
+    Returns:
+        numpy.ndarray: The filtered trace, same length and units.
+    """
+    return harmonic_notch_filter(
+        values,
+        base_frequency=base_frequency,
+        sample_frequency=sample_frequency,
+        max_frequency=max_frequency or (sample_frequency / 2),
+        quality_factor=quality_factor,
+    )
+
+
+def bandpass_filter_emg(
+    values: np.ndarray,
+    *,
+    sample_frequency: float,
+    high_pass_hz: float = 20.0,
+    low_pass_hz: float | None = None,
+) -> np.ndarray:
+    """Band-pass filter an EMG trace with ReSurfEMG's Butterworth filter.
+
+    The 20-500 Hz band is the range used in respiratory-sEMG literature.
+
+    Args:
+        values: EMG samples, one value per sample.
+        sample_frequency: Sampling rate in Hz.
+        high_pass_hz: Lower cutoff in Hz.
+        low_pass_hz: Upper cutoff in Hz. None uses the smaller of 500 Hz
+            and 95 percent of the Nyquist frequency.
+
+    Returns:
+        numpy.ndarray: The filtered trace, same length and units.
+
+    Raises:
+        OptionalDependencyError: If ReSurfEMG is unavailable.
+    """
+    if low_pass_hz is None:
+        low_pass_hz = default_low_pass_hz(sample_frequency)
+    return bandpass_filter(
+        values=values,
+        cutoff_frequency=(high_pass_hz, low_pass_hz),
+        sample_frequency=sample_frequency,
+    )
+
+
+def select_emg_channel(
+    recording: Mapping, *, channel: int | None = None
+) -> dict[str, Any]:
+    """Take one channel of a loaded EMG recording as the trace to analyse.
+
+    Args:
+        recording: Loaded dictionary with a channel-major array
+            (n_channels, n_samples) and metadata containing fs in Hz.
+        channel: Zero-based channel index. When None, channel labels select
+            a breathing-muscle channel, excluding ECG/EKG labels.
+
+    Returns:
+        dict[str, Any]: The recording fields plus ``channel``, ``fs`` (Hz),
+            ``raw_channel`` (the channel's samples, in the file's units)
+            and an empty ``filter`` record that the filter steps fill in.
+
+    Raises:
+        TypeError: If recording lacks the required array or metadata.
+        UnresolvedChannelError: If channel labels do not select an
+            unambiguous EMG channel and channel is None.
+    """
+    _require_emg_recording(recording)
+    metadata = dict(recording["metadata"])
+    fs = float(metadata["fs"])
+    array = recording["array"]
+    if channel is None:
+        channel = _choose_emg_channel(len(array), metadata.get("labels"))
+    return {
+        **recording,
+        "channel": channel,
+        "fs": fs,
+        "raw_channel": np.asarray(array[channel], dtype=float),
+        "filter": {},
+    }
+
+
 def emg_envelope(
-    values: Mapping,
+    values: np.ndarray,
     *,
     sample_frequency: float,
     window_seconds: float = 0.25,
@@ -258,7 +365,9 @@ def _preprocess_default(
     envelope_window_seconds = kwargs.pop("envelope_window_seconds", 0.25)
     envelope_method: Literal["rms", "arv"] = kwargs.pop("envelope_method", "rms")
     notch_base_frequency: float | None = kwargs.pop("notch_base_frequency", None)
-    notch_max_frequency = kwargs.pop("notch_max_frequency", fs / 2)
+    notch_max_frequency = notch_max_frequency_hz(
+        fs, kwargs.pop("notch_max_frequency", fs / 2)
+    )
     notch_quality_factor = kwargs.pop(
         "notch_quality_factor", 30.0 if notch_base_frequency is not None else None
     )
@@ -286,6 +395,7 @@ def _preprocess_default(
         )
 
     filtered = raw
+
     if notch_base_frequency is not None and notch_before_bandpass:
         filtered = notch(filtered, notch_base_frequency)
     filtered = bandpass_filter(
@@ -322,10 +432,10 @@ def _preprocess_default(
             raise ValueError(msg)
     envelope = None
     if compute_envelope:
-        envelope_window_samples = max(1, int(envelope_window_seconds * fs))
-        envelope = rolling_envelope(
+        envelope = emg_envelope(
             clean,
-            window_length=envelope_window_samples,
+            sample_frequency=fs,
+            window_seconds=envelope_window_seconds,
             method=envelope_method,
         )
 
@@ -348,6 +458,16 @@ def _preprocess_default(
             "notch_max_frequency": notch_max_frequency,
             "notch_quality_factor": notch_quality_factor,
             "notch_before_bandpass": notch_before_bandpass,
+        },
+        "envelope_settings": {
+            "compute_envelope": compute_envelope,
+            "envelope_window_seconds": envelope_window_seconds,
+            "envelope_method": envelope_method,
+        },
+        "ecg_removal": {
+            "remove_ecg": remove_ecg,
+            "ecg_removal_method": ecg_removal_method,
+            "ecg_gate_fill_method": fill_method,
         },
     }
 
@@ -416,42 +536,6 @@ def _get_enabled_functions(
     context: _PostprocessingContext,
 ) -> Callable[[tuple[str, str]], bool]:
     return lambda key: _is_selected(context, *key)
-
-
-def select_emg_channel(
-    recording: Mapping, *, channel: int | None = None
-) -> dict[str, Any]:
-    """Take one channel of a loaded EMG recording as the trace to analyse.
-
-    Args:
-        recording: Loaded dictionary with a channel-major array
-            (n_channels, n_samples) and metadata containing fs in Hz.
-        channel: Zero-based channel index. When None, channel labels select
-            a breathing-muscle channel, excluding ECG/EKG labels.
-
-    Returns:
-        dict[str, Any]: The recording fields plus ``channel``, ``fs`` (Hz),
-            ``raw_channel`` (the channel's samples, in the file's units)
-            and an empty ``filter`` record that the filter steps fill in.
-
-    Raises:
-        TypeError: If recording lacks the required array or metadata.
-        UnresolvedChannelError: If channel labels do not select an
-            unambiguous EMG channel and channel is None.
-    """
-    _require_emg_recording(recording)
-    metadata = dict(recording["metadata"])
-    fs = float(metadata["fs"])
-    array = recording["array"]
-    if channel is None:
-        channel = _choose_emg_channel(len(array), metadata.get("labels"))
-    return {
-        **recording,
-        "channel": channel,
-        "fs": fs,
-        "raw_channel": np.asarray(array[channel], dtype=float),
-        "filter": {},
-    }
 
 
 @dataclass
@@ -665,11 +749,14 @@ def _ventilator_breaths_default(
             "Needs ventilator breath and manoeuvre indices.",
         )
     if enabled(("quality_assessment", "ventilator_respiratory_rate")):
-        context.computed["quality_assessment"]["ventilator_respiratory_rate"] = (
-            respiratory_rate_from_indices(
-                indices=ventilator_breath_indices,
-                sample_frequency=context.ventilator_fs,
-            )
+        (
+            context.computed["quality_assessment"]["ventilator_respiratory_rate"],
+            context.computed["quality_assessment"][
+                "ventilator_respiratory_rate_breath_to_breath"
+            ],
+        ) = respiratory_rate_from_indices(
+            indices=ventilator_breath_indices,
+            sample_frequency=context.ventilator_fs,
         )
 
     if enabled(("quality_assessment", "detect_non_consecutive_manoeuvres")):
@@ -740,10 +827,11 @@ def _compute_emg_features_default(
         )
 
     if enabled(("features", "respiratory_rate")):
-        _, context.computed["features"]["respiratory_rate"] = (
-            respiratory_rate_from_indices(
-                indices=context.peak_indices, sample_frequency=context.fs
-            )
+        (
+            context.computed["features"]["respiratory_rate"],
+            context.computed["features"]["respiratory_rate_breath_to_breath"],
+        ) = respiratory_rate_from_indices(
+            indices=context.peak_indices, sample_frequency=context.fs
         )
     if not has_bounds:
         for name in (
@@ -907,9 +995,7 @@ def _compute_multimodal_quality_default(
             "Needs computed ventilator respiratory rate.",
         )
     if enabled(("quality_assessment", "evaluate_respiratory_rates")):
-        rr_vent = context.computed["quality_assessment"]["ventilator_respiratory_rate"][
-            0
-        ]
+        rr_vent = context.computed["quality_assessment"]["ventilator_respiratory_rate"]
         context.computed["quality_assessment"]["evaluate_respiratory_rates"] = (
             evaluate_respiratory_rates(
                 context.peak_indices,
@@ -1214,7 +1300,7 @@ class _DefaultsMixin:
     _preprocess_default = staticmethod(_preprocess_default)
     _postprocess_default = staticmethod(_postprocess_default)
     _detect_breaths_default = staticmethod(_detect_breaths_default)
-    default_low_pass_hz = staticmethod(default_low_pass_hz)
-    notch_max_frequency_hz = staticmethod(notch_max_frequency_hz)
     select_emg_channel = staticmethod(select_emg_channel)
     emg_envelope = staticmethod(emg_envelope)
+    notch_filter_emg = staticmethod(notch_filter_emg)
+    bandpass_filter_emg = staticmethod(bandpass_filter_emg)

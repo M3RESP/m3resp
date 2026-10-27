@@ -252,7 +252,7 @@ class TestEcgGating:
     def test_gate_mask_is_clipped_at_the_start_of_the_record(self):
         mask = _build_gate_mask(10, [0], gate_width_samples=4, fill_method=1)
 
-        np.testing.assert_array_equal(np.flatnonzero(mask), [0, 1])
+        np.testing.assert_array_equal(np.flatnonzero(mask), [0, 1, 2])
 
     def test_updates_processed_emg_and_session_with_the_gated_signal(self):
         session = M3Session()

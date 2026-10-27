@@ -121,7 +121,6 @@ def test_multimodal_full_example_runs_end_to_end():
     never actually executed as a regression test - this closes that gap."""
 
     pytest.importorskip("eitprocessing")
-    pytest.importorskip("resurfemg")
 
     # run_workflow (unlike run_spec) does not touch the spec's `outputs:`
     # section, so this exercises the example without writing into the
