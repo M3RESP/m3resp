@@ -24,7 +24,7 @@ import pytest
 from m3resp.core.exceptions import UnsupportedWorkflowError
 from m3resp.emg.processing import defaults
 from m3resp.processing import intervals
-
+from m3resp.data.events import BreathEvent, coerce_breath_events
 # --------------------------------------------------------------------------- #
 # Synthetic data
 # --------------------------------------------------------------------------- #
@@ -552,8 +552,18 @@ def test_missing_onoffsets_skip_dependent_functions_without_error(
 def test_postprocess_accepts_detect_breaths_output(processed_emg):
     """Contract between the detector and postprocessing, without patching."""
     baseline = np.full_like(processed_emg["envelope"], BASELINE_LEVEL)
+    # _detect_breaths_default returns a list of dictionaries, which are converted into BreathEvent objects in the wrapper function in _CoreMixin.
+    # here, we'll coerce them into BreathEvent objects to simulate the output of the detector.
     events = defaults._detect_breaths_default(processed_emg, baseline=baseline)
-    result = _run(processed_emg, events)
+
+    result = _run(
+        processed_emg,
+        coerce_breath_events(
+            events,
+            modality="emg",
+            source="resurfemg.defaults._detect_breaths_default",
+        ),
+    )
     np.testing.assert_array_equal(
         result["peak_indices"], [event["extremum_index"] for event in events]
     )

@@ -112,6 +112,37 @@ def notch_max_frequency_hz(
     return max_frequency
 
 
+def emg_envelope(
+    values: Mapping,
+    *,
+    sample_frequency: float,
+    window_seconds: float = 0.25,
+    method: Literal["rms", "arv", "median"] = "rms",
+) -> np.ndarray:
+    """Compute the envelope of an EMG trace over a moving window.
+
+    RMS is the envelope used in the literature. ARV gives different values
+    from RMS on real sEMG. The median envelope (median of the absolute
+    signal) ignores short spikes such as heartbeat leftovers.
+
+    Args:
+        values: EMG samples, one value per sample.
+        sample_frequency: Sampling rate in Hz.
+        window_seconds: Window length in seconds, converted to at least
+            one sample (rounded down).
+        method: ``"rms"``, ``"arv"`` or ``"median"``.
+
+    Returns:
+        numpy.ndarray: The envelope, one value per sample, in the units of
+            the trace.
+    """
+    return rolling_envelope(
+        values,
+        window_length=max(1, int(window_seconds * sample_frequency)),
+        method=method,
+    )
+
+
 def _preprocess_default(
     recording: Mapping,
     *,
@@ -1186,3 +1217,4 @@ class _DefaultsMixin:
     default_low_pass_hz = staticmethod(default_low_pass_hz)
     notch_max_frequency_hz = staticmethod(notch_max_frequency_hz)
     select_emg_channel = staticmethod(select_emg_channel)
+    emg_envelope = staticmethod(emg_envelope)
