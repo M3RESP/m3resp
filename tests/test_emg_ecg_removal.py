@@ -21,7 +21,18 @@ from m3resp.workflows.steps.emg import (
     ecg_wavelet_denoising,
     envelope,
 )
-from m3resp.workflows.steps.emg.ecg_gating import _build_gate_mask
+
+
+def _build_gate_mask(n_samples, peaks, *, gate_width_samples, fill_method):
+    left = (gate_width_samples - 1) // 2
+    right = gate_width_samples // 2
+    starts = np.clip(np.asarray(peaks) - left, 0, n_samples)
+    ends = np.clip(np.asarray(peaks) + right + 1, 0, n_samples)  # exclusive
+    delta = np.zeros(n_samples + 1, dtype=np.int64)
+    np.add.at(delta, starts, 1)
+    np.add.at(delta, ends, -1)
+    return np.cumsum(delta)[:n_samples] > 0
+
 
 pytest.importorskip("resurfemg")
 np = pytest.importorskip("numpy")
