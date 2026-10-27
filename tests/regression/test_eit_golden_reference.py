@@ -264,6 +264,43 @@ def test_m3resp_reader_matches_golden(dataset: str, m3resp_results: dict) -> Non
 
 
 @pytest.mark.parametrize("dataset", DATASETS)
+def test_m3resp_ventilator_waveforms_from_the_eit_file_match_golden(
+    dataset: str,
+) -> None:
+    """The airway pressure, flow and volume stored in the EIT file.
+
+    m3resp reads them with ``session.load_ventilator(..., source="eit")``.
+    A Sentec file holds no waveforms.
+    """
+
+    pytest.importorskip("eitprocessing")
+    entry = MANIFEST["inputs"][dataset]
+    path = os.path.join(REPO_ROOT, entry["file"])
+    golden = _golden(dataset, "reader")
+    session = M3Session()
+    if entry["vendor"] == "sentec":
+        from m3resp.core.exceptions import UnsupportedWorkflowError
+
+        assert not any(key.startswith("continuous/") for key in golden)
+        with pytest.raises(UnsupportedWorkflowError, match="no ventilator channel"):
+            session.load_ventilator(path, source="eit", vendor="sentec")
+        return
+
+    payload = session.load_ventilator(path, source="eit", vendor=entry["vendor"])
+
+    metadata = payload["metadata"]
+    for row, label, unit in zip(
+        payload["array"], metadata["labels"], metadata["units"], strict=True
+    ):
+        assert unit == str(golden[f"continuous/{label}/unit"]), label
+        assert_matches(row, golden[f"continuous/{label}/values"], f"{label}/values")
+        assert_matches(
+            metadata["time"], golden[f"continuous/{label}/time"], f"{label}/time"
+        )
+    assert len(metadata["labels"]) == 3
+
+
+@pytest.mark.parametrize("dataset", DATASETS)
 def test_m3resp_global_impedance_matches_golden(
     dataset: str, m3resp_results: dict
 ) -> None:

@@ -226,7 +226,9 @@ def load(
     return {
         **_loaded_recording_outputs(session),
         "_provenance": _upstream_metadata(
-            source_function="eitprocessing.datahandling.loading.load_eit_data",
+            source_function="m3resp.eit.io.read_eit_file",
+            source_package="m3resp",
+            implementation="m3resp.eit.io",
             operation="eit.load",
             parameters={
                 "vendor": vendor,

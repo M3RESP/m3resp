@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### m3resp reads the EIT files
+
+`eit.load` reads Draeger `.bin`, Sentec `.zri` and Timpel `.txt` files with the readers in `m3resp.eit.io` (`read_eit_file`, `read_draeger`, `read_sentec`, `read_timpel`). Each reader returns an `EITFileData`: the images and the waveforms as `Signal`s, the device marks (breath minima and maxima, event markers, QRS complexes) as `EventData`, and the Timpel device breaths as `BreathEvent`s. The readers are copied from eitprocessing 1.8.7 and give the same values. The tests compare them with the saved eitprocessing results in `tests/regression/golden/eit/` and with eitprocessing itself.
+
+The steps after `eit.load` still read an eitprocessing `Sequence`. `m3resp.adapters.eitprocessing_adapter.file_data_to_sequence` builds it from the reader result, field by field, so the `eit` extra still installs eitprocessing. The provenance record of `eit.load` names `m3resp.eit.io.read_eit_file`.
+
+### Fixed: EIT reading options that stopped with an error
+
+- Sentec: `first_frame` above 0 together with `max_frames` gives `max_frames` frames from `first_frame` on. eitprocessing 1.8.7 stops with an IndexError.
+- Timpel: with no frame left after `first_frame`, the reader gives a ValueError about `first_frame`. With one frame left, it reads that frame. eitprocessing 1.8.7 stops with an IndexError in both cases.
+- Timpel: when the device minima give fewer than two breath starts, the list of device breaths is empty. eitprocessing 1.8.7 stops with a ValueError.
+- `vendor="simulated"` gives the "No loading method" error of an unknown vendor. eitprocessing 1.8.7 stops with a KeyError.
+
 ## 0.2.1 (2026-10-26)
 
 ### Interactive plotly figures

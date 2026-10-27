@@ -75,17 +75,26 @@ def _use_stored_eit_breaths(
 
 
 def _upstream_metadata(
-    *, source_function: str, operation: str, parameters: dict[str, Any]
+    *,
+    source_function: str,
+    operation: str,
+    parameters: dict[str, Any],
+    source_package: str = "eitprocessing",
+    implementation: str = "upstream_adapter",
 ) -> dict[str, Any]:
-    """Build the Stage 2 EIT provenance metadata schema shared by native
-    `Signal`/`ParameterResult` outputs (see `plan/stage2/
-    1_eit_gap_migration_implementation_plan.md`, "Use one provenance
-    schema")."""
+    """The provenance details an EIT step returns under ``"_provenance"``.
+
+    They say which package and function computed the value, the settings
+    used, and the step name. `source_package`/`implementation` default to
+    the eitprocessing-adapter case; pass `source_package="m3resp"` and
+    `implementation="m3resp.<module>"` for a step whose value comes from
+    m3resp code.
+    """
 
     return {
-        "source_package": "eitprocessing",
+        "source_package": source_package,
         "source_function": source_function,
-        "implementation": "upstream_adapter",
+        "implementation": implementation,
         "parameters": parameters,
         "operation": operation,
     }

@@ -22,6 +22,7 @@ from m3resp.data.events import (
 )
 from m3resp.processing.filters import butterworth_filter
 
+from ._file_data import file_data_to_sequence, load_eit_file_as_sequence
 from ._joining import eit_file_paths, join_eit_sequences
 from ._shared import (
     _breath_intervals_to_dicts,
@@ -39,7 +40,9 @@ __all__ = [
     "add_to_collection",
     "breath_intervals_to_breath_events",
     "continuous_data_to_signal",
+    "file_data_to_sequence",
     "filter_pixels_preserving_gaps",
+    "load_eit_file_as_sequence",
     "sparse_data_to_interval_data",
 ]
 
@@ -93,8 +96,12 @@ class EITProcessingAdapter:
     def load_with_eitprocessing(
         self, path: str, vendor: str | None = None, **kwargs: Any
     ) -> Any:
-        """Load a Draeger, Sentec or Timpel file with `eitprocessing`.
+        """Load a Draeger, Sentec or Timpel file into an eitprocessing Sequence.
 
+        Each file is read by the m3resp reader of its vendor
+        (`m3resp.eit.io.read_eit_file`) and turned into the Sequence that
+        eitprocessing's ``load_eit_data`` gives (see
+        `load_eit_file_as_sequence`).
         Several files are read as one recording: each file is read, then they
         are joined in the given order (see `join_eit_sequences`).
 
@@ -102,9 +109,10 @@ class EITProcessingAdapter:
             path: The EIT file to read, or a list of files recorded one after
                 the other.
             vendor: ``"draeger"``, ``"sentec"`` or ``"timpel"``.
-            **kwargs: Passed on to ``eitprocessing``'s ``load_eit_data``
-                (``sample_frequency``, ``first_frame``, ``max_frames``, label
-                and name).
+            **kwargs: Passed on to `load_eit_file_as_sequence`
+                (``sample_frequency``,
+                ``first_frame``, ``max_frames``, ``label``, ``name`` and
+                ``description``).
 
         Returns:
             The loaded eitprocessing Sequence.
@@ -123,8 +131,8 @@ class EITProcessingAdapter:
                 "'sentec', or 'timpel') when no loader is injected."
             )
 
-        (load_eit_data,) = _lazy_import(
-            "eitprocessing.datahandling.loading.load_eit_data",
+        _lazy_import(
+            "eitprocessing.datahandling.sequence.Sequence",
             error=lambda: OptionalDependencyError(
                 "EIT support requires the optional dependency `eitprocessing`. "
                 'Install with `pip install "m3resp[eit]"` or inject a loader.'
@@ -133,7 +141,7 @@ class EITProcessingAdapter:
 
         paths = eit_file_paths(path)
         if len(paths) == 1:
-            return load_eit_data(paths[0], vendor=vendor, **kwargs)
+            return load_eit_file_as_sequence(paths[0], vendor=vendor, **kwargs)
 
         if kwargs.get("first_frame") or kwargs.get("max_frames") is not None:
             raise ValueError(
@@ -143,7 +151,8 @@ class EITProcessingAdapter:
                 "(session.slice_eit)."
             )
         sequences = [
-            load_eit_data(single_path, vendor=vendor, **kwargs) for single_path in paths
+            load_eit_file_as_sequence(single_path, vendor=vendor, **kwargs)
+            for single_path in paths
         ]
         return join_eit_sequences(sequences, paths)
 
