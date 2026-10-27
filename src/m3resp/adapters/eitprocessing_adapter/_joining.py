@@ -25,7 +25,9 @@ def eit_file_paths(path: Any) -> list[str]:
     return [os.fspath(path)]
 
 
-def join_eit_sequences(sequences: Sequence[Any], paths: Sequence[str]) -> Any:
+def join_eit_sequences(
+    sequences: Sequence[Any], paths: Sequence[str], *, check_order: bool = True
+) -> Any:
     """Join eitprocessing Sequences read from consecutive files, in the given order.
 
     The frame times of each file must come after those of the file before it.
@@ -35,6 +37,9 @@ def join_eit_sequences(sequences: Sequence[Any], paths: Sequence[str]) -> Any:
     Args:
         sequences: One eitprocessing Sequence per file, in recording order.
         paths: The file of each Sequence, for messages.
+        check_order: Check the order of the files and warn about a pause.
+            False when `m3resp.eit.io.join_eit_files` has checked the same
+            files already.
 
     Returns:
         One eitprocessing Sequence holding all frames.
@@ -45,9 +50,8 @@ def join_eit_sequences(sequences: Sequence[Any], paths: Sequence[str]) -> Any:
             (different device, image size or sampling rate).
     """
 
-    for (before, before_path), (after, after_path) in zip(
-        zip(sequences, paths), zip(sequences[1:], paths[1:]), strict=False
-    ):
+    pairs = zip(zip(sequences, paths), zip(sequences[1:], paths[1:]), strict=False)
+    for (before, before_path), (after, after_path) in pairs if check_order else ():
         before_time = np.asarray(before.eit_data["raw"].time, dtype=float)
         after_time = np.asarray(after.eit_data["raw"].time, dtype=float)
         before_end = float(before_time[-1])

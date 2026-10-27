@@ -20,9 +20,14 @@ from m3resp.data.events import (
     coerce_breath_events,
     reuse_matching_breaths,
 )
+from m3resp.eit.io import EITFileData, join_eit_files, read_eit_file
 from m3resp.processing.filters import butterworth_filter
 
-from ._file_data import file_data_to_sequence, load_eit_file_as_sequence
+from ._file_data import (
+    file_data_to_sequence,
+    load_eit_file_as_sequence,
+    sequence_to_file_data,
+)
 from ._joining import eit_file_paths, join_eit_sequences
 from ._shared import (
     _breath_intervals_to_dicts,
@@ -30,19 +35,42 @@ from ._shared import (
     _require_eit_sequence,
     add_to_collection,
     breath_intervals_to_breath_events,
-    continuous_data_to_signal,
     filter_pixels_preserving_gaps,
     sparse_data_to_interval_data,
 )
+from ._signals import (
+    EITPROCESSING_FIELDS,
+    as_continuous_data,
+    as_eit_data,
+    as_eitprocessing,
+    continuous_data_fields,
+    continuous_data_to_signal,
+    eit_data_fields,
+    eit_data_to_signal,
+    eitprocessing_fields,
+    signal_to_continuous_data,
+    signal_to_eit_data,
+)
 
 __all__ = [
+    "EITPROCESSING_FIELDS",
     "EITProcessingAdapter",
     "add_to_collection",
+    "as_continuous_data",
+    "as_eit_data",
+    "as_eitprocessing",
     "breath_intervals_to_breath_events",
+    "continuous_data_fields",
     "continuous_data_to_signal",
+    "eit_data_fields",
+    "eit_data_to_signal",
+    "eitprocessing_fields",
     "file_data_to_sequence",
     "filter_pixels_preserving_gaps",
     "load_eit_file_as_sequence",
+    "sequence_to_file_data",
+    "signal_to_continuous_data",
+    "signal_to_eit_data",
     "sparse_data_to_interval_data",
 ]
 
@@ -98,30 +126,55 @@ class EITProcessingAdapter:
     ) -> Any:
         """Load a Draeger, Sentec or Timpel file into an eitprocessing Sequence.
 
-        Each file is read by the m3resp reader of its vendor
-        (`m3resp.eit.io.read_eit_file`) and turned into the Sequence that
-        eitprocessing's ``load_eit_data`` gives (see
-        `load_eit_file_as_sequence`).
-        Several files are read as one recording: each file is read, then they
-        are joined in the given order (see `join_eit_sequences`).
+        The same as `load_with_native_data`, without the m3resp data.
 
         Args:
             path: The EIT file to read, or a list of files recorded one after
                 the other.
             vendor: ``"draeger"``, ``"sentec"`` or ``"timpel"``.
-            **kwargs: Passed on to `load_eit_file_as_sequence`
-                (``sample_frequency``,
-                ``first_frame``, ``max_frames``, ``label``, ``name`` and
-                ``description``).
+            **kwargs: See `load_with_native_data`.
 
         Returns:
             The loaded eitprocessing Sequence.
 
         Raises:
+            ValueError: See `load_with_native_data`.
+            OptionalDependencyError: If eitprocessing is not installed.
+        """
+
+        sequence, _ = self.load_with_native_data(path, vendor=vendor, **kwargs)
+        return sequence
+
+    def load_with_native_data(
+        self, path: str, vendor: str | None = None, **kwargs: Any
+    ) -> tuple[Any, EITFileData]:
+        """Load a Draeger, Sentec or Timpel file as m3resp data and as a Sequence.
+
+        Each file is read by the m3resp reader of its vendor
+        (`m3resp.eit.io.read_eit_file`). Several files are read as one
+        recording: the m3resp data of the files is joined in the given order
+        (`m3resp.eit.io.join_eit_files`). The eitprocessing Sequence of each
+        file is built with `file_data_to_sequence`, and the Sequences are
+        joined with `join_eit_sequences`, so the Sequence is the one
+        eitprocessing's ``load_eit_data`` gives.
+
+        Args:
+            path: The EIT file to read, or a list of files recorded one after
+                the other.
+            vendor: ``"draeger"``, ``"sentec"`` or ``"timpel"``.
+            **kwargs: ``sample_frequency``, ``first_frame`` and
+                ``max_frames`` for the reader; ``label``, ``name`` and
+                ``description`` for the Sequence.
+
+        Returns:
+            tuple[Any, EITFileData]: The eitprocessing Sequence, and the
+            m3resp data of all files joined (its ``path`` is the first file).
+
+        Raises:
             ValueError: If vendor is None; if ``first_frame`` or
-                ``max_frames`` is set with more than one file (eitprocessing
-                would apply them to each file); or if the files cannot be
-                joined.
+                ``max_frames`` is set with more than one file (they would
+                apply to each file); or if the files cannot be joined.
+            TypeError: If a keyword argument is unknown.
             OptionalDependencyError: If eitprocessing is not installed.
         """
 
@@ -139,22 +192,37 @@ class EITProcessingAdapter:
             ),
         )
 
-        paths = eit_file_paths(path)
-        if len(paths) == 1:
-            return load_eit_file_as_sequence(paths[0], vendor=vendor, **kwargs)
+        sequence_options = {
+            key: kwargs.pop(key)
+            for key in ("label", "name", "description")
+            if key in kwargs
+        }
+        unknown = set(kwargs) - {"sample_frequency", "first_frame", "max_frames"}
+        if unknown:
+            raise TypeError(
+                f"Unknown EIT loading option(s) {sorted(unknown)}. Known: "
+                "sample_frequency, first_frame, max_frames, label, name, "
+                "description."
+            )
 
-        if kwargs.get("first_frame") or kwargs.get("max_frames") is not None:
+        paths = eit_file_paths(path)
+        if len(paths) > 1 and (
+            kwargs.get("first_frame") or kwargs.get("max_frames") is not None
+        ):
             raise ValueError(
                 "first_frame and max_frames apply to each file, so they cannot "
                 "be used when loading several EIT files at once. Load the "
                 "files, then cut the recording with eit.slice_recording "
                 "(session.slice_eit)."
             )
+        files = [read_eit_file(single_path, vendor, **kwargs) for single_path in paths]
+        native = join_eit_files(files, paths)
         sequences = [
-            load_eit_file_as_sequence(single_path, vendor=vendor, **kwargs)
-            for single_path in paths
+            file_data_to_sequence(file_data, **sequence_options) for file_data in files
         ]
-        return join_eit_sequences(sequences, paths)
+        if len(sequences) == 1:
+            return sequences[0], native
+        return join_eit_sequences(sequences, paths, check_order=False), native
 
     def get_raw_eit(self, sequence: Any, label: str = "raw") -> Any:
         """Return the raw EIT data object from an upstream sequence."""
@@ -202,7 +270,7 @@ class EITProcessingAdapter:
         """
 
         upstream_mask = self.as_pixel_mask(mask)
-        masked = upstream_mask.apply(eit_data)
+        masked = upstream_mask.apply(as_eit_data(eit_data))
         return masked.get_summed_impedance(
             return_label=label,
             name=label.replace("_", " ").capitalize(),
@@ -213,21 +281,14 @@ class EITProcessingAdapter:
         """Return a copy of `sequence` keeping frames `start_index` up to (not
         including) `end_index`.
 
-        Uses `eitprocessing`'s own `Sequence.select_by_index`, which cuts the
-        pixel data, every continuous signal (global impedance, pressures,
-        flow) and the vendor's markers to the same frames. The time values
-        are kept as they were, so the first kept frame keeps its original
-        time stamp.
+        m3resp cuts the native images, waveforms, device marks and breaths,
+        then rebuilds a Sequence with the original collection keys and field
+        spellings. Frame times keep their original values.
         """
 
-        select_by_index = getattr(sequence, "select_by_index", None)
-        if select_by_index is None:
-            raise TypeError(
-                "Slicing EIT data needs an eitprocessing Sequence (or an "
-                "object with select_by_index); got "
-                f"{type(sequence).__name__}."
-            )
-        return select_by_index(start=start_index, end=end_index)
+        from ._slicing import slice_sequence
+
+        return slice_sequence(sequence, start_index, end_index)
 
     # -- Phase 1: reusable adapter operations ----------------------------------
     #
@@ -259,13 +320,15 @@ class EITProcessingAdapter:
         captures: dict[str, Any] = {}
         if capture:
             respiratory_rate_hz, heart_rate_hz = detector.apply(
-                signal,
+                as_eitprocessing(signal),
                 captures=captures,
                 suppress_length_warnings=True,
                 suppress_edge_case_warning=True,
             )
         else:
-            respiratory_rate_hz, heart_rate_hz = detector.apply(signal)
+            respiratory_rate_hz, heart_rate_hz = detector.apply(
+                as_eitprocessing(signal)
+            )
         return {
             "respiratory_rate_hz": float(respiratory_rate_hz),
             "heart_rate_hz": float(heart_rate_hz),
@@ -306,7 +369,7 @@ class EITProcessingAdapter:
         filtered_eit = MDNFilter(
             respiratory_rate=respiratory_rate_hz,
             heart_rate=heart_rate_hz,
-        ).apply(signal, captures=captures, **apply_kwargs)
+        ).apply(as_eitprocessing(signal), captures=captures, **apply_kwargs)
         return {"filtered_eit": filtered_eit, "filter_captures": captures}
 
     def find_breaths(
@@ -332,7 +395,7 @@ class EITProcessingAdapter:
             "eitprocessing.features.breath_detection.BreathDetection"
         )
         return BreathDetection(minimum_duration=minimum_duration_seconds).find_breaths(
-            timing_data
+            as_continuous_data(timing_data)
         )
 
     def find_pixel_breaths(
@@ -358,8 +421,8 @@ class EITProcessingAdapter:
             breath_detection=breath_detector,
             phase_correction_mode=phase_correction_mode,
         ).find_pixel_breaths(
-            eit_data,
-            timing_data,
+            as_eit_data(eit_data),
+            as_continuous_data(timing_data),
             sequence=sequence,
             store=False,
             result_label=result_label,
@@ -381,7 +444,7 @@ class EITProcessingAdapter:
         (EELI,) = _lazy_import("eitprocessing.parameters.eeli.EELI")
 
         result = EELI(breath_detection=breath_detector).compute_parameter(
-            timing_data,
+            as_continuous_data(timing_data),
             sequence=sequence,
             store=False,
             result_label=result_label,
@@ -404,8 +467,8 @@ class EITProcessingAdapter:
         (TIV,) = _lazy_import("eitprocessing.parameters.tidal_impedance_variation.TIV")
 
         result: Any = TIV(breath_detection=breath_detector).compute_parameter(
-            eit_data,
-            timing_data,
+            as_eit_data(eit_data),
+            as_continuous_data(timing_data),
             sequence,
             tiv_timing=tiv_timing,
             store=False,
@@ -427,7 +490,9 @@ class EITProcessingAdapter:
 
         captures: dict[str, Any] = {}
         mask = TIVLungspace(threshold=threshold).apply(
-            eit_data, timing_data=timing_data, captures=captures
+            as_eit_data(eit_data),
+            timing_data=as_continuous_data(timing_data),
+            captures=captures,
         )
         return {"mask": mask, "captures": captures}
 
@@ -451,7 +516,9 @@ class EITProcessingAdapter:
 
         captures: dict[str, Any] = {}
         mask = AmplitudeLungspace(threshold=threshold).apply(
-            eit_data, timing_data=timing_data, captures=captures
+            as_eit_data(eit_data),
+            timing_data=as_continuous_data(timing_data),
+            captures=captures,
         )
         return {"mask": mask, "captures": captures}
 
@@ -470,7 +537,9 @@ class EITProcessingAdapter:
 
         captures: dict[str, Any] = {}
         mask = WatershedLungspace(threshold_fraction=threshold_fraction).apply(
-            eit_data, timing_data=timing_data, captures=captures
+            as_eit_data(eit_data),
+            timing_data=as_continuous_data(timing_data),
+            captures=captures,
         )
         return {"mask": mask, "captures": captures}
 

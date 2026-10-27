@@ -57,14 +57,12 @@ from ._shared import (
                 "EIT pixel signal to compute per-pixel TIV on. Defaults to the "
                 "filtered signal, but any pixel signal can be bound here."
             ),
-            compatibility_only=True,
         ),
         StepArtifact(
             name="signal",
             artifact_type="eit_impedance_waveform",
             default_context_key="global_impedance",
             description="Impedance waveform (global, or regional from an ROI) supplying breath timing.",
-            compatibility_only=True,
         ),
         StepArtifact(
             name="eit_sequence",
@@ -136,8 +134,8 @@ def pixel_tiv(
     maps whose pixels are all missing.
 
     Args:
-        eit_data: eitprocessing EIT pixel data to measure, with time, row and
-            column axes.
+        eit_data: EIT images to measure, as a ``Signal`` (or an
+            eitprocessing ``EITData``), with time, row and column axes.
         signal: Global or regional waveform used to find the enclosing breaths.
         eit_sequence: Sequence that stores the upstream result.
         breath_detector: Detector used to identify breaths on ``signal``.
@@ -294,14 +292,12 @@ def _pixel_breath_intervals(
             artifact_type="eit_pixel_signal",
             default_context_key="filtered_eit",
             description="Filtered EIT pixel signal to detect pixel breaths on.",
-            compatibility_only=True,
         ),
         StepArtifact(
             name="timing_data",
             artifact_type="eit_impedance_waveform",
             default_context_key="global_impedance",
             description="Impedance waveform (global, or regional from an ROI) supplying overall breath timing.",
-            compatibility_only=True,
         ),
         StepArtifact(
             name="eit_sequence",
@@ -375,7 +371,8 @@ def pixel_breaths(
     breath detected on ``timing_data``.
 
     Args:
-        eit_data: eitprocessing pixel data with time, row and column axes.
+        eit_data: EIT images as a ``Signal`` (or an eitprocessing ``EITData``),
+            with time, row and column axes.
         timing_data: Global or regional waveform used to find enclosing breaths.
         eit_sequence: Sequence that stores the upstream result.
         session: Session that stores the per-breath timing grids and history.

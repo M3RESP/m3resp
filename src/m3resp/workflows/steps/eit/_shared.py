@@ -5,14 +5,16 @@ from __future__ import annotations
 import weakref
 from typing import Any
 
-from m3resp.adapters.eitprocessing_adapter import breath_intervals_to_breath_events
+from m3resp.adapters.eitprocessing_adapter import (
+    as_continuous_data,
+    breath_intervals_to_breath_events,
+)
 from m3resp.core.session import M3Session
 from m3resp.data import BreathEvent
 from m3resp.data.events import reuse_matching_breaths
 from m3resp.workflows.registry import StepArtifact
 
-#: Every eit.* step ultimately calls eitprocessing, directly or through
-#: EITProcessingAdapter, so all of them declare the same optional dependency.
+#: Steps that build or read eitprocessing objects require this package.
 _EITPROCESSING = ("eitprocessing",)
 
 
@@ -44,7 +46,8 @@ def _breaths_used_by(
 
     Args:
         breath_detector: eitprocessing detector with ``find_breaths``.
-        signal: Waveform used by the per-breath calculations.
+        signal: Waveform used by the per-breath calculations: a ``Signal``
+            or an eitprocessing ``ContinuousData``.
         session: Session that remembers detected breaths and supplies stored
             breaths for matching.
 
@@ -59,7 +62,9 @@ def _breaths_used_by(
             return breaths
 
     breaths = _use_stored_eit_breaths(
-        breath_intervals_to_breath_events(breath_detector.find_breaths(signal)),
+        breath_intervals_to_breath_events(
+            breath_detector.find_breaths(as_continuous_data(signal))
+        ),
         session,
     )
     found.append((breath_detector, signal, breaths))

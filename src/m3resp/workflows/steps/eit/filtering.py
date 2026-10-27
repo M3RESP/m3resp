@@ -11,10 +11,11 @@ from typing import Any, cast, get_args
 
 from m3resp.adapters.eitprocessing_adapter import (
     add_to_collection,
+    as_eit_data,
+    eit_data_to_signal,
     filter_pixels_preserving_gaps,
 )
 from m3resp.core.session import M3Session
-from m3resp.data import Signal
 from m3resp.processing.filters import ButterworthFilterType
 from m3resp.workflows.registry import (
     StepArtifact,
@@ -49,8 +50,7 @@ from ._shared import (
         StepArtifact(
             name="signal",
             artifact_type="eit_pixel_signal",
-            description="Upstream EIT pixel signal to filter.",
-            compatibility_only=True,
+            description="EIT images (pixel impedance) to filter.",
         ),
         StepArtifact(
             name="respiratory_rate_hz",
@@ -86,8 +86,7 @@ from ._shared import (
         StepArtifact(
             name="filtered_eit",
             artifact_type="eit_pixel_signal",
-            description="MDN-filtered upstream EIT signal.",
-            compatibility_only=True,
+            description="MDN-filtered EIT images as a Signal.",
         ),
         StepArtifact(
             name="filter_captures",
@@ -96,8 +95,8 @@ from ._shared import (
         ),
         StepArtifact(
             name="filtered_eit_signal",
-            artifact_type="signal",
-            description="Native Signal wrapping the filtered pixel impedance.",
+            artifact_type="eit_pixel_signal",
+            description="The same Signal as 'filtered_eit'.",
         ),
     ),
     record=True,
@@ -111,6 +110,24 @@ def mdn_filter(
     session: M3Session,
     label: str = "filtered",
 ) -> dict[str, Any]:
+    """Remove the heart-rate component from EIT images with the MDN filter.
+
+    Args:
+        signal (Any): EIT images as a ``Signal`` (or an eitprocessing
+            ``EITData``), time in seconds.
+        respiratory_rate_hz (float): Respiratory rate, in Hz.
+        heart_rate_hz (float): Heart rate to remove, in Hz.
+        eit_sequence (Any): Sequence that receives the filtered
+            eitprocessing ``EITData``.
+        session (M3Session): Session that receives the filtered Signal.
+        label (str): Label of the filtered data.
+
+    Returns:
+        dict[str, Any]: ``filtered_eit`` and ``filtered_eit_signal``, the
+            same filtered ``Signal``, and ``filter_captures``, the filter
+            diagnostics.
+    """
+
     result = session.eit_adapter.apply_mdn(
         signal,
         respiratory_rate_hz=respiratory_rate_hz,
@@ -132,24 +149,11 @@ def mdn_filter(
             "label": label,
         },
     )
-    filtered_eit_signal = Signal(
-        values=filtered_eit.pixel_impedance,
-        time=filtered_eit.time,
-        sample_frequency=getattr(filtered_eit, "sample_frequency", None),
-        unit=getattr(filtered_eit, "unit", None),
-        name=getattr(filtered_eit, "name", None)
-        or getattr(filtered_eit, "label", None),
-        modality="eit",
-        category="impedance",
-        channel="pixel_impedance",
-        processing_state="intermediate",
-        source="eitprocessing",
-        metadata=dict(metadata),
-    )
+    filtered_eit_signal = _filtered_signal(filtered_eit, metadata)
     session.signals.add(filtered_eit_signal)
 
     return {
-        "filtered_eit": filtered_eit,
+        "filtered_eit": filtered_eit_signal,
         "filter_captures": filter_captures,
         "filtered_eit_signal": filtered_eit_signal,
         "_provenance": metadata,
@@ -171,8 +175,7 @@ def mdn_filter(
         StepArtifact(
             name="signal",
             artifact_type="eit_pixel_signal",
-            description="Upstream EIT pixel signal to filter.",
-            compatibility_only=True,
+            description="EIT images (pixel impedance) to filter.",
         ),
         StepArtifact(
             name="eit_sequence",
@@ -229,8 +232,7 @@ def mdn_filter(
         StepArtifact(
             name="filtered_eit",
             artifact_type="eit_pixel_signal",
-            description="Butterworth-filtered upstream EIT signal.",
-            compatibility_only=True,
+            description="Butterworth-filtered EIT images as a Signal.",
         ),
         StepArtifact(
             name="filter_captures",
@@ -239,8 +241,8 @@ def mdn_filter(
         ),
         StepArtifact(
             name="filtered_eit_signal",
-            artifact_type="signal",
-            description="Native Signal wrapping the filtered pixel impedance.",
+            artifact_type="eit_pixel_signal",
+            description="The same Signal as 'filtered_eit'.",
         ),
     ),
     record=True,
@@ -259,8 +261,9 @@ def butterworth_filter(
     """Apply a zero-phase Butterworth filter to EIT pixel signals.
 
     Args:
-        signal (Any): Upstream EIT data with pixel_impedance, sample_frequency
-            in Hz, and time along the first axis.
+        signal (Any): EIT images as a ``Signal`` (or an eitprocessing
+            ``EITData``), with the frames per second in Hz and time along the
+            first axis.
         eit_sequence (Any): Sequence receiving the filtered EIT data.
         session (M3Session): Session receiving the filtered Signal and provenance.
         mode (ButterworthFilterType): "lowpass", "highpass", "bandpass", or
@@ -274,9 +277,10 @@ def butterworth_filter(
         label (str): Label for the filtered copy. Defaults to "filtered".
 
     Returns:
-        dict[str, Any]: filtered_eit upstream data, filter_captures diagnostics,
-            and filtered_eit_signal. Values retain their shape, units and time
-            coordinates. Pixels with only missing samples remain missing.
+        dict[str, Any]: ``filtered_eit`` and ``filtered_eit_signal``, the same
+            filtered ``Signal``, and ``filter_captures``, the filter
+            diagnostics. Values keep their shape, units and time. Pixels with
+            only missing samples stay missing.
 
     Raises:
         ValueError: If a pixel has gaps among otherwise present samples, or the
@@ -285,6 +289,7 @@ def butterworth_filter(
 
     from eitprocessing.filters.butterworth_filters import ButterworthFilter
 
+    signal = as_eit_data(signal)
     # One edge for the single-sided modes, both edges for the two-sided ones.
     # Upstream annotates `cutoff_frequency` as `float | tuple[float]` (a
     # one-element tuple), but its bandpass/bandstop branch actually requires
@@ -325,25 +330,25 @@ def butterworth_filter(
             "label": label,
         },
     )
-    filtered_eit_signal = Signal(
-        values=filtered_eit.pixel_impedance,
-        time=filtered_eit.time,
-        sample_frequency=getattr(filtered_eit, "sample_frequency", None),
-        unit=getattr(filtered_eit, "unit", None),
-        name=getattr(filtered_eit, "name", None)
-        or getattr(filtered_eit, "label", None),
-        modality="eit",
-        category="impedance",
-        channel="pixel_impedance",
-        processing_state="intermediate",
-        source="eitprocessing",
-        metadata=dict(metadata),
-    )
+    filtered_eit_signal = _filtered_signal(filtered_eit, metadata)
     session.signals.add(filtered_eit_signal)
 
     return {
-        "filtered_eit": filtered_eit,
+        "filtered_eit": filtered_eit_signal,
         "filter_captures": captures,
         "filtered_eit_signal": filtered_eit_signal,
         "_provenance": metadata,
     }
+
+
+def _filtered_signal(filtered_eit: Any, metadata: dict[str, Any]) -> Any:
+    """The filtered eitprocessing ``EITData`` as a ``Signal`` with the step provenance."""
+
+    signal = eit_data_to_signal(
+        filtered_eit,
+        processing_state="intermediate",
+        name=getattr(filtered_eit, "name", None)
+        or getattr(filtered_eit, "label", None),
+    )
+    signal.metadata.update(metadata)
+    return signal

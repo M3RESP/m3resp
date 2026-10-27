@@ -9,9 +9,8 @@ from typing import Any
 import numpy as np
 
 from m3resp.core.exceptions import OptionalDependencyError
-from m3resp.data import IntervalData, PixelMap, Signal
+from m3resp.data import IntervalData, PixelMap
 from m3resp.data.events import BreathEvent, coerce_breath_events
-from m3resp.data.signals import Modality, ProcessingState
 
 
 def _optional_dependency_error() -> OptionalDependencyError:
@@ -162,64 +161,6 @@ def _breath_intervals_to_dicts(breath_intervals: Any) -> list[dict[str, Any]]:
         }
         for breath in breath_intervals.values
     ]
-
-
-def continuous_data_to_signal(
-    obj: Any,
-    *,
-    modality: Modality,
-    channel: str | None,
-    processing_state: ProcessingState,
-    source: str | None = None,
-    method: str | None = None,
-    category: str | None = "impedance",
-    name: str | None = None,
-) -> Signal:
-    """Convert an `eitprocessing.ContinuousData`-shaped object to a `Signal`.
-
-    Everything `eitprocessing` emits through this path is an impedance
-    (global or pixel-resolved), so ``category`` defaults accordingly; pass it
-    explicitly for a channel that measures something else.
-
-    For anything other than ``processing_state="raw"``, ``name`` must be
-    passed explicitly - ``obj``'s own ``.name``/``.label`` is not trusted for
-    a transformed signal. This is a deliberate guard: upstream filter
-    operations (e.g. `eitprocessing`'s `MDNFilter.apply`) deep-copy their raw
-    input and only overwrite attributes passed as explicit kwargs, so a
-    caller that forgets to pass `name`/`label` through to the *upstream*
-    call gets an object whose `.name` still silently says `"raw"` - see the
-    `eit.mdn_filter` regression this guard was added for. Raw data is exempt
-    because its `.name`/`.label` genuinely comes from the loader, not from a
-    copy-then-partially-overwrite operation.
-    """
-
-    if processing_state == "raw":
-        resolved_name = (
-            name or getattr(obj, "name", None) or getattr(obj, "label", None)
-        )
-    elif name is not None:
-        resolved_name = name
-    else:
-        raise ValueError(
-            "continuous_data_to_signal: `name` must be passed explicitly "
-            f"for processing_state={processing_state!r} - obj.name/obj.label "
-            "cannot be trusted for a transformed signal, since upstream "
-            "filter operations may silently leave a stale value there."
-        )
-
-    return Signal(
-        values=obj.values,
-        time=obj.time,
-        sample_frequency=getattr(obj, "sample_frequency", None),
-        unit=getattr(obj, "unit", None),
-        name=resolved_name,
-        modality=modality,
-        category=category,
-        channel=channel,
-        processing_state=processing_state,
-        source=source,
-        method=method,
-    )
 
 
 def breath_intervals_to_breath_events(breath_intervals: Any) -> list[BreathEvent]:

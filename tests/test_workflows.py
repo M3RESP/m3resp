@@ -311,6 +311,7 @@ class FakeSignal:
         self.time = np.array([0.0, 0.5, 1.0]) if time is None else time
         self.pixel_impedance = np.zeros((len(self.time), 1, 1))
         self.sample_frequency = 2.0
+        self.vendor = "draeger"
         self.unit = None
 
     def __getitem__(self, _slice: Any) -> FakeSignal:

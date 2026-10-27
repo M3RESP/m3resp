@@ -1,20 +1,13 @@
-"""Reading ventilator waveforms out of an EIT recording.
+"""Read ventilator waveforms from native EIT recordings and reader results.
 
-Ventilator data reaches m3resp from two independent sources, not one:
+Draeger stores ventilator channels in its Medibus fields and Timpel in text
+columns next to the EIT images. The channel keys of EITRecording.signals or
+EITFileData.signals identify their vendor labels. Custom loaders may also
+return an eitprocessing Sequence with continuous_data.
 
-* the multi-channel file it shares with the sEMG (a Biopac export and
-  friends), read by :class:`~m3resp.adapters.resurfemg_adapter.ReSurfEMGAdapter`;
-* the EIT ``*.bin`` file itself, where the device stores the ventilator
-  waveforms alongside the impedance frames - Draeger via its Medibus fields,
-  Timpel as dedicated columns. ``eitprocessing`` already parses both and
-  exposes them as ``ContinuousData`` on the loaded ``Sequence``.
-
-This module covers the second source. It resolves the vendor's channel labels
-onto m3resp's canonical ``airway_pressure``/``flow``/``volume`` names (plus the
-esophageal/transpulmonary/gastric channels a Draeger pressure pod adds) and
-packs them into the same ``{"array", "metadata"}`` payload the EMG-file path
-produces, so everything downstream of loading - `split_channels`, the
-preprocessing defaults, slicing, `to_signals` - stays source-agnostic.
+Channel labels are resolved to airway_pressure, flow, volume and the
+additional pressure-pod channels. The result has one channel per row and
+metadata with units, sampling frequency and the original time axis.
 """
 
 from __future__ import annotations
@@ -24,6 +17,8 @@ from typing import Any
 import numpy as np
 
 from m3resp.core.exceptions import UnsupportedWorkflowError
+from m3resp.eit.io.file_data import EITFileData
+from m3resp.modalities.eit import EITRecording
 
 from ._channels import CHANNEL_CATEGORIES, ChannelSpec, resolve_channels
 
@@ -45,13 +40,17 @@ SENTINEL_CUTOFF = -1e30
 
 
 def _continuous_data_items(sequence: Any) -> list[tuple[str, Any]]:
-    """``(label, ContinuousData)`` pairs from a sequence, or a clear error."""
+    """Vendor labels and waveforms from native data or a custom Sequence."""
 
+    if isinstance(sequence, (EITRecording, EITFileData)):
+        if isinstance(sequence, EITFileData) or sequence.pixel_impedance is not None:
+            return list(sequence.signals.items())
+        sequence = sequence.data
     collection = getattr(sequence, "continuous_data", None)
     if collection is None:
         raise TypeError(
             "Loading ventilator data from an EIT recording expects an "
-            "eitprocessing Sequence (with `.continuous_data`), got "
+            "EITRecording, EITFileData or eitprocessing Sequence, got "
             f"{type(sequence).__name__}."
         )
     try:
@@ -88,7 +87,7 @@ def available_ventilator_channels(sequence: Any) -> dict[str, str]:
     """List ventilator channel keys and vendor labels in an EIT sequence.
 
     Args:
-        sequence (Any): eitprocessing Sequence containing continuous_data.
+        sequence (Any): EITRecording, EITFileData or an eitprocessing Sequence.
 
     Returns:
         dict[str, str]: Resolvable channel key to vendor label. Multiple airway
@@ -99,7 +98,7 @@ def available_ventilator_channels(sequence: Any) -> dict[str, str]:
             channels containing only missing measurements.
 
     Raises:
-        TypeError: If the sequence lacks continuous_data.
+        TypeError: If the input has no EIT waveforms.
     """
 
     specs, _, _ = _sequence_channel_specs(sequence)
@@ -133,7 +132,7 @@ def ventilator_payload_from_sequence(
     channels: tuple[str, ...] | list[str] = DEFAULT_EIT_CHANNELS,
     fs: float | None = None,
 ) -> dict[str, Any]:
-    """Pack an EIT sequence's ventilator channels into a ventilator payload.
+    """Pack native EIT waveforms or a custom Sequence into a ventilator payload.
 
     Returns the ``{"array", "metadata"}`` shape the ventilator path already
     consumes: ``array`` has one row per requested channel, in the requested
@@ -204,6 +203,13 @@ def ventilator_payload_from_sequence(
         )
 
     time = np.asarray(getattr(resolved[0], "time", ()), dtype=float)
+    for spec, data in zip(specs, resolved, strict=True):
+        other_time = np.asarray(getattr(data, "time", ()), dtype=float)
+        if not np.array_equal(time, other_time):
+            raise UnsupportedWorkflowError(
+                f"Ventilator channel {spec.key!r} has a different time axis "
+                "from the other channels in this EIT recording."
+            )
     return {
         "array": np.vstack(rows),
         "metadata": {

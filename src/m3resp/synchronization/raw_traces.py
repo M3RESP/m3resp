@@ -106,7 +106,7 @@ def _ventilator_raw_traces(recording: Any) -> dict[str, Any]:
 
 
 def _eit_raw_trace(recording: EITRecording) -> dict[str, Any] | None:
-    signal = recording.global_impedance
+    signal = recording.raw_global_impedance
     if signal is None:
         return None
     time = getattr(signal, "time", None)
@@ -117,5 +117,5 @@ def _eit_raw_trace(recording: EITRecording) -> dict[str, Any] | None:
         "title": "EIT raw global impedance",
         "time": np.asarray(time, dtype=float).tolist(),
         "values": np.asarray(values, dtype=float).tolist(),
-        "ylabel": getattr(signal, "label", "global_impedance_(raw)"),
+        "ylabel": "global_impedance_(raw)",
     }

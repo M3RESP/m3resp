@@ -99,7 +99,7 @@ def own_first_time(session: M3Session, modality: str) -> float:
 
     if normalize_modality(modality) != "eit" or session.eit is None:
         return 0.0
-    for obj in (session.eit.global_impedance, session.eit.raw):
+    for obj in (session.eit.pixel_impedance, *session.eit.signals.values()):
         time = getattr(obj, "time", None)
         if time is None:
             continue

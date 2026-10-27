@@ -14,6 +14,7 @@ from m3resp.workflows.context import (
 from m3resp.workflows.diagnostics import Diagnostic
 from m3resp.workflows.registry import (
     ANY_ARTIFACT_TYPE,
+    SIGNAL_ARTIFACT_TYPES,
     StepArtifact,
     StepDefinition,
     StepParameter,
@@ -406,9 +407,9 @@ def _check_artifact_type_compatibility(
     produced the context key it's bound to ("compilation validates
     ... artifact compatibility"), unless either side
     declares :data:`ANY_ARTIFACT_TYPE` (a genuine passthrough, e.g.
-    ``eit.slice_signal``). Only checked when *both* sides declare a type - this is
-    additive metadata, backfilled module by module, so an undeclared type on
-    either side is simply skipped rather than flagged."""
+    ``eit.slice_signal``). The check runs only when both sides declare a
+    type. An input of type ``"signal"`` accepts every type in
+    :data:`SIGNAL_ARTIFACT_TYPES`."""
 
     consumer_artifact = input_artifacts_by_name.get(param)
     if consumer_artifact is None:
@@ -420,6 +421,8 @@ def _check_artifact_type_compatibility(
     if ANY_ARTIFACT_TYPE in (consumer_type, producer_type):
         return []
     if consumer_type == producer_type:
+        return []
+    if consumer_type == "signal" and producer_type in SIGNAL_ARTIFACT_TYPES:
         return []
     return [
         Diagnostic(

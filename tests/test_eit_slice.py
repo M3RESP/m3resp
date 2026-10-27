@@ -1,10 +1,13 @@
 """Keeping only a time window of the loaded EIT recording (`eit.slice_recording`).
 
-The cutting is done by `eitprocessing`, so these tests build a small real
-`Sequence` rather than a stand-in.
+Native images and waveforms are cut together. The rebuilt Sequence is
+checked alongside the native fields.
 """
 
 from __future__ import annotations
+
+from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -19,6 +22,8 @@ from eitprocessing.datahandling.sequence import Sequence
 from m3resp import M3Session
 from m3resp.adapters import EITProcessingAdapter
 from m3resp.core.exceptions import MissingModalityDataError
+from m3resp.modalities.eit import EITRecording
+from m3resp.synchronization.raw_traces import raw_synchronization_traces
 from m3resp.synchronization.start_times import shared_clock_shift
 from m3resp.workflows.steps.eit.slicing import slice_recording
 
@@ -147,7 +152,7 @@ def test_frames_are_chosen_by_their_time_stamps():
     uneven = np.asarray(session.eit.data.time, dtype=float).copy()
     uneven[40] += 0.01  # frame 40 now lies just after 2.0 s + 0.01 s
 
-    session.eit.data.eit_data["raw"].time = uneven
+    session.eit.pixel_impedance.time = uneven
     session.slice_eit(2.005)
 
     assert session.eit.raw.pixel_impedance[0, 0, 0] == 40.0
@@ -172,6 +177,54 @@ def test_a_window_outside_the_recording_is_refused(start, end):
 def test_slice_needs_a_loaded_recording():
     with pytest.raises(MissingModalityDataError):
         M3Session().slice_eit(1.0)
+
+
+def test_slice_needs_the_raw_images():
+    session = _session()
+    session.eit = EITRecording(data=_sequence(), paths=(Path("study.bin"),))
+
+    with pytest.raises(MissingModalityDataError, match="raw EIT images"):
+        session.slice_eit(1.0)
+
+
+def test_slice_needs_a_file_path():
+    session = _session()
+    session.eit.paths = ()
+
+    with pytest.raises(ValueError, match="EITRecording.paths is empty"):
+        session.slice_eit(1.0)
+
+
+def test_slice_needs_the_device_maker():
+    session = _session()
+    session.eit.vendor = None
+    session.eit.pixel_impedance = replace(session.eit.pixel_impedance, source=None)
+
+    with pytest.raises(ValueError, match="device maker"):
+        session.slice_eit(1.0)
+
+
+def test_the_image_sum_is_computed_once_and_follows_a_slice():
+    session = _session()
+    recording = session.eit
+
+    summed = recording.raw_global_impedance
+
+    assert recording.raw_global_impedance is summed
+    np.testing.assert_array_equal(
+        summed.values, np.nansum(recording.pixel_impedance.values, axis=(1, 2))
+    )
+    session.slice_eit(2.0, 5.0)
+    assert recording.raw_global_impedance is not summed
+    assert len(recording.raw_global_impedance.values) == 60
+    assert recording.raw_global_impedance.values[0] == 40.0 * 32 * 32
+
+
+def test_the_raw_sync_trace_has_the_eitprocessing_label():
+    traces = raw_synchronization_traces(_session(), "eit")
+
+    assert traces["eit"]["ylabel"] == "global_impedance_(raw)"
+    assert len(traces["eit"]["values"]) == N_FRAMES
 
 
 def test_step_delegates_to_the_session():
@@ -205,8 +258,8 @@ def test_steps_after_the_slice_step_read_the_cut_recording(tmp_path):
 
     # Frame i holds i in every pixel, so the cut part starts at frame 40.
     raw = context.get("raw_eit")
-    assert raw.pixel_impedance.shape[0] == 60
-    assert raw.pixel_impedance[0, 0, 0] == 40.0
+    assert raw.values.shape[0] == 60
+    assert raw.values[0, 0, 0] == 40.0
     assert len(context.get("eit_sequence").time) == 60
     assert len(context.get("global_impedance").values) == 60
     raw_signals = [

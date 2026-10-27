@@ -92,10 +92,27 @@ def workflow_result():
     return run_workflow(_SPEC, session=M3Session())
 
 
+def _upstream(workflow_result, name: str) -> Any:
+    """The eitprocessing object of a step input, made by eitprocessing alone.
+
+    The steps pass m3resp ``Signal``s; the direct calls below take the
+    eitprocessing objects the workflow stored in its ``Sequence``.
+    """
+
+    sequence = workflow_result.value("eit_sequence")
+    if name == "raw_eit":
+        return sequence.eit_data["raw"]
+    filtered = sequence.eit_data["mdn_filtered"]
+    if name == "filtered_eit":
+        return filtered
+    assert name == "global_impedance"
+    return filtered.get_summed_impedance()
+
+
 def test_detect_rates_matches_direct_rate_detection_call(workflow_result):
     from eitprocessing.features.rate_detection import RateDetection
 
-    raw_eit = workflow_result.value("raw_eit")
+    raw_eit = _upstream(workflow_result, "raw_eit")
     expected_resp, expected_heart = RateDetection("adult").apply(raw_eit)
 
     assert workflow_result.value("respiratory_rate_hz") == pytest.approx(expected_resp)
@@ -109,7 +126,7 @@ def test_detect_rates_matches_direct_rate_detection_call(workflow_result):
 def test_mdn_filter_matches_direct_mdn_filter_call(workflow_result):
     from eitprocessing.filters.mdn import MDNFilter
 
-    raw_eit = workflow_result.value("raw_eit")
+    raw_eit = _upstream(workflow_result, "raw_eit")
     respiratory_rate_hz = workflow_result.value("respiratory_rate_hz")
     heart_rate_hz = workflow_result.value("heart_rate_hz")
 
@@ -118,9 +135,7 @@ def test_mdn_filter_matches_direct_mdn_filter_call(workflow_result):
     ).apply(raw_eit, label="mdn_filtered")
 
     filtered_eit = workflow_result.value("filtered_eit")
-    np.testing.assert_array_equal(
-        filtered_eit.pixel_impedance, expected.pixel_impedance
-    )
+    np.testing.assert_array_equal(filtered_eit.values, expected.pixel_impedance)
 
     signal = workflow_result.value("filtered_eit_signal")
     np.testing.assert_array_equal(signal.values, expected.pixel_impedance)
@@ -134,7 +149,7 @@ def test_mdn_filter_matches_direct_mdn_filter_call(workflow_result):
 def test_eeli_matches_direct_eeli_call(workflow_result):
     from eitprocessing.parameters.eeli import EELI
 
-    global_impedance = workflow_result.value("global_impedance")
+    global_impedance = _upstream(workflow_result, "global_impedance")
     breath_detector = workflow_result.value("breath_detector")
 
     expected = EELI(breath_detection=breath_detector).compute_parameter(
@@ -157,7 +172,7 @@ def test_eeli_matches_direct_eeli_call(workflow_result):
 def test_continuous_tiv_matches_direct_tiv_call(workflow_result):
     from eitprocessing.parameters.tidal_impedance_variation import TIV
 
-    global_impedance = workflow_result.value("global_impedance")
+    global_impedance = _upstream(workflow_result, "global_impedance")
     breath_detector = workflow_result.value("breath_detector")
 
     expected = TIV(breath_detection=breath_detector).compute_parameter(
@@ -179,8 +194,8 @@ def test_continuous_tiv_matches_direct_tiv_call(workflow_result):
 def test_pixel_tiv_matches_direct_tiv_call(workflow_result):
     from eitprocessing.parameters.tidal_impedance_variation import TIV
 
-    filtered_eit = workflow_result.value("filtered_eit")
-    global_impedance = workflow_result.value("global_impedance")
+    filtered_eit = _upstream(workflow_result, "filtered_eit")
+    global_impedance = _upstream(workflow_result, "global_impedance")
     breath_detector = workflow_result.value("breath_detector")
 
     expected = TIV(breath_detection=breath_detector).compute_parameter(
@@ -216,8 +231,8 @@ def test_pixel_breaths_matches_direct_pixel_breath_call(workflow_result):
     from eitprocessing.features.breath_detection import BreathDetection
     from eitprocessing.features.pixel_breath import PixelBreath
 
-    filtered_eit = workflow_result.value("filtered_eit")
-    global_impedance = workflow_result.value("global_impedance")
+    filtered_eit = _upstream(workflow_result, "filtered_eit")
+    global_impedance = _upstream(workflow_result, "global_impedance")
 
     expected = PixelBreath(
         breath_detection=BreathDetection(minimum_duration=2 / 3),
@@ -251,8 +266,8 @@ def test_pixel_breaths_matches_direct_pixel_breath_call(workflow_result):
 def test_roi_tiv_lungspace_matches_direct_call(workflow_result):
     from eitprocessing.roi.tiv import TIVLungspace
 
-    filtered_eit = workflow_result.value("filtered_eit")
-    global_impedance = workflow_result.value("global_impedance")
+    filtered_eit = _upstream(workflow_result, "filtered_eit")
+    global_impedance = _upstream(workflow_result, "global_impedance")
 
     expected_mask = TIVLungspace(threshold=0.15).apply(
         filtered_eit, timing_data=global_impedance
@@ -265,8 +280,8 @@ def test_roi_tiv_lungspace_matches_direct_call(workflow_result):
 def test_roi_amplitude_lungspace_matches_direct_call(workflow_result):
     from eitprocessing.roi.amplitude import AmplitudeLungspace
 
-    filtered_eit = workflow_result.value("filtered_eit")
-    global_impedance = workflow_result.value("global_impedance")
+    filtered_eit = _upstream(workflow_result, "filtered_eit")
+    global_impedance = _upstream(workflow_result, "global_impedance")
 
     expected_mask = AmplitudeLungspace(threshold=0.15).apply(
         filtered_eit, timing_data=global_impedance
@@ -279,8 +294,8 @@ def test_roi_amplitude_lungspace_matches_direct_call(workflow_result):
 def test_roi_watershed_matches_direct_call(workflow_result):
     from eitprocessing.roi.watershed import WatershedLungspace
 
-    filtered_eit = workflow_result.value("filtered_eit")
-    global_impedance = workflow_result.value("global_impedance")
+    filtered_eit = _upstream(workflow_result, "filtered_eit")
+    global_impedance = _upstream(workflow_result, "global_impedance")
 
     expected_mask = WatershedLungspace(threshold_fraction=0.15).apply(
         filtered_eit, timing_data=global_impedance

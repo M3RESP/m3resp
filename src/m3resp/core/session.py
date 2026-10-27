@@ -164,7 +164,9 @@ class M3Session:
         # no second injection. Pass `ventilator_adapter=` to separate them.
         self.ventilator_adapter = ventilator_adapter or VentilatorAdapter(
             loader=lambda path, **kwargs: self.emg_adapter.load(path, **kwargs),
-            eit_loader=lambda path, **kwargs: self.eit_adapter.load(path, **kwargs),
+            eit_loader=lambda path, **kwargs: load_eit_recording(
+                path, adapter=self.eit_adapter, **kwargs
+            ),
         )
 
         self.eit: EITRecording | None = None
@@ -240,10 +242,10 @@ class M3Session:
                 files recorded one after the other, read as one recording.
                 The files are joined in the given order; a pause between two
                 files stays in the time axis and gives a warning. With
-                eitprocessing, ``first_frame``/``max_frames`` cannot be used
-                with several files.
+                ``first_frame``/``max_frames`` apply to one file; use
+                ``slice_eit`` after loading several files.
             vendor (str | None): The EIT device maker, passed to
-                `eitprocessing` (for example ``"draeger"``).
+                the M3Resp reader (for example ``"draeger"``).
             loader (str): ``"eitprocessing"`` reads a Draeger, Sentec or
                 Timpel file and needs ``vendor``; ``"custom"`` uses the loader
                 given to `session.eit_adapter` (``EITProcessingAdapter(
@@ -769,11 +771,9 @@ class M3Session:
         part runs from the first frame at or after `start_seconds` up to,
         but not including, the first frame at or after `end_seconds`.
 
-        The cutting itself is done by `eitprocessing`
-        (`EITProcessingAdapter.slice_sequence`): pixel data, global
-        impedance, the pressure/flow channels and the vendor's markers are
-        all cut to the same frames. A ventilator recording loaded from the
-        same EIT file is cut at exactly those frames too, so it stays lined
+        m3resp cuts the native images, waveforms, device marks and breaths
+        together, then rebuilds the eitprocessing Sequence. A ventilator
+        recording from the same EIT file is cut at those frames too, so it stays lined
         up with the EIT. EIT frame times keep their original values; the EIT
         start time in `session.start_times` moves later by the part cut off
         the front, so the EIT stays lined up with the other recordings.
@@ -794,8 +794,15 @@ class M3Session:
         """
 
         recording = self.eit
-        if recording is None or recording.data is None:
+        if recording is None:
             raise MissingModalityDataError("slice_eit needs a loaded EIT recording.")
+        if recording.pixel_impedance is None:
+            raise MissingModalityDataError(
+                "slice_eit needs the raw EIT images of the recording, with their "
+                "times. The loaded data has none: a custom loader must return "
+                "an EITFileData, or a Sequence with the images under "
+                "eit_data['raw']."
+            )
         if self.processed_variants["eit"]:
             raise ValueError(
                 "slice_eit must run before preprocess_eit: the EIT has already "
@@ -825,9 +832,7 @@ class M3Session:
                     "at the same frames."
                 )
 
-        keep_frames(
-            recording, window.start_index, window.end_index, adapter=self.eit_adapter
-        )
+        keep_frames(recording, window.start_index, window.end_index)
         for item in on_eit_clock:
             keep_ventilator_samples(item, window.start_index, window.end_index)
 

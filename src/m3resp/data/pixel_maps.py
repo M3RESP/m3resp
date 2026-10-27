@@ -20,7 +20,8 @@ Portions of this module are derived from eitprocessing.
     Source:     https://github.com/EIT-ALIVE/eitprocessing
     Revision:   m3resp-integration (6d6da6a825a08201ad01c0a7b68f4de07d4501f3),
                 version 1.8.7
-    Original:   eitprocessing/roi/__init__.py::PixelMask.__init__
+    Original:   eitprocessing/roi/__init__.py::PixelMask.__init__;
+                PixelMask.apply
     Copyright:  Copyright (c) Netherlands eScience Center and Erasmus MC
     License:    Apache License, Version 2.0
 
@@ -33,6 +34,9 @@ Modified for M3RESP:
     - The mask has the fields `name`, `values`, `modality`, `method` and
       `metadata`, the same as `PixelMap`; plot settings and adding,
       subtracting or multiplying masks stay in eitprocessing.
+    - `PixelMask.apply` takes a NumPy array, a `Signal` or a `PixelMap` and
+      gives the same kind back; a `Signal` or `PixelMap` keeps all its other
+      fields.
     - Error and warning messages are reworded.
 
 The original copyright and license notices are retained per Apache-2.0 §4.
@@ -43,14 +47,15 @@ Full attribution notice: see top-level NOTICE.md.
 from __future__ import annotations
 
 import warnings
-from dataclasses import InitVar, dataclass, field
-from typing import Any
+from dataclasses import InitVar, dataclass, field, replace
+from typing import Any, overload
 
 import numpy as np
 
 from m3resp.data.categories import normalize_category
 from m3resp.data.event_data import IntervalData
 from m3resp.data.events import BreathEvent
+from m3resp.data.signals import Signal
 from m3resp.data.units import normalize_unit
 
 
@@ -251,6 +256,70 @@ class PixelMask:
         """Return the count of pixels that are not NaN, weight 0 included."""
 
         return int(np.count_nonzero(~np.isnan(self.values)))
+
+    @overload
+    def apply(self, data: np.ndarray) -> np.ndarray: ...
+
+    @overload
+    def apply(self, data: Signal) -> Signal: ...
+
+    @overload
+    def apply(self, data: PixelMap) -> PixelMap: ...
+
+    def apply(
+        self, data: np.ndarray | Signal | PixelMap
+    ) -> np.ndarray | Signal | PixelMap:
+        """Multiply each pixel of ``data`` by its mask value.
+
+        The mask applies to the last two axes of the data, so it works on one
+        image and on a series of images alike. A NaN in the mask makes the
+        pixel NaN; a weight scales the pixel.
+
+        Args:
+            data (numpy.ndarray | Signal | PixelMap): The pixels. The last two
+                axes are rows and columns, with the same size as the mask.
+
+        Returns:
+            numpy.ndarray | Signal | PixelMap: The same kind as ``data``, with
+                the masked pixels. A ``Signal`` or ``PixelMap`` is a copy with
+                the same other fields and a copy of the metadata.
+
+        Raises:
+            ValueError: If the last two axes of the data differ in size from
+                the mask.
+            TypeError: If ``data`` is not an array, a ``Signal`` or a
+                ``PixelMap``.
+        """
+
+        if isinstance(data, Signal):
+            return replace(
+                data,
+                values=self._multiply(np.asarray(data.values)),
+                metadata=dict(data.metadata),
+            )
+        if isinstance(data, PixelMap):
+            return replace(
+                data,
+                values=self._multiply(data.values),
+                metadata=dict(data.metadata),
+            )
+        if isinstance(data, np.ndarray):
+            return self._multiply(data)
+        raise TypeError(
+            "PixelMask.apply needs a NumPy array, a Signal or a PixelMap, "
+            f"got {type(data).__name__}."
+        )
+
+    def _multiply(self, data: np.ndarray) -> np.ndarray:
+        """Multiply the last two axes of ``data`` by the mask grid."""
+
+        if data.shape[-2:] != self.values.shape:
+            raise ValueError(
+                f"The data has shape {data.shape} and the mask "
+                f"'{self.name}' has shape {self.values.shape}; the last two "
+                "axes of the data must have the size of the mask."
+            )
+        return data * self.values[(np.newaxis,) * (data.ndim - 2) + (...,)]
 
     def __array__(self, dtype: Any = None, copy: bool | None = None) -> np.ndarray:
         """Return the grid as a NumPy array with the requested dtype.

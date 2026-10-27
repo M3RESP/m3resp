@@ -173,13 +173,14 @@ def read_timpel(
 
     pixel_impedance = np.where(pixel_impedance == _NAN_VALUE, np.nan, pixel_impedance)
 
-    # The value is kept as given: the default is the whole number 50, as in
-    # eitprocessing.
+    # The waveforms keep the value as given: the default is the whole number
+    # 50, as in eitprocessing. The images hold it as a float, as eitprocessing
+    # EITData does.
     frequency = sample_frequency
     pixel_signal = Signal(
         values=pixel_impedance,
         time=time,
-        sample_frequency=frequency,
+        sample_frequency=float(frequency),
         name="raw",
         modality="eit",
         category="impedance",
@@ -271,7 +272,7 @@ def read_timpel(
     return EITFileData(
         vendor=VENDOR,
         path=path,
-        sample_frequency=frequency,
+        sample_frequency=float(frequency),
         pixel_impedance=pixel_signal,
         signals=signals,
         events=events,

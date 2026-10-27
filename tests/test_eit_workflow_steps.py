@@ -97,6 +97,7 @@ class _FakeEITData:
         self.time = np.asarray(time, dtype=float)
         self.sample_frequency = 1.0
         self.unit = "a.u."
+        self.vendor = "draeger"
 
     def get_summed_impedance(self, return_label: str | None = None, **_: Any):
         return _FakeContinuousData(
@@ -408,7 +409,10 @@ def test_mdn_filter_step_works_without_eitprocessing_and_matches_declared_writes
 
     assert set(get_step("eit.mdn_filter").writes) <= set(result)
     assert result["filtered_eit_signal"].channel == "pixel_impedance"
-    assert sequence.eit_data["filtered"] is result["filtered_eit"]
+    assert result["filtered_eit"] is result["filtered_eit_signal"]
+    np.testing.assert_array_equal(
+        sequence.eit_data["filtered"].pixel_impedance, result["filtered_eit"].values
+    )
 
 
 @pytest.mark.parametrize("mode", ["lowpass", "highpass", "bandpass", "bandstop"])
@@ -432,7 +436,10 @@ def test_butterworth_filter_step_supports_every_mode_and_matches_declared_writes
     # Same native signal and session bookkeeping the MDN filter produces.
     assert result["filtered_eit_signal"].channel == "pixel_impedance"
     assert session.signals.for_modality("eit")
-    assert sequence.eit_data["filtered"] is result["filtered_eit"]
+    assert result["filtered_eit"] is result["filtered_eit_signal"]
+    np.testing.assert_array_equal(
+        sequence.eit_data["filtered"].pixel_impedance, result["filtered_eit"].values
+    )
 
 
 def test_butterworth_filter_step_accepts_an_already_filtered_signal():
@@ -451,7 +458,8 @@ def test_butterworth_filter_step_accepts_an_already_filtered_signal():
         once["filtered_eit"], eit_sequence=sequence, session=session, label="pass_two"
     )
 
-    assert twice["filtered_eit"].label == "pass_two"
+    assert twice["filtered_eit"].metadata["eitprocessing_fields"]["label"] == "pass_two"
+    assert sequence.eit_data["pass_two"].label == "pass_two"
     assert get_step("eit.butterworth_filter").reads["signal"] is None
 
 

@@ -5,21 +5,156 @@ steps after loading read an eitprocessing ``Sequence``.
 ``file_data_to_sequence`` builds the ``Sequence`` that eitprocessing 1.8.7's
 ``load_eit_data`` gives for the same file, field by field.
 ``load_eit_file_as_sequence`` reads one file and builds its ``Sequence``.
+``sequence_to_file_data`` goes the other way, for a ``Sequence`` from a
+custom loader or a cut ``Sequence``.
 """
 
 from __future__ import annotations
 
+import copy
 import os
 from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
 
-from m3resp.data.events import BreathEvent
+from m3resp.data.event_data import EventData, IntervalData
+from m3resp.data.events import BreathEvent, Event, Interval
+from m3resp.data.signals import Signal
 from m3resp.eit.io.file_data import EITFileData
 from m3resp.eit.io.read_file import read_eit_file
 
 from ._shared import _lazy_import
+
+
+def sequence_to_file_data(sequence: Any) -> EITFileData | None:
+    """Return the m3resp data of an eitprocessing ``Sequence``.
+
+    The result has the fields and labels the m3resp readers give for the same
+    file: the raw images as ``pixel_impedance``, each ``ContinuousData`` as a
+    ``Signal``, each ``SparseData`` as ``EventData`` and each
+    ``IntervalData`` as ``IntervalData`` (of ``BreathEvent``s when its values
+    are breaths).
+
+    Args:
+        sequence (Any): An eitprocessing ``Sequence``, or what a custom loader
+            returns.
+
+    Returns:
+        EITFileData | None: The m3resp data, or None when ``sequence`` has no
+            raw EIT data with images and time (for example the result of a
+            custom loader that returns another kind of object).
+    """
+    eit_collection = getattr(sequence, "eit_data", None)
+    raw = None
+    if eit_collection is not None and "raw" in eit_collection:
+        raw = eit_collection["raw"]
+    if raw is None or not all(
+        hasattr(raw, field) for field in ("pixel_impedance", "time", "vendor")
+    ):
+        return None
+
+    vendor = str(getattr(raw.vendor, "value", raw.vendor))
+    path = getattr(raw, "path", "")
+    path = path[0] if isinstance(path, list | tuple) else path
+    pixel_impedance = Signal(
+        values=raw.pixel_impedance,
+        time=raw.time,
+        sample_frequency=raw.sample_frequency,
+        name=raw.label,
+        modality="eit",
+        category="impedance",
+        channel="pixel_impedance",
+        source=vendor,
+    )
+
+    signals = {}
+    for key, data in getattr(sequence, "continuous_data", {}).items():
+        is_global_impedance = key.startswith("global_impedance")
+        description = getattr(data, "description", "")
+        signals[key] = Signal(
+            values=data.values,
+            time=data.time,
+            sample_frequency=data.sample_frequency,
+            unit=data.unit,
+            name=data.name,
+            metadata={"description": description} if description else {},
+            modality="eit" if is_global_impedance else "ventilator",
+            category=data.category,
+            channel="global_impedance" if is_global_impedance else None,
+            source=vendor,
+        )
+
+    events = {}
+    for key, data in getattr(sequence, "sparse_data", {}).items():
+        values = None if data.values is None else list(data.values)
+        events[key] = EventData(
+            name=key,
+            modality="eit",
+            events=[
+                Event(
+                    name=data.category,
+                    modality="eit",
+                    time=float(time),
+                    label=None if values is None else getattr(values[i], "text", None),
+                )
+                for i, time in enumerate(data.time)
+            ],
+            values=None
+            if values is None
+            else [getattr(value, "marker", value) for value in values],
+            category=data.category,
+            metadata={"description": data.name},
+        )
+
+    intervals = {}
+    for key, data in getattr(sequence, "interval_data", {}).items():
+        values = [] if data.values is None else data.values
+        items: list[Interval] = []
+        for index, interval in enumerate(data.intervals):
+            value = values[index] if index < len(values) else None
+            if value is not None and hasattr(value, "middle_time"):
+                items.append(
+                    BreathEvent(
+                        "eit",
+                        float(value.start_time),
+                        float(value.end_time),
+                        extremum_time=float(value.middle_time),
+                    )
+                )
+            else:
+                items.append(
+                    Interval(
+                        "eit",
+                        float(interval.start_time),
+                        float(interval.end_time),
+                        name=data.category,
+                    )
+                )
+        metadata: dict[str, Any] = {"description": data.name}
+        if hasattr(data, "default_partial_inclusion"):
+            metadata["default_partial_inclusion"] = data.default_partial_inclusion
+        intervals[key] = IntervalData(
+            name=key,
+            modality="eit",
+            intervals=items,
+            values=None
+            if data.values is None
+            or all(hasattr(value, "middle_time") for value in values)
+            else copy.deepcopy(data.values),
+            category=data.category,
+            metadata=metadata,
+        )
+
+    return EITFileData(
+        vendor=vendor,
+        path=os.fspath(path),
+        sample_frequency=raw.sample_frequency,
+        pixel_impedance=pixel_impedance,
+        signals=signals,
+        events=events,
+        intervals=intervals,
+    )
 
 
 def load_eit_file_as_sequence(

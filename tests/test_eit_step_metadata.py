@@ -54,9 +54,10 @@ def test_every_eit_step_declares_some_metadata_and_is_json_safe():
         json.dumps(description.as_dict())
 
 
-def test_every_eit_step_declares_the_optional_eitprocessing_dependency():
+def test_eit_steps_declare_the_packages_they_use():
     for name in _EIT_STEP_NAMES:
-        assert describe_step(name).optional_packages == ("eitprocessing",), name
+        expected = () if name == "eit.slice_signal" else ("eitprocessing",)
+        assert describe_step(name).optional_packages == expected, name
 
 
 def test_eit_load_vendor_choices_match_adapter_error_message():
@@ -143,3 +144,48 @@ def test_roi_threshold_parameters_are_bounded_zero_to_one():
         assert param.minimum == 0.0
         assert param.maximum == 1.0
         assert param.default == 0.15
+
+
+_IMAGE_ARTIFACTS = {
+    ("eit.load", "raw_eit"),
+    ("eit.load", "raw_pixel_impedance_signal"),
+    ("eit.mdn_filter", "signal"),
+    ("eit.mdn_filter", "filtered_eit"),
+    ("eit.butterworth_filter", "signal"),
+    ("eit.butterworth_filter", "filtered_eit_signal"),
+    ("eit.detect_rates", "signal"),
+    ("eit.global_impedance", "signal"),
+    ("eit.regional_impedance", "signal"),
+    ("eit.functional_impedance", "signal"),
+    ("eit.pixel_tiv", "eit_data"),
+    ("eit.pixel_breaths", "eit_data"),
+    ("eit.roi_tiv_lungspace", "eit_data"),
+}
+_WAVEFORM_ARTIFACTS = {
+    ("eit.load", "raw_global_impedance"),
+    ("eit.load", "raw_global_impedance_signal"),
+    ("eit.global_impedance", "global_impedance"),
+    ("eit.regional_impedance", "regional_impedance_signal"),
+    ("eit.functional_impedance", "functional_impedance"),
+    ("eit.detect_breaths", "signal"),
+    ("eit.continuous_tiv", "signal"),
+    ("eit.eeli", "signal"),
+    ("eit.pixel_tiv", "signal"),
+    ("eit.pixel_breaths", "timing_data"),
+    ("eit.roi_watershed", "timing_data"),
+}
+
+
+def test_eit_images_and_impedance_waveforms_have_their_own_labels():
+    labels = {}
+    for name in _EIT_STEP_NAMES:
+        description = describe_step(name)
+        for artifact in (*description.input_artifacts, *description.output_artifacts):
+            labels[name, artifact.name] = artifact
+    for key in _IMAGE_ARTIFACTS:
+        assert labels[key].artifact_type == "eit_pixel_signal", key
+        assert not labels[key].compatibility_only, key
+    for key in _WAVEFORM_ARTIFACTS:
+        assert labels[key].artifact_type == "eit_impedance_waveform", key
+        assert not labels[key].compatibility_only, key
+    assert "signal" not in {artifact.artifact_type for artifact in labels.values()}

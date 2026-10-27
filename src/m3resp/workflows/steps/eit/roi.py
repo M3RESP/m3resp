@@ -80,14 +80,12 @@ def _to_pixel_mask(
             artifact_type="eit_pixel_signal",
             default_context_key="filtered_eit",
             description="Filtered EIT pixel signal to derive the mask from.",
-            compatibility_only=True,
         ),
         StepArtifact(
             name="timing_data",
             artifact_type="eit_impedance_waveform",
             default_context_key="global_impedance",
             description="Impedance waveform (global, or regional from an ROI) supplying breath timing.",
-            compatibility_only=True,
         ),
         _SESSION_ARTIFACT,
     ),
@@ -135,7 +133,8 @@ def roi_tiv_lungspace(
     are recorded in the session's history.
 
     Args:
-        eit_data: eitprocessing pixel data with time, row and column axes.
+        eit_data: EIT images as a ``Signal`` (or an eitprocessing ``EITData``),
+            with time, row and column axes.
         timing_data: Waveform used to detect breaths for mean pixel TIV.
         session: Session that stores the mask and processing history.
         threshold: Fraction of maximum mean pixel TIV required for inclusion,
@@ -211,14 +210,12 @@ def roi_tiv_lungspace(
             artifact_type="eit_pixel_signal",
             default_context_key="filtered_eit",
             description="Filtered EIT pixel signal to derive the mask from.",
-            compatibility_only=True,
         ),
         StepArtifact(
             name="timing_data",
             artifact_type="eit_impedance_waveform",
             default_context_key="global_impedance",
             description="Impedance waveform (global, or regional from an ROI) supplying breath timing.",
-            compatibility_only=True,
         ),
         _SESSION_ARTIFACT,
     ),
@@ -271,7 +268,8 @@ def roi_amplitude_lungspace(
     are recorded in the session's history.
 
     Args:
-        eit_data: eitprocessing pixel data with time, row and column axes.
+        eit_data: EIT images as a ``Signal`` (or an eitprocessing ``EITData``),
+            with time, row and column axes.
         timing_data: Waveform used to detect breaths for mean pixel amplitude.
         session: Session that stores the mask and processing history.
         threshold: Fraction of maximum mean pixel amplitude required for
@@ -340,14 +338,12 @@ def roi_amplitude_lungspace(
             artifact_type="eit_pixel_signal",
             default_context_key="filtered_eit",
             description="Filtered EIT pixel signal to derive the mask from.",
-            compatibility_only=True,
         ),
         StepArtifact(
             name="timing_data",
             artifact_type="eit_impedance_waveform",
             default_context_key="global_impedance",
             description="Impedance waveform (global, or regional from an ROI) supplying breath timing.",
-            compatibility_only=True,
         ),
         _SESSION_ARTIFACT,
     ),
@@ -396,7 +392,8 @@ def roi_watershed(
     settings are recorded in the session's history.
 
     Args:
-        eit_data: eitprocessing pixel data with time, row and column axes.
+        eit_data: EIT images as a ``Signal`` (or an eitprocessing ``EITData``),
+            with time, row and column axes.
         timing_data: Waveform used to detect breaths for the pixel calculations.
         session: Session that stores the mask and processing history.
         threshold_fraction: Fraction of maximum mean pixel TIV used for the

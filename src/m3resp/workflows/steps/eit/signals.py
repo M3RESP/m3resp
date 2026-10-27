@@ -4,13 +4,22 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
+
 from m3resp.adapters.eitprocessing_adapter import (
+    EITPROCESSING_FIELDS,
     add_to_collection,
-    continuous_data_to_signal,
+    as_continuous_data,
+    eit_data_to_signal,
+    eitprocessing_fields,
+    signal_to_continuous_data,
     sparse_data_to_interval_data,
 )
+from m3resp.core.exceptions import UnsupportedWorkflowError
 from m3resp.core.session import M3Session
-from m3resp.data import PixelMask
+from m3resp.data import PixelMask, Signal
+from m3resp.eit.processing import global_impedance as summed_pixels
+from m3resp.eit.processing import regional_impedance as regional_impedance_of
 from m3resp.workflows.registry import (
     ANY_ARTIFACT_TYPE,
     StepArtifact,
@@ -31,7 +40,7 @@ from ._shared import (
     reads={"signal": "filtered_eit", "eit_sequence": "eit_sequence"},
     writes=("global_impedance",),
     summary="Compute and store the global impedance (sum of all pixels) of an EIT signal.",
-    description="Sum pixel impedance across the image to produce the single-channel global impedance waveform used for breath detection.",
+    description="Sum the pixel impedance of each image into the global impedance waveform used for breath detection. m3resp computes the sum (a port of eitprocessing's EITData.get_summed_impedance).",
     category="preprocessing",
     modality="eit",
     optional_packages=_EITPROCESSING,
@@ -41,8 +50,7 @@ from ._shared import (
             name="signal",
             artifact_type="eit_pixel_signal",
             default_context_key="filtered_eit",
-            description="Filtered EIT pixel signal to sum.",
-            compatibility_only=True,
+            description="Filtered EIT images (pixel impedance) to sum.",
         ),
         StepArtifact(
             name="eit_sequence",
@@ -56,8 +64,7 @@ from ._shared import (
         StepArtifact(
             name="global_impedance",
             artifact_type="eit_impedance_waveform",
-            description="Global impedance: the sum of all pixels, with no mask.",
-            compatibility_only=True,
+            description="Global impedance: the sum of all pixels, with no mask, as a Signal.",
         ),
     ),
 )
@@ -66,20 +73,39 @@ def global_impedance(
     *,
     eit_sequence: Any,
 ) -> dict[str, Any]:
-    """Sum pixel impedance into a waveform and add it to the EIT sequence.
+    """Sum the pixels of each image into a waveform and add it to the EIT sequence.
+
+    The sum is ``m3resp.eit.processing.global_impedance``. The waveform is
+    named ``"summed <label>"``, where ``<label>`` is the eitprocessing label of
+    the images, as eitprocessing names it.
 
     Args:
-        signal: eitprocessing pixel data with time, row and column axes.
+        signal: EIT images as a ``Signal`` (or an eitprocessing ``EITData``),
+            with time, row and column axes.
         eit_sequence: Sequence whose continuous-data collection receives
-            the summed impedance waveform.
+            the waveform as an eitprocessing ``ContinuousData``.
 
     Returns:
-        dict[str, Any]: ``global_impedance`` containing the upstream waveform
-            with its time axis and impedance unit.
+        dict[str, Any]: ``global_impedance``, the waveform as a ``Signal``
+            with the time axis of ``signal``, in arbitrary units (AU). Its
+            metadata names the function that computed it.
     """
 
-    summed = signal.get_summed_impedance()
-    add_to_collection(eit_sequence.continuous_data, summed)
+    pixels = signal if isinstance(signal, Signal) else eit_data_to_signal(signal)
+    label = eitprocessing_fields(pixels).get("label", pixels.name)
+    summed = summed_pixels(pixels, name=f"summed {label}")
+    # eitprocessing writes the unit as "AU"; the Signal holds m3resp's "a.u.".
+    summed.metadata[EITPROCESSING_FIELDS] = {"type": "ContinuousData", "unit": "AU"}
+    summed.metadata.update(
+        _upstream_metadata(
+            source_function="m3resp.eit.processing.global_impedance",
+            operation="eit.global_impedance",
+            parameters={},
+            source_package="m3resp",
+            implementation="m3resp.eit.processing.impedance",
+        )
+    )
+    add_to_collection(eit_sequence.continuous_data, signal_to_continuous_data(summed))
     return {"global_impedance": summed}
 
 
@@ -90,6 +116,63 @@ def _mask_label(mask: Any) -> str | None:
         return mask.name
     label = getattr(mask, "label", None)
     return label if isinstance(label, str) else None
+
+
+def _as_mask(mask: Any) -> PixelMask:
+    """Return ``mask`` as an m3resp ``PixelMask``.
+
+    An eitprocessing ``PixelMask`` keeps its values as they are, zeros and
+    weights included, because eitprocessing has checked them. A plain grid
+    runs the checks of ``PixelMask``, so a 0 becomes NaN, as in
+    eitprocessing.
+
+    Args:
+        mask (Any): An m3resp or eitprocessing ``PixelMask``, or a 2D grid
+            of numbers with NaN for pixels outside the region.
+
+    Returns:
+        PixelMask: The mask.
+
+    Raises:
+        UnsupportedWorkflowError: If ``mask`` is of another type or is not a
+            2D grid of numbers.
+    """
+
+    if isinstance(mask, PixelMask):
+        return mask
+    upstream = hasattr(mask, "mask")
+    value = mask.mask if upstream else mask
+    if not isinstance(value, (np.ndarray, list, tuple)):
+        raise UnsupportedWorkflowError(
+            "An ROI mask must be an m3resp PixelMask, an eitprocessing "
+            f"PixelMask, or a 2D array of pixels; got {type(mask).__name__}."
+        )
+    try:
+        grid = np.asarray(value)
+    except (TypeError, ValueError) as error:
+        raise UnsupportedWorkflowError(
+            "An ROI mask must be a 2D (row, column) array of numbers."
+        ) from error
+    if grid.ndim != 2:
+        raise UnsupportedWorkflowError(
+            "An ROI mask must be a 2D (row, column) array of pixels; got "
+            f"shape {grid.shape}."
+        )
+    try:
+        if upstream:
+            return PixelMask(
+                name=_mask_label(mask) or "mask",
+                values=grid,
+                keep_zeros=True,
+                suppress_value_range_error=True,
+                suppress_all_nan_warning=True,
+            )
+        return PixelMask(name="mask", values=grid)
+    except TypeError as error:
+        raise UnsupportedWorkflowError(
+            "An ROI mask must be a 2D (row, column) array of numbers "
+            "that can be stored as floats without changing their values."
+        ) from error
 
 
 def _impedance_in_mask(
@@ -103,41 +186,40 @@ def _impedance_in_mask(
 ) -> dict[str, Any]:
     """Sum pixel impedance inside a mask and store the waveform.
 
-    The upstream waveform goes onto the EIT sequence; a native ``Signal``
-    with channel ``output`` goes into ``session.signals``. The returned
-    ``"_provenance"`` details go into the calling step's provenance record.
+    ``m3resp.eit.processing.regional_impedance`` computes the sum. The
+    waveform goes into ``session.signals`` as a ``Signal`` with channel
+    ``output``, and onto the EIT sequence as an eitprocessing
+    ``ContinuousData`` labelled ``output``. The returned ``"_provenance"``
+    details go into the calling step's provenance record.
     """
 
-    waveform = session.eit_adapter.get_regional_impedance(signal, mask, label=output)
-    add_to_collection(eit_sequence.continuous_data, waveform)
+    pixels = signal if isinstance(signal, Signal) else eit_data_to_signal(signal)
+    native = regional_impedance_of(pixels, _as_mask(mask), name=output, channel=output)
+    native.metadata[EITPROCESSING_FIELDS] = {
+        "type": "ContinuousData",
+        "label": output,
+        "name": output.replace("_", " ").capitalize(),
+        "description": "Impedance summed over the pixels of a mask.",
+        "unit": "AU",
+    }
     metadata = _upstream_metadata(
-        source_function=(
-            "eitprocessing.roi.PixelMask.apply + "
-            "eitprocessing.datahandling.eitdata.EITData.get_summed_impedance"
-        ),
+        source_function="m3resp.eit.processing.regional_impedance",
         operation=step,
         parameters={"mask": _mask_label(mask)},
-    )
-    native = continuous_data_to_signal(
-        waveform,
-        modality="eit",
-        channel=output,
-        processing_state="intermediate",
-        source="eitprocessing",
-        method="eitprocessing.PixelMask.apply",
-        name=output,
+        source_package="m3resp",
+        implementation="m3resp.eit.processing.impedance",
     )
     native.metadata.update(metadata)
+    add_to_collection(eit_sequence.continuous_data, signal_to_continuous_data(native))
     session.signals.add(native)
-    return {output: waveform, f"{output}_signal": native, "_provenance": metadata}
+    return {output: native, f"{output}_signal": native, "_provenance": metadata}
 
 
 _PIXEL_SIGNAL_TO_SUM = StepArtifact(
     name="signal",
     artifact_type="eit_pixel_signal",
     default_context_key="filtered_eit",
-    description="Filtered EIT pixel signal to sum.",
-    compatibility_only=True,
+    description="Filtered EIT images (pixel impedance) to sum.",
 )
 
 _SEQUENCE_FOR_WAVEFORM = StepArtifact(
@@ -183,13 +265,12 @@ _SEQUENCE_FOR_WAVEFORM = StepArtifact(
         StepArtifact(
             name="regional_impedance",
             artifact_type="eit_impedance_waveform",
-            description="Regional impedance: the sum of the pixels inside the mask.",
-            compatibility_only=True,
+            description="Regional impedance: the sum of the pixels inside the mask, as a Signal.",
         ),
         StepArtifact(
             name="regional_impedance_signal",
-            artifact_type="signal",
-            description="Native Signal wrapping the regional impedance.",
+            artifact_type="eit_impedance_waveform",
+            description="The same Signal as 'regional_impedance'.",
         ),
     ),
     record=True,
@@ -209,7 +290,8 @@ def regional_impedance(
     recorded in the session's history.
 
     Args:
-        signal: eitprocessing pixel data with time, row and column axes.
+        signal: EIT images as a ``Signal`` (or an eitprocessing ``EITData``),
+            with time, row and column axes.
         mask: An m3resp or eitprocessing ``PixelMask``, or a 2D grid with
             NaN for pixels outside the region; its shape must match the image.
         eit_sequence: Sequence whose continuous-data collection receives the
@@ -217,10 +299,10 @@ def regional_impedance(
         session: Session that stores the waveform and processing history.
 
     Returns:
-        dict[str, Any]: ``regional_impedance``, the upstream waveform with its
-            time axis, in arbitrary units (AU), and ``regional_impedance_signal``, the
-            same waveform as a native ``Signal`` (also added to
-            ``session.signals``).
+        dict[str, Any]: ``regional_impedance`` and
+            ``regional_impedance_signal``, the same waveform as a ``Signal``
+            with the time axis of ``signal``, in arbitrary units (AU), also
+            added to ``session.signals``.
     """
 
     return _impedance_in_mask(
@@ -267,13 +349,12 @@ def regional_impedance(
         StepArtifact(
             name="functional_impedance",
             artifact_type="eit_impedance_waveform",
-            description="Functional impedance: the sum of the pixels inside the functional lung space.",
-            compatibility_only=True,
+            description="Functional impedance: the sum of the pixels inside the functional lung space, as a Signal.",
         ),
         StepArtifact(
             name="functional_impedance_signal",
-            artifact_type="signal",
-            description="Native Signal wrapping the functional impedance.",
+            artifact_type="eit_impedance_waveform",
+            description="The same Signal as 'functional_impedance'.",
         ),
     ),
     record=True,
@@ -292,7 +373,8 @@ def functional_impedance(
     the same as ``eit.regional_impedance``.
 
     Args:
-        signal: eitprocessing pixel data with time, row and column axes.
+        signal: EIT images as a ``Signal`` (or an eitprocessing ``EITData``),
+            with time, row and column axes.
         mask: Functional lung-space mask (m3resp or eitprocessing
             ``PixelMask``, or a 2D grid with NaN outside the lung space).
         eit_sequence: Sequence whose continuous-data collection receives the
@@ -300,10 +382,10 @@ def functional_impedance(
         session: Session that stores the waveform and processing history.
 
     Returns:
-        dict[str, Any]: ``functional_impedance``, the upstream waveform with its
-            time axis, in arbitrary units (AU), and ``functional_impedance_signal``, the
-            same waveform as a native ``Signal`` (also added to
-            ``session.signals``).
+        dict[str, Any]: ``functional_impedance`` and
+            ``functional_impedance_signal``, the same waveform as a ``Signal``
+            with the time axis of ``signal``, in arbitrary units (AU), also
+            added to ``session.signals``.
     """
 
     return _impedance_in_mask(
@@ -330,8 +412,7 @@ def functional_impedance(
             name="signal",
             artifact_type="eit_impedance_waveform",
             default_context_key="detection_signal",
-            description="Continuous impedance signal (typically the detection-window slice) to detect breaths on.",
-            compatibility_only=True,
+            description="Impedance waveform (typically the detection-window slice) to detect breaths on.",
         ),
     ),
     parameters=(
@@ -364,7 +445,8 @@ def detect_breaths(signal: Any, *, min_duration_s: float = 2 / 3) -> dict[str, A
     """Detect breaths on an impedance waveform with eitprocessing.
 
     Args:
-        signal: Global or regional impedance waveform with times in seconds.
+        signal: Global or regional impedance waveform as a ``Signal`` (or an
+            eitprocessing ``ContinuousData``), times in seconds.
         min_duration_s: Minimum separation used by the breath detector,
             in seconds.
 
@@ -378,7 +460,7 @@ def detect_breaths(signal: Any, *, min_duration_s: float = 2 / 3) -> dict[str, A
 
     detector = BreathDetection(minimum_duration=min_duration_s)
     return {
-        "breath_intervals": detector.find_breaths(signal),
+        "breath_intervals": detector.find_breaths(as_continuous_data(signal)),
         "breath_detector": detector,
     }
 
@@ -437,7 +519,6 @@ def normalize_breaths(
             artifact_type="eit_impedance_waveform",
             default_context_key="global_impedance",
             description="Impedance waveform (global, or regional from an ROI) to compute TIV on.",
-            compatibility_only=True,
         ),
         StepArtifact(
             name="eit_sequence",
@@ -484,7 +565,8 @@ def continuous_tiv(
     and the processing step is recorded in the session's history.
 
     Args:
-        signal: Global or regional impedance waveform to measure.
+        signal: Global or regional impedance waveform to measure, as a
+            ``Signal`` (or an eitprocessing ``ContinuousData``).
         eit_sequence: Sequence that stores the upstream result.
         breath_detector: Detector used to identify breaths on ``signal``.
         session: Session that stores the per-breath values and history.
@@ -501,7 +583,10 @@ def continuous_tiv(
     from eitprocessing.parameters.tidal_impedance_variation import TIV
 
     result: Any = TIV(breath_detection=breath_detector).compute_parameter(
-        signal, sequence=eit_sequence, store=False, result_label="continuous_tivs"
+        as_continuous_data(signal),
+        sequence=eit_sequence,
+        store=False,
+        result_label="continuous_tivs",
     )
     add_to_collection(eit_sequence.sparse_data, result)
 
@@ -549,7 +634,6 @@ def continuous_tiv(
             artifact_type="eit_impedance_waveform",
             default_context_key="global_impedance",
             description="Impedance waveform (global, or regional from an ROI) to compute EELI on.",
-            compatibility_only=True,
         ),
         StepArtifact(
             name="eit_sequence",
@@ -606,7 +690,8 @@ def eeli(
     step is recorded in the session's history.
 
     Args:
-        signal: Global or regional impedance waveform to measure.
+        signal: Global or regional impedance waveform to measure, as a
+            ``Signal`` (or an eitprocessing ``ContinuousData``).
         eit_sequence: Sequence that stores the upstream result.
         breath_detector: Detector used to identify breaths on ``signal``.
         session: Session that stores the per-breath values and history.

@@ -54,6 +54,23 @@ class TestStepNames:
 
 
 class TestSliceSignalOnAnM3respSignal:
+    def test_native_slicing_stays_available_without_eitprocessing(self, monkeypatch):
+        import importlib.util
+
+        from m3resp.workflows.registry import step_capability_state
+
+        find_spec = importlib.util.find_spec
+        monkeypatch.setattr(
+            importlib.util,
+            "find_spec",
+            lambda name, *args, **kwargs: (
+                None if name == "eitprocessing" else find_spec(name, *args, **kwargs)
+            ),
+        )
+        assert step_capability_state("eit.slice_signal") == "available"
+        assert step_capability_state("eit.load") == "missing_optional_dependency"
+        assert len(slice_signal(_signal(), start=10, end=20)["result"]) == 10
+
     def test_index_mode_cuts_values_and_time_together(self):
         result = slice_signal(_signal(), start=10, end=20, mode="index")["result"]
 
@@ -90,3 +107,18 @@ class TestSliceSignalOnAnM3respSignal:
     def test_a_window_with_no_samples_is_refused(self):
         with pytest.raises(ValueError, match="keeps no samples"):
             slice_signal(_signal(), start=0.0, end=1.0, mode="time")
+
+    def test_inclusive_time_bounds_keep_the_neighbouring_samples(self):
+        result = slice_signal(
+            _signal(),
+            start=36529.54,
+            end=36530.54,
+            mode="time",
+            start_inclusive=True,
+            end_inclusive=True,
+        )["result"]
+        assert result.values.tolist() == list(range(10, 22))
+
+    def test_time_flags_in_index_mode_are_refused(self):
+        with pytest.raises(ValueError, match="mode='time'"):
+            slice_signal(_signal(), start=10, end=20, end_inclusive=True)

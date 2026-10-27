@@ -21,6 +21,9 @@ from m3resp.adapters.ventilator_adapter import (
     ventilator_payload_from_sequence,
 )
 from m3resp.core.exceptions import UnsupportedWorkflowError
+from m3resp.data import Signal
+from m3resp.eit.io import EITFileData
+from m3resp.modalities.eit import EITRecording
 
 FS = 20.0
 N = 400
@@ -206,7 +209,56 @@ class TestPayload:
         }
 
 
+@pytest.mark.parametrize("kind", ["reader", "recording"])
+def test_native_waveforms_are_read_without_accessing_a_sequence(kind):
+    from pathlib import Path
+
+    upstream = _draeger()
+    time = np.arange(N) / FS
+    signals = {
+        key: Signal(
+            values=data.values,
+            time=data.time,
+            unit=data.unit,
+            sample_frequency=FS,
+            name=data.name,
+            source="draeger",
+        )
+        for key, data in upstream.continuous_data.items()
+    }
+    pixels = Signal(values=np.zeros((N, 2, 2)), time=time, sample_frequency=FS)
+    native = EITFileData(
+        vendor="draeger",
+        path="recording.bin",
+        sample_frequency=FS,
+        pixel_impedance=pixels,
+        signals=signals,
+    )
+    if kind == "recording":
+        native = EITRecording(
+            data=object(),
+            paths=(Path("recording.bin"),),
+            pixel_impedance=pixels,
+            signals=signals,
+        )
+
+    actual = ventilator_payload_from_sequence(native)
+    expected = ventilator_payload_from_sequence(upstream)
+
+    np.testing.assert_array_equal(actual["array"], expected["array"])
+    np.testing.assert_array_equal(
+        actual["metadata"].pop("time"), expected["metadata"].pop("time")
+    )
+    assert actual["metadata"] == expected["metadata"]
+
+
 class TestPayloadErrors:
+    def test_channels_on_different_time_axes_are_refused(self):
+        sequence = _draeger()
+        sequence.continuous_data["flow"].time = np.arange(N) / FS + 0.01
+        with pytest.raises(UnsupportedWorkflowError, match="different time axis"):
+            ventilator_payload_from_sequence(sequence)
+
     def test_a_missing_channel_names_what_is_available(self):
         sequence = _Sequence(
             _ContinuousData("airway pressure", _wave(10.0), unit="mbar")
