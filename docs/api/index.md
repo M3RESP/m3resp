@@ -139,6 +139,22 @@ These functions load one recording without a session.
    m3resp.io.load_emg
 ```
 
+## Read EIT files
+
+These functions read one EIT file of a Draeger, Sentec or Timpel device. Each returns an `EITFileData` with the images, the waveforms, the marks of the device and, for Timpel, the breaths found by the device. `read_eit_file` picks the reader from the device maker.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   m3resp.eit.io.read_eit_file
+   m3resp.eit.io.read_draeger
+   m3resp.eit.io.read_sentec
+   m3resp.eit.io.read_timpel
+   m3resp.eit.io.EITFileData
+```
+
 ## Plots
 
 These functions make figures with Matplotlib.
