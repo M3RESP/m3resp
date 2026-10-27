@@ -201,7 +201,7 @@
       "id": "preprocess",
       "in": {},
       "out": {
-        "processed_emg": "processed_emg_before_ecg"
+        "processed_emg": "processed_emg"
       },
       "uses": "emg.preprocess",
       "with": {
@@ -260,7 +260,7 @@
       "out": {},
       "uses": "emg.detect_breaths",
       "with": {
-        "min_breath_width_seconds": 1.0
+        "min_breath_width_seconds": 0.85
       }
     },
     {

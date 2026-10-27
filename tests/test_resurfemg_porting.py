@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import sys
 import os
 import warnings
 from pathlib import Path
@@ -381,71 +381,78 @@ def test_synchronization_comparison_uses_raw_eit_signal_when_filtered_exists():
         plt.close(fig)
 
 
-# NOTE: AssertionError
-def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
+def _snapshot(title, ylabel, before_time, before_values, after_time, after_values):
+    return {
+        "before": {
+            "title": title,
+            "time": before_time,
+            "values": before_values,
+            "ylabel": ylabel,
+        },
+        "after": {
+            "title": title,
+            "time": after_time,
+            "values": after_values,
+            "ylabel": ylabel,
+        },
+    }
+
+
+def test_synchronization_comparison_uses_raw_sync_snapshots_when_available(
+    monkeypatch,
+):
+    """Raw-sync path: traces come from the stored snapshots, and event markers
+    are moved onto the shared clock with ``shared_clock_shifts``, the same
+    shift the "after" snapshots were built with.
+    """
     plt = pytest.importorskip("matplotlib.pyplot")
+
+    # EMG starts 2 ms later on the shared clock. Patch the name where the
+    # plotting module looks it up, without hard-coding the module path.
+    plotting_module = sys.modules[plot_synchronization_comparison.__module__]
+    monkeypatch.setattr(
+        plotting_module,
+        "shared_clock_shifts",
+        lambda session: {"emg": -0.002, "eit": 0.0, "vent": 0.0},
+    )
+
     session = M3Session()
     session.processed["raw_synchronization"] = {
-        "emg": {
-            "before": {
-                "title": "EMG raw (EMG)",
-                "time": [0.0, 0.001, 0.002, 0.003],
-                "values": [0.0, 0.0, 1.0, 2.0],
-                "ylabel": "EMG amplitude (uV)",
-            },
-            "after": {
-                "title": "EMG raw (EMG)",
-                "time": [0.002, 0.003],
-                "values": [1.0, 2.0],
-                "ylabel": "EMG amplitude (uV)",
-            },
-        },
-        "vent_pressure": {
-            "before": {
-                "title": "Ventilator pressure",
-                "time": [0.0, 0.01, 0.02],
-                "values": [8.0, 9.0, 10.0],
-                "ylabel": "Pressure",
-            },
-            "after": {
-                "title": "Ventilator pressure",
-                "time": [0.01, 0.02],
-                "values": [9.0, 10.0],
-                "ylabel": "Pressure",
-            },
-        },
-        "vent_flow": {
-            "before": {
-                "title": "Ventilator flow",
-                "time": [0.0, 0.01, 0.02],
-                "values": [0.0, 0.5, 0.0],
-                "ylabel": "Flow",
-            },
-            "after": {
-                "title": "Ventilator flow",
-                "time": [0.01, 0.02],
-                "values": [0.5, 0.0],
-                "ylabel": "Flow",
-            },
-        },
-        "vent_volume": {
-            "before": {
-                "title": "Ventilator volume",
-                "time": [0.0, 0.01, 0.02],
-                "values": [100.0, 125.0, 150.0],
-                "ylabel": "Volume",
-            },
-            "after": {
-                "title": "Ventilator volume",
-                "time": [0.01, 0.02],
-                "values": [125.0, 150.0],
-                "ylabel": "Volume",
-            },
-        },
+        # "after" = "before" shifted by -0.002 s and cropped to the overlap.
+        "emg": _snapshot(
+            "EMG raw (EMG)",
+            "EMG amplitude (uV)",
+            [0.0, 0.001, 0.002, 0.003],
+            [0.0, 0.0, 1.0, 2.0],
+            [0.0, 0.001],
+            [1.0, 2.0],
+        ),
+        "vent_pressure": _snapshot(
+            "Ventilator pressure",
+            "Pressure",
+            [0.0, 0.01, 0.02],
+            [8.0, 9.0, 10.0],
+            [0.01, 0.02],
+            [9.0, 10.0],
+        ),
+        "vent_flow": _snapshot(
+            "Ventilator flow",
+            "Flow",
+            [0.0, 0.01, 0.02],
+            [0.0, 0.5, 0.0],
+            [0.01, 0.02],
+            [0.5, 0.0],
+        ),
+        "vent_volume": _snapshot(
+            "Ventilator volume",
+            "Volume",
+            [0.0, 0.01, 0.02],
+            [100.0, 125.0, 150.0],
+            [0.01, 0.02],
+            [125.0, 150.0],
+        ),
     }
-    session.parameters["raw_alignment"] = {
-        "offset_seconds": {"eit": 0.0, "emg": -0.002, "vent": 0.0}
-    }
+    # Breath peak at the 2.0 sample (t = 0.003 s on the original EMG clock).
     session.add_events(
         "emg_breaths",
         [BreathEvent("emg", 0.002, 0.004, extremum_time=0.003)],
@@ -464,31 +471,50 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
             volume_before_ax,
             volume_after_ax,
         ) = fig.axes
+
+        # EMG: traces straight from the snapshots.
+        assert list(emg_before_ax.lines[0].get_xdata()) == [0.0, 0.001, 0.002, 0.003]
         assert list(emg_before_ax.lines[0].get_ydata()) == [0.0, 0.0, 1.0, 2.0]
+        assert list(emg_after_ax.lines[0].get_xdata()) == [0.0, 0.001]
         assert list(emg_after_ax.lines[0].get_ydata()) == [1.0, 2.0]
-        assert list(emg_after_ax.lines[1].get_xdata()) == [0.001, 0.001]
+
+        # EMG markers: original time before, shared-clock time after;
+        # both sit on the 2.0 peak of their own panel.
+        assert list(emg_before_ax.lines[1].get_xdata()) == [0.003, 0.003]
+        assert list(emg_after_ax.lines[1].get_xdata()) == pytest.approx([0.001, 0.001])
+
         assert emg_before_ax.get_title() == "EMG raw (EMG) before synchronization"
         assert emg_after_ax.get_title() == "EMG raw (EMG) after synchronization"
-        assert list(pressure_before_ax.lines[0].get_ydata()) == [8.0, 9.0, 10.0]
-        assert list(pressure_after_ax.lines[0].get_ydata()) == [9.0, 10.0]
-        assert pressure_before_ax.get_title() == (
-            "Ventilator pressure before synchronization"
-        )
-        assert pressure_after_ax.get_title() == (
-            "Ventilator pressure after synchronization"
-        )
-        assert list(flow_before_ax.lines[0].get_ydata()) == [0.0, 0.5, 0.0]
-        assert list(flow_after_ax.lines[0].get_ydata()) == [0.5, 0.0]
-        assert flow_before_ax.get_title() == "Ventilator flow before synchronization"
-        assert flow_after_ax.get_title() == "Ventilator flow after synchronization"
-        assert list(volume_before_ax.lines[0].get_ydata()) == [100.0, 125.0, 150.0]
-        assert list(volume_after_ax.lines[0].get_ydata()) == [125.0, 150.0]
-        assert volume_before_ax.get_title() == (
-            "Ventilator volume before synchronization"
-        )
-        assert volume_after_ax.get_title() == (
-            "Ventilator volume after synchronization"
-        )
+
+        # Ventilator rows: snapshots plotted as stored, no events.
+        for before_ax, after_ax, title, before_y, after_y in (
+            (
+                pressure_before_ax,
+                pressure_after_ax,
+                "Ventilator pressure",
+                [8.0, 9.0, 10.0],
+                [9.0, 10.0],
+            ),
+            (
+                flow_before_ax,
+                flow_after_ax,
+                "Ventilator flow",
+                [0.0, 0.5, 0.0],
+                [0.5, 0.0],
+            ),
+            (
+                volume_before_ax,
+                volume_after_ax,
+                "Ventilator volume",
+                [100.0, 125.0, 150.0],
+                [125.0, 150.0],
+            ),
+        ):
+            assert list(before_ax.lines[0].get_ydata()) == before_y
+            assert list(after_ax.lines[0].get_ydata()) == after_y
+            assert before_ax.get_title() == f"{title} before synchronization"
+            assert after_ax.get_title() == f"{title} after synchronization"
+            assert len(after_ax.lines) == 1  # no ventilator breaths were added
     finally:
         plt.close(fig)
 

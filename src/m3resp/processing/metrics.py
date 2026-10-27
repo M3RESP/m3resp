@@ -294,7 +294,6 @@ def respiratory_rate_from_indices(
         With fewer than two breaths there is no time between breaths to
         measure, so this warns and returns NaN and an empty array.
     """
-
     breath_indices = np.asarray(indices)
     if breath_indices.size < 2:
         warnings.warn(

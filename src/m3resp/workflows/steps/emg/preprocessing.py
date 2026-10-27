@@ -696,7 +696,6 @@ def preprocess(
         ValueError: If envelope settings are given; they belong to
             ``emg.envelope``.
     """
-
     envelope_settings = sorted(set(_ENVELOPE_SETTINGS) & kwargs.keys())
     if envelope_settings:
         raise ValueError(
@@ -714,6 +713,7 @@ def preprocess(
         notch_quality_factor=notch_quality_factor,
         notch_before_bandpass=notch_before_bandpass,
         compute_envelope=False,
+        remove_ecg=False,
         **kwargs,
     )
     return {"processed_emg": processed_emg}
