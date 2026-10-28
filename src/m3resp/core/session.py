@@ -1186,138 +1186,6 @@ class M3Session:
         """Detect EMG breaths and store normalized events.
 
         Args:
-            window_seconds (float): Window length in seconds.
-            step_seconds (float): Time between baseline updates, in seconds.
-            percentile (float): Percentile of the envelope in each window,
-                0 to 100.
-            variant (str | None): Use the `preprocess_emg` result with this
-                name; None uses the current processed EMG.
-
-        Returns:
-            numpy.ndarray: One baseline value per envelope sample, in the
-                units of the envelope.
-
-        Raises:
-            MissingModalityDataError: If there is no processed EMG (or no such
-                variant).
-            ValueError: If the processed EMG has no envelope, or a setting is
-                out of range.
-        """
-
-        from m3resp.workflows.steps.emg.baseline import compute_moving_baseline
-
-        processed = self._processed_emg(variant)
-        if processed is None:
-            raise MissingModalityDataError(
-                "No processed EMG; call preprocess_emg() first."
-            )
-        baseline, signal, parameters = compute_moving_baseline(
-            self,
-            processed,
-            window_seconds=window_seconds,
-            step_seconds=step_seconds,
-            percentile=percentile,
-            variant=variant,
-        )
-        self.signals.items[:] = [
-            existing
-            for existing in self.signals.items
-            if not (existing.modality == "emg" and existing.name == signal.name)
-        ]
-        self.signals.add(signal)
-        self._record("emg_moving_baseline", "emg", variant=variant, **parameters)
-        return baseline
-
-    def emg_slopesum_baseline(
-        self,
-        *,
-        window_seconds: float = 7.5,
-        step_seconds: float = 0.2,
-        percentile: float = 33.0,
-        augmented_percentile: float = 25.0,
-        moving_average_seconds: float = 0.5,
-        percentile_window_seconds: float = 1.0,
-        variant: str | None = None,
-    ) -> Any:
-        """Compute the slope-sum baseline of the EMG envelope (ReSurfEMG).
-
-        The slope-sum baseline is the quiet level of the envelope with its
-        slope added: in each window it is 1.2 times a percentile of the
-        envelope plus its absolute, smoothed slope. The calculation is the
-        same as in the ``emg.slopesum_baseline`` step. Breath detection
-        measures its threshold above this level, so pass it on, with the same
-        ``variant``::
-
-            baseline = session.emg_slopesum_baseline()
-            session.detect_emg_breaths(baseline=baseline)
-
-        Three signals are added to `session.signals`:
-        ``<channel>_slopesum_baseline``, and the running mean and running
-        standard deviation of the moving baseline,
-        ``<channel>_slopesum_baseline_running_mean`` and ``..._running_std``
-        (each with ``:<variant>`` at the end for a variant). They replace the
-        ones from an earlier call. The call is recorded in
-        `session.provenance`.
-
-        Args:
-            window_seconds (float): Window length in seconds.
-            step_seconds (float): Time between updates of the moving
-                baseline, in seconds.
-            percentile (float): Percentile of the envelope in each window for
-                the moving baseline, 0 to 100.
-            augmented_percentile (float): Percentile of the envelope plus its
-                slope in each window, 0 to 100.
-            moving_average_seconds (float): Smoothing window of the envelope
-                slope, in seconds.
-            percentile_window_seconds (float): Time between updates of the
-                slope-sum baseline, in seconds.
-            variant (str | None): Use the `preprocess_emg` result with this
-                name; None uses the current processed EMG.
-
-        Returns:
-            numpy.ndarray: One baseline value per envelope sample, in the
-                units of the envelope.
-
-        Raises:
-            MissingModalityDataError: If there is no processed EMG (or no such
-                variant).
-            ValueError: If the processed EMG has no envelope, or a setting is
-                out of range.
-        """
-
-        from m3resp.workflows.steps.emg.baseline import compute_slopesum_baseline
-
-        processed = self._processed_emg(variant)
-        if processed is None:
-            raise MissingModalityDataError(
-                "No processed EMG; call preprocess_emg() first."
-            )
-        baseline, signals, _detail, parameters = compute_slopesum_baseline(
-            self,
-            processed,
-            window_seconds=window_seconds,
-            step_seconds=step_seconds,
-            percentile=percentile,
-            augmented_percentile=augmented_percentile,
-            moving_average_seconds=moving_average_seconds,
-            percentile_window_seconds=percentile_window_seconds,
-            variant=variant,
-        )
-        names = {signal.name for signal in signals}
-        self.signals.items[:] = [
-            existing
-            for existing in self.signals.items
-            if not (existing.modality == "emg" and existing.name in names)
-        ]
-        for signal in signals:
-            self.signals.add(signal)
-        self._record("emg_slopesum_baseline", "emg", variant=variant, **parameters)
-        return baseline
-
-    def detect_emg_breaths(self, *, variant: str | None = None, **kwargs: Any) -> Any:
-        """Detect EMG breaths and store normalized events.
-
-        Args:
             variant (str | None): Detect breaths in the `preprocess_emg`
                 result with this name, stored under
                 `session.events["emg_breaths:<name>"]`. See
@@ -1336,13 +1204,20 @@ class M3Session:
         else:
             data = data or self._require_raw("emg").data
             event_key = "emg_breaths"
-        events = self.emg_adapter.detect_breaths(data, **kwargs)
+
+        events = self.emg_adapter.detect_breaths(
+            data,
+            **kwargs,
+            **{"distance_seconds": 0.5} if "distance_seconds" not in kwargs else {},
+        )
         self.add_events(event_key, events)
         recorded = dict(kwargs)
         if "baseline" in recorded:
             # The baseline is a full-length array; record that one was used,
             # not its samples.
             recorded["baseline"] = recorded["baseline"] is not None
+        if "distance_seconds" not in recorded:
+            recorded["distance_seconds"] = 0.5
         self._record("detect_emg_breaths", "emg", variant=variant, **recorded)
         return self.events[event_key]
 

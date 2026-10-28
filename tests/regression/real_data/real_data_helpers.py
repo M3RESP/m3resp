@@ -439,6 +439,7 @@ def emg_spec(
                 "min_breath_width_seconds": s["min_breath_width_seconds"],
                 "prominence_factor": s["prominence_factor"],
                 "merge_close_peaks_within_width": True,
+                "distance_seconds": s["min_breath_width_seconds"],
             },
         },
         {"uses": "emg.peak_indices"},

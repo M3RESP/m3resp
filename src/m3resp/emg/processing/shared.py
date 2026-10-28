@@ -315,7 +315,7 @@ def _require_integer_valued_sample_frequency(sample_frequency: float) -> int:
     """
     if not np.isfinite(sample_frequency) or sample_frequency <= 0:
         msg = f"sample_frequency must be finite and positive; got {sample_frequency!r}."
-        raise MutuallyExclusiveArgsError(msg)
+        raise ValueError(msg)
     if float(sample_frequency).is_integer():
         return int(sample_frequency)
     msg = (

@@ -79,9 +79,6 @@ class TestEmgLoad:
                 }
             )
 
-    @pytest.mark.skipif(
-        not Path("unused.Poly5").exists(), reason="session recordings not on disk"
-    )
     def test_injected_loader_still_produces_native_signals(self):
         """A session's custom loader still yields native per-channel signals."""
         from m3resp.emg import ReSurfEMG

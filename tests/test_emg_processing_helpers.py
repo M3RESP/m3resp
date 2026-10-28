@@ -250,14 +250,6 @@ class TestIntegerSampleFrequency:
         ):
             shared._require_integer_valued_sample_frequency(fs)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Bug: a non-finite or non-positive rate raises "
-            "MutuallyExclusiveArgsError, which is not a ValueError, although "
-            "the docstring says ValueError."
-        ),
-    )
     def test_invalid_rate_raises_value_error(self):
         """Known bug (xfail): invalid rates should raise ValueError as documented."""
         with pytest.raises(ValueError):
