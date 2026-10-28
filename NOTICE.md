@@ -12,8 +12,17 @@ ReSurfEMG
   For the 'development of a software tool for automated surface EMG' project.
 ```
 
-Source: https://github.com/resurfemg-org/ReSurfEMG  
+Source: <https://github.com/resurfemg-org/ReSurfEMG>  
 License: Apache License, Version 2.0
+
+The files in `src\m3resp\emg` reimplement ReSurfEMG's original methods in m3resp; see the
+per-module "Provenance" notes in those files for the specific functions and
+upstream revision:
+
+- `src/m3resp/emg/processing/ecg.py`
+- `src/m3resp/emg/processing/quality.py`
+- `src/m3resp/emg/processing/baseline.py`
+- `src/m3resp/emg/processing/shared.py`
 
 Portions of `src/m3resp/processing/peaks.py`, `src/m3resp/processing/windows.py`,
 `src/m3resp/processing/metrics.py`, `src/m3resp/processing/intervals.py`,
@@ -22,15 +31,15 @@ are derived from ReSurfEMG; see the
 per-module "Provenance" notes in those files for the specific functions and
 upstream revision.
 
-
 ## eitprocessing
+
 ```
 eitprocessing
   This product includes eitprocessing, software developed by Netherlands eScience 
   Center, Erasmus MC.
 ```
 
-Source: https://github.com/EIT-ALIVE/eitprocessing  
+Source: <https://github.com/EIT-ALIVE/eitprocessing>  
 License: Apache License, Version 2.0
 
 Portions of `src/m3resp/processing/filters.py`,
