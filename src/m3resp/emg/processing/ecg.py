@@ -34,7 +34,7 @@ import numpy as np
 import pandas as pd
 import pywt
 
-from m3resp.core.utilities import capture_value
+from m3resp.processing.captures import capture_value
 from m3resp.processing.filters import bandpass_filter
 from m3resp.processing.windows import rolling_rms  # TODO: check correctness
 

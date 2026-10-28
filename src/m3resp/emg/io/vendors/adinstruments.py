@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 from prettytable import PrettyTable
 
-from m3resp.core.utilities import _validate_incompatible_kwargs
+from m3resp.processing.validation import _validate_incompatible_kwargs
 
 KT = TypeVar("KT")
 VT = TypeVar("VT")

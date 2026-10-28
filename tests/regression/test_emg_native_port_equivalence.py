@@ -862,8 +862,6 @@ def test_evaluate_respiratory_rates_defaults(adapter, native, breaths):
 # -- signal-shaping helpers --------------------------------------------------
 
 
-# TODO: keys in the native implementation don't match keys in the adapter.
-@VENTILATOR_SIGNALS_HELPER
 def test_ventilator_signals_helper_is_identical():
     rng = np.random.default_rng(seed=1)
     recording = {"array": rng.normal(size=(3, 500)), "metadata": {"fs": 100.0}}
@@ -874,7 +872,7 @@ def test_ventilator_signals_helper_is_identical():
         actual = native_signals.ventilator_signals(recording, fs=fs, **kwargs)
 
         assert actual.keys() == expected.keys()
-        for key in ("pressure", "flow", "volume", "fs"):
+        for key in ("airway_pressure", "flow", "volume", "fs"):
             assert_identical(actual[key], expected[key], key)
         assert actual["metadata"] == expected["metadata"]
 

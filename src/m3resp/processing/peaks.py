@@ -130,6 +130,7 @@ def detect_emg_breath_peaks(
     threshold: float = 0,
     prominence_factor: float = 0.5,
     min_peak_width_samples: int | None = None,
+    distance_samples: float | None = None,
     **kwargs,
 ) -> np.ndarray:
     """Identify breaths in EMG envelope.
@@ -147,6 +148,7 @@ def detect_emg_breath_peaks(
         prominence_factor (float): Required prominence of peaks, relative to the
             75th - 50th percentile of the emg_env above the baseline.
         min_peak_width_samples (int): Required width of peak in samples.
+        distance_samples (float, optional): Minimum interpeak distance in samples.
         kwargs: ReSurfEMG backwards-compatible alternative keyword arguments for
             `baseline` and `min_peak_width_samples`:
             - `emg_baseline` (numpy.ndarray, optional): EMG baseline. If none provided,
@@ -180,12 +182,17 @@ def detect_emg_breath_peaks(
     prominence = prominence_factor * (
         np.nanpercentile(delta, 75) + np.nanpercentile(delta, 50)
     )
-    return detect_peaks(
+    peaks = detect_peaks(
         envelope,
         height=threshold,
         prominence=prominence,
         width=min_peak_width_samples,
     )
+    if distance_samples is not None:
+        peaks = merge_close_peaks(
+            peaks, envelope, min_distance_samples=distance_samples
+        )
+    return peaks
 
 
 # NOTE ported from resurfemg.postprocessing.event_detection.detect_ventilator_breath
@@ -200,6 +207,7 @@ def detect_ventilator_breath_peaks(
     prominence: float | None = None,
     threshold_refined: float | None = None,
     prominence_refined: float | None = None,
+    distance_samples: float | None = None,
     **kwargs,
 ) -> np.ndarray:
     """Identify breaths in ventilator volume data.
@@ -224,6 +232,7 @@ def detect_ventilator_breath_peaks(
             detection. Defaults to None.
         prominence_refined (int | None, optional): Refined prominence for peak
             detection. Defaults to None.
+        distance_samples (float | None, optional): Minimum interpeak distance in samples.
         kwargs (Any): ReSurfEMG backwards-compatible alternative keyword arguments for
             `threshold_refined` and `prominence_refined`:
             - `threshold_new` (int | None, optional): Refined threshold for peak
@@ -250,6 +259,10 @@ def detect_ventilator_breath_peaks(
         prominence=prominence,
         width=width_samples,
     )
+    if distance_samples is not None:
+        first_pass = merge_close_peaks(
+            first_pass, volume_slice, min_distance_samples=distance_samples
+        )
     threshold_refined = _validate_incompatible_kwargs(
         arg_name1="threshold_refined",
         arg_value1=threshold_refined,
@@ -264,13 +277,18 @@ def detect_ventilator_breath_peaks(
         default_value=0.5 * np.percentile(volume_slice, 90),
         **kwargs,
     )
-
-    return detect_peaks(
+    peaks = detect_peaks(
         volume_slice,
         height=threshold_refined,
         prominence=prominence_refined,
         width=width_samples,
     )
+
+    if distance_samples is not None:
+        peaks = merge_close_peaks(
+            peaks, volume_slice, min_distance_samples=distance_samples
+        )
+    return peaks
 
 
 def detect_occluded_breath_peaks(
@@ -301,7 +319,7 @@ def detect_occluded_breath_peaks(
         end_index (int, optional): End index to stop looking for Pocc manoeuvres.
         prominence_factor (float): Multiplier in setting the minimum peak prominence.
         min_width_seconds (float, optional): Minimum peak width in seconds.
-        distance_seconds (float, optional): Minimum interpeak distance in seconds.seconds
+        distance_seconds (float, optional): Minimum interpeak distance in seconds.
         kwargs: ReSurfEMG backwards-compatible alternative keyword arguments for
             `min_width_seconds` and `distance_seconds`:
             - `min_width_s` (int, optional): Minimum peak width in seconds.

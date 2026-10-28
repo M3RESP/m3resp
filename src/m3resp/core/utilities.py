@@ -63,8 +63,8 @@ def _validate_incompatible_kwargs(
             )
         ```
     """
-    arg_value1 = arg_value1 or kwargs.get(arg_name1)
-    arg_value2 = arg_value2 or kwargs.get(arg_name2)
+    arg_value1 = arg_value1 if arg_value1 is not None else kwargs.get(arg_name1)
+    arg_value2 = arg_value2 if arg_value2 is not None else kwargs.get(arg_name2)
     if arg_value1 is not None and arg_value2 is not None:
         msg_0 = f"{arg_name1} and {arg_name2} cannot both be set at the same time."
         raise MutuallyExclusiveArgsError(msg_0)

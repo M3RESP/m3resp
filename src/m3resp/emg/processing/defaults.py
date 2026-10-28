@@ -503,6 +503,10 @@ def _detect_breaths_default(
 
     min_width_samples = max(1, int(min_breath_width_seconds * fs))
 
+    distance_seconds = kwargs.pop("distance_seconds", None)
+
+    if distance_seconds is not None:
+        kwargs["distance_samples"] = max(1, int(distance_seconds * fs))
     peak_indices = detect_emg_breath_peaks(
         envelope,
         baseline=baseline,
