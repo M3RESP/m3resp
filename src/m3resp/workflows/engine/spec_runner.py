@@ -301,11 +301,28 @@ def _maybe_assemble_eit(result: WorkflowResult) -> None:
 
 
 def _infer_filter_mode(filtered_eit: Any) -> str:
-    """Derive the filter mode from a filtered EIT signal's label."""
+    """Return the filter that made the filtered EIT images.
+
+    Args:
+        filtered_eit (Any): The ``filtered_eit`` output of a workflow: a
+            ``Signal`` from ``eit.mdn_filter`` or ``eit.butterworth_filter``
+            (the step name is in ``metadata["operation"]``), an eitprocessing
+            ``EITData`` (the filter is read from its label), or None.
+
+    Returns:
+        str: ``"mdn"``, the Butterworth mode (``"lowpass"``, ``"highpass"``,
+            ``"bandpass"`` or ``"bandstop"``), or ``"none"``.
+    """
 
     if filtered_eit is None:
         return "none"
-    label = getattr(filtered_eit, "label", "")
+    metadata = getattr(filtered_eit, "metadata", None) or {}
+    operation = metadata.get("operation")
+    if operation == "eit.mdn_filter":
+        return "mdn"
+    if operation == "eit.butterworth_filter":
+        return str(metadata.get("parameters", {}).get("mode", "none"))
+    label = getattr(filtered_eit, "label", None) or ""
     for mode in ("mdn", "lowpass", "bandpass"):
         if mode in label:
             return mode

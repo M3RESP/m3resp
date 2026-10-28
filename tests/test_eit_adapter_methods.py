@@ -19,7 +19,10 @@ import numpy as np
 import pytest
 
 from m3resp.adapters import EITProcessingAdapter
-from m3resp.adapters.eitprocessing_adapter import add_to_collection
+from m3resp.adapters.eitprocessing_adapter import (
+    add_to_collection,
+    signal_to_eit_data,
+)
 from m3resp.core.exceptions import OptionalDependencyError
 from m3resp.data import IntervalData, Signal
 from m3resp.eit.processing import RateDetectionSettings
@@ -100,7 +103,7 @@ def loaded_chain() -> dict[str, Any]:
         heart_rate_hz=rates["heart_rate_hz"],
         label="mdn_filtered",
     )
-    filtered_eit = mdn["filtered_eit"]
+    filtered_eit = signal_to_eit_data(mdn["filtered_eit"])
     filtered_gi = filtered_eit.get_summed_impedance(
         return_label="global_impedance_(mdn_filtered)"
     )
@@ -154,11 +157,38 @@ class TestApplyMdn:
         )
 
         filtered = result["filtered_eit"]
-        assert (
-            filtered.pixel_impedance.shape
-            == loaded_chain["raw_eit"].pixel_impedance.shape
+        assert isinstance(filtered, Signal)
+        assert filtered.values.shape == loaded_chain["raw_eit"].pixel_impedance.shape
+        assert filtered.method == "m3resp.eit.processing.mdn_filter"
+        assert result["filter_captures"]["filtered_data"] is filtered
+
+    def test_the_eitprocessing_images_equal_mdn_filter_of_eitprocessing(
+        self, loaded_chain: dict[str, Any]
+    ):
+        from eitprocessing.filters.mdn import MDNFilter
+
+        rates = loaded_chain["rates"]
+        names = {
+            "label": "mdn_filtered",
+            "name": "MDN-filtered EIT data",
+            "description": "EIT data filtered with MDN heart-rate noise removal.",
+        }
+        expected = MDNFilter(
+            respiratory_rate=rates["respiratory_rate_hz"],
+            heart_rate=rates["heart_rate_hz"],
+        ).apply(loaded_chain["raw_eit"], **names)
+
+        result = loaded_chain["adapter"].apply_mdn(
+            loaded_chain["raw_eit"],
+            respiratory_rate_hz=rates["respiratory_rate_hz"],
+            heart_rate_hz=rates["heart_rate_hz"],
+            **names,
         )
-        assert filtered is not loaded_chain["raw_eit"]
+        filtered = signal_to_eit_data(result["filtered_eit"])
+
+        assert filtered == expected
+        for field in ("label", "name", "description", "path", "vendor"):
+            assert getattr(filtered, field) == getattr(expected, field), field
 
     @pytest.mark.parametrize(
         "respiratory_rate_hz,heart_rate_hz",
@@ -345,13 +375,25 @@ class TestOptionalDependencyBehavior:
         assert isinstance(breaths, IntervalData)
         assert len(breaths.intervals) == 6
 
-    def test_apply_mdn_raises_optional_dependency_error(
+    def test_apply_mdn_runs_without_eitprocessing(
         self, blocked_adapter: EITProcessingAdapter
     ):
-        with pytest.raises(OptionalDependencyError):
-            blocked_adapter.apply_mdn(
-                object(), respiratory_rate_hz=0.3, heart_rate_hz=1.5
-            )
+        fs = 20.0
+        time = np.arange(int(30 * fs)) / fs
+        images = Signal(
+            values=np.sin(2 * np.pi * 1.5 * time)[:, None, None]
+            * np.ones((len(time), 4, 4)),
+            time=time,
+            sample_frequency=fs,
+            name="images",
+            modality="eit",
+        )
+        result = blocked_adapter.apply_mdn(
+            images, respiratory_rate_hz=0.3, heart_rate_hz=1.5
+        )
+        filtered = result["filtered_eit"]
+        assert filtered.values.shape == images.values.shape
+        assert filtered.method == "m3resp.eit.processing.mdn_filter"
 
     def test_find_pixel_breaths_raises_optional_dependency_error(
         self, blocked_adapter: EITProcessingAdapter

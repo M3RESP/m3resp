@@ -75,6 +75,31 @@ def add_to_collection(collection: Any, value: Any) -> None:
         collection.add(value)
 
 
+#: Highest order of a Butterworth filter of EIT images, as in eitprocessing.
+MAX_EIT_BUTTERWORTH_ORDER = 10
+
+
+def check_eit_butterworth_order(order: int) -> None:
+    """Refuse a Butterworth order outside 1 to 10 for EIT images.
+
+    The filter runs forwards and backwards, so the effective order is twice
+    the given order. Higher orders can give unstable or wrong results.
+
+    Args:
+        order (int): The order of the filter.
+
+    Raises:
+        ValueError: If ``order`` is below 1 or above 10.
+    """
+
+    if not 1 <= order <= MAX_EIT_BUTTERWORTH_ORDER:
+        raise ValueError(
+            "The order of a Butterworth filter of EIT images must be from 1 to "
+            f"{MAX_EIT_BUTTERWORTH_ORDER}, got {order}. Higher orders can give "
+            "unstable results."
+        )
+
+
 def filter_pixels_preserving_gaps(
     pixel_impedance: Any,
     *,

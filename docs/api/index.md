@@ -159,7 +159,7 @@ These functions read one EIT file of a Draeger, Sentec or Timpel device. Each re
 
 ## EIT calculations
 
-`global_impedance` sums the pixels of each EIT image into the global impedance waveform. `regional_impedance` and `functional_impedance` sum the pixels inside a mask. Each of these three functions returns a `Signal`. `detect_rates` finds the breathing rate and the heart rate of the EIT images, in Hz, from their frequency spectra. `find_breaths` finds the breaths of an impedance waveform and returns them as `BreathEvent`s. `RateDetectionSettings` and `BreathDetectionSettings` hold the settings of these two functions.
+`global_impedance` sums the pixels of each EIT image into the global impedance waveform. `regional_impedance` and `functional_impedance` sum the pixels inside a mask. Each of these three functions returns a `Signal`. `detect_rates` finds the breathing rate and the heart rate of the EIT images, in Hz, from their frequency spectra. `find_breaths` finds the breaths of an impedance waveform and returns them as `BreathEvent`s. `RateDetectionSettings` and `BreathDetectionSettings` hold the settings of these two functions. `mdn_filter` removes the heart signal from EIT images or a waveform with the MDN (multiple digital notch) filter and returns a `Signal`; `mdn_frequency_bands` gives the frequency bands that it removes.
 
 ```{eval-rst}
 .. autosummary::
@@ -173,6 +173,8 @@ These functions read one EIT file of a Draeger, Sentec or Timpel device. Each re
    m3resp.eit.processing.RateDetectionSettings
    m3resp.eit.processing.find_breaths
    m3resp.eit.processing.BreathDetectionSettings
+   m3resp.eit.processing.mdn_filter
+   m3resp.eit.processing.mdn_frequency_bands
    m3resp.eit.processing.slicing.slice_file_data
    m3resp.processing.slicing.slice_by_index
    m3resp.processing.slicing.slice_by_time

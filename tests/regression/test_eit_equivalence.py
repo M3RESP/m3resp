@@ -54,6 +54,8 @@ class _FakeEITData:
         self.pixel_impedance = pixel_impedance
         self.sample_frequency = sample_frequency
         self.time = time
+        # Every eitprocessing EITData has a device maker.
+        self.vendor = "draeger"
 
     def get_summed_impedance(self, return_label: str | None = None, **_: Any):
         summed = self.pixel_impedance.sum(axis=(1, 2))

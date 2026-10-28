@@ -45,7 +45,7 @@ The packages give no default for these settings, so M3Resp chose the values. Eac
 
 | Step | Setting | Value |
 |---|---|---|
-| `eit.butterworth_filter` | `mode` / `lowpass_hz` / `highpass_hz` / `order` | `lowpass` / 1.0 Hz / 0.05 Hz / 4 |
+| `eit.butterworth_filter` | `mode` / `lowpass_hz` / `highpass_hz` / `order` | `lowpass` / 1.0 Hz / 0.05 Hz / 4 (1 to 10) |
 | `emg.detect_breaths` | shortest breath (`min_breath_width_seconds`) | 0.5 s |
 | `ventilator.detect_breaths` | `breath_width_seconds` | 0.5 s |
 | `ventilator.detect_pressure_breaths` | `smoothing_seconds` / `min_depth` / `min_interval_seconds` | 0.2 s / 0.15 / 2.0 s |
@@ -67,9 +67,9 @@ The packages give no default for these settings, so M3Resp chose the values. Eac
 | | Welch overlap | 0.5 | m3resp (same as eitprocessing) |
 | | breathing rate, adult / neonate | 6 to 60 /min / 15 to 85 /min | m3resp (same as eitprocessing) |
 | | heart rate, adult / neonate | 40 to 200 /min / 90 to 210 /min | m3resp (same as eitprocessing) |
-| `eit.mdn_filter` | upper noise limit | 220 /min | eitprocessing |
-| | notch distance | 10 /min | eitprocessing |
-| | filter order | 10 | eitprocessing |
+| `eit.mdn_filter` | upper noise limit | 220 /min | m3resp (same as eitprocessing), can be set with `noise_frequency_limit_hz` |
+| | notch distance | 10 /min | m3resp (same as eitprocessing), can be set with `notch_distance_hz` |
+| | filter order | 10 | m3resp (same as eitprocessing), can be set with `order` (1 to 10) |
 | `eit.butterworth_filter` | see section 2 | | m3resp |
 | `eit.pixel_breaths` | `phase_correction_mode` | negative amplitude | m3resp (same as eitprocessing) |
 | | `minimum_duration_seconds` | 0.67 s | m3resp (same as eitprocessing) |

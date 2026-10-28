@@ -13,7 +13,7 @@ To select the filter, set `filter_mode`:
 | `"bandpass"` | A Butterworth band-pass filter from `highpass_hz` (default 0.05 Hz) to `lowpass_hz` (default 1.0 Hz). |
 | `"none"` | No filter. |
 
-`filter_order` sets the order of the low-pass and band-pass filters (default 4).
+`filter_order` sets the order of the low-pass and band-pass filters (default 4, from 1 to 10).
 
 ```python
 session.preprocess_eit(filter_mode="bandpass", highpass_hz=0.05, lowpass_hz=1.0)

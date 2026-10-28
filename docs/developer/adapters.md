@@ -36,7 +36,8 @@ The code is in `src/m3resp/adapters/eitprocessing_adapter/`.
 | `get_raw_eit`, `get_global_impedance`, `get_regional_impedance` | Get the pixel, global or regional impedance from a sequence |
 | `slice_sequence` | Cut native images, waveforms, marks and breaths, then rebuild a sequence |
 | `detect_rates`, `find_breaths` | Find the breathing rate and the heart rate, or the breaths, with `m3resp.eit.processing` |
-| `apply_mdn`, `find_pixel_breaths`, `compute_eeli`, `compute_pixel_tiv` | Run one `eitprocessing` operation each |
+| `apply_mdn` | Remove the heart signal from EIT images with `m3resp.eit.processing.mdn_filter`; the result is a `Signal` |
+| `find_pixel_breaths`, `compute_eeli`, `compute_pixel_tiv` | Run one `eitprocessing` operation each |
 | `compute_tiv_lungspace`, `compute_amplitude_lungspace`, `compute_watershed_lungspace`, `filter_roi_by_size`, `as_pixel_mask` | Make and filter regions of interest |
 | `preprocess(sequence, ...)` | Run rate detection, filter, breath detection, TIV, EELI and pixel TIV in one call. `session.preprocess_eit()` uses it. |
 | `compute_tiv(sequence, compute=...)` | Run a TIV function that you give |

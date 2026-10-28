@@ -63,9 +63,33 @@ breaths = find_breaths(global_impedance, BreathDetectionSettings(minimum_duratio
 
 The steps `eit.detect_rates` and `eit.detect_breaths` run these functions. Their outputs `rate_detector` and `breath_detector` are the settings records. `breath_intervals` is an m3resp `IntervalData` whose `intervals` are the `BreathEvent`s. The TIV, EELI and pixel steps still run eitprocessing, and they make an eitprocessing `BreathDetection` from the settings record.
 
+## Filter the EIT data
+
+`m3resp.eit.processing.mdn_filter` is the MDN filter of eitprocessing. It gives the same numbers as `MDNFilter` of eitprocessing 1.8.7, with the same settings and defaults. The settings are keyword arguments of the function, in Hz:
+
+```python
+# eitprocessing
+from eitprocessing.filters.mdn import MDNFilter
+
+filtered = MDNFilter(respiratory_rate=0.25, heart_rate=1.2).apply(eit_data)
+
+# M3Resp
+from m3resp.eit.processing import mdn_filter
+
+filtered = mdn_filter(raw_eit, respiratory_rate=0.25, heart_rate=1.2)
+```
+
+`raw_eit` is a `Signal` with the EIT images (frames, rows, columns) or one waveform; the result is a new `Signal` with the same shape, unit and time. `noise_frequency_limit` (default 220 per minute), `notch_distance` (default 10 per minute) and `order` (default 10) have the names of eitprocessing. `mdn_frequency_bands(respiratory_rate=..., heart_rate=...)` gives the removed bands without filtering.
+
+`mdn_filter(..., captures={})` fills the dictionary with the keys of eitprocessing: `low_pass_frequency`, `n_harmonics`, `frequency_bands`, and the images before and after the filter as `Signal`s in `unfiltered_data` and `filtered_data`. A pixel with NaN at some samples becomes NaN at every sample, as in eitprocessing; M3Resp also gives a warning that names these pixels.
+
+The Butterworth filters of eitprocessing (`ButterworthFilter`) are `m3resp.processing.filters.butterworth_filter`, a function with the filter type, the cutoff, the sample frequency and the order as arguments. It gives the same numbers. For EIT images, the order is 1 to 10, as in eitprocessing.
+
+The steps `eit.mdn_filter` and `eit.butterworth_filter` run these functions. `eit.mdn_filter` has the settings `noise_frequency_limit_hz`, `notch_distance_hz` and `order`. Both steps give the filtered images as a `Signal` and keep the captures under `filter_captures`. They also add the filtered images to the eitprocessing `Sequence`, for the steps that still run eitprocessing.
+
 ## Filter and detect breaths
 
-`session.preprocess_eit()` runs rate detection, filter, breath detection, TIV, EELI and pixel TIV in one call. The rate detection and the breath detection use `m3resp.eit.processing`; the other parts use eitprocessing. Each part has settings in `preprocess_eit`:
+`session.preprocess_eit()` runs rate detection, filter, breath detection, TIV, EELI and pixel TIV in one call. The rate detection, the filters and the breath detection use M3Resp code; TIV, EELI and pixel TIV use eitprocessing. Each part has settings in `preprocess_eit`:
 
 | `eitprocessing` | Settings of `preprocess_eit` |
 |---|---|

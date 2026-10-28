@@ -443,6 +443,26 @@ def test_preprocess_rates_match_golden(dataset: str, preprocess_results: dict) -
 
 
 @pytest.mark.parametrize("dataset", DATASETS)
+def test_preprocess_mdn_filter_matches_golden(
+    dataset: str, preprocess_results: dict
+) -> None:
+    result = preprocess_results[dataset]
+    golden = _golden(dataset, "mdn_filter")
+    assert result["filter_mode"] == "mdn"
+    assert_matches(
+        result["filtered_eit"].pixel_impedance, golden["pixel_impedance"], "pixels"
+    )
+    for key, expected in golden.items():
+        if key.startswith("captures/"):
+            assert_matches(
+                result["filter_captures"][key.removeprefix("captures/")], expected, key
+            )
+    stored = result["sequence"].eit_data["mdn_filtered"]
+    assert stored is result["filtered_eit"]
+    assert stored.name == "MDN-filtered EIT data"
+
+
+@pytest.mark.parametrize("dataset", DATASETS)
 def test_preprocess_breaths_match_golden(
     dataset: str, preprocess_results: dict
 ) -> None:

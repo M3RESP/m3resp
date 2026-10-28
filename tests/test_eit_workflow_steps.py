@@ -20,6 +20,11 @@ from typing import Any
 import numpy as np
 import pytest
 
+from m3resp.adapters.eitprocessing_adapter import (
+    EITPROCESSING_FIELDS,
+    as_signal,
+    eitprocessing_fields,
+)
 from m3resp.core.exceptions import WorkflowSpecError
 from m3resp.core.session import M3Session
 from m3resp.data import (
@@ -28,9 +33,11 @@ from m3resp.data import (
     IntervalData,
     PixelMap,
     PixelMask,
+    Signal,
     pixel_breath_events,
 )
 from m3resp.workflows import available_steps, run_workflow
+from m3resp.workflows.engine.spec_runner import _infer_filter_mode
 from m3resp.workflows.registry import get_step
 from m3resp.workflows.spec import load_spec
 from m3resp.workflows.steps.eit import (
@@ -194,9 +201,25 @@ class _FakeAdapter:
         *,
         respiratory_rate_hz: float,
         heart_rate_hz: float,
+        label: str = "filtered",
+        name: str | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        filtered = _FakeEITData(signal.pixel_impedance, signal.time, label="filtered")
+        images = as_signal(signal)
+        filtered = Signal(
+            values=images.values,
+            time=images.time,
+            sample_frequency=images.sample_frequency,
+            name=name or images.name,
+            metadata={
+                EITPROCESSING_FIELDS: {**eitprocessing_fields(images), "label": label}
+            },
+            modality="eit",
+            category="impedance",
+            channel="pixel_impedance",
+            source="draeger",
+            processing_state="intermediate",
+        )
         return {"filtered_eit": filtered, "filter_captures": {}}
 
     def compute_eeli(
@@ -393,7 +416,8 @@ def test_detect_rates_rejects_an_implausible_rate(rate_name, rate):
         _detect_rates_with(rate_name, rate)
 
 
-def test_mdn_filter_step_works_without_eitprocessing_and_matches_declared_writes():
+def test_mdn_filter_step_matches_declared_writes():
+    pytest.importorskip("eitprocessing")
     session = _session_with_fake_adapter()
     raw = _FakeEITData(np.ones((4, 2, 2)), time=np.arange(4, dtype=float))
     sequence = _FakeSequence(raw)
@@ -411,8 +435,34 @@ def test_mdn_filter_step_works_without_eitprocessing_and_matches_declared_writes
     assert result["filtered_eit_signal"].channel == "pixel_impedance"
     assert result["filtered_eit"] is result["filtered_eit_signal"]
     np.testing.assert_array_equal(
-        sequence.eit_data["filtered"].pixel_impedance, result["filtered_eit"].values
+        sequence.eit_data["mdn_filtered"].pixel_impedance,
+        result["filtered_eit"].values,
     )
+    assert result["filtered_eit"].metadata["operation"] == "eit.mdn_filter"
+    assert result["filtered_eit"].metadata["source_package"] == "m3resp"
+    assert _infer_filter_mode(result["filtered_eit"]) == "mdn"
+
+
+@pytest.mark.parametrize(
+    ("metadata", "label", "mode"),
+    [
+        ({"operation": "eit.mdn_filter"}, None, "mdn"),
+        (
+            {"operation": "eit.butterworth_filter", "parameters": {"mode": "bandstop"}},
+            None,
+            "bandstop",
+        ),
+        ({}, "lowpass_filtered", "lowpass"),
+        ({}, None, "none"),
+    ],
+)
+def test_the_filter_mode_of_a_workflow_comes_from_the_filtered_images(
+    metadata: dict, label: str | None, mode: str
+):
+    filtered = SimpleNamespace(metadata=metadata, label=label)
+
+    assert _infer_filter_mode(filtered) == mode
+    assert _infer_filter_mode(None) == "none"
 
 
 @pytest.mark.parametrize("mode", ["lowpass", "highpass", "bandpass", "bandstop"])

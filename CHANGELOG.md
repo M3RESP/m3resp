@@ -43,6 +43,19 @@ Three cases give a different result from eitprocessing 1.8.7:
 - When no frequency of the spectrum lies inside a rate range, `detect_rates` gives a ValueError that names the range in breaths per minute. eitprocessing stops with a numpy error.
 - When the first and the last valley are removed and no valley is left, `find_breaths` gives no breaths. eitprocessing stops with an IndexError.
 
+### m3resp filters the EIT data
+
+`eit.mdn_filter`, `EITProcessingAdapter.apply_mdn` and `session.preprocess_eit()` (filter `"mdn"`) remove the heart signal with `m3resp.eit.processing.mdn_filter`. The function is copied from `MDNFilter` of eitprocessing 1.8.7 and gives the same numbers, with the same settings and defaults. `mdn_frequency_bands` gives the bands that the filter removes. `eit.butterworth_filter` and `session.preprocess_eit()` (filters `"lowpass"` and `"bandpass"`) run `m3resp.processing.filters.butterworth_filter`, which gives the same numbers as eitprocessing's `ButterworthFilter`.
+
+Changes that a user can see:
+
+- `eit.mdn_filter` has three new settings: `noise_frequency_limit_hz` (default 220 per minute), `notch_distance_hz` (default 10 per minute) and `order` (default 10, from 1 to 10). The defaults give the same result as before.
+- `apply_mdn` returns the filtered images as a `Signal`. Before, it returned an eitprocessing `EITData`.
+- In `filter_captures` of both steps and of `session.preprocess_eit()`, `unfiltered_data` and `filtered_data` are the images before and after the filter as `Signal`s. Before, they were eitprocessing `EITData` objects (MDN) or arrays (Butterworth).
+- The filtered images have the device maker in `source` and the filter function in `method`. The provenance of both steps names m3resp.
+- The Butterworth order of EIT images is 1 to 10 in `eit.butterworth_filter` and in `session.preprocess_eit()`. Before, `session.preprocess_eit()` accepted a higher order.
+- A pixel with NaN at some samples becomes NaN at every sample of the MDN result, as in eitprocessing. M3Resp also gives a warning that names these pixels.
+
 ### Fixed: EIT reading options that stopped with an error
 
 - Sentec: `first_frame` above 0 together with `max_frames` gives `max_frames` frames from `first_frame` on. eitprocessing 1.8.7 stops with an IndexError.

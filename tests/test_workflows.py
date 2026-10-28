@@ -340,7 +340,6 @@ def fake_eitprocessing(monkeypatch):
     pytest.importorskip("eitprocessing")
     import eitprocessing.features.breath_detection as bd
     import eitprocessing.features.rate_detection as rd
-    from eitprocessing.filters import mdn
 
     class FakeRateDetection:
         def __init__(self, subject_type: str, **kwargs: Any) -> None:
@@ -348,13 +347,6 @@ def fake_eitprocessing(monkeypatch):
 
         def apply(self, signal: Any, **kwargs: Any) -> tuple[float, float]:
             return 0.25, 1.5
-
-    class FakeMDNFilter:
-        def __init__(self, **kwargs: Any) -> None:
-            self.kwargs = kwargs
-
-        def apply(self, signal: Any, label: str = "filtered", **kwargs: Any):
-            return FakeSignal(label)
 
     class FakeBreathDetection:
         def __init__(self, minimum_duration: float = 0.0, **kwargs: Any) -> None:
@@ -364,15 +356,23 @@ def fake_eitprocessing(monkeypatch):
             return FakeIntervals(BREATH_PAIRS)
 
     monkeypatch.setattr(rd, "RateDetection", FakeRateDetection)
-    monkeypatch.setattr(mdn, "MDNFilter", FakeMDNFilter)
     monkeypatch.setattr(bd, "BreathDetection", FakeBreathDetection)
 
-    # The rate and breath detection run on m3resp code.
+    # The rate and breath detection and the MDN filter run on m3resp code.
+    import dataclasses
+
     import m3resp.adapters.eitprocessing_adapter as eit_adapter_module
     import m3resp.workflows.steps.eit.signals as eit_signal_steps
 
     monkeypatch.setattr(
         eit_adapter_module, "detect_rates_of", lambda *args, **kwargs: (0.25, 1.5)
+    )
+    monkeypatch.setattr(
+        eit_adapter_module,
+        "mdn_filter",
+        lambda signal, **kwargs: dataclasses.replace(
+            signal, metadata=dict(signal.metadata)
+        ),
     )
     monkeypatch.setattr(
         eit_signal_steps,

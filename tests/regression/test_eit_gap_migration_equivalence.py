@@ -140,11 +140,13 @@ def test_mdn_filter_matches_direct_mdn_filter_call(workflow_result):
 
     signal = workflow_result.value("filtered_eit_signal")
     np.testing.assert_array_equal(signal.values, expected.pixel_impedance)
-    # Regression guard: MDNFilter.apply deep-copies the raw input and only
-    # overwrites attributes passed as explicit kwargs, so `name` must be
-    # passed explicitly or the filtered signal silently keeps the raw
-    # object's own name ("raw") instead of describing itself as filtered.
     assert signal.name == "MDN-filtered EIT data (mdn_filtered)"
+    # The step stores the filtered images in the Sequence for the steps that
+    # still call eitprocessing.
+    stored = _upstream(workflow_result, "filtered_eit")
+    assert stored == expected
+    assert stored.label == "mdn_filtered"
+    assert stored.name == signal.name
 
 
 def test_eeli_matches_direct_eeli_call(workflow_result):

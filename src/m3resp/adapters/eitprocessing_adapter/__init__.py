@@ -6,7 +6,6 @@ values per breath from eitprocessing results.
 
 from __future__ import annotations
 
-import copy
 import math
 from collections.abc import Callable, Iterable
 from typing import Any, Literal, cast
@@ -24,18 +23,25 @@ from m3resp.eit.io import EITFileData, join_eit_files, read_eit_file
 from m3resp.eit.processing import (
     BreathDetectionSettings,
     RateDetectionSettings,
+    mdn_filter,
 )
 from m3resp.eit.processing import detect_rates as detect_rates_of
 from m3resp.eit.processing import find_breaths as find_breaths_of
-from m3resp.processing.filters import butterworth_filter
+from m3resp.eit.processing.mdn_filter import (
+    NOISE_FREQUENCY_LIMIT,
+    NOTCH_DISTANCE,
+    ORDER,
+)
 
 from ._file_data import (
     file_data_to_sequence,
     load_eit_file_as_sequence,
     sequence_to_file_data,
 )
+from ._filtering import butterworth_filter_images
 from ._joining import eit_file_paths, join_eit_sequences
 from ._shared import (
+    MAX_EIT_BUTTERWORTH_ORDER,
     _lazy_import,
     _require_eit_sequence,
     add_to_collection,
@@ -43,6 +49,7 @@ from ._shared import (
     breath_intervals_to_breath_events,
     breaths_to_eitprocessing,
     breaths_to_interval_data,
+    check_eit_butterworth_order,
     filter_pixels_preserving_gaps,
     sparse_data_to_interval_data,
 )
@@ -63,6 +70,7 @@ from ._signals import (
 
 __all__ = [
     "EITPROCESSING_FIELDS",
+    "MAX_EIT_BUTTERWORTH_ORDER",
     "EITProcessingAdapter",
     "add_to_collection",
     "as_breath_detection",
@@ -73,6 +81,8 @@ __all__ = [
     "breath_intervals_to_breath_events",
     "breaths_to_eitprocessing",
     "breaths_to_interval_data",
+    "butterworth_filter_images",
+    "check_eit_butterworth_order",
     "continuous_data_fields",
     "continuous_data_to_signal",
     "eit_data_fields",
@@ -369,13 +379,44 @@ class EITProcessingAdapter:
         *,
         respiratory_rate_hz: float,
         heart_rate_hz: float,
+        noise_frequency_limit_hz: float = NOISE_FREQUENCY_LIMIT,
+        notch_distance_hz: float = NOTCH_DISTANCE,
+        order: int = ORDER,
         label: str = "filtered",
         name: str | None = None,
         description: str | None = None,
     ) -> dict[str, Any]:
-        """Apply an MDN heart-rate-removal filter to EIT pixel data."""
+        """Remove the heart signal from EIT images with the MDN filter.
 
-        (MDNFilter,) = _lazy_import("eitprocessing.filters.mdn.MDNFilter")
+        Args:
+            signal (Any): EIT images as a ``Signal`` (time along the first
+                axis), or an eitprocessing ``EITData``.
+            respiratory_rate_hz (float): Breathing rate in Hz.
+            heart_rate_hz (float): Heart rate in Hz.
+            noise_frequency_limit_hz (float): Low-pass edge in Hz. Defaults
+                to 220 per minute.
+            notch_distance_hz (float): Half the width of each removed band,
+                in Hz. Defaults to 10 per minute.
+            order (int): Butterworth order of each filter. Defaults to 10.
+            label (str): Label of the filtered images in an eitprocessing
+                ``Sequence``.
+            name (str | None): Name of the filtered images. None keeps the
+                name of ``signal``.
+            description (str | None): Description of the filtered images in
+                an eitprocessing ``Sequence``. None keeps the description of
+                ``signal``.
+
+        Returns:
+            dict[str, Any]: ``filtered_eit``, the filtered images as a
+                ``Signal`` (``signal_to_eit_data`` gives the eitprocessing
+                ``EITData`` with ``label``, ``name`` and ``description``), and
+                ``filter_captures``, the in-between results of
+                ``m3resp.eit.processing.mdn_filter``.
+
+        Raises:
+            ValueError: If a rate is not a finite number above 0, or if
+                ``mdn_filter`` refuses the rates or the settings.
+        """
 
         for rate_name, rate in (
             ("respiratory_rate_hz", respiratory_rate_hz),
@@ -386,17 +427,27 @@ class EITProcessingAdapter:
                     f"{rate_name} must be a finite, positive value in Hz, got {rate!r}."
                 )
 
-        apply_kwargs: dict[str, Any] = {"label": label}
-        if name is not None:
-            apply_kwargs["name"] = name
-        if description is not None:
-            apply_kwargs["description"] = description
-
+        images = as_signal(signal)
         captures: dict[str, Any] = {}
-        filtered_eit = MDNFilter(
+        filtered_eit = mdn_filter(
+            images,
             respiratory_rate=respiratory_rate_hz,
             heart_rate=heart_rate_hz,
-        ).apply(as_eitprocessing(signal), captures=captures, **apply_kwargs)
+            noise_frequency_limit=noise_frequency_limit_hz,
+            notch_distance=notch_distance_hz,
+            order=order,
+            name=name,
+            captures=captures,
+        )
+        fields = {
+            **eitprocessing_fields(images),
+            "type": "EITData",
+            "label": label,
+            "name": filtered_eit.name,
+        }
+        if description is not None:
+            fields["description"] = description
+        filtered_eit.metadata[EITPROCESSING_FIELDS] = fields
         return {"filtered_eit": filtered_eit, "filter_captures": captures}
 
     def find_breaths(
@@ -687,7 +738,7 @@ class EITProcessingAdapter:
             filter_enabled: Use the selected filter when True; otherwise use none.
             lowpass_hz: Low-pass cutoff, or band-pass upper cutoff, in Hz.
             highpass_hz: Band-pass lower cutoff in Hz.
-            filter_order: Butterworth filter order for lowpass or bandpass.
+            filter_order: Butterworth filter order for lowpass or bandpass, 1 to 10.
             breath_min_duration_seconds: Minimum detected breath duration in seconds.
             compute_rates: Estimate respiratory and heart rates.
             compute_breath_intervals: Detect and store EIT breath intervals.
@@ -713,8 +764,9 @@ class EITProcessingAdapter:
             OptionalDependencyError: If eitprocessing is unavailable.
             TypeError: If sequence does not provide the expected EIT collections.
             KeyError: If sequence.eit_data has no raw EIT entry.
-            ValueError: If the filter mode is unsupported, or TIV/EELI/pixel TIV
-                is requested while breath-interval calculation is disabled.
+            ValueError: If the filter mode is unsupported, if the Butterworth order
+                is outside 1 to 10, or TIV/EELI/pixel TIV is requested while
+                breath-interval calculation is disabled.
         """
 
         (TIV,) = _lazy_import(
@@ -779,7 +831,9 @@ class EITProcessingAdapter:
                 name="MDN-filtered EIT data",
                 description="EIT data filtered with MDN heart-rate noise removal.",
             )
-            filtered_eit = mdn_result["filtered_eit"]
+            # TIV, EELI and pixel TIV below still call eitprocessing, so the
+            # filtered images go on as an eitprocessing ``EITData``.
+            filtered_eit = signal_to_eit_data(mdn_result["filtered_eit"])
             filter_captures = mdn_result["filter_captures"]
         elif normalized_filter_mode in {"lowpass", "bandpass"}:
             butterworth_filter_type = cast(
@@ -790,27 +844,15 @@ class EITProcessingAdapter:
                 if butterworth_filter_type == "lowpass"
                 else (highpass_hz, lowpass_hz)
             )
-            filtered_pixels = filter_pixels_preserving_gaps(
-                raw_eit.pixel_impedance,
+            filtered_images, filter_captures = butterworth_filter_images(
+                as_signal(raw_eit),
+                mode=butterworth_filter_type,
+                cutoff_frequency=cutoff_frequency,
+                order=filter_order,
+                label=f"{normalized_filter_mode}_filtered",
                 operation=f"preprocess(filter_mode={normalized_filter_mode!r})",
-                apply=lambda pixels: butterworth_filter(
-                    pixels,
-                    filter_type=butterworth_filter_type,
-                    cutoff_frequency=cutoff_frequency,
-                    sample_frequency=raw_eit.sample_frequency,
-                    order=filter_order,
-                    axis=0,
-                    captures=filter_captures,
-                ),
-                captures=filter_captures,
             )
-            filtered_eit = copy.deepcopy(raw_eit)
-            filtered_eit.label = f"{normalized_filter_mode}_filtered"
-            filtered_eit.name = f"{normalized_filter_mode.title()}-filtered EIT data"
-            filtered_eit.description = (
-                f"EIT data filtered with a {normalized_filter_mode} Butterworth filter."
-            )
-            filtered_eit.pixel_impedance = filtered_pixels
+            filtered_eit = signal_to_eit_data(filtered_images)
 
         if filtered_eit is not raw_eit:
             add_to_collection(sequence.eit_data, filtered_eit)
