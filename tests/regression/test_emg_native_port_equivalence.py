@@ -310,22 +310,15 @@ def _gate_cases() -> list[Any]:
     cases = []
     for fill_method in (0, 1, 2, 3):
         for gate_width_samples in (205, 204):
-            for layout in sorted(_GATE_PEAK_LAYOUTS):
-                boundary = layout in (
-                    "near_boundaries",
-                    "at_boundaries",
-                    "pre_gate_at_index_0",
+            cases.extend(
+                pytest.param(
+                    layout,
+                    gate_width_samples,
+                    fill_method,
+                    id=f"fill{fill_method}-w{gate_width_samples}-{layout}",
                 )
-                marks = [GATE_INTERP_AT_END] if fill_method == 1 and boundary else []
-                cases.append(
-                    pytest.param(
-                        layout,
-                        gate_width_samples,
-                        fill_method,
-                        marks=marks,
-                        id=f"fill{fill_method}-w{gate_width_samples}-{layout}",
-                    )
-                )
+                for layout in sorted(_GATE_PEAK_LAYOUTS)
+            )
     return cases
 
 
@@ -342,7 +335,6 @@ def test_gate_ecg_explicit(
     np.testing.assert_allclose(actual, expected, rtol=1e-15, atol=0)
 
 
-@GATE_INTERP_AT_END  # default fill_method=1; the last detected peak is near the end
 def test_gate_ecg_detected_peaks_defaults(adapter, native, ecg_signal, ecg_peaks):
     expected = adapter.gate_ecg(ecg_signal, ecg_peaks)
     actual = native.gate_ecg(ecg_signal, ecg_peaks)
@@ -363,7 +355,7 @@ def test_gate_ecg_detected_peaks_other_fill_methods(
         assert_identical(actual, expected)
 
 
-@WAVELET_THRESHOLD
+# @WAVELET_THRESHOLD
 @pytest.mark.parametrize("hard_thresholding", [True, False])
 @pytest.mark.parametrize(
     ("levels", "wavelet_type", "fixed_threshold"),
@@ -393,7 +385,6 @@ def test_wavelet_denoise_ecg_explicit(
     assert_identical(actual, expected)
 
 
-@WAVELET_THRESHOLD
 def test_wavelet_denoise_ecg_defaults(adapter, native, ecg_signal_padded, ecg_peaks):
     peaks = ecg_peaks[ecg_peaks < len(ecg_signal_padded)]
 
@@ -445,7 +436,6 @@ def test_moving_baseline_defaults(adapter, native, breaths):
     assert_identical(actual, expected)
 
 
-@SLOPESUM_BASELINE
 @pytest.mark.parametrize(
     (
         "window_samples",
@@ -488,7 +478,6 @@ def test_slopesum_baseline_explicit(
     assert_identical(actual, expected)
 
 
-@SLOPESUM_DEFAULT_PERCENTILE_WINDOW
 def test_slopesum_baseline_defaults(adapter, native, breaths):
     kwargs = {
         "window_samples": 5 * EMG_FS,
@@ -764,7 +753,7 @@ def _bell_curve_errors(implementation, breaths: Breaths, **kwargs):
         )
 
 
-@BELL_CURVE_RETURN_ORDER
+# @BELL_CURVE_RETURN_ORDER
 @pytest.mark.parametrize(
     ("bell_window_samples", "bell_threshold"),
     [(5 * EMG_FS, 40.0), (EMG_FS, 40.0), (2 * EMG_FS, 5.0)],
@@ -783,7 +772,6 @@ def test_evaluate_bell_curve_error_explicit(
     assert_identical(actual, expected)
 
 
-@BELL_CURVE_RETURN_ORDER
 def test_evaluate_bell_curve_error_defaults(adapter, native, breaths):
     expected = _bell_curve_errors(adapter, breaths)
     actual = _bell_curve_errors(native, breaths)
@@ -791,7 +779,6 @@ def test_evaluate_bell_curve_error_defaults(adapter, native, breaths):
     assert_identical(actual, expected)
 
 
-@BELL_CURVE_RETURN_ORDER
 def test_evaluate_bell_curve_error_short_breath_padding(adapter, native, breaths):
     """Breaths shorter than 3 samples take the `plus_index` padding branch."""
 
@@ -830,7 +817,6 @@ def test_evaluate_event_timing_explicit(adapter, native, min_delta, max_delta):
     assert_identical(actual, expected)
 
 
-@EVENT_TIMING_DEFAULTS
 def test_evaluate_event_timing_defaults(adapter, native):
     expected = adapter.evaluate_event_timing(
         _EVENT_TIMES_FIRST, _EVENT_TIMES_SECOND, min_delta=-0.5, max_delta=2.0

@@ -5,17 +5,14 @@ def _known_divergence(
     reason: str,
     *,
     raises: type[BaseException] | tuple[type[BaseException], ...] | None = None,
-    strict: bool = False,
+    strict: bool = True,
 ) -> pytest.MarkDecorator:
     return pytest.mark.xfail(reason=reason, raises=raises, strict=strict, run=True)
 
 
-GATE_RMS_LAST_SAMPLE = pytest.mark.xfail(
-    strict=True,
-    reason="upstream _compute_gate_mask clips k_end to N-1: last sample never gated "
-    "for fill_method=3, raw ECG leaks into the RMS fill",
+GATE_RMS_LAST_SAMPLE = _known_divergence(
+    "upstream _compute_gate_mask clips k_end to N-1: last sample never gated for fill_method=3, raw ECG leaks into the RMS fill"
 )
-
 MISSING_TEST_DATA_FILE = _known_divergence(
     "The test data file is missing from the repository, so these tests cannot be run.",
     raises=FileNotFoundError,

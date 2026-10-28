@@ -73,6 +73,7 @@ def _emg_flag(name: str, peak: int, passed: bool) -> QualityFlag:
 
 
 def test_breath_with_invalid_window_is_removed_and_all_outputs_stay_aligned():
+    """A breath with an invalid window is removed from every per-breath output."""
     session, outputs = _session_with_three_breaths()
     original_products = np.array(outputs["time_product"], copy=True)
 
@@ -105,6 +106,7 @@ def test_breath_with_invalid_window_is_removed_and_all_outputs_stay_aligned():
 
 
 def test_flags_are_matched_to_breaths_by_peak_sample():
+    """Flags are matched to breaths by peak sample, not by position."""
     session, outputs = _session_with_three_breaths()
     # A check that only covered the last breath (like event timing, which
     # only scores breaths paired with the ventilator).
@@ -124,6 +126,7 @@ def test_flags_are_matched_to_breaths_by_peak_sample():
 
 
 def test_most_recent_result_of_a_check_counts():
+    """When a check ran twice, its latest flag for a breath decides."""
     session, outputs = _session_with_three_breaths()
     session.quality.add(_emg_flag("start_end_validity", 800, passed=True))
 
@@ -134,6 +137,7 @@ def test_most_recent_result_of_a_check_counts():
 
 
 def test_unknown_flag_name_raises():
+    """Asking for a flag name with no EMG flags raises ValueError."""
     session, outputs = _session_with_three_breaths()
     with pytest.raises(ValueError, match="No EMG quality flag named 'snr_pseudo'"):
         remove_invalid_breaths(
@@ -142,6 +146,7 @@ def test_unknown_flag_name_raises():
 
 
 def test_whole_recording_flag_cannot_be_used():
+    """A whole-recording flag cannot be used to remove breaths."""
     session, outputs = _session_with_three_breaths()
     session.quality.add(
         QualityFlag(
@@ -155,6 +160,7 @@ def test_whole_recording_flag_cannot_be_used():
 
 
 def test_feature_with_wrong_number_of_values_raises():
+    """A feature with a different number of values than breaths raises ValueError."""
     session, outputs = _session_with_three_breaths()
     with pytest.raises(ValueError, match="'time_product' has 2 values"):
         remove_invalid_breaths(
@@ -180,6 +186,7 @@ def _example_emg_spec() -> dict[str, Any]:
 
 
 def test_runs_at_the_end_of_the_example_emg_workflow():
+    """The step runs at the end of the example EMG workflow."""
     pytest.importorskip("resurfemg")
     spec = _example_emg_spec()
     spec["steps"].append(

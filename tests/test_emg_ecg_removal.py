@@ -79,7 +79,10 @@ def _fake_processed_emg(
 
 
 class TestEcgDetectPeaks:
+    """`emg.ecg_detect_peaks`: peak events, channel choice and input checks."""
+
     def test_writes_events_and_count_result_from_real_data(self):
+        """On real data the step writes peak indices, one event per peak and a count."""
         result = run_workflow(
             {
                 "name": "ecg-detect",
@@ -106,6 +109,7 @@ class TestEcgDetectPeaks:
         assert result.session.events["ecg_peaks"] == events
 
     def test_ecg_channel_overrides_source_and_reads_the_raw_recording(self):
+        """`ecg_channel` detects peaks on that raw recording channel."""
         session = M3Session()
         result = run_workflow(
             {
@@ -121,11 +125,13 @@ class TestEcgDetectPeaks:
         assert len(result.value("ecg_peak_indices")) > 0
 
     def test_rejects_unknown_source_with_available_keys_listed(self):
+        """An unknown `source` raises ValueError listing the available keys."""
         session = M3Session()
         with pytest.raises(ValueError, match="available keys"):
             ecg_detect_peaks(session, _fake_processed_emg(), source="nope")
 
     def test_rejects_out_of_range_ecg_channel(self):
+        """An `ecg_channel` beyond the recording raises ValueError."""
         session = M3Session()
         session.load_emg(str(EMG_PATH), verbose=False)
         with pytest.raises(ValueError, match="out of range"):
@@ -139,6 +145,8 @@ class TestSeparateFilteredAndCleanedSignals:
     """
 
     def test_gating_keeps_the_band_passed_signal_alongside_the_gated_one(self):
+        """Gating stores the gated signal as `ecg_cleaned` and keeps `filtered` as
+        is."""
         session = M3Session()
         processed_emg = _fake_processed_emg()
         band_passed = processed_emg["filtered"]
@@ -150,6 +158,7 @@ class TestSeparateFilteredAndCleanedSignals:
         assert not np.array_equal(after["ecg_cleaned"], band_passed)
 
     def test_a_second_removal_step_works_on_the_already_cleaned_signal(self):
+        """A second gating pass works on the first pass's output, not on `filtered`."""
         # Two gating passes chain without either naming a source key: the
         # second reads what the first produced, not the band-passed signal.
         session = M3Session()
@@ -163,6 +172,7 @@ class TestSeparateFilteredAndCleanedSignals:
         assert not np.array_equal(second["ecg_cleaned"], first["ecg_cleaned"])
 
     def test_an_explicit_source_still_selects_that_signal(self):
+        """An explicit `source='filtered'` gates that signal and records it."""
         session = M3Session()
         processed_emg = _fake_processed_emg()
         peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
@@ -173,6 +183,7 @@ class TestSeparateFilteredAndCleanedSignals:
         assert result["ecg_gate_mask_result"].metadata["source"] == "filtered"
 
     def test_an_unknown_source_is_rejected(self):
+        """Gating an unknown `source` raises ValueError."""
         session = M3Session()
         processed_emg = _fake_processed_emg()
         peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
@@ -198,17 +209,21 @@ class TestPreprocessEnvelopeSkipping:
         return ReSurfEMG().preprocess(recording, **kwargs)
 
     def test_envelope_is_computed_by_default(self):
+        """Preprocessing computes an envelope by default."""
         processed = self._preprocess()
 
         assert processed["envelope"] is not None
 
     def test_skipping_leaves_no_envelope_but_keeps_the_band_passed_signal(self):
+        """`compute_envelope=False` returns no envelope but keeps the filtered
+        signal."""
         processed = self._preprocess(compute_envelope=False)
 
         assert processed["envelope"] is None
         assert processed["filtered"] is not None
 
     def test_skipping_still_records_the_envelope_settings(self):
+        """Envelope settings are recorded even when the envelope is skipped."""
         processed = self._preprocess(
             compute_envelope=False,  # removed in the native implementation
             envelope_window_seconds=0.25,
@@ -219,6 +234,8 @@ class TestPreprocessEnvelopeSkipping:
         assert processed["filter"]["envelope_method"] == "rms"
 
     def test_gating_removes_the_envelope_of_the_ungated_signal(self):
+        """Gating clears the stale envelope of the ungated signal, also in the
+        session."""
         session = M3Session()
         processed = self._preprocess()
         assert processed["envelope"] is not None
@@ -233,11 +250,14 @@ class TestPreprocessEnvelopeSkipping:
 
 
 class TestEcgGating:
+    """`emg.ecg_gating`: gated signal, gate mask and gate-width options."""
+
     @pytest.mark.parametrize("gate_width_samples", [4, 7, 8, 204, 205])
     @pytest.mark.parametrize("fill_method", [0, 1, 2, 3])
     def test_gate_mask_names_exactly_the_samples_gating_replaced(
         self, gate_width_samples, fill_method
     ):
+        """The gate mask marks exactly the samples ReSurfEMG's gating replaced."""
         # The RMS fill (method 3) blanks a slightly different span than the
         # other fills on an odd gate width, including the 205-sample default.
         # The mask has to follow whichever fill actually ran.
@@ -266,11 +286,13 @@ class TestEcgGating:
         np.testing.assert_array_equal(np.flatnonzero(mask), replaced)
 
     def test_gate_mask_is_clipped_at_the_start_of_the_record(self):
+        """A gate at sample 0 is clipped to the start of the record."""
         mask = _build_gate_mask(10, [0], gate_width_samples=4, fill_method=1)
 
         np.testing.assert_array_equal(np.flatnonzero(mask), [0, 1, 2])
 
     def test_updates_processed_emg_and_session_with_the_gated_signal(self):
+        """The gated signal is stored as `ecg_cleaned` with the input's shape."""
         session = M3Session()
         processed_emg = _fake_processed_emg()
         peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
@@ -300,11 +322,9 @@ class TestEcgGating:
         assert mask_result.value.shape == gated.shape
         assert mask_result.value.sum() > 0
 
-    def test_recomputed_envelope_reuses_the_preprocessing_envelope_method(self):
-        """The recomputation must not silently switch envelope method: an ARV
-        bundle stays ARV, and the effective choice is carried forward so a
-        later recomputation off the gated bundle agrees too.
-        """
+    def test_envelope_step_computes_the_envelope_of_the_gated_signal(self):
+        """`emg.envelope` after gating uses the gated signal and the requested
+        method."""
         session = M3Session()
         processed_emg = _fake_processed_emg()
         peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
@@ -356,6 +376,7 @@ class TestEcgGating:
         assert result["processed_emg_after_ecg"]["filter"]["envelope_method"] == "rms"
 
     def test_rejects_both_gate_width_forms_at_once(self):
+        """Giving gate width in both seconds and samples raises ValueError."""
         session = M3Session()
         processed_emg = _fake_processed_emg()
         peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
@@ -370,6 +391,7 @@ class TestEcgGating:
             )
 
     def test_gate_mask_never_alters_the_cleaned_result(self):
+        """The gate mask is descriptive only; it does not change the gated values."""
         # The mask is descriptive only - built from the same effective gate
         # width, but the cleaned array's actual values come solely from
         # ReSurfEMG's own gating() output.
@@ -387,6 +409,7 @@ class TestEcgGating:
 
 @pytest.mark.parametrize("remove_ecg", [ecg_gating, ecg_wavelet_denoising])
 def test_ecg_removal_clears_the_envelope_and_its_source(remove_ecg):
+    """ECG removal clears the existing envelope and its recorded source."""
     session = M3Session()
     with_envelope = envelope(session, _fake_processed_emg())[
         "processed_emg_with_envelope"
@@ -401,7 +424,10 @@ def test_ecg_removal_clears_the_envelope_and_its_source(remove_ecg):
 
 
 class TestEcgWaveletDenoising:
+    """`emg.ecg_wavelet_denoising`: results, padding metadata and input checks."""
+
     def test_preserves_all_four_upstream_results_with_padding_metadata(self):
+        """Wavelet denoising keeps all four upstream results and records padding."""
         session = M3Session()
         processed_emg = _fake_processed_emg(n_samples=40965)
         peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
@@ -428,6 +454,7 @@ class TestEcgWaveletDenoising:
         assert session.emg is None or session.emg.filtered is cleaned
 
     def test_rejects_unknown_source(self):
+        """Wavelet denoising an unknown `source` raises ValueError."""
         session = M3Session()
         processed_emg = _fake_processed_emg()
         peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]

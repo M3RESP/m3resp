@@ -11,7 +11,6 @@ from m3resp import BreathEvent, M3Session
 from m3resp.adapters import EITProcessingAdapter
 from m3resp.io import load_eit
 from m3resp.modalities.eit import load as load_eit_recording
-from known_divergences import MISSING_TEST_DATA_FILE
 
 
 class FakeCollection(dict):

@@ -6,7 +6,6 @@ import pytest
 from m3resp import BreathEvent, M3Session
 from m3resp.adapters import EITProcessingAdapter
 from m3resp.emg import ReSurfEMG
-from known_divergences import MISSING_TEST_DATA_FILE
 
 
 def test_session_loads_modalities_with_injected_adapters():

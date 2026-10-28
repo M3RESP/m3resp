@@ -48,6 +48,7 @@ def _bundle(values: np.ndarray, **extra) -> dict:
 def test_separate_steps_give_the_same_trace_as_emg_preprocess(
     loaded_session, notch_before_bandpass
 ):
+    """Channel, band-pass and notch steps in sequence match `emg.preprocess`."""
     settings = {"high_pass_hz": 20.0, "low_pass_hz": 500.0}
     notch = {"base_frequency": 50.0, "max_frequency": 950.0, "quality_factor": 30.0}
 
@@ -81,6 +82,7 @@ def test_separate_steps_give_the_same_trace_as_emg_preprocess(
 
 
 def test_envelope_follows_the_chosen_window_and_method():
+    """`emg.envelope` uses the requested window and method and records them."""
     rng = np.random.default_rng(3)
     values = rng.normal(size=4096)
     session = M3Session()
@@ -98,6 +100,7 @@ def test_envelope_follows_the_chosen_window_and_method():
 
 
 def test_rms_envelope_of_a_constant_is_that_constant():
+    """The RMS envelope of a constant signal is that constant."""
     session = M3Session()
     values = np.full(2048, 3.0)
 
@@ -107,6 +110,7 @@ def test_rms_envelope_of_a_constant_is_that_constant():
 
 
 def test_envelope_uses_the_ecg_cleaned_trace_when_present():
+    """The envelope is taken from `ecg_cleaned` when it exists."""
     session = M3Session()
     values = np.ones(2048)
     cleaned = np.full(2048, 2.0)
@@ -125,16 +129,19 @@ def test_envelope_uses_the_ecg_cleaned_trace_when_present():
     ],
 )
 def test_envelope_refuses_bad_settings(kwargs, message):
+    """Invalid envelope window or method raises ValueError."""
     with pytest.raises(ValueError, match=message):
         envelope(M3Session(), _bundle(np.ones(100)), **kwargs)
 
 
 def test_emg_preprocess_refuses_envelope_settings(loaded_session):
+    """`emg.preprocess` rejects envelope settings and points to `emg.envelope`."""
     with pytest.raises(ValueError, match="emg.envelope"):
         preprocess(loaded_session, channel=1, envelope_window_seconds=0.5)
 
 
 def test_a_step_that_needs_an_envelope_names_the_envelope_step():
+    """A step run without an envelope names `emg.envelope` in its error."""
     bundle = _bundle(np.ones(4096), envelope=None)
 
     with pytest.raises(ValueError, match="emg.envelope"):
@@ -142,6 +149,7 @@ def test_a_step_that_needs_an_envelope_names_the_envelope_step():
 
 
 def test_filters_refuse_a_trace_already_cleaned_of_ecg():
+    """Band-pass and notch refuse to run after ECG removal."""
     bundle = _bundle(np.ones(4096), ecg_cleaned=np.ones(4096))
 
     with pytest.raises(ValueError, match="before the ECG-removal step"):
@@ -151,6 +159,7 @@ def test_filters_refuse_a_trace_already_cleaned_of_ecg():
 
 
 def test_notch_max_frequency_above_nyquist_warns_and_records_nyquist():
+    """A notch maximum above Nyquist warns and Nyquist is recorded."""
     with pytest.warns(UserWarning, match="above the Nyquist frequency"):
         after = notch_filter(
             M3Session(),
@@ -165,6 +174,7 @@ def test_notch_max_frequency_above_nyquist_warns_and_records_nyquist():
 def test_emg_preprocess_records_nyquist_for_a_notch_max_frequency_above_it(
     loaded_session,
 ):
+    """`emg.preprocess` clips a notch maximum above Nyquist and records Nyquist."""
     with pytest.warns(UserWarning, match="above the Nyquist frequency"):
         processed = preprocess(
             loaded_session,
@@ -188,6 +198,7 @@ def test_emg_preprocess_records_nyquist_for_a_notch_max_frequency_above_it(
     ids=["notch", "bandpass"],
 )
 def test_filtering_again_clears_the_envelope_and_its_source(refilter, output):
+    """Re-filtering clears the existing envelope and its recorded source."""
     session = M3Session()
     with_envelope = envelope(session, _bundle(np.ones(4096)))[
         "processed_emg_with_envelope"
@@ -201,6 +212,7 @@ def test_filtering_again_clears_the_envelope_and_its_source(refilter, output):
 
 
 def test_bandpass_refuses_a_lower_cutoff_above_the_upper_one():
+    """A high-pass cutoff above the low-pass cutoff raises ValueError."""
     with pytest.raises(ValueError, match="must be below"):
         bandpass_filter(
             M3Session(), _bundle(np.ones(4096)), high_pass_hz=300.0, low_pass_hz=200.0
@@ -208,6 +220,7 @@ def test_bandpass_refuses_a_lower_cutoff_above_the_upper_one():
 
 
 def test_filters_start_from_the_raw_channel_after_select_channel(loaded_session):
+    """After `emg.select_channel`, band-pass filters the raw channel with defaults."""
     bundle = select_channel(loaded_session, channel=1)["processed_emg"]
     assert "filtered" not in bundle
 
@@ -219,6 +232,7 @@ def test_filters_start_from_the_raw_channel_after_select_channel(loaded_session)
 
 
 def test_workflow_runs_the_separate_steps_in_order():
+    """A spec of the separate preprocessing steps runs end to end."""
     spec = {
         "name": "emg-separate-preprocessing",
         "inputs": {"emg_file": str(EMG_PATH)},

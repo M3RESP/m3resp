@@ -17,7 +17,6 @@ from m3resp.datamodel import (
     validate_store,
 )
 from m3resp.datamodel.entities import DerivedFeature, TargetType
-from known_divergences import MISSING_TEST_DATA_FILE
 
 
 def test_entities_reject_unknown_coded_values():

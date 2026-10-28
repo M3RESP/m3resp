@@ -171,23 +171,28 @@ def recording() -> dict:
 
 
 def test_default_low_pass_hz_caps_at_500():
+    """The default low-pass is 500 Hz when Nyquist allows it."""
     assert defaults.default_low_pass_hz(2048.0) == 500
 
 
 def test_default_low_pass_hz_stays_below_nyquist_for_low_rates():
+    """At low sampling rates the default low-pass is 95% of Nyquist."""
     assert defaults.default_low_pass_hz(500.0) == pytest.approx(237.5)
 
 
 @pytest.mark.parametrize("max_frequency", [None, 0])
 def test_notch_max_frequency_defaults_to_nyquist(max_frequency):
+    """An unset or invalid notch maximum falls back to Nyquist."""
     assert defaults.notch_max_frequency_hz(1000.0, max_frequency) == 500.0
 
 
 def test_notch_max_frequency_keeps_valid_value():
+    """A notch maximum below Nyquist is kept."""
     assert defaults.notch_max_frequency_hz(1000.0, 300.0) == 300.0
 
 
 def test_notch_max_frequency_above_nyquist_warns_and_clips():
+    """A notch maximum above Nyquist warns and is clipped to Nyquist."""
     with pytest.warns(UserWarning, match="Nyquist"):
         assert defaults.notch_max_frequency_hz(1000.0, 800.0) == 500.0
 
@@ -198,6 +203,7 @@ def test_notch_max_frequency_above_nyquist_warns_and_clips():
 
 
 def test_merge_selections_keeps_functions_from_every_dict():
+    """The merged default selection includes EMG, ventilator and multimodal QA."""
     merged = _default_selection()
     quality = merged["quality_assessment"]
     for name in (
@@ -210,6 +216,7 @@ def test_merge_selections_keeps_functions_from_every_dict():
 
 
 def test_merge_selections_does_not_mutate_inputs():
+    """Editing the merged selection leaves the source selections unchanged."""
     before = copy.deepcopy(ALL_SELECTIONS)
     merged = _default_selection()
     merged["quality_assessment"]["snr_pseudo"] = False
@@ -230,6 +237,7 @@ def test_ventilator_event_selection_has_only_ventilator_functions():
 
 
 def test_build_context_without_ventilator(peaks, processed_emg):
+    """Without ventilator data the context has no ventilator fields and PEEP is NaN."""
     context = defaults._build_context(processed_emg["envelope"], FS, peaks)
     assert context.ventilator_signals is None
     assert context.ventilator_fs is None
@@ -239,6 +247,7 @@ def test_build_context_without_ventilator(peaks, processed_emg):
 
 
 def test_build_context_converts_windows_to_samples(peaks, processed_emg):
+    """Baseline window and step are converted from seconds to samples."""
     context = defaults._build_context(
         processed_emg["envelope"], FS, peaks, baseline_window_seconds=5.0
     )
@@ -270,6 +279,7 @@ def test_disable_skips_selected_ventilator_functions_without_ventilator(
 
 
 def test_disable_ignores_unselected_functions(processed_emg, peaks):
+    """Unselected ventilator functions are not reported as skipped."""
     selection = {"baseline": {"moving_baseline": True}}
     context = _context_with_baseline(processed_emg, peaks, selected_functions=selection)
     defaults._disable_unavailable_postprocessing(context)
@@ -277,6 +287,7 @@ def test_disable_ignores_unselected_functions(processed_emg, peaks):
 
 
 def test_quality_skips_functions_needing_time_products(processed_emg, peaks):
+    """Quality checks that need time products are skipped when none were computed."""
     selection = {
         "quality_assessment": {
             "detect_extreme_time_products": True,
@@ -291,6 +302,7 @@ def test_quality_skips_functions_needing_time_products(processed_emg, peaks):
 
 
 def test_quality_skips_local_high_aub_without_area_under_baseline(processed_emg, peaks):
+    """`detect_local_high_aub` is skipped without area-under-baseline results."""
     selection = {"quality_assessment": {"detect_local_high_aub": True}}
     context = _context_with_baseline(processed_emg, peaks, selected_functions=selection)
     defaults._compute_emg_quality_default(context)
@@ -304,16 +316,19 @@ def test_quality_skips_local_high_aub_without_area_under_baseline(processed_emg,
 
 
 def test_detect_breaths_rejects_unprocessed_input():
+    """Breath detection on unprocessed input raises UnsupportedWorkflowError."""
     with pytest.raises(UnsupportedWorkflowError):
         defaults._detect_breaths_default({"fs": FS})
 
 
 def test_detect_breaths_warns_without_baseline(processed_emg):
+    """Breath detection without a baseline warns."""
     with pytest.warns(UserWarning, match="baseline"):
         defaults._detect_breaths_default(processed_emg)
 
 
 def test_detect_breaths_returns_point_events_near_true_peaks(processed_emg, peaks):
+    """Detected breaths are point events within 0.2 s of the true peaks."""
     baseline = np.full_like(processed_emg["envelope"], BASELINE_LEVEL)
     events = defaults._detect_breaths_default(processed_emg, baseline=baseline)
 
@@ -333,6 +348,7 @@ def test_detect_breaths_returns_point_events_near_true_peaks(processed_emg, peak
 
 
 def test_preprocess_returns_expected_fields(recording):
+    """Default preprocessing returns every documented field at full length."""
     result = defaults._preprocess_default(recording, channel=0, remove_ecg=False)
     n = recording["array"].shape[1]
     for key in (
@@ -352,11 +368,13 @@ def test_preprocess_returns_expected_fields(recording):
 
 
 def test_preprocess_without_ecg_removal_keeps_filtered_signal(recording):
+    """With `remove_ecg=False` the clean signal equals the filtered one."""
     result = defaults._preprocess_default(recording, channel=0, remove_ecg=False)
     np.testing.assert_array_equal(result["clean"], result["filtered"])
 
 
 def test_preprocess_can_skip_envelope(recording):
+    """With `compute_envelope=False` no envelope is returned."""
     result = defaults._preprocess_default(
         recording, channel=0, remove_ecg=False, compute_envelope=False
     )
@@ -364,11 +382,13 @@ def test_preprocess_can_skip_envelope(recording):
 
 
 def test_preprocess_rejects_unknown_ecg_method(recording):
+    """An unknown ECG removal method raises ValueError."""
     with pytest.raises(ValueError, match="Unknown ECG removal method"):
         defaults._preprocess_default(recording, channel=0, ecg_removal_method="nope")
 
 
 def test_preprocess_records_filter_settings(recording):
+    """The filter settings used, including notch defaults, are recorded."""
     result = defaults._preprocess_default(
         recording,
         channel=0,
@@ -386,12 +406,14 @@ def test_preprocess_records_filter_settings(recording):
 
 
 def test_preprocess_default_low_pass_matches_helper(recording):
+    """The recorded default low-pass matches `default_low_pass_hz`."""
     result = defaults._preprocess_default(recording, channel=0, remove_ecg=False)
     fs = recording["metadata"]["fs"]
     assert result["filter"]["low_pass_hz"] == defaults.default_low_pass_hz(fs)
 
 
 def test_preprocess_does_not_mutate_recording(recording):
+    """Preprocessing leaves the input recording's data and metadata unchanged."""
     before = copy.deepcopy(recording["metadata"])
     raw_before = recording["array"].copy()
     defaults._preprocess_default(recording, channel=0, remove_ecg=False)
@@ -405,6 +427,7 @@ def test_preprocess_does_not_mutate_recording(recording):
 
 
 def test_postprocess_rejects_unprocessed_input():
+    """Postprocessing unprocessed input raises UnsupportedWorkflowError."""
     with pytest.raises(UnsupportedWorkflowError):
         defaults._postprocess_default({"fs": FS}, [])
 
@@ -448,6 +471,7 @@ def test_postprocess_computes_emg_features_with_peaks_and_baseline(
 
 @pytest.mark.usefixtures("inject_peaks")
 def test_postprocess_returns_peak_indices_and_settings(processed_emg, peaks):
+    """Postprocessing returns the peak indices and the settings it used."""
     result = _run(
         processed_emg, peaks, ecg_peak_indices=peaks + 50, baseline_window_seconds=5.0
     )
@@ -458,6 +482,7 @@ def test_postprocess_returns_peak_indices_and_settings(processed_emg, peaks):
 
 @pytest.mark.usefixtures("inject_peaks")
 def test_postprocess_does_not_mutate_caller_selection(processed_emg, peaks):
+    """Postprocessing leaves the caller's function selection unchanged."""
     selection = _default_selection()
     before = copy.deepcopy(selection)
     _run(processed_emg, peaks, selected_functions=selection)
@@ -477,6 +502,7 @@ def test_postprocess_without_ecg_peaks_skips_interpeak_distance(processed_emg, p
 def test_postprocess_without_enough_peaks_skips_instead_of_raising(
     processed_emg, peaks, n_peaks
 ):
+    """Too few peaks skip features and on/offset detection but keep the baseline."""
     result = _run(processed_emg, peaks[:n_peaks], ecg_peak_indices=peaks + 50)
 
     assert result["computed"]["features"] == {}
@@ -490,6 +516,7 @@ def test_postprocess_without_enough_peaks_skips_instead_of_raising(
 
 @pytest.mark.usefixtures("inject_peaks")
 def test_postprocess_without_ventilator_reports_ventilator_skips(processed_emg, peaks):
+    """Without ventilator data, ventilator-only functions are reported as skipped."""
     result = _run(processed_emg, peaks, ecg_peak_indices=peaks + 50)
     assert VENTILATOR_ONLY <= set(result["skipped"])
     assert "detect_ventilator_breath" not in result["computed"]["event_detection"]
@@ -497,6 +524,7 @@ def test_postprocess_without_ventilator_reports_ventilator_skips(processed_emg, 
 
 @pytest.mark.usefixtures("inject_peaks", "ventilator")
 def test_postprocess_with_ventilator_computes_ventilator_results(processed_emg, peaks):
+    """With ventilator data, ventilator breaths and rate checks are computed."""
     result = _run(
         processed_emg, peaks, ecg_peak_indices=peaks + 50, ventilator=object()
     )

@@ -35,7 +35,10 @@ POCC_SPEC = {
 
 
 class TestPoccIntervals:
+    """`ventilator.pocc_intervals`: on/offsets, validity and baseline settings."""
+
     def test_writes_start_end_validity_and_ventilator_modality_events(self):
+        """One start, end, validity flag and ventilator event is written per Pocc."""
         result = run_workflow(POCC_SPEC)
         o = result.outputs
 
@@ -69,6 +72,7 @@ class TestPoccIntervals:
         assert result.session.events["pocc_breaths"] == events
 
     def test_crossings_use_a_moving_pressure_baseline(self):
+        """Pocc on/offsets use ReSurfEMG's moving pressure baseline, not PEEP."""
         # ReSurfEMG takes Pocc on/offset against the moving baseline of the
         # airway pressure (percentile 33, 7.5 s window), not the constant PEEP.
         from resurfemg.postprocessing.baseline import moving_baseline
@@ -85,6 +89,7 @@ class TestPoccIntervals:
         assert np.ptp(baseline) > 0
 
     def test_baseline_parameters_are_passed_through(self):
+        """A lower `baseline_percentile` gives a baseline that is never higher."""
         spec = {**POCC_SPEC, "steps": [*POCC_SPEC["steps"]]}
         spec["steps"][-2] = {
             "uses": "ventilator.pocc_intervals",
@@ -96,6 +101,7 @@ class TestPoccIntervals:
         assert np.any(low < default)
 
     def test_does_not_assume_emg_and_ventilator_fs_are_equal(self):
+        """Pocc events carry the ventilator's sampling rate, not the EMG's."""
         result = run_workflow(POCC_SPEC)
         emg_fs = result.session.emg.metadata["fs"]
         vent_fs = result.value("ventilator_signals")["fs"]
@@ -107,7 +113,10 @@ class TestPoccIntervals:
 
 
 class TestPoccTimeProduct:
+    """`ventilator.pocc_time_product`: values, units and ReSurfEMG equivalence."""
+
     def test_writes_one_value_per_pocc_with_combined_pressure_time_unit(self):
+        """One time product per Pocc is written in cmH2O*s as a ventilator result."""
         result = run_workflow(POCC_SPEC)
         o = result.outputs
 
@@ -129,6 +138,7 @@ class TestPoccTimeProduct:
         assert np.all(time_products > 0)
 
     def test_matches_resurfemg_ptpocc(self):
+        """Time products match ReSurfEMG's PTPocc, including the area under baseline."""
         # ReSurfEMG's PTPocc (basic_emg_pipeline_annotated.ipynb):
         # calculate_time_products(include_aub=True, aub_window_s=5 * fs,
         # aub_reference_signal=p_vent.y_baseline) = time product against the
@@ -166,6 +176,7 @@ class TestPoccTimeProduct:
         )
 
     def test_area_under_baseline_can_be_left_out(self):
+        """`include_aub=False` gives the plain window integral."""
         from m3resp.processing.metrics import window_integral
 
         spec = {**POCC_SPEC, "steps": [*POCC_SPEC["steps"]]}

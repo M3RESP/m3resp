@@ -42,6 +42,7 @@ _MIGRATED_EMG_STEPS = (
 
 
 def test_every_migrated_step_is_registered_and_listed():
+    """Every migrated EMG step is registered with a summary."""
     steps = available_steps()
     for name in _MIGRATED_EMG_STEPS:
         assert name in steps, f"{name} missing from available_steps()"
@@ -49,6 +50,7 @@ def test_every_migrated_step_is_registered_and_listed():
 
 
 def test_registered_reads_and_writes_match_the_alternative_step_pairs():
+    """Alternative steps writing the same key are both registered."""
     # emg.moving_baseline/emg.slopesum_baseline and emg.ecg_gating/
     # emg.ecg_wavelet_denoising are alternatives that both naturally write
     # the same context key (baseline / processed_emg_after_ecg) - confirm
@@ -80,6 +82,7 @@ def test_registered_reads_and_writes_match_the_alternative_step_pairs():
     ],
 )
 def test_new_steps_declare_session_as_a_read(step_name):
+    """Each new step declares `session` among its reads."""
     # Every new step needs session (to reach session.emg_adapter, or to
     # add native results to session.signals/parameter_results/quality).
     definition = get_step(step_name)
@@ -87,7 +90,10 @@ def test_new_steps_declare_session_as_a_read(step_name):
 
 
 class TestFullExampleEndToEnd:
+    """The full example EMG workflow on the committed sample data."""
+
     def test_full_emg_example_workflow_runs_end_to_end(self, tmp_path):
+        """The full example EMG workflow runs end to end on the sample data."""
         pytest.importorskip("resurfemg")
 
         repo_root = Path(__file__).resolve().parents[1]

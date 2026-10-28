@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from known_divergences import MISSING_TEST_DATA_FILE
+
 
 from m3resp import BreathEvent, M3Session
 from m3resp.emg import ReSurfEMG
@@ -519,9 +519,7 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available(
         plt.close(fig)
 
 
-# NOTE: AssertionError
 def test_emg_real_data_pipeline_uses_committed_poly5_sample():
-    # pytest.importorskip("resurfemg")
 
     repo_root = Path(__file__).resolve().parents[1]
     emg_path = os.path.join(
