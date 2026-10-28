@@ -592,7 +592,6 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
         plt.close(fig)
 
 
-# NOTE: TypeError
 def test_emg_real_data_workflow_uses_committed_poly5_sample():
     """Load, preprocess, detect and postprocess the committed synthetic Poly5 sample."""
     pytest.importorskip("resurfemg")

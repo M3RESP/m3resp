@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from known_divergences import MISSING_TEST_DATA_FILE
+
 
 from m3resp.core.session import M3Session
 from m3resp.data import Signal

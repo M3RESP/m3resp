@@ -18,7 +18,7 @@ from m3resp.core.exceptions import (
     VariantAlreadyExistsError,
 )
 from m3resp.core.session import M3Session
-from known_divergences import MISSING_TEST_DATA_FILE
+
 
 FS = 100.0
 N = 1000

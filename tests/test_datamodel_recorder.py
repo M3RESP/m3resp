@@ -29,7 +29,6 @@ from m3resp.datamodel import (
     validate_store,
 )
 from m3resp.workflows import register_step, run_workflow
-from known_divergences import MISSING_TEST_DATA_FILE
 
 
 @pytest.fixture(autouse=True)

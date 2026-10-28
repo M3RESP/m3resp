@@ -20,7 +20,6 @@ from m3resp.data import (
     TimeSeries,
 )
 
-from known_divergences import MISSING_TEST_DATA_FILE
 from m3resp.data.events import BreathEvent
 
 

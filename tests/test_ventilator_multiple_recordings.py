@@ -21,7 +21,7 @@ from m3resp.emg.processing.signals import ventilator_signals
 from m3resp.emg import ReSurfEMG
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.core.session import M3Session
-from known_divergences import MISSING_TEST_DATA_FILE
+
 
 FS = 100.0
 N = 500
@@ -101,7 +101,6 @@ class TestPositionalProducersNowResolveByName:
             "volume": 0,
         }
 
-    # NOTE: AssertionError
     def test_emg_postprocessing_lets_labels_beat_column_order(self):
         # Postprocessing used to pass columns 0/1/2 itself, which overrode the
         # labels. The same recording with its columns shuffled (and labelled)

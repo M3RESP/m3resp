@@ -23,7 +23,6 @@ from m3resp.modalities.ventilator import (
     ventilator_payload,
     ventilator_raw,
 )
-from known_divergences import MISSING_TEST_DATA_FILE
 
 
 def _payload(n_samples: int = 100, fs: float = 10.0) -> dict:
