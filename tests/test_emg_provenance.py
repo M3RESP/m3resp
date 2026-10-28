@@ -24,6 +24,7 @@ def _provenance_for(session, action: str):
 
 
 def test_upstream_backed_step_records_the_shared_provenance_schema():
+    """A ReSurfEMG-backed step records provenance in the shared schema."""
     result = run_workflow(
         {
             "name": "provenance-smoke",
@@ -66,6 +67,7 @@ def test_upstream_backed_step_records_the_shared_provenance_schema():
 
 
 def test_native_primitive_step_records_m3resp_as_the_source_package():
+    """A step implemented in m3resp records m3resp as its source package."""
     # A flat pressure signal never crosses its own moving baseline, which
     # trips an unrelated pre-existing edge case in
     # onoff_from_baseline_crossings (no crossing found after the last peak);
@@ -110,6 +112,7 @@ def test_native_primitive_step_records_m3resp_as_the_source_package():
 
 
 def test_each_migrated_step_call_adds_exactly_one_provenance_record():
+    """Each step call adds exactly one provenance record."""
     result = run_workflow(
         {
             "name": "provenance-count-smoke",

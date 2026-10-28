@@ -25,6 +25,7 @@ classifiers = [
 dependencies = [
   "complexipy>8.2.0",
   "loguru",
+  "mypy>=2.4.0",
   "neurokit2==0.2.13",
   "numpy",
   "pandas",
@@ -32,7 +33,6 @@ dependencies = [
   "pydantic>=2",
   "pytest>=9.1.1",
   "PyYAML",
-  "resurfemg",
   "scipy",
   "sphinx>=9.1.1",
 ]
@@ -48,7 +48,7 @@ emg = [
 ]
 all = [
   "eitprocessing @ git+https://github.com/M3RESP/eitprocessing.git@m3resp-integration",
-  "resurfemg @ git+https://github.com/M3RESP/ReSurfEMG.git@m3resp-integration",
+  "resurfemg @ git+https://github.com/M3RESP/ReSurfEMG.git@fix/gating_window_computation",
   "ipywidgets",
 ]
 dev = [
@@ -102,6 +102,7 @@ addopts = "-m 'not real_data'"
 markers = [
   "real_data: runs on recorded data from tests/regression/real_data/datasets.yaml",
 ]
+xfail_strict = true
 
 
 [tool.marimo.runtime]
@@ -140,6 +141,7 @@ ignore = [
     "D104",   # Missing public package docstring
     "D105",   # Missing docstring in magic method
     "D107",   # Missing docstring in `__init__`
+    "D202",   # No blank lines allowed after function docstring
     "COM812", # missing trailing comma
     "ISC001", # single line implicit string concatenation
     "PLR2004", # Comparison against unnamed value
@@ -178,10 +180,23 @@ max-complexity = 15
 # consume. Both are load-bearing in that format, not dead code.
 "notebooks/**/*.py" = ["B018", "PLR1711"]
 "tools/visualization_tools/**/*.py" = ["B018", "PLR1711"]
-'tests/**/*.py' = [
-    'INP001', # Test directories are not namespace packages
-    'S101',   # Pytest tests should use `assert`
-    'RUF018', # Assignment expressions in assert are fine here
+"tests/**/*.py" = [
+    "S101",     # assert used — standard in pytest
+    "PLR2004",  # magic values in comparisons (expected numbers)
+    "ANN",      # missing type annotations
+    "D",        # missing/format docstrings
+    "ARG",      # unused arguments (pytest fixtures)
+    "SLF001",   # private member access (testing internals)
+    "INP001",   # implicit namespace package (no __init__.py)
+    "FBT",      # boolean positional args
+    "PLR0913",  # too many arguments (many fixtures)
+    "PLR0915",  # too many statements
+    "N802",     # function name not lowercase (e.g. test_EMG_filter)
+    "N806",     # uppercase variable names (X, Fs, etc.)
+    "T201",     # print statements
+    "S311",     # non-crypto random (synthetic test signals)
+    "PD901",    # generic `df` variable name
+    "E501",     # line too long (long parametrize data, paths)
 ]
 
 [tool.ty.environment]
@@ -213,3 +228,6 @@ dev = [
 ]
 
 
+[tool.coverage.run]
+source = ["m3resp"]
+branch = true

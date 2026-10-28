@@ -66,7 +66,7 @@ class _EcgMixin:
         peak_indices: Any,
         *,
         gate_width_samples: int = 205,
-        fill_method: int = 1,
+        fill_method: int = 3,
     ) -> np.ndarray:
         """Gate (remove) ECG peaks from `signal` around `peak_indices`.
 

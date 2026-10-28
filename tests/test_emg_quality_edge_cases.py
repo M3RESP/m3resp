@@ -27,7 +27,10 @@ np = pytest.importorskip("numpy")
 
 
 class TestEmptyInputs:
+    """Quality steps given no peaks."""
+
     def test_snr_pseudo_with_no_peaks_produces_no_results_not_a_crash(self):
+        """`snr_pseudo` with no peaks returns empty results and stores nothing."""
         session = M3Session()
         processed_emg = {
             "envelope": np.zeros(100),
@@ -44,7 +47,10 @@ class TestEmptyInputs:
 
 
 class TestNaNPropagation:
+    """Quality steps given NaN data."""
+
     def test_nan_envelope_produces_nan_measurements_not_silent_passing(self):
+        """A NaN envelope gives NaN SNR values, not passing flags."""
         session = M3Session()
         processed_emg = {
             "envelope": np.full(100, np.nan),
@@ -65,7 +71,10 @@ class TestNaNPropagation:
 
 
 class TestMismatchedLengths:
+    """Quality steps given arrays of different lengths."""
+
     def test_percentage_under_baseline_step_rejects_mismatched_arrays(self):
+        """Mismatched start/end arrays raise ValueError."""
         session = M3Session()
         processed_emg = {
             "envelope": np.zeros(100),
@@ -86,7 +95,10 @@ class TestMismatchedLengths:
 
 
 class TestZeroDenominator:
+    """Quality steps whose ratio has a zero denominator."""
+
     def test_interpeak_dist_with_degenerate_ecg_peaks_returns_inf_not_a_crash(self):
+        """Identical ECG peaks give an infinite ratio instead of ZeroDivisionError."""
         # Regression: this previously raised a raw ZeroDivisionError from
         # Python float division; fixed to use NumPy division, matching
         # upstream interpeak_dist's own behavior (a RuntimeWarning plus an
@@ -111,7 +123,10 @@ class TestZeroDenominator:
 
 
 class TestFailedFit:
+    """Quality steps whose statistics cannot be estimated."""
+
     def test_extreme_time_products_with_a_single_value_does_not_crash(self):
+        """A single time product still yields one flag and degenerate bounds."""
         # A single-element input degenerates the percentile-based bounds
         # (upper == lower == the one value), which is a legitimate "cannot
         # meaningfully evaluate extremeness" case, not a crash.

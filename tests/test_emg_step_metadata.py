@@ -83,6 +83,7 @@ _QUALITY_STEP_NAMES = [
 
 
 def test_all_forty_three_emg_and_ventilator_steps_are_registered_and_described():
+    """All 43 EMG and ventilator steps are registered under their prefixes."""
     emg = {d.name for d in describe_steps(prefix="emg.")}
     ventilator = {d.name for d in describe_steps(prefix="ventilator.")}
     assert emg == set(_EMG_STEP_NAMES)
@@ -91,6 +92,7 @@ def test_all_forty_three_emg_and_ventilator_steps_are_registered_and_described()
 
 
 def test_every_emg_step_declares_some_metadata_and_is_json_safe():
+    """Every EMG/ventilator step has a description and JSON-safe metadata."""
     for name in _ALL_STEP_NAMES:
         description = describe_step(name)
         assert description.description, name
@@ -103,11 +105,13 @@ def test_every_emg_step_declares_some_metadata_and_is_json_safe():
 
 
 def test_eleven_quality_steps_are_all_categorized_quality():
+    """The eleven quality steps are all in the 'quality' category."""
     for name in _QUALITY_STEP_NAMES:
         assert describe_step(name).category == "quality", name
 
 
 def test_ecg_removal_alternatives_are_mutually_cross_referenced():
+    """ECG gating and wavelet denoising list each other as alternatives."""
     gating = describe_step("emg.ecg_gating")
     wavelet = describe_step("emg.ecg_wavelet_denoising")
     assert set(gating.alternatives) == {"emg.ecg_wavelet_denoising"}
@@ -115,11 +119,13 @@ def test_ecg_removal_alternatives_are_mutually_cross_referenced():
 
 
 def test_ecg_removal_steps_need_resurfemg():
+    """The ECG steps declare `resurfemg` as an optional package."""
     for name in ("emg.ecg_gating", "emg.ecg_wavelet_denoising", "emg.ecg_detect_peaks"):
         assert describe_step(name).optional_packages == ("resurfemg",), name
 
 
 def test_ecg_gating_fill_method_choices_match_adapter_validation():
+    """Declared `fill_method` choices and default match the adapter's checks."""
     from m3resp.emg import ReSurfEMG
 
     description = describe_step("emg.ecg_gating")
@@ -132,6 +138,7 @@ def test_ecg_gating_fill_method_choices_match_adapter_validation():
 
 
 def test_snr_pseudo_flags_are_optional_matching_conditional_behavior():
+    """`snr_pseudo_flags` is declared optional, since it needs `minimum_snr`."""
     description = describe_step("emg.snr_pseudo")
     flags = next(
         a for a in description.output_artifacts if a.name == "snr_pseudo_flags"
@@ -140,6 +147,7 @@ def test_snr_pseudo_flags_are_optional_matching_conditional_behavior():
 
 
 def test_pocc_quality_threshold_defaults_match_function_signature():
+    """Declared Pocc quality thresholds match the function's defaults."""
     import inspect
 
     from m3resp.workflows.steps.ventilator import pocc_quality
@@ -159,11 +167,13 @@ def test_pocc_quality_threshold_defaults_match_function_signature():
 
 
 def test_describe_steps_prefix_filter_covers_emg_module():
+    """`describe_steps(prefix='emg.')` returns exactly the EMG steps."""
     names = {d.name for d in describe_steps(prefix="emg.")}
     assert names == set(_EMG_STEP_NAMES)
 
 
 def test_describe_steps_prefix_filter_separates_ventilator_from_emg():
+    """Ventilator steps are listed under 'ventilator.' and not under 'emg.'."""
     # The rename's whole point: ventilator steps are discoverable under their
     # own prefix rather than buried in the EMG namespace.
     names = {d.name for d in describe_steps(prefix="ventilator.")}
@@ -172,6 +182,7 @@ def test_describe_steps_prefix_filter_separates_ventilator_from_emg():
 
 
 def test_all_seventy_two_built_in_steps_still_describe_without_error():
+    """All 72 built-in steps describe themselves with some metadata."""
     descriptions = describe_steps()
     assert len(descriptions) == 72
     with_metadata = [

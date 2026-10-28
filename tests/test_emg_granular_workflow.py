@@ -68,6 +68,7 @@ GRANULAR_SPEC = {
 
 
 def test_granular_emg_workflow_matches_monolithic_postprocess():
+    """The step-by-step EMG workflow gives the same results as `postprocess_emg`."""
     result = run_workflow(GRANULAR_SPEC)
 
     reference_session = M3Session()

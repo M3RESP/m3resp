@@ -50,6 +50,7 @@ def _two_overlapping_breaths_and_one_clean_breath() -> tuple[dict[str, Any], Any
 
 
 def test_invalid_breath_keeps_its_computed_features():
+    """A breath with invalid on/offsets keeps its features and is flagged invalid."""
     processed_emg, baseline, peak_indices = (
         _two_overlapping_breaths_and_one_clean_breath()
     )
@@ -87,6 +88,7 @@ def test_invalid_breath_keeps_its_computed_features():
 
 
 def test_onset_offset_validity_is_added_to_the_session_quality_flags():
+    """On/offset validity becomes one EMG quality flag per breath."""
     processed_emg, baseline, peak_indices = (
         _two_overlapping_breaths_and_one_clean_breath()
     )
@@ -115,6 +117,7 @@ def test_onset_offset_validity_is_added_to_the_session_quality_flags():
 
 
 def test_invalid_pocc_manoeuvre_keeps_its_pressure_time_product():
+    """An invalid Pocc manoeuvre keeps its pressure-time product."""
     processed_emg, baseline, peak_indices = (
         _two_overlapping_breaths_and_one_clean_breath()
     )

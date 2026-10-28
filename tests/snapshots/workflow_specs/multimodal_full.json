@@ -201,7 +201,7 @@
       "id": "preprocess",
       "in": {},
       "out": {
-        "processed_emg": "processed_emg"
+        "processed_emg": "processed_emg_before_ecg"
       },
       "uses": "emg.preprocess",
       "with": {

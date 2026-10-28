@@ -25,7 +25,10 @@ EMG_PATH = REPO_ROOT / "tests" / "data" / "emg_data_synth_quiet_breathing.Poly5"
 
 
 class TestEmgLoad:
+    """`emg.load`: native per-channel signals and loader options."""
+
     def test_writes_channel_major_native_signals_with_labels_units_and_fs(self):
+        """Loading writes one `Signal` per channel with its label, unit and rate."""
         result = run_workflow(
             {
                 "name": "emg-load",
@@ -54,6 +57,7 @@ class TestEmgLoad:
         assert len(result.session.signals) == len(signals)
 
     def test_loader_options_must_be_a_mapping(self):
+        """Non-mapping `loader_options` fail spec validation before running."""
         # Caught by Phase 3.3 static parameter-type validation before
         # execution ever reaches emg.load's own runtime TypeError check.
         from m3resp.core.exceptions import WorkflowSpecError
@@ -79,6 +83,7 @@ class TestEmgLoad:
         not Path("unused.Poly5").exists(), reason="session recordings not on disk"
     )
     def test_injected_loader_still_produces_native_signals(self):
+        """A session's custom loader still yields native per-channel signals."""
         from m3resp.emg import ReSurfEMG
 
         fake_array = np.asarray([[0.0, 1.0, 0.0, -1.0], [2.0, 2.0, 2.0, 2.0]])
@@ -121,7 +126,10 @@ def _fake_processed_emg(*, fs: float = 1000.0, n_samples: int = 5000) -> dict[st
 
 
 class TestMovingBaselineNativeOutput:
+    """`emg.moving_baseline`: baseline signal output and parameter checks."""
+
     def test_writes_a_derived_signal_matching_the_envelope_time_axis(self):
+        """The baseline is also written as a `Signal` on the envelope's time axis."""
         session = M3Session()
         processed_emg = _fake_processed_emg()
 
@@ -159,13 +167,17 @@ class TestMovingBaselineNativeOutput:
         ],
     )
     def test_rejects_invalid_parameters(self, kwargs):
+        """Invalid window, step or percentile values raise ValueError."""
         session = M3Session()
         with pytest.raises(ValueError):
             moving_baseline(session, _fake_processed_emg(), **kwargs)
 
 
 class TestSlopesumBaselineNativeOutput:
+    """`emg.slopesum_baseline`: baseline signals, default windows and checks."""
+
     def test_writes_baseline_and_running_mean_std_signals(self):
+        """Baseline, running mean and running std are written as `Signal`s."""
         session = M3Session()
         processed_emg = _fake_processed_emg()
 
@@ -204,6 +216,7 @@ class TestSlopesumBaselineNativeOutput:
     def test_default_moving_average_and_percentile_window_seconds_match_prior_defaults(
         self,
     ):
+        """Default 0.5 s / 1.0 s windows match the old fs//2 and fs sample counts."""
         # Regression: before Phase 2, these were hardcoded as
         # `max(1, int(fs // 2))` / `max(1, int(fs))` samples. The new
         # seconds-based defaults (0.5s / 1.0s) must reproduce the same
@@ -226,6 +239,7 @@ class TestSlopesumBaselineNativeOutput:
         ],
     )
     def test_rejects_invalid_parameters(self, kwargs):
+        """Invalid slope-sum baseline parameters raise ValueError."""
         session = M3Session()
         with pytest.raises(ValueError):
             slopesum_baseline(session, _fake_processed_emg(), **kwargs)

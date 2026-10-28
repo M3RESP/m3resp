@@ -40,8 +40,8 @@ def _session() -> M3Session:
     return session
 
 
-@MISSING_TEST_DATA_FILE
 def test_slice_keeps_only_the_window():
+    """Slicing keeps only the requested window and stores a summary."""
     session = _session()
 
     summary = session.slice_emg(10.0, 25.0)
@@ -54,8 +54,8 @@ def test_slice_keeps_only_the_window():
     assert session.parameters["emg_slice"] == summary
 
 
-@MISSING_TEST_DATA_FILE
 def test_without_an_end_the_rest_of_the_recording_is_kept():
+    """Without an end time, everything after the start is kept."""
     session = _session()
 
     session.slice_emg(50.0)
@@ -65,7 +65,6 @@ def test_without_an_end_the_rest_of_the_recording_is_kept():
     assert array[0, -1] == pytest.approx(DURATION_SECONDS - 1 / FS)
 
 
-@MISSING_TEST_DATA_FILE
 def test_airway_pressure_from_the_same_file_is_cut_the_same_way():
     """Paw and EMG share one clock, so they must stay lined up."""
 
@@ -108,6 +107,7 @@ def test_ventilator_data_at_its_own_rate_is_cut_at_the_same_times():
 
 
 def test_emg_data_held_as_a_list_stays_a_list():
+    """EMG data held as nested lists is sliced and stays a list."""
     session = M3Session(
         emg_adapter=ReSurfEMGAdapter(
             loader=lambda *args, **kwargs: {
@@ -154,6 +154,7 @@ def test_ventilator_data_at_its_own_rate_is_cut_at_the_same_times():
 
 
 def test_emg_data_held_as_a_list_stays_a_list():
+    """EMG data held as nested lists is sliced and stays a list."""
     session = M3Session(
         emg_adapter=ReSurfEMG(
             loader=lambda *args, **kwargs: {
@@ -176,6 +177,7 @@ def test_emg_data_held_as_a_list_stays_a_list():
     [(-1.0, 10.0), (20.0, 10.0), (10.0, 10.0), (0.0, DURATION_SECONDS + 1.0)],
 )
 def test_a_window_outside_the_recording_is_refused(start, end):
+    """A window outside the recording raises ValueError and keeps the data."""
     session = _session()
 
     with pytest.raises(ValueError, match="start < end"):
@@ -185,12 +187,13 @@ def test_a_window_outside_the_recording_is_refused(start, end):
 
 
 def test_slicing_needs_a_loaded_recording():
+    """Slicing without loaded EMG raises MissingModalityDataError."""
     with pytest.raises(MissingModalityDataError):
         M3Session().slice_emg(0.0, 1.0)
 
 
-@MISSING_TEST_DATA_FILE
 def test_step_calls_the_session_method():
+    """`emg.slice_recording` calls `session.slice_emg`."""
     session = _session()
 
     result = slice_recording(session, start_seconds=5.0)
@@ -200,6 +203,7 @@ def test_step_calls_the_session_method():
 
 
 def test_steps_after_the_slice_step_read_the_cut_recording(tmp_path):
+    """Steps after `emg.slice_recording` in a workflow see the cut recording."""
     from m3resp.workflows import load_spec, run_workflow
 
     (tmp_path / "study.txt").write_text("")

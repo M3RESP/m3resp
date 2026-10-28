@@ -180,7 +180,6 @@ class TestPositionalProducersNowResolveByName:
 
 
 class TestOneRecordingIsUnchanged:
-    @MISSING_TEST_DATA_FILE
     def test_the_primary_recording_is_still_reachable_the_old_way(self):
         session = _session({"vent.txt": _payload(["Paw", "Flow", "Volume"])})
         session.load_ventilator("vent.txt")
@@ -190,7 +189,6 @@ class TestOneRecordingIsUnchanged:
         assert session.raw["vent"] is session.ventilator
         assert session.primary_ventilator_name() == "default"
 
-    @MISSING_TEST_DATA_FILE
     def test_channels_keep_their_bare_names(self):
         session = _session({"vent.txt": _payload(["Paw", "Flow", "Volume"])})
         session.load_ventilator("vent.txt")
@@ -202,7 +200,6 @@ class TestOneRecordingIsUnchanged:
             "volume",
         }
 
-    @MISSING_TEST_DATA_FILE
     def test_the_recording_still_gets_its_channels_back(self):
         session = _session({"vent.txt": _payload(["Paw", "Flow", "Volume"])})
         session.load_ventilator("vent.txt")
@@ -214,7 +211,6 @@ class TestOneRecordingIsUnchanged:
 
 
 class TestTwoRecordings:
-    @MISSING_TEST_DATA_FILE
     def _session(self) -> M3Session:
         session = _session(
             {
@@ -231,23 +227,19 @@ class TestTwoRecordings:
         session.load_ventilator("eit_medibus.txt", name="eit")
         return session
 
-    @MISSING_TEST_DATA_FILE
     def test_both_are_filed_under_their_names(self):
         session = self._session()
         assert set(session.ventilators) == {"default", "eit"}
 
-    @MISSING_TEST_DATA_FILE
     def test_the_first_stays_primary(self):
         session = self._session()
         assert session.primary_ventilator_name() == "default"
         assert session.raw["ventilator"] is session.ventilators["default"]
 
-    @MISSING_TEST_DATA_FILE
     def test_a_named_recording_is_retrievable(self):
         session = self._session()
         assert session.get_ventilator("eit") is session.ventilators["eit"]
 
-    @MISSING_TEST_DATA_FILE
     def test_an_unknown_name_names_what_is_loaded(self):
         session = self._session()
         with pytest.raises(MissingModalityDataError, match="'eit'"):
@@ -257,7 +249,6 @@ class TestTwoRecordings:
         with pytest.raises(MissingModalityDataError, match="load_ventilator"):
             M3Session().get_ventilator()
 
-    @MISSING_TEST_DATA_FILE
     def test_the_second_recordings_channels_are_named_apart(self):
         session = self._session()
         session.preprocess_ventilator()
@@ -267,7 +258,6 @@ class TestTwoRecordings:
         assert {"airway_pressure", "flow", "volume"} <= channels
         assert {"airway_pressure__eit", "flow__eit", "volume__eit"} <= channels
 
-    @MISSING_TEST_DATA_FILE
     def test_both_airway_pressures_survive_as_the_same_quantity(self):
         session = self._session()
         session.preprocess_ventilator()
@@ -279,7 +269,6 @@ class TestTwoRecordings:
             "airway_pressure__eit",
         }
 
-    @MISSING_TEST_DATA_FILE
     def test_each_pressure_keeps_the_unit_its_device_reported(self):
         session = self._session()
         session.preprocess_ventilator()
@@ -293,7 +282,6 @@ class TestTwoRecordings:
         # channels millilitres.
         assert units == {"volume": "L", "volume__eit": "mL"}
 
-    @MISSING_TEST_DATA_FILE
     def test_each_recording_lands_in_its_own_variant(self):
         session = self._session()
         session.preprocess_ventilator()
@@ -301,7 +289,6 @@ class TestTwoRecordings:
 
         assert set(session.processed_variants["ventilator"]) == {"default", "eit"}
 
-    @MISSING_TEST_DATA_FILE
     def test_the_named_recording_gets_its_own_channels_back(self):
         session = self._session()
         session.preprocess_ventilator(name="eit")
@@ -312,7 +299,6 @@ class TestTwoRecordings:
         # The primary recording was not touched by preprocessing the other one.
         assert session.ventilators["default"].airway_pressure is None
 
-    @MISSING_TEST_DATA_FILE
     def test_the_two_pressures_hold_different_data(self):
         session = _session(
             {
@@ -371,7 +357,6 @@ class TestVentilatorInheritsItsHostsClock:
             session.slice_ventilator(1.0)
         assert session.ventilator.data["array"].shape[1] == before
 
-    @MISSING_TEST_DATA_FILE
     def test_an_semg_sourced_recording_reports_the_emg_clock(self):
         from m3resp.modalities.ventilator import ventilator_clock
 
@@ -379,7 +364,6 @@ class TestVentilatorInheritsItsHostsClock:
         session.load_ventilator("study.txt")
         assert ventilator_clock(session.ventilator) == "emg"
 
-    @MISSING_TEST_DATA_FILE
     def test_a_standalone_export_keeps_its_own_clock(self):
         from m3resp.modalities.ventilator import ventilator_clock
 
@@ -387,7 +371,6 @@ class TestVentilatorInheritsItsHostsClock:
         session.load_ventilator("monitor.txt", source="ventilator")
         assert ventilator_clock(session.ventilator) == "ventilator"
 
-    @MISSING_TEST_DATA_FILE
     def test_cutting_emg_also_cuts_the_ventilator_it_carried(self):
         session = _session(
             {
@@ -403,7 +386,6 @@ class TestVentilatorInheritsItsHostsClock:
         after = session.ventilator.data["array"].shape[1]
         assert after == before - int(1.0 * FS)
 
-    @MISSING_TEST_DATA_FILE
     def test_a_hosted_recording_is_not_cut_on_its_own(self):
         session = _session({"study.txt": _payload(["Paw", "Flow", "Volume"])})
         session.load_ventilator("study.txt")
@@ -415,7 +397,6 @@ class TestVentilatorInheritsItsHostsClock:
             session.slice_ventilator(1.0)
         assert session.ventilator.data["array"].shape[1] == before
 
-    @MISSING_TEST_DATA_FILE
     def test_a_standalone_export_is_cut_by_slice_ventilator(self):
         session = _session({"monitor.txt": _payload(["Paw", "Flow", "Volume"])})
         session.load_ventilator("monitor.txt", source="ventilator")
@@ -424,7 +405,6 @@ class TestVentilatorInheritsItsHostsClock:
         session.slice_ventilator(1.0)
         assert session.ventilator.data["array"].shape[1] == before - int(1.0 * FS)
 
-    @MISSING_TEST_DATA_FILE
     def test_a_standalone_export_is_untouched_by_slice_emg(self):
         session = _session(
             {
@@ -439,7 +419,6 @@ class TestVentilatorInheritsItsHostsClock:
         session.slice_emg(1.0)
         assert session.ventilator.data["array"].shape[1] == before
 
-    @MISSING_TEST_DATA_FILE
     def test_each_recording_follows_its_own_host(self):
         session = _session(
             {

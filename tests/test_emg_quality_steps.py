@@ -77,7 +77,10 @@ def _synthetic_breaths(
 
 
 class TestSnrPseudo:
+    """`emg.snr_pseudo`: per-breath SNR results and optional flags."""
+
     def test_results_have_no_flags_without_a_configured_minimum(self):
+        """Without `minimum_snr`, one SNR result per breath and no flags."""
         session = M3Session()
         data = _synthetic_breaths()
         out = snr_pseudo(
@@ -91,6 +94,7 @@ class TestSnrPseudo:
         assert len(session.quality) == 0
 
     def test_flags_appear_only_when_minimum_snr_is_set(self):
+        """With `minimum_snr`, one pass/fail flag is written per breath."""
         session = M3Session()
         data = _synthetic_breaths()
         out = snr_pseudo(
@@ -110,7 +114,10 @@ class TestSnrPseudo:
 
 
 class TestPercentageUnderBaseline:
+    """`emg.percentage_under_baseline`: per-breath flags and results."""
+
     def test_writes_per_breath_flags_and_percentage_reference_measurements(self):
+        """One flag and one percentage/reference result is written per breath."""
         session = M3Session()
         data = _synthetic_breaths()
         out = percentage_under_baseline(
@@ -132,7 +139,10 @@ class TestPercentageUnderBaseline:
 
 
 class TestDetectLocalHighAub:
+    """`emg.detect_local_high_aub`: per-breath flags and threshold."""
+
     def test_writes_per_breath_flags_and_the_effective_threshold(self):
+        """One flag per breath is written, plus the threshold actually used."""
         session = M3Session()
         data = _synthetic_breaths()
         aub_out = area_under_baseline(
@@ -157,7 +167,10 @@ class TestDetectLocalHighAub:
 
 
 class TestDetectExtremeTimeProducts:
+    """`emg.detect_extreme_time_products`: per-breath flags and bounds."""
+
     def test_writes_per_breath_flags_and_effective_bounds(self):
+        """One flag per breath is written, plus the bounds actually used."""
         session = M3Session()
         data = _synthetic_breaths()
         tp_out = time_product(
@@ -182,7 +195,10 @@ class TestDetectExtremeTimeProducts:
 
 
 class TestDetectNonConsecutiveManoeuvres:
+    """`ventilator.detect_non_consecutive_manoeuvres` flags."""
+
     def test_writes_one_airway_pressure_flag_per_manoeuvre(self):
+        """One ventilator airway-pressure flag is written per manoeuvre."""
         session = M3Session()
         ventilator_breaths = np.array([0, 1000, 2000, 3000, 4000])
         manoeuvres = np.array([500, 2500])
@@ -195,7 +211,10 @@ class TestDetectNonConsecutiveManoeuvres:
 
 
 class TestEvaluateBellCurveError:
+    """`emg.evaluate_bell_curve_error`: per-breath flags and results."""
+
     def test_writes_per_breath_flags_and_measurement_results(self):
+        """One flag and one bell-curve error result is written per breath."""
         session = M3Session()
         data = _synthetic_breaths()
         tp_out = time_product(
@@ -240,7 +259,10 @@ class TestEvaluateBellCurveError:
 
 
 class TestEvaluateEventTiming:
+    """`emg.evaluate_event_timing`: EMG/ventilator breath pairing."""
+
     def test_writes_per_pair_results_with_both_source_indices_and_fs(self):
+        """Each EMG/ventilator pair records both indices and both sampling rates."""
         session = M3Session()
         data = _synthetic_breaths()
         vent_fs = 50.0
@@ -268,6 +290,7 @@ class TestEvaluateEventTiming:
             )
 
     def test_reports_unmatched_count_instead_of_silently_truncating(self):
+        """EMG peaks without a ventilator match are counted, not silently dropped."""
         session = M3Session()
         data = _synthetic_breaths()
         # One extra EMG peak with no ventilator counterpart.
@@ -294,7 +317,10 @@ class TestEvaluateEventTiming:
 
 
 class TestEvaluateRespiratoryRates:
+    """`emg.evaluate_respiratory_rates`: rate agreement check."""
+
     def test_writes_one_flag_and_one_detected_fraction_measurement(self):
+        """One overall flag and one detected-fraction result are written."""
         session = M3Session()
         data = _synthetic_breaths()
         ventilator_respiratory_rate = (12.0, np.array([12.0, 12.5, 11.5]))
@@ -312,7 +338,10 @@ class TestEvaluateRespiratoryRates:
 
 
 class TestPoccQualityAndInterpeakDist:
+    """`ventilator.pocc_quality` and `emg.interpeak_dist`."""
+
     def test_pocc_quality_labels_criteria_rows_explicitly(self):
+        """Pocc quality results name each criterion they report."""
         session = M3Session()
         pressure = -np.abs(np.sin(np.linspace(0, 10, 2000))) * 5.0
         ventilator_signals = {"airway_pressure": pressure, "fs": 100.0}
@@ -330,6 +359,7 @@ class TestPoccQualityAndInterpeakDist:
         assert len(out["pocc_quality_results"]) == len(pocc_peaks) * 3
 
     def test_interpeak_dist_requires_at_least_two_peaks_each(self):
+        """`interpeak_dist` needs at least two EMG and two ECG peaks."""
         session = M3Session()
         with pytest.raises(ValueError, match="at least two peaks"):
             interpeak_dist(session, [1], [1, 2], {"fs": 100.0})
