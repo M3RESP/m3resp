@@ -30,6 +30,7 @@ from typing import Any
 import numpy as np
 import pytest
 
+from m3resp.adapters.eitprocessing_adapter import as_breath_detection
 from m3resp.core.session import M3Session
 from m3resp.workflows.engine import run_workflow
 
@@ -150,7 +151,7 @@ def test_eeli_matches_direct_eeli_call(workflow_result):
     from eitprocessing.parameters.eeli import EELI
 
     global_impedance = _upstream(workflow_result, "global_impedance")
-    breath_detector = workflow_result.value("breath_detector")
+    breath_detector = as_breath_detection(workflow_result.value("breath_detector"))
 
     expected = EELI(breath_detection=breath_detector).compute_parameter(
         global_impedance, store=False, result_label="continuous_eelis"
@@ -173,7 +174,7 @@ def test_continuous_tiv_matches_direct_tiv_call(workflow_result):
     from eitprocessing.parameters.tidal_impedance_variation import TIV
 
     global_impedance = _upstream(workflow_result, "global_impedance")
-    breath_detector = workflow_result.value("breath_detector")
+    breath_detector = as_breath_detection(workflow_result.value("breath_detector"))
 
     expected = TIV(breath_detection=breath_detector).compute_parameter(
         global_impedance, store=False, result_label="continuous_tivs"
@@ -196,7 +197,7 @@ def test_pixel_tiv_matches_direct_tiv_call(workflow_result):
 
     filtered_eit = _upstream(workflow_result, "filtered_eit")
     global_impedance = _upstream(workflow_result, "global_impedance")
-    breath_detector = workflow_result.value("breath_detector")
+    breath_detector = as_breath_detection(workflow_result.value("breath_detector"))
 
     expected = TIV(breath_detection=breath_detector).compute_parameter(
         filtered_eit,

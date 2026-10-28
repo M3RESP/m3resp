@@ -82,17 +82,27 @@ def test_every_declared_alternative_is_a_real_registered_step():
             )
 
 
+#: EIT steps that run on m3resp code only.
+_M3RESP_ONLY_EIT_STEPS = (
+    "eit.slice_signal",
+    "eit.detect_rates",
+    "eit.detect_breaths",
+    "eit.normalize_breaths",
+)
+
+
 def test_eit_and_emg_steps_declare_their_optional_package_accurately():
-    """Native signal slicing is available on its own. EIT steps that read
-    or build a Sequence declare eitprocessing; EMG steps that call their
-    upstream package declare resurfemg.
+    """Native signal slicing and the rate and breath detection are available
+    on their own. Other EIT steps read or build a Sequence and declare
+    eitprocessing; EMG steps that call their upstream package declare
+    resurfemg.
     """
 
     for description in describe_steps():
         prefix = description.name.split(".", 1)[0]
         if prefix == "eit":
             expected = (
-                () if description.name == "eit.slice_signal" else ("eitprocessing",)
+                () if description.name in _M3RESP_ONLY_EIT_STEPS else ("eitprocessing",)
             )
             assert description.optional_packages == expected, description.name
         elif prefix == "emg" and description.optional_packages:

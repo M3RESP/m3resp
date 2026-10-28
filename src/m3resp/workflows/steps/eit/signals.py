@@ -9,7 +9,10 @@ import numpy as np
 from m3resp.adapters.eitprocessing_adapter import (
     EITPROCESSING_FIELDS,
     add_to_collection,
+    as_breath_detection,
     as_continuous_data,
+    as_signal,
+    breaths_to_interval_data,
     eit_data_to_signal,
     eitprocessing_fields,
     signal_to_continuous_data,
@@ -18,6 +21,7 @@ from m3resp.adapters.eitprocessing_adapter import (
 from m3resp.core.exceptions import UnsupportedWorkflowError
 from m3resp.core.session import M3Session
 from m3resp.data import PixelMask, Signal
+from m3resp.eit.processing import BreathDetectionSettings, find_breaths
 from m3resp.eit.processing import global_impedance as summed_pixels
 from m3resp.eit.processing import regional_impedance as regional_impedance_of
 from m3resp.workflows.registry import (
@@ -403,10 +407,9 @@ def functional_impedance(
     reads={"signal": "detection_signal"},
     writes=("breath_intervals", "breath_detector"),
     summary="Detect breaths on a continuous EIT impedance signal.",
-    description="Detect breath start/end times on an impedance waveform (global, or regional from an ROI) via eitprocessing's BreathDetection.",
+    description="Detect the breaths (start, peak, end) of an impedance waveform (global, or regional from an ROI) from its peaks and valleys (m3resp.eit.processing.find_breaths).",
     category="detection",
     modality="eit",
-    optional_packages=_EITPROCESSING,
     input_artifacts=(
         StepArtifact(
             name="signal",
@@ -428,40 +431,39 @@ def functional_impedance(
     output_artifacts=(
         StepArtifact(
             name="breath_intervals",
-            artifact_type="interval_collection",
-            description="Detected breath intervals.",
-            compatibility_only=True,
+            artifact_type="interval_data",
+            description="The detected breaths as BreathEvents (IntervalData without values).",
         ),
         StepArtifact(
             name="breath_detector",
             artifact_type="eit_breath_detector",
-            description="Configured upstream BreathDetection instance, reusable by later steps.",
+            description="The settings of the breath detection (BreathDetectionSettings), for the TIV, EELI and pixel steps.",
             public=False,
-            compatibility_only=True,
         ),
     ),
 )
 def detect_breaths(signal: Any, *, min_duration_s: float = 2 / 3) -> dict[str, Any]:
-    """Detect breaths on an impedance waveform with eitprocessing.
+    """Detect the breaths of an impedance waveform.
 
     Args:
         signal: Global or regional impedance waveform as a ``Signal`` (or an
             eitprocessing ``ContinuousData``), times in seconds.
-        min_duration_s: Minimum separation used by the breath detector,
-            in seconds.
+        min_duration_s: Shortest expected breath, in seconds.
 
     Returns:
-        dict[str, Any]: ``breath_intervals`` as upstream detected breaths and
-            ``breath_detector`` as the configured detector for later steps.
-            Breath times retain the waveform's time axis.
+        dict[str, Any]: ``breath_intervals``, an ``IntervalData`` whose
+            intervals are the breaths as ``BreathEvent``s (start, peak in
+            ``extremum_time``, end) on the time axis of the waveform, and
+            ``breath_detector``, the ``BreathDetectionSettings`` for later
+            steps.
     """
 
-    from eitprocessing.features.breath_detection import BreathDetection
-
-    detector = BreathDetection(minimum_duration=min_duration_s)
+    settings = BreathDetectionSettings(minimum_duration=min_duration_s)
     return {
-        "breath_intervals": detector.find_breaths(as_continuous_data(signal)),
-        "breath_detector": detector,
+        "breath_intervals": breaths_to_interval_data(
+            find_breaths(as_signal(signal), settings)
+        ),
+        "breath_detector": settings,
     }
 
 
@@ -469,20 +471,18 @@ def detect_breaths(signal: Any, *, min_duration_s: float = 2 / 3) -> dict[str, A
     "eit.normalize_breaths",
     reads={"breath_intervals": "breath_intervals", "session": "session"},
     writes=(),
-    summary="Normalize detected EIT breath intervals into session events.",
-    description="Convert detected EIT breath intervals into native BreathEvents and store them on the session as 'eit_breaths'.",
+    summary="Store detected EIT breaths as session events.",
+    description="Store the breaths from 'eit.detect_breaths' as BreathEvents on the session under 'eit_breaths'.",
     category="detection",
     modality="eit",
-    optional_packages=_EITPROCESSING,
     parameters_reviewed=True,
     session_writes=("session.events.eit_breaths",),
     input_artifacts=(
         StepArtifact(
             name="breath_intervals",
-            artifact_type="interval_collection",
+            artifact_type="interval_data",
             default_context_key="breath_intervals",
-            description="Breath intervals from 'eit.detect_breaths' to normalize.",
-            compatibility_only=True,
+            description="Breaths from 'eit.detect_breaths' to store.",
         ),
         _SESSION_ARTIFACT,
     ),
@@ -530,9 +530,8 @@ def normalize_breaths(
         StepArtifact(
             name="breath_detector",
             artifact_type="eit_breath_detector",
-            description="Configured breath detector from 'eit.detect_breaths'.",
+            description="Breath detection settings from 'eit.detect_breaths'.",
             public=False,
-            compatibility_only=True,
         ),
         _SESSION_ARTIFACT,
     ),
@@ -568,7 +567,9 @@ def continuous_tiv(
         signal: Global or regional impedance waveform to measure, as a
             ``Signal`` (or an eitprocessing ``ContinuousData``).
         eit_sequence: Sequence that stores the upstream result.
-        breath_detector: Detector used to identify breaths on ``signal``.
+        breath_detector: Settings of the breath detection on ``signal``
+            (``BreathDetectionSettings``), or an eitprocessing
+            ``BreathDetection``.
         session: Session that stores the per-breath values and history.
 
     Returns:
@@ -582,7 +583,9 @@ def continuous_tiv(
 
     from eitprocessing.parameters.tidal_impedance_variation import TIV
 
-    result: Any = TIV(breath_detection=breath_detector).compute_parameter(
+    result: Any = TIV(
+        breath_detection=as_breath_detection(breath_detector)
+    ).compute_parameter(
         as_continuous_data(signal),
         sequence=eit_sequence,
         store=False,
@@ -645,9 +648,8 @@ def continuous_tiv(
         StepArtifact(
             name="breath_detector",
             artifact_type="eit_breath_detector",
-            description="Configured breath detector from 'eit.detect_breaths'.",
+            description="Breath detection settings from 'eit.detect_breaths'.",
             public=False,
-            compatibility_only=True,
         ),
         _SESSION_ARTIFACT,
     ),
@@ -693,7 +695,9 @@ def eeli(
         signal: Global or regional impedance waveform to measure, as a
             ``Signal`` (or an eitprocessing ``ContinuousData``).
         eit_sequence: Sequence that stores the upstream result.
-        breath_detector: Detector used to identify breaths on ``signal``.
+        breath_detector: Settings of the breath detection on ``signal``
+            (``BreathDetectionSettings``), or an eitprocessing
+            ``BreathDetection``.
         session: Session that stores the per-breath values and history.
         result_label: Name used for the upstream and per-breath results.
 

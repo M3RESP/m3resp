@@ -24,6 +24,25 @@ The EIT images and impedance waveforms that the EIT steps give and read are `Sig
 
 Ventilator waveforms can be read from `EITRecording.signals` or an `EITFileData`. Device marks and Timpel breaths remain available in `session.eit.events` and `session.eit.intervals`. Raw EIT Signals record the vendor in `source`. The raw global waveform is available as `session.eit.raw_global_impedance`; when the file has none, m3resp sums the native images.
 
+### m3resp finds the EIT rates and breaths
+
+`eit.detect_rates`, `EITProcessingAdapter.detect_rates` and `session.preprocess_eit()` find the breathing rate and the heart rate with `m3resp.eit.processing.detect_rates`. `eit.detect_breaths`, `EITProcessingAdapter.find_breaths` and `session.preprocess_eit()` find the breaths with `m3resp.eit.processing.find_breaths`. The two functions are copied from `RateDetection` and `BreathDetection` of eitprocessing 1.8.7 and give the same numbers. Their settings are in `RateDetectionSettings` and `BreathDetectionSettings`, with the same names and defaults as in eitprocessing. The `method` of the rate results is `m3resp.eit.processing.detect_rates`.
+
+Some step outputs have a new form:
+
+- `breath_intervals` of `eit.detect_breaths` is an m3resp `IntervalData` whose `intervals` are `BreathEvent`s, with the artifact type `interval_data`. Before, it was an eitprocessing `IntervalData` of `Breath`s (type `interval_collection`). The peak of a breath is in `extremum_time`; eitprocessing calls it `middle_time`.
+- `rate_detector` of `eit.detect_rates` and `breath_detector` of `eit.detect_breaths` are the settings records. The artifact types `eit_rate_detector` and `eit_breath_detector` keep their names and now stand for the m3resp settings records. The TIV, EELI and pixel steps make an eitprocessing `BreathDetection` from the settings record.
+- `metric.interval_cv` reads `BreathEvent`s and `Interval`s, and its input has the type `interval_data`.
+- `eit.detect_rates`, `eit.detect_breaths` and `eit.normalize_breaths` run without eitprocessing.
+
+`session.preprocess_eit()` also stores the breaths in the eitprocessing `Sequence` under `"eit_breaths"`, in the form of eitprocessing. `m3resp.visualization.plot_rate_detection` draws the figure of the rate detection (`rate_detection.png`), with the same look as the eitprocessing figure.
+
+Three cases give a different result from eitprocessing 1.8.7:
+
+- A rate limit of 0 Hz stays 0 Hz. eitprocessing replaces it by the default limit of the subject type.
+- When no frequency of the spectrum lies inside a rate range, `detect_rates` gives a ValueError that names the range in breaths per minute. eitprocessing stops with a numpy error.
+- When the first and the last valley are removed and no valley is left, `find_breaths` gives no breaths. eitprocessing stops with an IndexError.
+
 ### Fixed: EIT reading options that stopped with an error
 
 - Sentec: `first_frame` above 0 together with `max_frames` gives `max_frames` frames from `first_frame` on. eitprocessing 1.8.7 stops with an IndexError.

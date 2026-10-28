@@ -25,7 +25,7 @@ session.detect_eit_breaths()
 print(len(session.events["eit_breaths"]))
 ```
 
-M3Resp reads EIT files, sums global and regional impedance, and slices EIT data with its own code. Rate estimation, filtering, breath detection and the other EIT calculations use `eitprocessing` through the adapter. EMG calculations use `resurfemg`, and ventilator calculations are part of M3Resp. The results are held in M3Resp objects.
+M3Resp reads EIT files, sums global and regional impedance, slices EIT data, and finds the breathing rate, the heart rate and the breaths with its own code. Filtering and the other EIT calculations use `eitprocessing` through the adapter. EMG calculations use `resurfemg`, and ventilator calculations are part of M3Resp. The results are held in M3Resp objects.
 
 ## Where the session stores the results
 

@@ -15,11 +15,14 @@ import os
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 
 from m3resp.adapters import EITProcessingAdapter
 from m3resp.adapters.eitprocessing_adapter import add_to_collection
 from m3resp.core.exceptions import OptionalDependencyError
+from m3resp.data import IntervalData, Signal
+from m3resp.eit.processing import RateDetectionSettings
 
 pytest.importorskip("eitprocessing")
 
@@ -309,11 +312,38 @@ class TestOptionalDependencyBehavior:
         monkeypatch.setattr(builtins, "__import__", _blocking_import)
         return EITProcessingAdapter()
 
-    def test_detect_rates_raises_optional_dependency_error(
+    def test_detect_rates_runs_without_eitprocessing(
         self, blocked_adapter: EITProcessingAdapter
     ):
-        with pytest.raises(OptionalDependencyError):
-            blocked_adapter.detect_rates(object())
+        fs = 20.0
+        time = np.arange(int(40 * fs)) / fs
+        breathing = np.sin(2 * np.pi * 0.25 * time)
+        images = Signal(
+            values=breathing[:, None, None] * np.ones((len(time), 4, 4)) + 5.0,
+            time=time,
+            sample_frequency=fs,
+            name="images",
+            modality="eit",
+        )
+        rates = blocked_adapter.detect_rates(images, welch_window_seconds=20.0)
+        assert rates["respiratory_rate_hz"] == pytest.approx(0.25, abs=0.01)
+        assert isinstance(rates["rate_detector"], RateDetectionSettings)
+
+    def test_find_breaths_runs_without_eitprocessing(
+        self, blocked_adapter: EITProcessingAdapter
+    ):
+        fs = 20.0
+        time = np.arange(int(30 * fs)) / fs
+        waveform = Signal(
+            values=np.sin(2 * np.pi * 0.25 * time),
+            time=time,
+            sample_frequency=fs,
+            name="global_impedance",
+            modality="eit",
+        )
+        breaths = blocked_adapter.find_breaths(waveform)
+        assert isinstance(breaths, IntervalData)
+        assert len(breaths.intervals) == 6
 
     def test_apply_mdn_raises_optional_dependency_error(
         self, blocked_adapter: EITProcessingAdapter

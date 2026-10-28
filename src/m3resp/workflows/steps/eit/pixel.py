@@ -74,9 +74,8 @@ from ._shared import (
         StepArtifact(
             name="breath_detector",
             artifact_type="eit_breath_detector",
-            description="Configured breath detector from 'eit.detect_breaths'.",
+            description="Breath detection settings from 'eit.detect_breaths'.",
             public=False,
-            compatibility_only=True,
         ),
         _SESSION_ARTIFACT,
     ),
@@ -138,7 +137,9 @@ def pixel_tiv(
             eitprocessing ``EITData``), with time, row and column axes.
         signal: Global or regional waveform used to find the enclosing breaths.
         eit_sequence: Sequence that stores the upstream result.
-        breath_detector: Detector used to identify breaths on ``signal``.
+        breath_detector: Settings of the breath detection on ``signal``
+            (``BreathDetectionSettings``), or an eitprocessing
+            ``BreathDetection``.
         session: Session that stores the per-breath maps and history.
         tiv_timing: ``'continuous'`` uses waveform breath timing; ``'pixel'``
             uses individual pixel breath timing.

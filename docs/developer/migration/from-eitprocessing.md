@@ -33,9 +33,39 @@ The raw EIT Signals identify the vendor in `source`. `eit.load` and `eit.slice_r
 
 `session.slice_eit(start, end)` cuts native images, waveforms, marks and breaths using seconds from the first image. See {doc}`../../concepts/slicing` for boundary rules. Ventilator waveforms can be read from the native recording or an `EITFileData` with `ventilator_payload_from_sequence` in `m3resp.adapters.ventilator_adapter`.
 
+## Find the rates and the breaths
+
+`m3resp.eit.processing` has the rate detection and the breath detection of `eitprocessing`. They give the same numbers as `RateDetection` and `BreathDetection` of eitprocessing 1.8.7. The settings have the same names and defaults; they are in a settings record, and the calculation is a function:
+
+```python
+# eitprocessing
+from eitprocessing.features.breath_detection import BreathDetection
+from eitprocessing.features.rate_detection import RateDetection
+
+respiratory_rate, heart_rate = RateDetection("adult").apply(eit_data)
+breaths = BreathDetection(minimum_duration=2 / 3).find_breaths(global_impedance)
+
+# M3Resp
+from m3resp.eit.processing import (
+    BreathDetectionSettings,
+    RateDetectionSettings,
+    detect_rates,
+    find_breaths,
+)
+
+respiratory_rate, heart_rate = detect_rates(raw_eit, RateDetectionSettings("adult"))
+breaths = find_breaths(global_impedance, BreathDetectionSettings(minimum_duration=2 / 3))
+```
+
+`raw_eit` is a `Signal` with the EIT images (frames, rows, columns), and `global_impedance` is a `Signal` with one value per frame. Both rates are in Hz. `find_breaths` returns a list of `BreathEvent`s. The `middle_time` of an eitprocessing `Breath` is the `extremum_time` of a `BreathEvent`.
+
+`detect_rates(..., captures={})` fills the dictionary with the spectra under the keys of eitprocessing (`frequencies`, `normalized_total_power`, `average_normalized_pixel_power`, `diff_total_averaged_power`, `estimated_respiratory_rate`, `estimated_heart_rate`). `m3resp.visualization.plot_rate_detection(settings, **captures)` draws the figure of `RateDetection.plotting.plot`.
+
+The steps `eit.detect_rates` and `eit.detect_breaths` run these functions. Their outputs `rate_detector` and `breath_detector` are the settings records. `breath_intervals` is an m3resp `IntervalData` whose `intervals` are the `BreathEvent`s. The TIV, EELI and pixel steps still run eitprocessing, and they make an eitprocessing `BreathDetection` from the settings record.
+
 ## Filter and detect breaths
 
-`session.preprocess_eit()` runs the `eitprocessing` steps in one call. Each step has settings in `preprocess_eit`:
+`session.preprocess_eit()` runs rate detection, filter, breath detection, TIV, EELI and pixel TIV in one call. The rate detection and the breath detection use `m3resp.eit.processing`; the other parts use eitprocessing. Each part has settings in `preprocess_eit`:
 
 | `eitprocessing` | Settings of `preprocess_eit` |
 |---|---|

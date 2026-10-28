@@ -404,3 +404,53 @@ def test_m3resp_lung_space_masks_match_golden(
         ("filter_by_size", "size_filtered_roi_result"),
     ):
         assert_mask_matches(result.value(value).values, golden[f"{name}/mask"], name)
+
+
+# 4. m3resp through session.preprocess_eit() against the golden files
+
+
+@pytest.fixture(scope="module")
+def preprocess_results() -> dict[str, Any]:
+    """Run ``session.preprocess_eit()`` once for every test file."""
+
+    pytest.importorskip("eitprocessing")
+    settings = MANIFEST["settings"]
+    results = {}
+    for dataset in DATASETS:
+        entry = MANIFEST["inputs"][dataset]
+        session = M3Session()
+        session.load_eit(os.path.join(REPO_ROOT, entry["file"]), entry["vendor"])
+        results[dataset] = session.preprocess_eit(
+            subject_type=settings["rate_detection"]["subject_type"],
+            breath_min_duration_seconds=settings["breath_detection"][
+                "minimum_duration_s"
+            ],
+        )
+    return results
+
+
+@pytest.mark.parametrize("dataset", DATASETS)
+def test_preprocess_rates_match_golden(dataset: str, preprocess_results: dict) -> None:
+    result = preprocess_results[dataset]
+    golden = _golden(dataset, "rates")
+    assert_matches(result["respiratory_rate_hz"], golden["respiratory_rate_hz"], "RR")
+    assert_matches(result["heart_rate_hz"], golden["heart_rate_hz"], "HR")
+    for key, expected in golden.items():
+        if key.startswith("captures/"):
+            assert_matches(
+                result["rate_captures"][key.removeprefix("captures/")], expected, key
+            )
+
+
+@pytest.mark.parametrize("dataset", DATASETS)
+def test_preprocess_breaths_match_golden(
+    dataset: str, preprocess_results: dict
+) -> None:
+    result = preprocess_results[dataset]
+    golden = _golden(dataset, "breaths")["breaths"]
+    breaths = result["breath_intervals"].intervals
+    actual = [(b.start_time, b.extremum_time, b.end_time) for b in breaths]
+    assert_matches(np.asarray(actual, dtype=float).reshape(-1, 3), golden, "breaths")
+    stored = result["sequence"].interval_data["eit_breaths"].values
+    upstream = [(b.start_time, b.middle_time, b.end_time) for b in stored]
+    assert_matches(np.asarray(upstream, dtype=float).reshape(-1, 3), golden, "Sequence")

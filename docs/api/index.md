@@ -159,7 +159,7 @@ These functions read one EIT file of a Draeger, Sentec or Timpel device. Each re
 
 ## EIT calculations
 
-`global_impedance` sums the pixels of each EIT image into the global impedance waveform. `regional_impedance` and `functional_impedance` sum the pixels inside a mask. Each function returns a `Signal`.
+`global_impedance` sums the pixels of each EIT image into the global impedance waveform. `regional_impedance` and `functional_impedance` sum the pixels inside a mask. Each of these three functions returns a `Signal`. `detect_rates` finds the breathing rate and the heart rate of the EIT images, in Hz, from their frequency spectra. `find_breaths` finds the breaths of an impedance waveform and returns them as `BreathEvent`s. `RateDetectionSettings` and `BreathDetectionSettings` hold the settings of these two functions.
 
 ```{eval-rst}
 .. autosummary::
@@ -169,6 +169,10 @@ These functions read one EIT file of a Draeger, Sentec or Timpel device. Each re
    m3resp.eit.processing.global_impedance
    m3resp.eit.processing.regional_impedance
    m3resp.eit.processing.functional_impedance
+   m3resp.eit.processing.detect_rates
+   m3resp.eit.processing.RateDetectionSettings
+   m3resp.eit.processing.find_breaths
+   m3resp.eit.processing.BreathDetectionSettings
    m3resp.eit.processing.slicing.slice_file_data
    m3resp.processing.slicing.slice_by_index
    m3resp.processing.slicing.slice_by_time
@@ -185,6 +189,7 @@ These functions make figures with Matplotlib.
    :nosignatures:
 
    m3resp.visualization.plot_eit_processing_summary
+   m3resp.visualization.plot_rate_detection
    m3resp.visualization.plot_session_overview
    m3resp.visualization.plot_synchronization_comparison
 ```

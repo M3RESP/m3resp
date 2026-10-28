@@ -59,14 +59,14 @@ The packages give no default for these settings, so M3Resp chose the values. Eac
 | Step | Setting | Value | Set by |
 |---|---|---|---|
 | `eit.detect_breaths` | shortest breath | 0.67 s | m3resp (same as eitprocessing) |
-| | moving-average window | 15 s, Blackman shape | eitprocessing |
-| | smallest breath, as a fraction of the typical breath | 0.25 | eitprocessing |
-| | removal of bad data: window / percentile / factor | 0.5 s / 5th / ×4 | eitprocessing |
+| | moving-average window | 15 s, Blackman shape | m3resp (same as eitprocessing) |
+| | smallest breath, as a fraction of the typical breath | 0.25 | m3resp (same as eitprocessing) |
+| | removal of bad data: window / percentile / factor | 0.5 s / 5th / ×4 | m3resp (same as eitprocessing) |
 | `eit.detect_rates` | `subject_type` | adult | m3resp |
-| | Welch window | 30 s (shortest allowed 10 s) | eitprocessing, can be set with `welch_window_seconds` |
-| | Welch overlap | 0.5 | eitprocessing |
-| | breathing rate, adult / neonate | 6 to 60 /min / 15 to 85 /min | eitprocessing |
-| | heart rate, adult / neonate | 40 to 200 /min / 90 to 210 /min | eitprocessing |
+| | Welch window | 30 s (shortest allowed 10 s) | m3resp (same as eitprocessing), can be set with `welch_window_seconds` |
+| | Welch overlap | 0.5 | m3resp (same as eitprocessing) |
+| | breathing rate, adult / neonate | 6 to 60 /min / 15 to 85 /min | m3resp (same as eitprocessing) |
+| | heart rate, adult / neonate | 40 to 200 /min / 90 to 210 /min | m3resp (same as eitprocessing) |
 | `eit.mdn_filter` | upper noise limit | 220 /min | eitprocessing |
 | | notch distance | 10 /min | eitprocessing |
 | | filter order | 10 | eitprocessing |

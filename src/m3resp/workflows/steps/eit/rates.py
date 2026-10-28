@@ -14,7 +14,6 @@ from m3resp.workflows.registry import (
 )
 
 from ._shared import (
-    _EITPROCESSING,
     _SESSION_ARTIFACT,
     _upstream_metadata,
 )
@@ -32,10 +31,9 @@ from ._shared import (
         "heart_rate_result",
     ),
     summary="Estimate respiratory and heart rate from an EIT signal.",
-    description="Estimate respiratory and heart rate from an EIT signal via eitprocessing's RateDetection.",
+    description="Estimate respiratory and heart rate from the frequency spectra of EIT images (m3resp.eit.processing.detect_rates).",
     category="detection",
     modality="eit",
-    optional_packages=_EITPROCESSING,
     session_writes=("session.parameter_results",),
     input_artifacts=(
         StepArtifact(
@@ -62,8 +60,8 @@ from ._shared import (
             unit="s",
             minimum=10,
             description=(
-                "Welch power-spectrum window length. Left unset, the detector "
-                "uses its own default of 30 s; it rejects anything below 10 s."
+                "Welch power-spectrum window length. Left unset, it is 30 s; "
+                "the shortest allowed window is 10 s."
             ),
         ),
         StepParameter(
@@ -90,9 +88,8 @@ from ._shared import (
         StepArtifact(
             name="rate_detector",
             artifact_type="eit_rate_detector",
-            description="Configured upstream RateDetection instance, reusable by later steps.",
+            description="The settings of the rate detection (RateDetectionSettings), for the rate figure.",
             public=False,
-            compatibility_only=True,
         ),
         StepArtifact(
             name="rate_captures",
@@ -135,12 +132,12 @@ def detect_rates(
         ("respiratory_rate_hz", respiratory_rate_hz),
         ("heart_rate_hz", heart_rate_hz),
     ):
-        # NaN means no rate could be estimated. With eitprocessing's own
-        # detector this is the only failure that can occur: the rate is drawn
-        # from the search band and its parabolic refinement shifts it by less
-        # than half a frequency bin, so it cannot come back zero or negative,
-        # but a frequency bin in which no pixel was measured leaves NaN in the
-        # averaged pixel power spectrum and the refinement carries it through.
+        # NaN means no rate could be estimated. With
+        # m3resp.eit.processing.detect_rates this is the only failure that can
+        # occur: the rate comes from the search band and the parabola
+        # refinement moves it by less than half a frequency step, so it stays
+        # above zero. A frequency step in which no pixel was measured leaves
+        # NaN in the averaged pixel spectrum, and the refinement keeps it.
         if math.isnan(value):
             raise ValueError(
                 f"eit.detect_rates could not estimate a {name}: the detector "
@@ -149,9 +146,8 @@ def detect_rates(
                 "that the signal covers enough breaths and that the subject "
                 "type matches the expected rate range."
             )
-        # A rate outside the search band cannot come from eitprocessing, but
-        # this step runs against whichever detector `session.eit_adapter`
-        # wraps, and a substituted or custom one is under no such constraint.
+        # `session.eit_adapter` can be replaced by an adapter with another
+        # detector, which can give any number.
         if not math.isfinite(value) or value <= 0:
             raise ValueError(
                 f"eit.detect_rates produced an implausible {name}: {value!r}. "
@@ -159,20 +155,22 @@ def detect_rates(
             )
 
     metadata = _upstream_metadata(
-        source_function="eitprocessing.features.rate_detection.RateDetection.apply",
+        source_function="m3resp.eit.processing.detect_rates",
         operation="eit.detect_rates",
         parameters={
             "subject_type": subject_type,
             "welch_window_seconds": welch_window_seconds,
             "capture": capture,
         },
+        source_package="m3resp",
+        implementation="m3resp.eit.processing.rate_detection",
     )
     respiratory_rate_result = ParameterResult(
         name="respiratory_rate",
         value=respiratory_rate_hz,
         modality="eit",
         unit="Hz",
-        method="eitprocessing.RateDetection",
+        method="m3resp.eit.processing.detect_rates",
         metadata=dict(metadata),
     )
     heart_rate_result = ParameterResult(
@@ -180,7 +178,7 @@ def detect_rates(
         value=heart_rate_hz,
         modality="eit",
         unit="Hz",
-        method="eitprocessing.RateDetection",
+        method="m3resp.eit.processing.detect_rates",
         metadata=dict(metadata),
     )
     session.parameter_results.add(respiratory_rate_result)

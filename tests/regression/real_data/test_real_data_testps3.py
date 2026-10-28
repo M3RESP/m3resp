@@ -143,8 +143,8 @@ def test_eit_mdn_filter_and_breaths_match_eitprocessing(testps3_run, testps3_pat
         context.get("filtered_eit").values, filtered.pixel_impedance
     )
     found = [
-        (b.start_time, b.middle_time, b.end_time)
-        for b in context.get("breath_intervals").values
+        (b.start_time, b.extremum_time, b.end_time)
+        for b in context.get("breath_intervals").intervals
     ]
     assert found == [(b.start_time, b.middle_time, b.end_time) for b in breaths.values]
 

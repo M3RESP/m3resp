@@ -40,6 +40,8 @@ Portions of `src/m3resp/processing/filters.py`,
 `src/m3resp/eit/io/sentec.py`, `src/m3resp/eit/io/timpel.py`,
 `src/m3resp/eit/io/read_file.py`, `src/m3resp/eit/io/join.py`,
 `src/m3resp/eit/processing/impedance.py`, `src/m3resp/eit/processing/slicing.py`,
+`src/m3resp/eit/processing/rate_detection.py`, `src/m3resp/eit/processing/breath_detection.py`,
+`src/m3resp/visualization/rate_detection.py`,
 `src/m3resp/processing/slicing.py`, and
 `src/m3resp/adapters/eitprocessing_adapter/_slicing.py` are derived from eitprocessing; see the per-module "Provenance"
 notes in those files for the specific functions and upstream revision.

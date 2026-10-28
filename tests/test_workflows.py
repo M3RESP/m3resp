@@ -11,6 +11,7 @@ import pytest
 from m3resp.adapters import EITProcessingAdapter
 from m3resp.core.exceptions import UnknownStepError, WorkflowSpecError
 from m3resp.core.session import M3Session
+from m3resp.data import BreathEvent
 from m3resp.workflows import load_spec, register_step, run_workflow, validate_spec
 
 # --------------------------------------------------------------------------- #
@@ -334,7 +335,7 @@ BREATH_PAIRS = [(0.0, 1.0), (1.0, 2.5), (2.5, 3.2), (3.2, 4.6)]
 
 @pytest.fixture
 def fake_eitprocessing(monkeypatch):
-    """Patch the upstream classes the EIT steps import at call time."""
+    """Patch the detectors and the upstream classes the EIT steps call."""
 
     pytest.importorskip("eitprocessing")
     import eitprocessing.features.breath_detection as bd
@@ -365,6 +366,22 @@ def fake_eitprocessing(monkeypatch):
     monkeypatch.setattr(rd, "RateDetection", FakeRateDetection)
     monkeypatch.setattr(mdn, "MDNFilter", FakeMDNFilter)
     monkeypatch.setattr(bd, "BreathDetection", FakeBreathDetection)
+
+    # The rate and breath detection run on m3resp code.
+    import m3resp.adapters.eitprocessing_adapter as eit_adapter_module
+    import m3resp.workflows.steps.eit.signals as eit_signal_steps
+
+    monkeypatch.setattr(
+        eit_adapter_module, "detect_rates_of", lambda *args, **kwargs: (0.25, 1.5)
+    )
+    monkeypatch.setattr(
+        eit_signal_steps,
+        "find_breaths",
+        lambda *args, **kwargs: [
+            BreathEvent("eit", start, end, extremum_time=(start + end) / 2)
+            for start, end in BREATH_PAIRS
+        ],
+    )
 
 
 def _fake_eit_session() -> M3Session:

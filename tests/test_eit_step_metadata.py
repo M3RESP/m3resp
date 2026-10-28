@@ -54,9 +54,18 @@ def test_every_eit_step_declares_some_metadata_and_is_json_safe():
         json.dumps(description.as_dict())
 
 
+#: EIT steps that run on m3resp code only.
+_M3RESP_ONLY_STEPS = (
+    "eit.slice_signal",
+    "eit.detect_rates",
+    "eit.detect_breaths",
+    "eit.normalize_breaths",
+)
+
+
 def test_eit_steps_declare_the_packages_they_use():
     for name in _EIT_STEP_NAMES:
-        expected = () if name == "eit.slice_signal" else ("eitprocessing",)
+        expected = () if name in _M3RESP_ONLY_STEPS else ("eitprocessing",)
         assert describe_step(name).optional_packages == expected, name
 
 

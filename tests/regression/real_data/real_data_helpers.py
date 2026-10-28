@@ -641,7 +641,7 @@ def eit_breath_start_times(run: dict[str, Any]) -> np.ndarray:
     starts = np.asarray(
         [
             breath.start_time
-            for breath in run["eit_context"].get("breath_intervals").values
+            for breath in run["eit_context"].get("breath_intervals").intervals
         ],
         dtype=float,
     )

@@ -358,6 +358,34 @@ def as_continuous_data(obj: Any) -> Any:
     return signal_to_continuous_data(obj) if isinstance(obj, Signal) else obj
 
 
+def as_signal(obj: Any) -> Signal:
+    """Return EIT images or a waveform as an m3resp ``Signal``.
+
+    Args:
+        obj (Any): A ``Signal``, an eitprocessing ``EITData`` (images) or an
+            eitprocessing ``ContinuousData`` (one value per sample).
+
+    Returns:
+        Signal: ``obj`` itself for a ``Signal``; ``eit_data_to_signal(obj)``
+            for an object with ``pixel_impedance``; otherwise
+            ``continuous_data_to_signal(obj)`` with modality ``"eit"``,
+            processing state ``"intermediate"`` and the label of ``obj`` as
+            name.
+    """
+
+    if isinstance(obj, Signal):
+        return obj
+    if hasattr(obj, "pixel_impedance"):
+        return eit_data_to_signal(obj)
+    return continuous_data_to_signal(
+        obj,
+        modality="eit",
+        channel=None,
+        processing_state="intermediate",
+        name=getattr(obj, "label", None) or "waveform",
+    )
+
+
 def as_eitprocessing(obj: Any) -> Any:
     """Return ``obj`` as the eitprocessing object of its kind.
 

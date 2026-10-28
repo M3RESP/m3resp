@@ -1,8 +1,8 @@
 """Save static EIT workflow figures from a run's context.
 
 These are the headless, file-writing counterparts of the interactive panels
-in ``tools/visualization_tools/1_annemijn_pipeline_results.py``: the native
-``eitprocessing`` rate-detection figure, the global-impedance/breaths/TIV/EELI
+in ``tools/visualization_tools/1_annemijn_pipeline_results.py``: the
+rate-detection figure (``plot_rate_detection``), the global-impedance/breaths/TIV/EELI
 overview, and the per-pixel TIV map. Each figure is produced only when the
 context carries the keys it needs, so a workflow that ran only part of the EIT
 chain still writes whatever it can rather than failing.
@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+from m3resp.adapters.eitprocessing_adapter import breath_intervals_to_breath_events
 
 
 def save_eit_figures(
@@ -71,15 +73,17 @@ def save_eit_figures(
 
 
 def _figure_rate_detection(ctx, figures_dir: Path, plt) -> Path | None:
-    """Native ``RateDetection.plotting.plot(...)`` from the rate capture."""
+    """``plot_rate_detection`` with the rate settings and the rate captures."""
 
-    detector = ctx.get("rate_detector")
+    from m3resp.visualization.rate_detection import plot_rate_detection
+
+    settings = ctx.get("rate_detector")
     captures = ctx.get("rate_captures")
-    if detector is None or not captures:
+    if settings is None or not captures:
         return None
 
     plt.close("all")
-    fig = detector.plotting.plot(**captures)
+    fig = plot_rate_detection(settings, **captures)
     fig.set_size_inches(11, 4.5)
     path = figures_dir / "rate_detection.png"
     fig.savefig(path, dpi=150, bbox_inches="tight")
@@ -109,10 +113,15 @@ def _figure_global_impedance(ctx, figures_dir: Path, plt) -> Path | None:
     fig, ax = plt.subplots(figsize=(11, 4.0))
     ax.plot(t, values, color="#185FA5", linewidth=1.0, label="global impedance")
 
-    breaths = getattr(ctx.get("breath_intervals"), "values", None) or []
+    breath_intervals = ctx.get("breath_intervals")
+    breaths = (
+        breath_intervals_to_breath_events(breath_intervals)
+        if breath_intervals is not None
+        else []
+    )
     if breaths:
         start = np.array([b.start_time - t0 for b in breaths], dtype=float)
-        mid = np.array([b.middle_time - t0 for b in breaths], dtype=float)
+        mid = np.array([b.extremum_time - t0 for b in breaths], dtype=float)
         peak_idx = np.clip(np.searchsorted(t, mid), 0, t.size - 1)
         start_idx = np.clip(np.searchsorted(t, start), 0, t.size - 1)
         peak_y = values[peak_idx]
