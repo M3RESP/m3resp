@@ -13,6 +13,7 @@ from m3resp.core.exceptions import OptionalDependencyError
 from m3resp.data import IntervalData, PixelMap
 from m3resp.data.events import BreathEvent, coerce_breath_events
 from m3resp.eit.processing import BreathDetectionSettings
+from m3resp.eit.processing._breath_samples import check_breaths
 
 
 def _optional_dependency_error() -> OptionalDependencyError:
@@ -214,6 +215,32 @@ def breath_intervals_to_breath_events(breath_intervals: Any) -> list[BreathEvent
         modality="eit",
         source="eitprocessing.BreathDetection",
     )
+
+
+def given_breath_events(breaths: Any, *, function: str) -> list[BreathEvent]:
+    """Return the breaths given to a TIV or EELI calculation as ``BreathEvent``s.
+
+    Args:
+        breaths (Any): A list of ``BreathEvent``s of any modality, an m3resp
+            ``IntervalData`` of them, or an eitprocessing ``IntervalData`` of
+            ``Breath``s (EIT breaths). Times are in seconds.
+        function (str): Name of the calling function or step, for the message.
+
+    Returns:
+        list[BreathEvent]: The breaths in input order. ``BreathEvent``s are
+            returned as they are; eitprocessing breaths are converted with
+            ``breath_intervals_to_breath_events``.
+
+    Raises:
+        TypeError: If an item of a list or of an m3resp ``IntervalData`` is
+            not a ``BreathEvent``.
+    """
+
+    if isinstance(breaths, IntervalData):
+        return check_breaths(breaths.intervals, function=function)
+    if isinstance(breaths, (list, tuple)):
+        return check_breaths(breaths, function=function)
+    return breath_intervals_to_breath_events(breaths)
 
 
 def breaths_to_interval_data(

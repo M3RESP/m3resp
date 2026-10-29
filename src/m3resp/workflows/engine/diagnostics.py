@@ -13,8 +13,8 @@ from m3resp.workflows.context import (
 )
 from m3resp.workflows.diagnostics import Diagnostic
 from m3resp.workflows.registry import (
+    ACCEPTED_ARTIFACT_TYPES,
     ANY_ARTIFACT_TYPE,
-    SIGNAL_ARTIFACT_TYPES,
     StepArtifact,
     StepDefinition,
     StepParameter,
@@ -359,6 +359,30 @@ def _check_bindings(
                     step_label,
                 )
             )
+    for group in definition.one_of_reads:
+        present = [
+            param
+            for param in group
+            if step_spec.inputs.get(param, definition.reads[param]) in produced
+        ]
+        if not present:
+            diagnostics.append(
+                Diagnostic(
+                    severity="error",
+                    code="missing_one_of_inputs",
+                    message=(
+                        f"{step_label} needs one of the inputs {list(group)}, "
+                        "but none is produced by an earlier step or declared "
+                        "in inputs."
+                    ),
+                    step_id=step_spec.id,
+                    step_position=position,
+                    operation_id=step_spec.uses,
+                    suggestion=(
+                        "Bind one of them with 'in:', or add the step that produces it."
+                    ),
+                )
+            )
     for context_key in definition.requires:
         if context_key not in produced:
             diagnostics.append(
@@ -408,8 +432,8 @@ def _check_artifact_type_compatibility(
     ... artifact compatibility"), unless either side
     declares :data:`ANY_ARTIFACT_TYPE` (a genuine passthrough, e.g.
     ``eit.slice_signal``). The check runs only when both sides declare a
-    type. An input of type ``"signal"`` accepts every type in
-    :data:`SIGNAL_ARTIFACT_TYPES`."""
+    type. An input of a group type (``"signal"``, ``"breaths"``) also
+    accepts the types listed for it in :data:`ACCEPTED_ARTIFACT_TYPES`."""
 
     consumer_artifact = input_artifacts_by_name.get(param)
     if consumer_artifact is None:
@@ -422,7 +446,7 @@ def _check_artifact_type_compatibility(
         return []
     if consumer_type == producer_type:
         return []
-    if consumer_type == "signal" and producer_type in SIGNAL_ARTIFACT_TYPES:
+    if producer_type in ACCEPTED_ARTIFACT_TYPES.get(consumer_type, frozenset()):
         return []
     return [
         Diagnostic(

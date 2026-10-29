@@ -42,6 +42,7 @@ from m3resp.workflows.registry import get_step
 from m3resp.workflows.spec import load_spec
 from m3resp.workflows.steps.eit import (
     butterworth_filter,
+    continuous_tiv,
     detect_rates,
     eeli,
     load,
@@ -221,13 +222,6 @@ class _FakeAdapter:
             processing_state="intermediate",
         )
         return {"filtered_eit": filtered, "filter_captures": {}}
-
-    def compute_eeli(
-        self, timing_data: Any, *, sequence: Any, breath_detector: Any, **kwargs: Any
-    ) -> Any:
-        return _FakeSparseData(
-            [1.0, 2.0, np.nan], [0.0, 1.0, 2.0], label="continuous_eelis"
-        )
 
     def compute_pixel_tiv(
         self,
@@ -513,40 +507,67 @@ def test_butterworth_filter_step_accepts_an_already_filtered_signal():
     assert get_step("eit.butterworth_filter").reads["signal"] is None
 
 
-def test_eeli_step_stores_one_value_per_breath():
-    session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((3, 1, 1)), time=np.arange(3, dtype=float))
-    sequence = _FakeSequence(raw)
+def _waveform(values: list[float]) -> _FakeContinuousData:
+    """A global impedance waveform, one sample per second from 0 s."""
 
-    result = eeli(
-        raw,
-        eit_sequence=sequence,
-        breath_detector=_FakeBreathDetector(3),
-        session=session,
+    return _FakeContinuousData(
+        "global_impedance", values, np.arange(len(values), dtype=float)
     )
 
-    assert set(get_step("eit.eeli").writes) <= set(result)
+
+def test_eeli_step_stores_one_value_per_breath():
+    session = _session_with_fake_adapter()
+    waveform = _waveform([10.0, 11.0, 12.0, 13.0])
+
+    result = eeli(waveform, breath_detector=_FakeBreathDetector(3), session=session)
+
+    assert set(get_step("eit.eeli").writes) == set(result) - {"_provenance"}
     eeli_result = result["eeli_result"]
     assert isinstance(eeli_result, IntervalData)
-    np.testing.assert_array_equal(eeli_result.values, [1.0, 2.0, np.nan])
+    # The EELI of each breath is the impedance at its end (1, 2 and 3 s).
+    np.testing.assert_array_equal(eeli_result.values, [11.0, 12.0, 13.0])
     assert [b.start_time for b in eeli_result.intervals] == [0.0, 1.0, 2.0]
-    assert eeli_result.method == "eitprocessing.EELI"
+    assert eeli_result.name == "continuous_eelis"
+    assert eeli_result.method == "m3resp.eit.processing.end_expiratory_lung_impedance"
+    assert eeli_result.metadata["source_package"] == "m3resp"
+    assert eeli_result.metadata["operation"] == "eit.eeli"
     assert list(session.interval_data) == [eeli_result]
     assert len(session.parameter_results) == 0
 
 
-def test_eeli_step_refuses_breaths_that_do_not_match_the_values():
+def test_continuous_tiv_step_uses_the_chosen_method():
     session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((3, 1, 1)), time=np.arange(3, dtype=float))
-    sequence = _FakeSequence(raw)
+    waveform = _waveform([1.0, 3.0, 2.0, 6.0, 4.0])
+    detector = _FakeBreathDetector(2)  # breaths (0, 0.5, 1) and (1, 1.5, 2)
 
-    with pytest.raises(ValueError, match="per-breath values"):
-        eeli(
-            raw,
-            eit_sequence=sequence,
-            breath_detector=_FakeBreathDetector(2),
-            session=session,
-        )
+    inspiratory = continuous_tiv(waveform, breath_detector=detector, session=session)[
+        "continuous_tiv_result"
+    ]
+    expiratory = continuous_tiv(
+        waveform, breath_detector=detector, session=session, tiv_method="expiratory"
+    )["continuous_tiv_result"]
+
+    # The middle (0.5 s, 1.5 s) lies halfway, so the later sample is read.
+    np.testing.assert_array_equal(inspiratory.values, [2.0, -1.0])
+    np.testing.assert_array_equal(expiratory.values, [0.0, 0.0])
+    assert expiratory.metadata["tiv_method"] == "expiratory"
+    assert expiratory.metadata["parameters"] == {
+        "tiv_method": "expiratory",
+        "breaths": "breath_detector",
+    }
+    assert inspiratory.intervals[0] is expiratory.intervals[0]
+
+
+def test_eeli_step_gives_nan_for_breaths_outside_the_data():
+    session = _session_with_fake_adapter()
+    waveform = _waveform([10.0, 11.0, 12.0, 13.0])
+
+    with pytest.warns(UserWarning, match="1 of 4 breaths lie partly outside"):
+        result = eeli(waveform, breath_detector=_FakeBreathDetector(4), session=session)
+
+    np.testing.assert_array_equal(
+        result["eeli_result"].values, [11.0, 12.0, 13.0, np.nan]
+    )
 
 
 def test_pixel_tiv_step_preserves_shape_and_valid_breath_metadata():
@@ -694,21 +715,19 @@ def test_steps_on_the_same_breaths_share_one_detection_and_the_same_breaths():
     session.events is reused, so values can be traced to it."""
 
     session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float))
+    raw = _FakeEITData(np.ones((3, 2, 2)), time=np.arange(3, dtype=float))
     sequence = _FakeSequence(raw)
+    waveform = _waveform([10.0, 11.0, 12.0])
     detector = _FakeBreathDetector(2)
     stored_first_breath = BreathEvent("eit", 0.0, 1.0, extremum_time=0.5)
     session.add_events("eit_breaths", [stored_first_breath])
-    session.eit_adapter.compute_eeli = lambda *args, **kwargs: _FakeSparseData(  # type: ignore[attr-defined]
-        [1.0, 2.0], [1.0, 2.0], label="continuous_eelis"
-    )
 
-    eeli_result = eeli(
-        raw, eit_sequence=sequence, breath_detector=detector, session=session
-    )["eeli_result"]
+    eeli_result = eeli(waveform, breath_detector=detector, session=session)[
+        "eeli_result"
+    ]
     tiv_result = pixel_tiv(
         eit_data=raw,
-        signal=raw,
+        signal=waveform,
         eit_sequence=sequence,
         breath_detector=detector,
         session=session,
@@ -728,11 +747,9 @@ def test_steps_ignore_stored_eit_breaths_that_are_not_breaths():
 
     session = _session_with_fake_adapter()
     session.add_events("eit_breaths", [Event(name="marker", modality="eit", time=0.0)])
-    raw = _FakeEITData(np.ones((3, 1, 1)), time=np.arange(3, dtype=float))
 
     result = eeli(
-        raw,
-        eit_sequence=_FakeSequence(raw),
+        _waveform([10.0, 11.0, 12.0, 13.0]),
         breath_detector=_FakeBreathDetector(3),
         session=session,
     )

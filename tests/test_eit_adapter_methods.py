@@ -21,11 +21,19 @@ import pytest
 from m3resp.adapters import EITProcessingAdapter
 from m3resp.adapters.eitprocessing_adapter import (
     add_to_collection,
+    as_signal,
+    breaths_to_interval_data,
     signal_to_eit_data,
 )
 from m3resp.core.exceptions import OptionalDependencyError
-from m3resp.data import IntervalData, Signal
-from m3resp.eit.processing import RateDetectionSettings
+from m3resp.data import BreathEvent, IntervalData, Signal
+from m3resp.eit.processing import (
+    BreathDetectionSettings,
+    RateDetectionSettings,
+    end_expiratory_lung_impedance,
+    find_breaths,
+    tidal_impedance_variation,
+)
 
 pytest.importorskip("eitprocessing")
 
@@ -249,21 +257,33 @@ class TestFindPixelBreaths:
         assert result is not None
 
 
-class TestComputeEeli:
-    def test_stores_result_in_sparse_data_exactly_once(
+class TestComputeTivAndEeli:
+    def test_give_m3resp_values_and_leave_the_sequence_unchanged(
         self, loaded_chain: dict[str, Any]
     ):
         sequence = loaded_chain["sequence"]
-        result = loaded_chain["adapter"].compute_eeli(
+        adapter = loaded_chain["adapter"]
+        waveform = as_signal(loaded_chain["filtered_gi"])
+        breaths = find_breaths(
+            waveform, BreathDetectionSettings(minimum_duration=2 / 3)
+        )
+        sparse_before = dict(sequence.sparse_data)
+
+        eeli = adapter.compute_eeli(
+            loaded_chain["filtered_gi"], breaths=breaths, result_label="eeli_test"
+        )
+        tiv = adapter.compute_continuous_tiv(
             loaded_chain["filtered_gi"],
-            sequence=sequence,
-            breath_detector=loaded_chain["breath_detector"],
-            result_label="eeli_test",
+            breaths=breaths_to_interval_data(breaths),
+            tiv_method="mean",
         )
 
-        assert "eeli_test" in sequence.sparse_data
-        assert sequence.sparse_data["eeli_test"] is result
-        assert len(result.values) == len(result.time)
+        assert dict(sequence.sparse_data) == sparse_before
+        assert eeli == end_expiratory_lung_impedance(
+            waveform, breaths, name="eeli_test"
+        )
+        assert tiv == tidal_impedance_variation(waveform, breaths, method="mean")
+        assert len(eeli) == len(tiv) == len(breaths) > 0
 
 
 class TestComputePixelTiv:
@@ -401,13 +421,22 @@ class TestOptionalDependencyBehavior:
         with pytest.raises(OptionalDependencyError):
             blocked_adapter.find_pixel_breaths(object(), object())
 
-    def test_compute_eeli_raises_optional_dependency_error(
+    def test_compute_tiv_and_eeli_run_without_eitprocessing(
         self, blocked_adapter: EITProcessingAdapter
     ):
-        with pytest.raises(OptionalDependencyError):
-            blocked_adapter.compute_eeli(
-                object(), sequence=object(), breath_detector=object()
-            )
+        waveform = Signal(
+            values=np.array([1.0, 3.0, 2.0, 5.0, 1.0]),
+            time=np.arange(5.0),
+            sample_frequency=1.0,
+            name="global_impedance",
+            modality="eit",
+        )
+        breaths = [BreathEvent("eit", 0.0, 2.0, extremum_time=1.0)]
+
+        tiv = blocked_adapter.compute_continuous_tiv(waveform, breaths=breaths)
+        eeli = blocked_adapter.compute_eeli(waveform, breaths=breaths)
+
+        assert tiv.values[0] == 2.0 and eeli.values[0] == 2.0
 
     def test_compute_pixel_tiv_raises_optional_dependency_error(
         self, blocked_adapter: EITProcessingAdapter

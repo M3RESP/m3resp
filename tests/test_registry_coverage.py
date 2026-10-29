@@ -88,6 +88,8 @@ _M3RESP_ONLY_EIT_STEPS = (
     "eit.detect_rates",
     "eit.detect_breaths",
     "eit.normalize_breaths",
+    "eit.continuous_tiv",
+    "eit.eeli",
 )
 
 

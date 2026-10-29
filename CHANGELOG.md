@@ -56,6 +56,26 @@ Changes that a user can see:
 - The Butterworth order of EIT images is 1 to 10 in `eit.butterworth_filter` and in `session.preprocess_eit()`. Before, `session.preprocess_eit()` accepted a higher order.
 - A pixel with NaN at some samples becomes NaN at every sample of the MDN result, as in eitprocessing. M3Resp also gives a warning that names these pixels.
 
+### m3resp computes TIV and EELI, also on breaths of another modality
+
+`eit.continuous_tiv`, `eit.eeli`, `EITProcessingAdapter.compute_eeli` and `session.preprocess_eit()` compute the tidal impedance variation (TIV) and the end-expiratory lung impedance (EELI) of each breath with `m3resp.eit.processing.tidal_impedance_variation` and `end_expiratory_lung_impedance`. The functions are copied from `TIV` and `EELI` of eitprocessing 1.8.7 and give the same numbers with the same breaths. They take the breaths as a list of `BreathEvent`s and find no breaths themselves (#113).
+
+Changes that a user can see:
+
+- The steps `eit.continuous_tiv` and `eit.eeli` have a new optional input `breaths`, with the new artifact type `breaths`. It accepts a list of `BreathEvent`s or an `IntervalData` of breaths of any modality. Breaths of another modality are moved to the EIT clock with the start times of the session, with a warning when the recordings were never synchronized. Without `breaths`, the steps find the breaths on their waveform with the settings of `eit.detect_breaths`, as before.
+- TIV and EELI are values at the start, end of inspiration and end of the given breaths. The default EMG breaths and the ventilator breaths of `ventilator.normalize_breaths` mark other moments of the breath (see the documentation of breaths of another modality).
+- The outputs `continuous_tiv` and `eeli` (eitprocessing `SparseData`) and the input `eit_sequence` of the two steps are removed; the results are `continuous_tiv_result` and `eeli_result`. The two steps run without eitprocessing. `session.preprocess_eit()` gives `continuous_tiv` and `eeli` as m3resp `IntervalData`, and the eitprocessing `Sequence` no longer holds `continuous_tivs` and `continuous_eelis`.
+- `eit.continuous_tiv` has the new setting `tiv_method`: `inspiratory` (default, as before), `expiratory` or `mean`.
+- The TIV and EELI results have the unit of the waveform (before: no unit) and the function name in `method`.
+- `EITProcessingAdapter.compute_eeli` takes the breaths (`breaths=`) and returns an `IntervalData`; the new `compute_continuous_tiv` does the same for TIV.
+- `ventilator.normalize_breaths` gives the breaths as the new output `ventilator_breath_events`.
+- A workflow check reports an `eit.continuous_tiv` or `eit.eeli` step that gets neither `breaths` nor `breath_detector`, with the code `missing_one_of_inputs`. A step can list such inputs in the new `one_of_reads` of `register_step`.
+- Each breath time is read at the nearest sample. A breath partly outside the data or in a gap of the time axis gets NaN, with a warning. EELI of eitprocessing reads only a sample at exactly the breath end time.
+
+### Fixed: the EIT summary figure after a workflow
+
+`m3resp.visualization.plot_eit_processing_summary` stopped with an `AttributeError` after a workflow run, because it read the `label` of the global impedance, which is a `Signal` there. The figure takes the axis label from the name of the `Signal`.
+
 ### Fixed: EIT reading options that stopped with an error
 
 - Sentec: `first_frame` above 0 together with `max_frames` gives `max_frames` frames from `first_frame` on. eitprocessing 1.8.7 stops with an IndexError.

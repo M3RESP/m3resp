@@ -376,3 +376,68 @@ def test_optional_reads_must_name_a_declared_read():
         )
         def _bad(a: Any) -> dict[str, Any]:
             return {}
+
+
+@pytest.fixture
+def _one_of_read_steps():
+    @register_step(
+        "one_of_test.make_hint",
+        writes=("hint",),
+    )
+    def _make_hint() -> dict[str, Any]:
+        return {"hint": 10}
+
+    @register_step(
+        "one_of_test.use_hint_or_guess",
+        reads={"hint": "hint", "guess": "guess"},
+        optional_reads=("hint", "guess"),
+        one_of_reads=(("hint", "guess"),),
+        writes=("used",),
+    )
+    def _use_hint_or_guess(hint: Any = None, guess: Any = None) -> dict[str, Any]:
+        return {"used": hint if hint is not None else guess}
+
+    yield
+    STEP_REGISTRY.pop("one_of_test.make_hint", None)
+    STEP_REGISTRY.pop("one_of_test.use_hint_or_guess", None)
+
+
+def test_a_step_with_none_of_its_one_of_reads_is_refused(_one_of_read_steps):
+    spec = load_spec(
+        {"name": "p", "steps": [{"uses": "one_of_test.use_hint_or_guess"}]}
+    )
+
+    [diagnostic] = validate_workflow(spec, readiness=False).structural
+
+    assert diagnostic.code == "missing_one_of_inputs"
+    assert "['hint', 'guess']" in diagnostic.message
+
+
+def test_a_step_with_one_of_its_one_of_reads_compiles(_one_of_read_steps):
+    spec = load_spec(
+        {
+            "name": "p",
+            "steps": [
+                {"uses": "one_of_test.make_hint"},
+                {"uses": "one_of_test.use_hint_or_guess"},
+            ],
+        }
+    )
+
+    assert validate_workflow(spec, readiness=False).structural == ()
+
+
+@pytest.mark.parametrize(
+    "group", [("a",), ("a", "c")], ids=["one name", "name outside optional_reads"]
+)
+def test_one_of_reads_needs_two_optional_reads(group: tuple[str, ...]):
+    with pytest.raises(ValueError, match="one_of_reads"):
+
+        @register_step(
+            "one_of_test.bad",
+            reads={"a": "a", "b": "b", "c": "c"},
+            optional_reads=("a", "b"),
+            one_of_reads=(group,),
+        )
+        def _bad(a: Any = None, b: Any = None, c: Any = None) -> dict[str, Any]:
+            return {}

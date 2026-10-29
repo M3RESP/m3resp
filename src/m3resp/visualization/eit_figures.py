@@ -21,19 +21,27 @@ from typing import Any
 import numpy as np
 
 from m3resp.adapters.eitprocessing_adapter import breath_intervals_to_breath_events
+from m3resp.core.session import M3Session
+from m3resp.synchronization.start_times import on_clock_of
 
 
 def save_eit_figures(
-    context_values: Mapping[str, Any], output_dir: str | Path
+    context_values: Mapping[str, Any],
+    output_dir: str | Path,
+    session: M3Session | None = None,
 ) -> list[Path]:
     """Save available EIT workflow figures as PNG files.
 
     Args:
         context_values: Workflow values such as rate_detector/rate_captures,
-            global_impedance, breath_intervals, eeli and pixel_tiv. Each figure
+            global_impedance, breath_intervals, eeli_result and pixel_tiv. Each figure
             is attempted when its required values are available.
         output_dir: Destination directory. A figures subdirectory is created
             and existing figure files with the same names are replaced.
+        session: Session with the start time of each recording. The EELI of
+            breaths of another modality (input ``breaths`` of ``eit.eeli``)
+            is placed on the EIT clock with these start times. None places
+            each EELI at the breath end time as given.
 
     Returns:
         list[Path]: Written paths in rate_detection, global_impedance, pixel_tiv
@@ -60,16 +68,12 @@ def save_eit_figures(
     figures_dir = Path(output_dir) / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
 
-    written: list[Path] = []
-    for builder in (
-        _figure_rate_detection,
-        _figure_global_impedance,
-        _figure_pixel_tiv,
-    ):
-        path = builder(context_values, figures_dir, plt)
-        if path is not None:
-            written.append(path)
-    return written
+    paths = (
+        _figure_rate_detection(context_values, figures_dir, plt),
+        _figure_global_impedance(context_values, figures_dir, plt, session),
+        _figure_pixel_tiv(context_values, figures_dir, plt),
+    )
+    return [path for path in paths if path is not None]
 
 
 def _figure_rate_detection(ctx, figures_dir: Path, plt) -> Path | None:
@@ -91,13 +95,16 @@ def _figure_rate_detection(ctx, figures_dir: Path, plt) -> Path | None:
     return path
 
 
-def _figure_global_impedance(ctx, figures_dir: Path, plt) -> Path | None:
+def _figure_global_impedance(
+    ctx, figures_dir: Path, plt, session: M3Session | None
+) -> Path | None:
     """Global impedance with per-breath TIV segments and EELI reference band.
 
     Mirrors ``eitprocessing``'s own TIV/EELI example conventions: TIV is the
     "inspiratory" rise ``value_at_middle - value_at_start`` drawn as a vertical
     segment per breath, and EELIs sit on the curve's troughs at each breath's
     end-expiratory sample, with the session mean/median and a +/-1 SD band.
+    The mean, median and SD leave out NaN values (breaths outside the data).
     """
 
     gi = ctx.get("global_impedance")
@@ -145,11 +152,18 @@ def _figure_global_impedance(ctx, figures_dir: Path, plt) -> Path | None:
         seg_y[2::3] = np.nan
         ax.plot(seg_x, seg_y, color="#2A9D8F", linewidth=2.0, label="TIV")
 
-    eeli = ctx.get("eeli")
+    eeli = ctx.get("eeli_result")
     if eeli is not None:
-        eeli_t = np.asarray(getattr(eeli, "time", []), dtype=float) - t0
-        eeli_v = np.asarray(getattr(eeli, "values", []), dtype=float)
-        if eeli_v.size:
+        # The EELI of each breath is placed at the end of the breath, on the
+        # EIT clock.
+        eeli_breaths = (
+            eeli.intervals
+            if session is None
+            else on_clock_of(session, eeli.intervals, "eit")
+        )
+        eeli_t = np.array([b.end_time for b in eeli_breaths], dtype=float) - t0
+        eeli_v = np.asarray(eeli.values, dtype=float)
+        if np.isfinite(eeli_v).any():
             ax.plot(
                 eeli_t,
                 eeli_v,
@@ -159,9 +173,9 @@ def _figure_global_impedance(ctx, figures_dir: Path, plt) -> Path | None:
                 markersize=4,
                 label="EELIs",
             )
-            mean_eeli = float(np.mean(eeli_v))
-            median_eeli = float(np.median(eeli_v))
-            std_eeli = float(np.std(eeli_v))
+            mean_eeli = float(np.nanmean(eeli_v))
+            median_eeli = float(np.nanmedian(eeli_v))
+            std_eeli = float(np.nanstd(eeli_v))
             ax.axhspan(
                 mean_eeli - std_eeli,
                 mean_eeli + std_eeli,

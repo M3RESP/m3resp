@@ -474,3 +474,21 @@ def test_preprocess_breaths_match_golden(
     stored = result["sequence"].interval_data["eit_breaths"].values
     upstream = [(b.start_time, b.middle_time, b.end_time) for b in stored]
     assert_matches(np.asarray(upstream, dtype=float).reshape(-1, 3), golden, "Sequence")
+
+
+@pytest.mark.parametrize("dataset", DATASETS)
+def test_preprocess_tiv_and_eeli_match_golden(
+    dataset: str, preprocess_results: dict
+) -> None:
+    result = preprocess_results[dataset]
+    golden = _golden(dataset, "tiv_eeli")
+    tiv, eeli = result["continuous_tiv"], result["eeli"]
+    breaths = result["breath_intervals"].intervals
+    assert_matches(tiv.values, golden["tiv/values"], "tiv/values")
+    assert_matches(eeli.values, golden["eeli/values"], "eeli/values")
+    # TIV and EELI hold the breaths of `breath_intervals`.
+    assert all(a is b for a, b in zip(tiv.intervals, breaths, strict=True))
+    assert all(a is b for a, b in zip(eeli.intervals, breaths, strict=True))
+    # The Sequence holds no TIV or EELI.
+    assert "continuous_tivs" not in result["sequence"].sparse_data
+    assert "continuous_eelis" not in result["sequence"].sparse_data

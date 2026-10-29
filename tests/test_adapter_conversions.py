@@ -125,6 +125,46 @@ class TestEITAdapterConversions:
         assert [b.start_time for b in tiv.intervals] == [0.0, 2.0, 4.0]
         assert [b.extremum_time for b in tiv.intervals] == [1.0, 3.0, 5.0]
 
+    def test_to_interval_data_gives_m3resp_tiv_and_eeli_the_stored_breaths(self):
+        adapter = EITProcessingAdapter()
+        breaths = [
+            BreathEvent("eit", 0.0, 2.0, extremum_time=1.0),
+            BreathEvent("eit", 2.0, 4.0, extremum_time=3.0),
+        ]
+        stored = [BreathEvent("eit", 0.0, 2.0, extremum_time=1.0)]
+        eeli = IntervalData(
+            name="continuous_eelis",
+            modality="eit",
+            intervals=list(breaths),
+            values=np.array([5.0, 6.0]),
+            unit="a.u.",
+            metadata={"signal_name": "global_impedance"},
+        )
+
+        [result] = adapter.to_interval_data(
+            {"breath_intervals": breaths, "eeli": eeli}, stored_breaths=stored
+        )
+
+        np.testing.assert_array_equal(result.values, [5.0, 6.0])
+        assert result.intervals[0] is stored[0]
+        assert result.intervals[1] is breaths[1]
+        assert (result.name, result.unit) == ("continuous_eelis", "a.u.")
+        assert result.metadata == eeli.metadata
+        assert result.metadata is not eeli.metadata
+
+    def test_to_interval_data_refuses_m3resp_values_of_other_breaths(self):
+        adapter = EITProcessingAdapter()
+        breaths = [BreathEvent("eit", 0.0, 2.0, extremum_time=1.0)]
+        eeli = IntervalData(
+            name="continuous_eelis",
+            modality="eit",
+            intervals=breaths * 2,
+            values=np.array([5.0, 6.0]),
+        )
+
+        with pytest.raises(ValueError, match="per-breath values"):
+            adapter.to_interval_data({"breath_intervals": breaths, "eeli": eeli})
+
     def test_to_interval_data_needs_the_breaths(self):
         adapter = EITProcessingAdapter()
         preprocessed = {"continuous_tiv": _sparse([1.0], name="continuous_tivs")}

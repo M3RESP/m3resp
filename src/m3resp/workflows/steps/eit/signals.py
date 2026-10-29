@@ -9,21 +9,26 @@ import numpy as np
 from m3resp.adapters.eitprocessing_adapter import (
     EITPROCESSING_FIELDS,
     add_to_collection,
-    as_breath_detection,
-    as_continuous_data,
     as_signal,
     breaths_to_interval_data,
     eit_data_to_signal,
     eitprocessing_fields,
     signal_to_continuous_data,
-    sparse_data_to_interval_data,
 )
 from m3resp.core.exceptions import UnsupportedWorkflowError
 from m3resp.core.session import M3Session
 from m3resp.data import PixelMask, Signal
-from m3resp.eit.processing import BreathDetectionSettings, find_breaths
+from m3resp.eit.processing import (
+    TIV_METHODS,
+    BreathDetectionSettings,
+    end_expiratory_lung_impedance,
+    find_breaths,
+    tidal_impedance_variation,
+)
 from m3resp.eit.processing import global_impedance as summed_pixels
 from m3resp.eit.processing import regional_impedance as regional_impedance_of
+from m3resp.eit.processing.eeli import METHOD as EELI_FUNCTION
+from m3resp.eit.processing.tidal_impedance_variation import METHOD as TIV_FUNCTION
 from m3resp.workflows.registry import (
     ANY_ARTIFACT_TYPE,
     StepArtifact,
@@ -32,9 +37,10 @@ from m3resp.workflows.registry import (
 )
 
 from ._shared import (
+    _BREATHS_ARTIFACT,
     _EITPROCESSING,
     _SESSION_ARTIFACT,
-    _breaths_used_by,
+    _per_breath_values,
     _upstream_metadata,
 )
 
@@ -501,16 +507,17 @@ def normalize_breaths(
     "eit.continuous_tiv",
     reads={
         "signal": "global_impedance",
-        "eit_sequence": "eit_sequence",
         "breath_detector": "breath_detector",
+        "breaths": "breaths",
         "session": "session",
     },
-    writes=("continuous_tiv", "continuous_tiv_result"),
+    optional_reads=("breath_detector", "breaths"),
+    one_of_reads=(("breaths", "breath_detector"),),
+    writes=("continuous_tiv_result",),
     summary="Compute continuous tidal impedance variation (TIV).",
-    description="Compute per-breath tidal impedance variation on an impedance waveform (global, or regional from an ROI) via eitprocessing's TIV.",
+    description="Compute the tidal impedance variation of each breath of an impedance waveform (global, or regional from an ROI), with m3resp.eit.processing.tidal_impedance_variation. The breaths are found on the waveform with the settings of 'eit.detect_breaths', or come from the input 'breaths' (any modality).",
     category="parameters",
     modality="eit",
-    optional_packages=_EITPROCESSING,
     parameters_reviewed=True,
     session_writes=("session.interval_data",),
     input_artifacts=(
@@ -521,27 +528,25 @@ def normalize_breaths(
             description="Impedance waveform (global, or regional from an ROI) to compute TIV on.",
         ),
         StepArtifact(
-            name="eit_sequence",
-            artifact_type="eit_sequence",
-            description="Sequence the result is added onto.",
-            public=False,
-            compatibility_only=True,
-        ),
-        StepArtifact(
             name="breath_detector",
             artifact_type="eit_breath_detector",
-            description="Breath detection settings from 'eit.detect_breaths'.",
+            required=False,
+            description="Breath detection settings from 'eit.detect_breaths', used when 'breaths' is not connected.",
             public=False,
         ),
+        _BREATHS_ARTIFACT,
         _SESSION_ARTIFACT,
     ),
-    output_artifacts=(
-        StepArtifact(
-            name="continuous_tiv",
-            artifact_type="eit_sparse_data",
-            description="Per-breath continuous TIV values (upstream SparseData).",
-            compatibility_only=True,
+    parameters=(
+        StepParameter(
+            name="tiv_method",
+            value_type="string",
+            default="inspiratory",
+            choices=TIV_METHODS,
+            description="Part of the breath: 'inspiratory' (end of inspiration minus start), 'expiratory' (end of inspiration minus end) or 'mean' (end of inspiration minus the mean of start and end).",
         ),
+    ),
+    output_artifacts=(
         StepArtifact(
             name="continuous_tiv_result",
             artifact_type="interval_data",
@@ -553,83 +558,77 @@ def normalize_breaths(
 def continuous_tiv(
     signal: Any,
     *,
-    eit_sequence: Any,
-    breath_detector: Any,
     session: M3Session,
+    breath_detector: Any = None,
+    breaths: Any = None,
+    tiv_method: str = "inspiratory",
 ) -> dict[str, Any]:
-    """Compute tidal impedance variation (TIV) for each detected breath.
+    """Compute the tidal impedance variation (TIV) of each breath.
 
-    The upstream result is added to the sequence's sparse-data collection.
-    Values paired with their breaths are added to ``session.interval_data``,
-    and the processing step is recorded in the session's history.
+    The breaths come from ``breaths``, or are found on ``signal`` with the
+    settings of ``breath_detector``. The result is added to
+    ``session.interval_data``, and the step is recorded in the session's
+    history.
 
     Args:
-        signal: Global or regional impedance waveform to measure, as a
-            ``Signal`` (or an eitprocessing ``ContinuousData``).
-        eit_sequence: Sequence that stores the upstream result.
+        signal: Global or regional impedance waveform, as a ``Signal`` (or an
+            eitprocessing ``ContinuousData``).
+        session: Session that stores the per-breath values and history.
         breath_detector: Settings of the breath detection on ``signal``
             (``BreathDetectionSettings``), or an eitprocessing
-            ``BreathDetection``.
-        session: Session that stores the per-breath values and history.
+            ``BreathDetection``. Used when ``breaths`` is None.
+        breaths: Breaths of any modality (a list of ``BreathEvent``s or an
+            ``IntervalData`` of breaths), each on the clock of its modality.
+            They are moved to the EIT clock with the start times of the
+            session.
+        tiv_method: ``"inspiratory"``, ``"expiratory"`` or ``"mean"``.
 
     Returns:
-        dict[str, Any]: ``continuous_tiv`` as upstream sparse data and
-            ``continuous_tiv_result`` as ``IntervalData`` with one value per
-            breath, in detector order and in the signal's impedance unit.
+        dict[str, Any]: ``continuous_tiv_result``, an ``IntervalData`` with
+            one TIV value per breath, in the unit of ``signal``. Given breaths
+            are kept as they are, on the clock of their modality.
 
     Raises:
-        ValueError: If the numbers of values and detected breaths differ.
+        ValueError: If neither ``breaths`` nor ``breath_detector`` is given.
     """
 
-    from eitprocessing.parameters.tidal_impedance_variation import TIV
-
-    result: Any = TIV(
-        breath_detection=as_breath_detection(breath_detector)
-    ).compute_parameter(
-        as_continuous_data(signal),
-        sequence=eit_sequence,
-        store=False,
-        result_label="continuous_tivs",
-    )
-    add_to_collection(eit_sequence.sparse_data, result)
-
     metadata = _upstream_metadata(
-        source_function=(
-            "eitprocessing.parameters.tidal_impedance_variation.TIV.compute_parameter"
-        ),
+        source_package="m3resp",
+        source_function=TIV_FUNCTION,
+        implementation=TIV_FUNCTION,
         operation="eit.continuous_tiv",
-        parameters={"result_label": "continuous_tivs"},
+        parameters={"tiv_method": tiv_method, **_breath_origin(breaths)},
     )
-    continuous_tiv_result = sparse_data_to_interval_data(
-        result,
-        _breaths_used_by(breath_detector, signal, session),
-        modality="eit",
-        method="eitprocessing.TIV",
-        metadata=dict(metadata),
+    result = _per_breath_values(
+        lambda waveform, found: tidal_impedance_variation(
+            waveform, found, method=tiv_method
+        ),
+        signal,
+        breaths=breaths,
+        breath_detector=breath_detector,
+        session=session,
+        action="eit.continuous_tiv",
     )
-    session.interval_data.add(continuous_tiv_result)
-
-    return {
-        "continuous_tiv": result,
-        "continuous_tiv_result": continuous_tiv_result,
-        "_provenance": metadata,
-    }
+    result.metadata.update(metadata)
+    session.interval_data.add(result)
+    return {"continuous_tiv_result": result, "_provenance": metadata}
 
 
 @register_step(
     "eit.eeli",
     reads={
         "signal": "global_impedance",
-        "eit_sequence": "eit_sequence",
         "breath_detector": "breath_detector",
+        "breaths": "breaths",
         "session": "session",
     },
-    writes=("eeli", "eeli_result"),
+    optional_reads=("breath_detector", "breaths"),
+    one_of_reads=(("breaths", "breath_detector"),),
+    writes=("eeli_result",),
     summary="Compute end-expiratory lung impedance (EELI).",
-    description="Compute per-breath end-expiratory lung impedance (EELI) via eitprocessing's EELI parameter.",
+    description="Compute the end-expiratory lung impedance of each breath of an impedance waveform (global, or regional from an ROI), with m3resp.eit.processing.end_expiratory_lung_impedance. The breaths are found on the waveform with the settings of 'eit.detect_breaths', or come from the input 'breaths' (any modality).",
     category="parameters",
     modality="eit",
-    optional_packages=_EITPROCESSING,
     session_writes=("session.interval_data",),
     input_artifacts=(
         StepArtifact(
@@ -639,18 +638,13 @@ def continuous_tiv(
             description="Impedance waveform (global, or regional from an ROI) to compute EELI on.",
         ),
         StepArtifact(
-            name="eit_sequence",
-            artifact_type="eit_sequence",
-            description="Sequence the result is added onto.",
-            public=False,
-            compatibility_only=True,
-        ),
-        StepArtifact(
             name="breath_detector",
             artifact_type="eit_breath_detector",
-            description="Breath detection settings from 'eit.detect_breaths'.",
+            required=False,
+            description="Breath detection settings from 'eit.detect_breaths', used when 'breaths' is not connected.",
             public=False,
         ),
+        _BREATHS_ARTIFACT,
         _SESSION_ARTIFACT,
     ),
     parameters=(
@@ -658,17 +652,11 @@ def continuous_tiv(
             name="result_label",
             value_type="string",
             default="continuous_eelis",
-            description="Label the upstream result is stored under.",
+            description="Name of the result.",
             advanced=True,
         ),
     ),
     output_artifacts=(
-        StepArtifact(
-            name="eeli",
-            artifact_type="eit_sparse_data",
-            description="Per-breath EELI values (upstream SparseData).",
-            compatibility_only=True,
-        ),
         StepArtifact(
             name="eeli_result",
             artifact_type="interval_data",
@@ -680,54 +668,63 @@ def continuous_tiv(
 def eeli(
     signal: Any,
     *,
-    eit_sequence: Any,
-    breath_detector: Any,
     session: M3Session,
+    breath_detector: Any = None,
+    breaths: Any = None,
     result_label: str = "continuous_eelis",
 ) -> dict[str, Any]:
-    """Compute end-expiratory lung impedance (EELI) for each detected breath.
+    """Compute the end-expiratory lung impedance (EELI) of each breath.
 
-    The upstream result is stored in the EIT sequence. Values paired with
-    their breaths are added to ``session.interval_data``, and the processing
-    step is recorded in the session's history.
+    The breaths come from ``breaths``, or are found on ``signal`` with the
+    settings of ``breath_detector``. The result is added to
+    ``session.interval_data``, and the step is recorded in the session's
+    history.
 
     Args:
-        signal: Global or regional impedance waveform to measure, as a
-            ``Signal`` (or an eitprocessing ``ContinuousData``).
-        eit_sequence: Sequence that stores the upstream result.
+        signal: Global or regional impedance waveform, as a ``Signal`` (or an
+            eitprocessing ``ContinuousData``).
+        session: Session that stores the per-breath values and history.
         breath_detector: Settings of the breath detection on ``signal``
             (``BreathDetectionSettings``), or an eitprocessing
-            ``BreathDetection``.
-        session: Session that stores the per-breath values and history.
-        result_label: Name used for the upstream and per-breath results.
+            ``BreathDetection``. Used when ``breaths`` is None.
+        breaths: Breaths of any modality (a list of ``BreathEvent``s or an
+            ``IntervalData`` of breaths), each on the clock of its modality.
+            They are moved to the EIT clock with the start times of the
+            session.
+        result_label: Name of the result.
 
     Returns:
-        dict[str, Any]: ``eeli`` as upstream sparse data and ``eeli_result``
-            as ``IntervalData`` with one value per breath, in detector order
-            and in the signal's impedance unit.
+        dict[str, Any]: ``eeli_result``, an ``IntervalData`` with one EELI
+            value per breath, in the unit of ``signal``. Given breaths are
+            kept as they are, on the clock of their modality.
 
     Raises:
-        ValueError: If the numbers of values and detected breaths differ.
+        ValueError: If neither ``breaths`` nor ``breath_detector`` is given.
     """
 
-    result = session.eit_adapter.compute_eeli(
-        signal,
-        sequence=eit_sequence,
-        breath_detector=breath_detector,
-        result_label=result_label,
-    )
     metadata = _upstream_metadata(
-        source_function="eitprocessing.parameters.eeli.EELI.compute_parameter",
+        source_package="m3resp",
+        source_function=EELI_FUNCTION,
+        implementation=EELI_FUNCTION,
         operation="eit.eeli",
-        parameters={"result_label": result_label},
+        parameters={"result_label": result_label, **_breath_origin(breaths)},
     )
-    eeli_result = sparse_data_to_interval_data(
-        result,
-        _breaths_used_by(breath_detector, signal, session),
-        modality="eit",
-        method="eitprocessing.EELI",
-        metadata=dict(metadata),
+    result = _per_breath_values(
+        lambda waveform, found: end_expiratory_lung_impedance(
+            waveform, found, name=result_label
+        ),
+        signal,
+        breaths=breaths,
+        breath_detector=breath_detector,
+        session=session,
+        action="eit.eeli",
     )
-    session.interval_data.add(eeli_result)
+    result.metadata.update(metadata)
+    session.interval_data.add(result)
+    return {"eeli_result": result, "_provenance": metadata}
 
-    return {"eeli": result, "eeli_result": eeli_result, "_provenance": metadata}
+
+def _breath_origin(breaths: Any) -> dict[str, str]:
+    """Where the breaths of a TIV or EELI step come from, for the provenance."""
+
+    return {"breaths": "breath_detector" if breaths is None else "input"}

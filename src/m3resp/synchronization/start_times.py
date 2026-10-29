@@ -32,17 +32,22 @@ separate monitor export were started at different moments.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from m3resp.data.events import Interval
 from m3resp.modalities.names import VENTILATOR, normalize_modality
 from m3resp.modalities.ventilator import (
     ventilator_clock,
     ventilator_recording,
     ventilator_recordings,
 )
-from m3resp.synchronization.alignment import ventilator_start_key
+from m3resp.synchronization.alignment import (
+    align_events_by_modality_offset,
+    ventilator_start_key,
+)
 
 if TYPE_CHECKING:
     from m3resp.core.session import M3Session
@@ -128,6 +133,36 @@ def shared_clock_shifts(session: M3Session) -> dict[str, float]:
     """`shared_clock_shift` for every modality, keyed by modality name."""
 
     return {modality: shared_clock_shift(session, modality) for modality in MODALITIES}
+
+
+def on_clock_of(
+    session: M3Session, events: Sequence[Interval], modality: str
+) -> list[Any]:
+    """Return copies of intervals or breaths with their times on the clock of `modality`.
+
+    Each interval has its times on the clock of its own modality. The shift
+    of an interval is ``shared_clock_shift(its modality) - shared_clock_shift(modality)``,
+    so intervals of `modality` keep their times. A ventilator interval uses
+    the shift of the primary ventilator recording.
+
+    Args:
+        session (M3Session): Session with the start time of each recording.
+        events (Sequence[Interval]): Intervals or breaths, each on the clock
+            of its modality.
+        modality (str): The modality whose clock the times are moved to, for
+            example ``"eit"``.
+
+    Returns:
+        list[Any]: One copy per interval, in input order, with start, end and
+            any extremum time in seconds on the clock of `modality`.
+    """
+
+    target = shared_clock_shift(session, modality)
+    shifts = {
+        own: shared_clock_shift(session, own) - target
+        for own in {normalize_modality(event.modality) for event in events}
+    }
+    return align_events_by_modality_offset(events, shifts)
 
 
 def shift_trace(trace: dict[str, Any], shift: float) -> dict[str, Any]:

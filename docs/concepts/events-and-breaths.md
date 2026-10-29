@@ -114,6 +114,19 @@ The EIT steps store their values per breath in `session.interval_data`:
 
 `preprocess_eit` also stores `continuous_tivs`, `continuous_eelis` and `pixel_tivs`. The breaths of these values have the times of the EIT recording. A breath with the same start and end time as a breath in `session.events["eit_breaths"]` is the same object.
 
+### Breaths of another modality
+
+The steps `eit.continuous_tiv` and `eit.eeli` can use breaths of any modality: connect them to the input `breaths`. It takes a list of `BreathEvent`s or an `IntervalData` of breaths, for example `breath_intervals` of `eit.detect_breaths`, `emg_breath_events` of `emg.detect_breaths` or `ventilator_breath_events` of `ventilator.normalize_breaths`:
+
+```yaml
+- uses: eit.eeli
+  in: { signal: global_impedance, breaths: ventilator_breath_events }
+```
+
+Check the meaning of the breath times first. TIV is the impedance at the end of inspiration (`extremum_time`) minus the impedance at the start of the breath, and EELI is the impedance at the end of the breath. The values are a TIV and an EELI only when the breath times mark these moments in the impedance, as the EIT breaths and the breaths of the EIT device do. The default EMG breaths have the same start, extremum and end time: the highest muscle activity. So their TIV is 0, and their EELI is the impedance at the highest muscle activity. The ventilator breaths of `ventilator.normalize_breaths` are a window of 0.5 s around the volume peak, so their EELI is near the end of inspiration.
+
+Each modality keeps its breath times on its own clock. The step moves the breaths to the clock of the EIT recording with the start times of the session (see {doc}`../how-to/synchronize-recordings`), and reads each time at the nearest sample. If the recordings were never synchronized, the step gives a warning. A breath that lies partly outside the EIT data, or in a gap of its time axis (for example between two joined files), gets NaN. The result keeps the given breath objects, with their own times, and `metadata["breath_modality"]` gives their modality. The EIT figures (`save_eit_figures`, `plot_eit_processing_summary`) show each value on the EIT clock.
+
 ## Where the breaths are stored
 
 The session stores each list of breaths or events in `session.events`, under a name:

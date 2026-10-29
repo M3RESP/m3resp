@@ -71,6 +71,7 @@ The packages give no default for these settings, so M3Resp chose the values. Eac
 | | notch distance | 10 /min | m3resp (same as eitprocessing), can be set with `notch_distance_hz` |
 | | filter order | 10 | m3resp (same as eitprocessing), can be set with `order` (1 to 10) |
 | `eit.butterworth_filter` | see section 2 | | m3resp |
+| `eit.continuous_tiv` | `tiv_method` | inspiratory | m3resp (same as eitprocessing) |
 | `eit.pixel_breaths` | `phase_correction_mode` | negative amplitude | m3resp (same as eitprocessing) |
 | | `minimum_duration_seconds` | 0.67 s | m3resp (same as eitprocessing) |
 | `eit.pixel_tiv` | `tiv_timing` | continuous | m3resp |

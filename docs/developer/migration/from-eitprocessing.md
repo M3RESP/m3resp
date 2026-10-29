@@ -61,7 +61,7 @@ breaths = find_breaths(global_impedance, BreathDetectionSettings(minimum_duratio
 
 `detect_rates(..., captures={})` fills the dictionary with the spectra under the keys of eitprocessing (`frequencies`, `normalized_total_power`, `average_normalized_pixel_power`, `diff_total_averaged_power`, `estimated_respiratory_rate`, `estimated_heart_rate`). `m3resp.visualization.plot_rate_detection(settings, **captures)` draws the figure of `RateDetection.plotting.plot`.
 
-The steps `eit.detect_rates` and `eit.detect_breaths` run these functions. Their outputs `rate_detector` and `breath_detector` are the settings records. `breath_intervals` is an m3resp `IntervalData` whose `intervals` are the `BreathEvent`s. The TIV, EELI and pixel steps still run eitprocessing, and they make an eitprocessing `BreathDetection` from the settings record.
+The steps `eit.detect_rates` and `eit.detect_breaths` run these functions. Their outputs `rate_detector` and `breath_detector` are the settings records. `breath_intervals` is an m3resp `IntervalData` whose `intervals` are the `BreathEvent`s. The pixel steps still run eitprocessing, and they make an eitprocessing `BreathDetection` from the settings record.
 
 ## Filter the EIT data
 
@@ -87,9 +87,41 @@ The Butterworth filters of eitprocessing (`ButterworthFilter`) are `m3resp.proce
 
 The steps `eit.mdn_filter` and `eit.butterworth_filter` run these functions. `eit.mdn_filter` has the settings `noise_frequency_limit_hz`, `notch_distance_hz` and `order`. Both steps give the filtered images as a `Signal` and keep the captures under `filter_captures`. They also add the filtered images to the eitprocessing `Sequence`, for the steps that still run eitprocessing.
 
+## TIV and EELI
+
+`m3resp.eit.processing.tidal_impedance_variation` and `end_expiratory_lung_impedance` are the waveform part of `TIV` and `EELI` of eitprocessing. They take the breaths as a list of `BreathEvent`s, so the breaths can come from `find_breaths`, from the EIT device or from another step:
+
+```python
+# eitprocessing
+from eitprocessing.features.breath_detection import BreathDetection
+from eitprocessing.parameters.eeli import EELI
+from eitprocessing.parameters.tidal_impedance_variation import TIV
+
+detector = BreathDetection()
+tiv = TIV(breath_detection=detector).compute_parameter(global_impedance)
+eeli = EELI(breath_detection=detector).compute_parameter(global_impedance)
+
+# M3Resp
+from m3resp.eit.processing import (
+    end_expiratory_lung_impedance,
+    find_breaths,
+    tidal_impedance_variation,
+)
+
+breaths = find_breaths(global_impedance)
+tiv = tidal_impedance_variation(global_impedance, breaths)
+eeli = end_expiratory_lung_impedance(global_impedance, breaths)
+```
+
+With the breaths of `find_breaths`, both give the numbers of eitprocessing 1.8.7. `method` is the `tiv_method` of eitprocessing: `"inspiratory"` (default), `"expiratory"` or `"mean"`. The result is an `IntervalData` with the given breaths and one value per breath, in the unit of the waveform. eitprocessing gives a `SparseData` with no unit; its `time` is the `extremum_time` of each breath for TIV and the `end_time` for EELI.
+
+Each breath time is read at the nearest sample. A breath that lies partly outside the data or in a gap of the time axis, and a TIV breath with no `extremum_time`, gets NaN, with a warning. Data whose category is not an impedance gives a `ValueError`, as `EELI` of eitprocessing.
+
+The steps `eit.continuous_tiv` and `eit.eeli` run these functions and give `continuous_tiv_result` and `eeli_result`. `eit.continuous_tiv` has the setting `tiv_method`. Without the input `breaths`, the steps find the breaths on their waveform with the settings of `eit.detect_breaths`, as eitprocessing does. With `breaths`, they use those breaths; see [Breaths of another modality](../../concepts/events-and-breaths.md#breaths-of-another-modality).
+
 ## Filter and detect breaths
 
-`session.preprocess_eit()` runs rate detection, filter, breath detection, TIV, EELI and pixel TIV in one call. The rate detection, the filters and the breath detection use M3Resp code; TIV, EELI and pixel TIV use eitprocessing. Each part has settings in `preprocess_eit`:
+`session.preprocess_eit()` runs rate detection, filter, breath detection, TIV, EELI and pixel TIV in one call. The rate detection, the filters, the breath detection, TIV and EELI use M3Resp code; pixel TIV uses eitprocessing. Each part has settings in `preprocess_eit`:
 
 | `eitprocessing` | Settings of `preprocess_eit` |
 |---|---|
@@ -97,7 +129,7 @@ The steps `eit.mdn_filter` and `eit.butterworth_filter` run these functions. `ei
 | `MDNFilter` | `filter_mode="mdn"` (default) |
 | Butterworth low-pass or band-pass filter | `filter_mode="lowpass"` or `"bandpass"`, `lowpass_hz`, `highpass_hz`, `filter_order` |
 | `BreathDetection` | `breath_min_duration_seconds` |
-| `TIV` | `compute_continuous_tiv`, `compute_pixel_tiv` |
+| `TIV` | `compute_continuous_tiv` (method `inspiratory`), `compute_pixel_tiv` |
 | `EELI` | `compute_eeli` |
 
 See {doc}`../../how-to/eit-processing-settings` for the default of each setting.

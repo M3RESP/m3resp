@@ -68,6 +68,18 @@ ANY_ARTIFACT_TYPE = "any"
 #: these types accepts only that type.
 SIGNAL_ARTIFACT_TYPES = frozenset(("eit_pixel_signal", "eit_impedance_waveform"))
 
+#: Artifact type of a step input that takes breaths of any modality. It
+#: accepts each type in :data:`BREATH_ARTIFACT_TYPES`: a list of
+#: ``BreathEvent``s, or an ``IntervalData`` of breaths.
+BREATHS_ARTIFACT_TYPE = "breaths"
+BREATH_ARTIFACT_TYPES = frozenset(("breath_event_list", "interval_data"))
+
+#: The artifact types each group input type accepts, besides its own type.
+ACCEPTED_ARTIFACT_TYPES: Mapping[str, frozenset[str]] = {
+    "signal": SIGNAL_ARTIFACT_TYPES,
+    BREATHS_ARTIFACT_TYPE: BREATH_ARTIFACT_TYPES,
+}
+
 
 @dataclass(frozen=True)
 class StepParameter:
@@ -204,6 +216,11 @@ class StepDefinition(StepInfo):
     #: input that improves a result when present, e.g. the EMG baseline that
     #: ``emg.detect_breaths`` sets its threshold against.
     optional_reads: tuple[str, ...] = ()
+    #: Groups of names from ``optional_reads`` of which at least one must be
+    #: present, checked when a workflow is compiled. For a step that takes
+    #: its input from one of two places, e.g. ``eit.eeli`` reads the given
+    #: ``breaths`` or finds them with the ``breath_detector``.
+    one_of_reads: tuple[tuple[str, ...], ...] = ()
     #: context keys that must already exist before the step runs, but are not
     #: passed as arguments (e.g. an in-place mutated sequence).
     requires: tuple[str, ...] = ()
@@ -255,6 +272,7 @@ def register_step(
     *,
     reads: Mapping[str, str | None] | None = None,
     optional_reads: tuple[str, ...] = (),
+    one_of_reads: tuple[tuple[str, ...], ...] = (),
     writes: tuple[str, ...] = (),
     replaces: tuple[str, ...] = (),
     requires: tuple[str, ...] = (),
@@ -284,6 +302,8 @@ def register_step(
         reads: Function arguments mapped to default context keys. None values
             require explicit input bindings in the spec.
         optional_reads: Names from reads that may be absent at execution time.
+        one_of_reads: Groups of names from optional_reads of which at least
+            one must be present.
         writes: Output names returned by the step, renameable through ``out:``.
         replaces: Names from writes whose value replaces the value an earlier
             step wrote under the same context key.
@@ -322,7 +342,8 @@ def register_step(
     Raises:
         ValueError: When applying the decorator, if a name or alias conflicts
             with a registration, optional_reads names an undeclared input,
-            or replaces names an undeclared output.
+            a one_of_reads group has fewer than two names or a name outside
+            optional_reads, or replaces names an undeclared output.
         StepMetadataError: When applying the decorator, if names, parameters,
             input/output descriptions or their JSON representation are
             invalid, or ``record=True`` is set for a step that does not read
@@ -352,6 +373,13 @@ def register_step(
                 f"Workflow step '{name}' declares optional_reads "
                 f"{sorted(unknown_optional)} that are not in 'reads'."
             )
+        for group in one_of_reads:
+            if len(group) < 2 or not set(group) <= set(optional_reads):
+                raise ValueError(
+                    f"Workflow step '{name}' declares one_of_reads group "
+                    f"{tuple(group)!r}; a group needs two or more names from "
+                    "'optional_reads'."
+                )
         unknown_replaces = set(replaces) - set(writes)
         if unknown_replaces:
             raise ValueError(
@@ -368,6 +396,7 @@ def register_step(
             func=step_func,
             reads=dict(reads or {}),
             optional_reads=tuple(optional_reads),
+            one_of_reads=tuple(tuple(group) for group in one_of_reads),
             writes=tuple(writes),
             replaces=tuple(replaces),
             requires=tuple(requires),

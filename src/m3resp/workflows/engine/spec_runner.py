@@ -235,7 +235,7 @@ def _apply_outputs(spec: WorkflowSpec, result: WorkflowResult, *, mode: str) -> 
         output_dir.mkdir(parents=True, exist_ok=True)
         from m3resp.visualization.eit_figures import save_eit_figures
 
-        save_eit_figures(result.context.values, output_dir)
+        save_eit_figures(result.context.values, output_dir, result.session)
 
     if mode == "explicit":
         return
@@ -289,8 +289,8 @@ def _maybe_assemble_eit(result: WorkflowResult) -> None:
             "global_impedance", ctx.get("raw_global_impedance")
         ),
         "breath_intervals": ctx.get("breath_intervals"),
-        "continuous_tiv": ctx.get("continuous_tiv"),
-        "eeli": ctx.get("eeli"),
+        "continuous_tiv": ctx.get("continuous_tiv_result"),
+        "eeli": ctx.get("eeli_result"),
         "pixel_tiv": ctx.get("pixel_tiv"),
         "pixel_breaths": ctx.get("pixel_breaths"),
         "tiv_lungspace_mask": ctx.get("tiv_lungspace_mask"),

@@ -169,7 +169,9 @@ def test_eeli_matches_direct_eeli_call(workflow_result):
         [breath.end_time for breath in eeli_result.intervals],
         np.asarray(expected.time, dtype=float),
     )
-    assert eeli_result.unit == expected.unit
+    # eitprocessing gives no unit; m3resp gives the unit of the waveform.
+    assert expected.unit is None
+    assert eeli_result.unit == workflow_result.value("global_impedance").unit
 
 
 def test_continuous_tiv_matches_direct_tiv_call(workflow_result):

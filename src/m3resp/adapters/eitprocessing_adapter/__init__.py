@@ -6,6 +6,7 @@ values per breath from eitprocessing results.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from collections.abc import Callable, Iterable
 from typing import Any, Literal, cast
@@ -23,7 +24,9 @@ from m3resp.eit.io import EITFileData, join_eit_files, read_eit_file
 from m3resp.eit.processing import (
     BreathDetectionSettings,
     RateDetectionSettings,
+    end_expiratory_lung_impedance,
     mdn_filter,
+    tidal_impedance_variation,
 )
 from m3resp.eit.processing import detect_rates as detect_rates_of
 from m3resp.eit.processing import find_breaths as find_breaths_of
@@ -51,6 +54,7 @@ from ._shared import (
     breaths_to_interval_data,
     check_eit_butterworth_order,
     filter_pixels_preserving_gaps,
+    given_breath_events,
     sparse_data_to_interval_data,
 )
 from ._signals import (
@@ -90,6 +94,7 @@ __all__ = [
     "eitprocessing_fields",
     "file_data_to_sequence",
     "filter_pixels_preserving_gaps",
+    "given_breath_events",
     "load_eit_file_as_sequence",
     "sequence_to_file_data",
     "signal_to_continuous_data",
@@ -503,28 +508,72 @@ class EITProcessingAdapter:
             add_to_collection(sequence.interval_data, result)
         return result
 
+    def compute_continuous_tiv(
+        self,
+        timing_data: Any,
+        *,
+        breaths: Any,
+        tiv_method: str = "inspiratory",
+        result_label: str = "continuous_tivs",
+    ) -> IntervalData:
+        """Compute the tidal impedance variation (TIV) of each breath.
+
+        Args:
+            timing_data: The impedance waveform as a ``Signal``, or an
+                eitprocessing ``ContinuousData``, with time in seconds.
+            breaths: The breaths on the time axis of the waveform: a list of
+                ``BreathEvent``s, an m3resp ``IntervalData`` of them, or an
+                eitprocessing ``IntervalData`` of ``Breath``s.
+            tiv_method: ``"inspiratory"``, ``"expiratory"`` or ``"mean"``.
+            result_label: Name of the result.
+
+        Returns:
+            IntervalData: One TIV value per breath, from
+                ``m3resp.eit.processing.tidal_impedance_variation``.
+
+        Raises:
+            TypeError: If a breath of a list or of an m3resp ``IntervalData``
+                is not a ``BreathEvent``.
+        """
+
+        return tidal_impedance_variation(
+            as_signal(timing_data),
+            given_breath_events(breaths, function="compute_continuous_tiv"),
+            method=tiv_method,
+            name=result_label,
+        )
+
     def compute_eeli(
         self,
         timing_data: Any,
         *,
-        sequence: Any,
-        breath_detector: Any,
+        breaths: Any,
         result_label: str = "continuous_eelis",
-    ) -> Any:
-        """Compute end-expiratory lung impedance (EELI) per breath."""
+    ) -> IntervalData:
+        """Compute the end-expiratory lung impedance (EELI) of each breath.
 
-        (EELI,) = _lazy_import("eitprocessing.parameters.eeli.EELI")
+        Args:
+            timing_data: The impedance waveform as a ``Signal``, or an
+                eitprocessing ``ContinuousData``, with time in seconds.
+            breaths: The breaths on the time axis of the waveform: a list of
+                ``BreathEvent``s, an m3resp ``IntervalData`` of them, or an
+                eitprocessing ``IntervalData`` of ``Breath``s.
+            result_label: Name of the result.
 
-        result = EELI(
-            breath_detection=as_breath_detection(breath_detector)
-        ).compute_parameter(
-            as_continuous_data(timing_data),
-            sequence=sequence,
-            store=False,
-            result_label=result_label,
+        Returns:
+            IntervalData: One EELI value per breath, from
+                ``m3resp.eit.processing.end_expiratory_lung_impedance``.
+
+        Raises:
+            TypeError: If a breath of a list or of an m3resp ``IntervalData``
+                is not a ``BreathEvent``.
+        """
+
+        return end_expiratory_lung_impedance(
+            as_signal(timing_data),
+            given_breath_events(breaths, function="compute_eeli"),
+            name=result_label,
         )
-        add_to_collection(sequence.sparse_data, result)
-        return result
 
     def compute_pixel_tiv(
         self,
@@ -756,7 +805,8 @@ class EITProcessingAdapter:
                 captures, respiratory and heart rates in Hz, the breaths
                 (``breath_intervals``, an m3resp ``IntervalData`` of
                 ``BreathEvent``s; the ``Sequence`` also gets them as
-                ``"eit_breaths"``), TIV, EELI and pixel TIV.
+                ``"eit_breaths"``), TIV and EELI (m3resp ``IntervalData``,
+                one value per breath of ``breath_intervals``) and pixel TIV.
                 Disabled optional results are None; capture mappings are empty when
                 their calculation is skipped. Impedance results retain input units.
 
@@ -769,8 +819,9 @@ class EITProcessingAdapter:
                 breath-interval calculation is disabled.
         """
 
-        (TIV,) = _lazy_import(
-            "eitprocessing.parameters.tidal_impedance_variation.TIV",
+        # The Sequence, the filtered images and pixel TIV need eitprocessing.
+        _lazy_import(
+            "eitprocessing.datahandling.sequence.Sequence",
             error=lambda: OptionalDependencyError(
                 "EIT preprocessing requires the optional dependency "
                 '`eitprocessing`. Install with `pip install "m3resp[eit]"`.'
@@ -892,28 +943,20 @@ class EITProcessingAdapter:
 
         # `compute_breath_intervals` is guaranteed True here (validated above
         # whenever any of these three outputs is requested), so
-        # `breath_detector`/`filtered_global_impedance` are always populated;
+        # `breath_intervals`, `breath_detector` and `filtered_global_impedance` are set;
         # the asserts only narrow the type for mypy.
         if compute_continuous_tiv:
-            assert breath_detector is not None
+            assert breath_intervals is not None
             assert filtered_global_impedance is not None
-            tiv_calculator = TIV(breath_detection=as_breath_detection(breath_detector))
-            continuous_tiv = tiv_calculator.compute_parameter(
-                filtered_global_impedance,
-                sequence=sequence,
-                store=False,
-                result_label="continuous_tivs",
+            continuous_tiv = self.compute_continuous_tiv(
+                filtered_global_impedance, breaths=breath_intervals
             )
-            add_to_collection(sequence.sparse_data, continuous_tiv)
 
         if compute_eeli:
-            assert breath_detector is not None
+            assert breath_intervals is not None
             assert filtered_global_impedance is not None
             eeli = self.compute_eeli(
-                filtered_global_impedance,
-                sequence=sequence,
-                breath_detector=breath_detector,
-                result_label="continuous_eelis",
+                filtered_global_impedance, breaths=breath_intervals
             )
 
         pixel_tiv: Any = None
@@ -1068,7 +1111,9 @@ class EITProcessingAdapter:
             preprocessed: Preprocessing output with optional ``continuous_tiv``,
                 ``eeli`` and ``pixel_tiv`` results and their ``breath_intervals``.
                 Each result must have one value per detected breath, in the
-                same order. Units are taken from each result.
+                same order. TIV and EELI are m3resp ``IntervalData``; pixel
+                TIV is an eitprocessing result. Units are taken from each
+                result.
             stored_breaths: Existing breaths to reuse when modality and exact
                 start and end times match. ``None`` uses newly converted breaths.
 
@@ -1105,10 +1150,27 @@ class EITProcessingAdapter:
         )
 
         results: list[IntervalData] = []
-        for sparse, method, as_pixel_maps in per_breath:
+        for result, method, as_pixel_maps in per_breath:
+            if isinstance(result, IntervalData):
+                # TIV and EELI of m3resp: the values stay, the breaths are
+                # the stored ones.
+                if len(result) != len(breaths):
+                    raise ValueError(
+                        f"Got {len(result)} per-breath values but {len(breaths)} "
+                        "breaths; the breaths must be the ones the values were "
+                        "computed over."
+                    )
+                results.append(
+                    dataclasses.replace(
+                        result,
+                        intervals=list(breaths),
+                        metadata=dict(result.metadata),
+                    )
+                )
+                continue
             results.append(
                 sparse_data_to_interval_data(
-                    sparse,
+                    result,
                     breaths,
                     modality="eit",
                     method=method,
