@@ -55,6 +55,7 @@ import numpy as np
 from m3resp.data.categories import normalize_category
 from m3resp.data.event_data import IntervalData
 from m3resp.data.events import BreathEvent
+from m3resp.data.pixel_breaths import PixelBreaths
 from m3resp.data.signals import Signal
 from m3resp.data.units import normalize_unit
 
@@ -368,17 +369,19 @@ def pixel_breath_events(
     """Return the breaths of one pixel as ``BreathEvent`` objects.
 
     ``eit.pixel_breaths`` stores, for each global breath, a grid of each
-    pixel's breath start, middle and end time. This function picks one pixel
-    from that grid and turns its breaths into ``BreathEvent`` objects, so
-    analyses written for global breaths (durations, timing checks, linking)
-    can run on one pixel too.
+    pixel's breath start, end of inspiration and end time. This function
+    picks one pixel from that grid and turns its breaths into ``BreathEvent``
+    objects, so analyses written for global breaths (durations, timing
+    checks, linking) can run on one pixel too. It gives the same breaths as
+    :meth:`PixelBreaths.pixel <m3resp.data.pixel_breaths.PixelBreaths.pixel>`.
 
     Args:
-        pixel_breaths: The ``IntervalData`` written by ``eit.pixel_breaths``
-            (name ``'pixel_breaths'`` by default): one (row, column, 3) grid
-            of start, middle and end times in seconds per global breath.
-        row: Row of the pixel, counted from 0.
-        column: Column of the pixel, counted from 0.
+        pixel_breaths (IntervalData): The ``IntervalData`` written by
+            ``eit.pixel_breaths`` (``pixel_breath_timing_result``): one
+            (row, column, 3) grid of start, end of inspiration and end times
+            in seconds per global breath.
+        row (int): Row of the pixel, counted from 0.
+        column (int): Column of the pixel, counted from 0.
 
     Returns:
         list[BreathEvent]: One breath per global breath in which the pixel
@@ -387,45 +390,21 @@ def pixel_breath_events(
             time (end of inspiration), all in seconds. A global breath where
             the pixel has no breath (NaN) gives no entry. ``metadata`` holds
             ``row``, ``column`` and ``global_breath_id``, the ``id`` of the
-            global breath it belongs to.
+            global breath it belongs to. No global breaths give an empty
+            list.
 
     Raises:
-        ValueError: If the grids are not (row, column, 3), or ``row`` or
-            ``column`` is outside the grid.
+        TypeError: If an interval of ``pixel_breaths`` is not a
+            ``BreathEvent``.
+        ValueError: If the grids are not (row, column, 3), a pixel breath
+            has NaN for only some of its three times or its times are not
+            in the order start, end of inspiration, end, or ``row`` or ``column`` is
+            outside the grid.
     """
 
-    values = pixel_breaths.values if pixel_breaths.values is not None else []
-    events: list[BreathEvent] = []
-    for interval, grid in zip(pixel_breaths.intervals, values, strict=True):
-        timings = np.asarray(grid, dtype=float)
-        if timings.ndim != 3 or timings.shape[-1] != 3:
-            raise ValueError(
-                f"'{pixel_breaths.name}' must hold (row, column, 3) grids of "
-                f"start, middle and end times, got shape {timings.shape}."
-            )
-        n_rows, n_columns, _ = timings.shape
-        if not (0 <= row < n_rows and 0 <= column < n_columns):
-            raise ValueError(
-                f"Pixel ({row}, {column}) is outside the {n_rows} x {n_columns} grid."
-            )
-        start, middle, end = timings[row, column]
-        if np.isnan([start, middle, end]).any():
-            continue
-        events.append(
-            BreathEvent(
-                pixel_breaths.modality,
-                float(start),
-                float(end),
-                extremum_time=float(middle),
-                source=pixel_breaths.method,
-                metadata={
-                    "row": row,
-                    "column": column,
-                    "global_breath_id": interval.id,
-                },
-            )
-        )
-    return events
+    if not pixel_breaths.intervals:
+        return []
+    return PixelBreaths.from_interval_data(pixel_breaths).pixel(row, column)
 
 
 def _as_float_grid(values: Any, *, owner: str) -> np.ndarray:

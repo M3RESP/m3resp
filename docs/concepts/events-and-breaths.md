@@ -110,13 +110,14 @@ The EIT steps store their values per breath in `session.interval_data`:
 | `eit.continuous_tiv` | `continuous_tivs` | TIV |
 | `eit.eeli` | `continuous_eelis` | EELI |
 | `eit.pixel_tiv` | `pixel_tivs` | A {doc}`pixel map <pixel-maps>` of TIV |
+| `eit.pixel_eeli` | `pixel_eelis` | A {doc}`pixel map <pixel-maps>` of EELI |
 | `eit.pixel_breaths` | `pixel_breaths` | The start, middle and end time of the breath in each pixel |
 
-`preprocess_eit` also stores `continuous_tivs`, `continuous_eelis` and `pixel_tivs`. The breaths of these values have the times of the EIT recording. A breath with the same start and end time as a breath in `session.events["eit_breaths"]` is the same object.
+`preprocess_eit` also stores `continuous_tivs`, `continuous_eelis` and `pixel_tivs`, and `pixel_eelis` with `compute_pixel_eeli=True`. The breaths of these values have the times of the EIT recording. A breath with the same start and end time as a breath in `session.events["eit_breaths"]` is the same object.
 
 ### Breaths of another modality
 
-The steps `eit.continuous_tiv` and `eit.eeli` can use breaths of any modality: connect them to the input `breaths`. It takes a list of `BreathEvent`s or an `IntervalData` of breaths, for example `breath_intervals` of `eit.detect_breaths`, `emg_breath_events` of `emg.detect_breaths` or `ventilator_breath_events` of `ventilator.normalize_breaths`:
+Four steps can use breaths of any modality: `eit.continuous_tiv`, `eit.eeli`, and `eit.pixel_tiv` and `eit.pixel_eeli` with the timing `continuous`. Connect the breaths to the input `breaths`. It takes a list of `BreathEvent`s or an `IntervalData` of breaths, for example `breath_intervals` of `eit.detect_breaths`, `emg_breath_events` of `emg.detect_breaths` or `ventilator_breath_events` of `ventilator.normalize_breaths`:
 
 ```yaml
 - uses: eit.eeli
@@ -126,6 +127,8 @@ The steps `eit.continuous_tiv` and `eit.eeli` can use breaths of any modality: c
 Check the meaning of the breath times first. TIV is the impedance at the end of inspiration (`extremum_time`) minus the impedance at the start of the breath, and EELI is the impedance at the end of the breath. The values are a TIV and an EELI only when the breath times mark these moments in the impedance, as the EIT breaths and the breaths of the EIT device do. The default EMG breaths have the same start, extremum and end time: the highest muscle activity. So their TIV is 0, and their EELI is the impedance at the highest muscle activity. The ventilator breaths of `ventilator.normalize_breaths` are a window of 0.5 s around the volume peak, so their EELI is near the end of inspiration.
 
 Each modality keeps its breath times on its own clock. The step moves the breaths to the clock of the EIT recording with the start times of the session (see {doc}`../how-to/synchronize-recordings`), and reads each time at the nearest sample. If the recordings were never synchronized, the step gives a warning. A breath that lies partly outside the EIT data, or in a gap of its time axis (for example between two joined files), gets NaN. The result keeps the given breath objects, with their own times, and `metadata["breath_modality"]` gives their modality. The EIT figures (`save_eit_figures`, `plot_eit_processing_summary`) show each value on the EIT clock.
+
+The pixel breath search takes EIT breaths only: `eit.pixel_breaths`, and `eit.pixel_tiv` and `eit.pixel_eeli` with the timing `pixel` and no `pixel_breaths` input. Breaths of another modality give a `ValueError`, because the search windows of the pixel breaths lie between the ends of inspiration of the impedance breaths. See {doc}`pixel-maps`.
 
 ## Where the breaths are stored
 

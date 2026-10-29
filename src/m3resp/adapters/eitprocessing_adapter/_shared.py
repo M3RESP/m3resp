@@ -10,9 +10,9 @@ from typing import Any
 import numpy as np
 
 from m3resp.core.exceptions import OptionalDependencyError
-from m3resp.data import IntervalData, PixelMap
+from m3resp.data import IntervalData, PixelMap, Signal
 from m3resp.data.events import BreathEvent, coerce_breath_events
-from m3resp.eit.processing import BreathDetectionSettings
+from m3resp.eit.processing import BreathDetectionSettings, find_breaths
 from m3resp.eit.processing._breath_samples import check_breaths
 
 
@@ -311,6 +311,33 @@ def breaths_to_eitprocessing(
         parameters={BreathDetectionSettings: asdict(settings)},
         derived_from=list(derived_from),
     )
+
+
+def pixel_sign_breaths(signal: Signal, detector: Any) -> list[BreathEvent] | None:
+    """Return the breaths that give the sign of each pixel in the pixel breath search.
+
+    eitprocessing 1.8.7 finds these breaths on the waveform with the default
+    settings of the breath detection, whatever the settings of the global
+    breaths. The result goes to ``sign_breaths`` of
+    ``m3resp.eit.processing.find_pixel_breaths``, so the pixel breaths are
+    the same as in eitprocessing.
+
+    Args:
+        signal (Signal): The waveform the global breaths were found in.
+        detector (Any): The settings of the global breaths
+            (``BreathDetectionSettings``), or an eitprocessing
+            ``BreathDetection``.
+
+    Returns:
+        list[BreathEvent] | None: The breaths of ``signal`` found with the
+            default settings. None when ``detector`` holds the default
+            settings, because the global breaths are then the same breaths.
+    """
+
+    default = BreathDetectionSettings()
+    if detector == default:
+        return None
+    return find_breaths(signal, default)
 
 
 def as_breath_detection(detector: Any) -> Any:

@@ -74,7 +74,9 @@ The packages give no default for these settings, so M3Resp chose the values. Eac
 | `eit.continuous_tiv` | `tiv_method` | inspiratory | m3resp (same as eitprocessing) |
 | `eit.pixel_breaths` | `phase_correction_mode` | negative amplitude | m3resp (same as eitprocessing) |
 | | `minimum_duration_seconds` | 0.67 s | m3resp (same as eitprocessing) |
-| `eit.pixel_tiv` | `tiv_timing` | continuous | m3resp |
+| `eit.pixel_tiv` | `tiv_timing` | continuous | m3resp (eitprocessing: pixel) |
+| | `tiv_method` | inspiratory | m3resp (same as eitprocessing) |
+| `eit.pixel_eeli` | `eeli_timing` | continuous | m3resp (no eitprocessing version) |
 | `eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace` | `threshold` | 0.15 | m3resp (same as eitprocessing) |
 | `eit.roi_watershed` | `threshold_fraction` | 0.15 | m3resp (same as eitprocessing) |
 | `eit.roi_filter_by_size` | `min_region_size` / `connectivity` | 10 pixels / 1 (4 neighbours) | m3resp (same as eitprocessing) |

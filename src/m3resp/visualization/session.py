@@ -167,10 +167,13 @@ def plot_eit_processing_summary(
 
     tiv = _breath_values(processed.get("continuous_tiv"), "extremum_time", session)
     eeli = _breath_values(processed.get("eeli"), "end_time", session)
+    # One PixelMap of TIV per breath (IntervalData of eit.pixel_tiv).
     pixel_tiv = processed.get("pixel_tiv")
     mean_pixel_tiv = None
     if pixel_tiv is not None and len(pixel_tiv.values):
-        mean_pixel_tiv = np.nanmean(np.stack(pixel_tiv.values), axis=0)
+        mean_pixel_tiv = np.nanmean(
+            np.stack([np.asarray(m, dtype=float) for m in pixel_tiv.values]), axis=0
+        )
 
     if backend == "plotly":
         color, label = _event_style("eit")

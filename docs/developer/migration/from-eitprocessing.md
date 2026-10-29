@@ -61,7 +61,7 @@ breaths = find_breaths(global_impedance, BreathDetectionSettings(minimum_duratio
 
 `detect_rates(..., captures={})` fills the dictionary with the spectra under the keys of eitprocessing (`frequencies`, `normalized_total_power`, `average_normalized_pixel_power`, `diff_total_averaged_power`, `estimated_respiratory_rate`, `estimated_heart_rate`). `m3resp.visualization.plot_rate_detection(settings, **captures)` draws the figure of `RateDetection.plotting.plot`.
 
-The steps `eit.detect_rates` and `eit.detect_breaths` run these functions. Their outputs `rate_detector` and `breath_detector` are the settings records. `breath_intervals` is an m3resp `IntervalData` whose `intervals` are the `BreathEvent`s. The pixel steps still run eitprocessing, and they make an eitprocessing `BreathDetection` from the settings record.
+The steps `eit.detect_rates` and `eit.detect_breaths` run these functions. Their outputs `rate_detector` and `breath_detector` are the settings records. `breath_intervals` is an m3resp `IntervalData` whose `intervals` are the `BreathEvent`s. The TIV, EELI and pixel steps find the breaths with the settings record, or take them from the input `breaths`.
 
 ## Filter the EIT data
 
@@ -119,9 +119,56 @@ Each breath time is read at the nearest sample. A breath that lies partly outsid
 
 The steps `eit.continuous_tiv` and `eit.eeli` run these functions and give `continuous_tiv_result` and `eeli_result`. `eit.continuous_tiv` has the setting `tiv_method`. Without the input `breaths`, the steps find the breaths on their waveform with the settings of `eit.detect_breaths`, as eitprocessing does. With `breaths`, they use those breaths; see [Breaths of another modality](../../concepts/events-and-breaths.md#breaths-of-another-modality).
 
+## Pixel breaths, pixel TIV and pixel EELI
+
+`m3resp.eit.processing.find_pixel_breaths` is `PixelBreath.find_pixel_breaths` of eitprocessing. `pixel_tidal_impedance_variation` is the pixel part of `TIV` (`compute_pixel_parameter`). `pixel_end_expiratory_lung_impedance` is new: eitprocessing has no pixel EELI. The functions take the global breaths as a list of `BreathEvent`s, and the breaths of each pixel as a `PixelBreaths`:
+
+```python
+# eitprocessing
+from eitprocessing.features.breath_detection import BreathDetection
+from eitprocessing.features.pixel_breath import PixelBreath
+from eitprocessing.parameters.tidal_impedance_variation import TIV
+
+detector = BreathDetection()
+pixel_breaths = PixelBreath(breath_detection=detector).find_pixel_breaths(
+    eit_data, global_impedance
+)
+tiv = TIV(breath_detection=detector).compute_pixel_parameter(
+    eit_data, global_impedance, sequence, tiv_timing="pixel"
+)
+
+# M3Resp
+from m3resp.eit.processing import (
+    find_breaths,
+    find_pixel_breaths,
+    pixel_end_expiratory_lung_impedance,
+    pixel_tidal_impedance_variation,
+)
+
+breaths = find_breaths(global_impedance)
+pixel_breaths = find_pixel_breaths(pixels, global_impedance, breaths)
+tiv = pixel_tidal_impedance_variation(pixels, pixel_breaths)
+eeli = pixel_end_expiratory_lung_impedance(pixels, pixel_breaths)
+```
+
+With the breaths of `find_breaths`, the pixel breaths and the pixel TIV are the numbers of eitprocessing 1.8.7, with the three phase correction modes, both timings and the three TIV methods. The differences:
+
+| eitprocessing | M3Resp |
+|---|---|
+| `PixelBreath` finds the global breaths with its own `BreathDetection` | `find_pixel_breaths` takes the global breaths as input |
+| An `IntervalData` with a (row, column) grid of `Breath` or `None` per global breath | A `PixelBreaths` with three (breath, row, column) arrays of times, NaN for no breath; `pixel(row, column)` gives the breaths of one pixel as `BreathEvent`s |
+| A pixel TIV with `tiv_timing="pixel"` finds the pixel breaths again, always in the mode "negative amplitude" | `pixel_tidal_impedance_variation` takes the `PixelBreaths` of any mode |
+| A `SparseData` of pixel TIV with no unit; with missing pixel breaths, its `time` values are out of step with the values | An `IntervalData` of one `PixelMap` per global breath, in the unit of the images |
+| One warning for each pixel with no cross-correlation peak or with too many breaths left out; the text says "more than half", the limit is 25 % | One warning for each of the two reasons, with the number of pixels and their positions; `metadata["skipped_pixels"]` lists them |
+| Fewer than 2 global breaths: `ValueError` | Fewer than 2 global breaths: no pixel breaths |
+
+eitprocessing takes the sign of each pixel from a second breath detection with the default settings, whatever the settings of `PixelBreath`. `find_pixel_breaths` takes the sign from `sign_breaths`, or from `breaths` when `sign_breaths` is None. To get the numbers of eitprocessing with other detection settings, pass the breaths found with the default settings as `sign_breaths`. The steps do this.
+
+The step `eit.pixel_breaths` runs `find_pixel_breaths` and gives `pixel_breaths` (the `PixelBreaths`) and `pixel_breath_timing_result` (the same times as grids). It finds the global breaths with `minimum_duration_seconds`, or takes the EIT breaths of the input `breaths`. `eit.pixel_tiv` and `eit.pixel_eeli` have the settings `tiv_timing` and `eeli_timing` (`continuous` or `pixel`); `eit.pixel_tiv` also has `tiv_method`. With the `pixel` timing, they use the `PixelBreaths` of the input `pixel_breaths` (by default the output of an earlier `eit.pixel_breaths` step), or find the pixel breaths themselves in the mode "negative amplitude", as eitprocessing does. See {doc}`../../concepts/pixel-maps`.
+
 ## Filter and detect breaths
 
-`session.preprocess_eit()` runs rate detection, filter, breath detection, TIV, EELI and pixel TIV in one call. The rate detection, the filters, the breath detection, TIV and EELI use M3Resp code; pixel TIV uses eitprocessing. Each part has settings in `preprocess_eit`:
+`session.preprocess_eit()` runs rate detection, filter, breath detection, TIV, EELI and pixel TIV in one call, and pixel EELI with `compute_pixel_eeli=True`. All parts use M3Resp code. Each part has settings in `preprocess_eit`:
 
 | `eitprocessing` | Settings of `preprocess_eit` |
 |---|---|
@@ -129,8 +176,9 @@ The steps `eit.continuous_tiv` and `eit.eeli` run these functions and give `cont
 | `MDNFilter` | `filter_mode="mdn"` (default) |
 | Butterworth low-pass or band-pass filter | `filter_mode="lowpass"` or `"bandpass"`, `lowpass_hz`, `highpass_hz`, `filter_order` |
 | `BreathDetection` | `breath_min_duration_seconds` |
-| `TIV` | `compute_continuous_tiv` (method `inspiratory`), `compute_pixel_tiv` |
+| `TIV` | `compute_continuous_tiv` (method `inspiratory`), `compute_pixel_tiv` (method `inspiratory`, global timing) |
 | `EELI` | `compute_eeli` |
+| (no pixel EELI) | `compute_pixel_eeli` (off by default) |
 
 See {doc}`../../how-to/eit-processing-settings` for the default of each setting.
 
@@ -150,7 +198,7 @@ print(len(breaths), len(tiv.values))  # one TIV value per breath
 |---|---|
 | Respiratory rate and heart rate | `session.parameter_results`. See {doc}`../../concepts/parameters`. |
 | Breaths of `BreathDetection` | `session.events["eit_breaths"]` |
-| TIV, EELI and pixel TIV per breath | `session.interval_data`, with the names `continuous_tivs`, `continuous_eelis` and `pixel_tivs` |
+| TIV, EELI and pixel TIV per breath | `session.interval_data`, with the names `continuous_tivs`, `continuous_eelis` and `pixel_tivs` (and `pixel_eelis`) |
 | `IntervalData` (values per interval) | `m3resp.IntervalData`. See [Values per interval or event](../../concepts/events-and-breaths.md#values-per-interval-or-event). |
 | `SparseData` (values at single times) | `m3resp.EventData` |
 

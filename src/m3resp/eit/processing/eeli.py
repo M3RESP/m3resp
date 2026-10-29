@@ -6,6 +6,11 @@ end of the breath (``end_time``). The breaths are given as ``BreathEvent``s,
 so they can come from ``find_breaths``, from the EIT device, or from another
 modality.
 
+``pixel_end_expiratory_lung_impedance`` gives one map of EELI values per
+breath, one value for each pixel of EIT images: the impedance of the pixel at
+the end of the global breath, or at the end of its own breath
+(``PixelBreaths``). It is m3resp code, with no eitprocessing version.
+
 The value is an EELI only when the breath end marks the end of expiration in
 the impedance. This is true for EIT breaths. Breaths of another modality can
 mark other moments.
@@ -51,22 +56,27 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Final
 
-import numpy as np
-
 from m3resp.data.event_data import IntervalData
 from m3resp.data.events import BreathEvent, Interval
+from m3resp.data.pixel_breaths import PixelBreaths
 from m3resp.data.signals import Signal
 from m3resp.eit.processing._breath_samples import (
-    NO_SAMPLE,
     breath_samples,
     breath_source_metadata,
     check_breaths,
     check_impedance_waveform,
+    check_pixel_breaths,
+    check_pixel_impedance,
+    pixel_maps_per_breath,
+    values_at,
 )
 
 #: Name of the result, as in eitprocessing.
 NAME: Final = "continuous_eelis"
 METHOD: Final = "m3resp.eit.processing.end_expiratory_lung_impedance"
+#: Name of the pixel result.
+PIXEL_NAME: Final = "pixel_eelis"
+PIXEL_METHOD: Final = "m3resp.eit.processing.pixel_end_expiratory_lung_impedance"
 
 
 def end_expiratory_lung_impedance(
@@ -110,17 +120,80 @@ def end_expiratory_lung_impedance(
         signal, checked, points=("start_time", "end_time"), function=function
     )["end_time"]
 
-    values = np.full(len(checked), np.nan)
-    found = end != NO_SAMPLE
-    values[found] = data[end[found]]
-
     return IntervalData(
         name=name,
         modality=signal.modality,
         intervals=list[Interval](checked),
-        values=values,
+        values=values_at(data, end),
         category="impedance",
         unit=signal.unit,
         method=METHOD,
         metadata={"signal_name": signal.name, **breath_source_metadata(checked)},
+    )
+
+
+def pixel_end_expiratory_lung_impedance(
+    pixels: Signal,
+    breaths: Sequence[BreathEvent] | PixelBreaths,
+    *,
+    name: str = PIXEL_NAME,
+) -> IntervalData:
+    """Return the EELI of each pixel, as one map per breath.
+
+    Args:
+        pixels (Signal): EIT images, values with shape (time, row, column),
+            with time in seconds. Its ``category`` must be None or an
+            impedance category.
+        breaths (Sequence[BreathEvent] | PixelBreaths): The breaths, with
+            times on the time axis of ``pixels``. A list of ``BreathEvent``
+            objects gives the same breath end to every pixel (for example
+            the breaths of the global impedance). A ``PixelBreaths`` gives
+            each pixel the end of its own breath. The breath end is read at
+            the nearest sample.
+        name (str): Name of the result and of each ``PixelMap``.
+
+    Returns:
+        IntervalData: The global breaths (the given ``BreathEvent``
+            objects, or ``PixelBreaths.breaths``), in the same order, with
+            one ``PixelMap`` of EELI values each, in the unit of ``pixels``. A
+            pixel is NaN where its breath is partly outside the data or in a
+            gap of the time axis, where its image value is NaN, and, for
+            ``PixelBreaths``, where the pixel has no breath (always the
+            first and the last breath). ``metadata`` holds ``eeli_timing``
+            (``"continuous"`` for a list of breaths, ``"pixel"`` for
+            ``PixelBreaths``), ``signal_name``, ``breath_modality`` and
+            ``breath_source``.
+
+    Raises:
+        TypeError: If ``pixels`` is not a ``Signal`` or a breath is not a
+            ``BreathEvent``.
+        ValueError: If the category is not an impedance category, the
+            values do not have the shape (time, row, column), or the grid of
+            ``PixelBreaths`` differs from the grid of ``pixels``.
+
+    Warns:
+        UserWarning: When breaths lie partly outside the data or in a gap
+            of the time axis.
+    """
+
+    function = "pixel_end_expiratory_lung_impedance"
+    data = check_pixel_impedance(pixels, function=function)
+    checked, global_breaths, timing = check_pixel_breaths(
+        breaths, data, function=function
+    )
+    end = breath_samples(
+        pixels, checked, points=("start_time", "end_time"), function=function
+    )["end_time"]
+
+    return pixel_maps_per_breath(
+        values_at(data, end),
+        pixels,
+        global_breaths,
+        name=name,
+        method=PIXEL_METHOD,
+        metadata={
+            "eeli_timing": timing,
+            "signal_name": pixels.name,
+            **breath_source_metadata(checked),
+        },
     )

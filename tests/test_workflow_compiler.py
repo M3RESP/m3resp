@@ -441,3 +441,40 @@ def test_one_of_reads_needs_two_optional_reads(group: tuple[str, ...]):
         )
         def _bad(a: Any = None, b: Any = None, c: Any = None) -> dict[str, Any]:
             return {}
+
+
+@pytest.fixture
+def _unbound_optional_read_step():
+    @register_step(
+        "unbound_test.make_hint",
+        writes=("hint",),
+    )
+    def _make_hint() -> dict[str, Any]:
+        return {"hint": 10}
+
+    @register_step(
+        "unbound_test.use_hint",
+        reads={"hint": None},
+        optional_reads=("hint",),
+        writes=("used",),
+    )
+    def _use_hint(hint: Any = None) -> dict[str, Any]:
+        return {"used": hint}
+
+    yield
+    STEP_REGISTRY.pop("unbound_test.make_hint", None)
+    STEP_REGISTRY.pop("unbound_test.use_hint", None)
+
+
+def test_an_optional_read_with_no_default_key_is_used_only_when_bound(
+    _unbound_optional_read_step,
+):
+    steps = [{"uses": "unbound_test.make_hint"}, {"uses": "unbound_test.use_hint"}]
+    unbound = load_spec({"name": "p", "steps": steps})
+    bound = load_spec(
+        {"name": "p", "steps": [steps[0], {**steps[1], "in": {"hint": "hint"}}]}
+    )
+
+    assert validate_workflow(unbound, readiness=False).structural == ()
+    assert "hint" not in compile_workflow(unbound).steps[1].input_bindings
+    assert compile_workflow(bound).steps[1].input_bindings == {"hint": "hint"}

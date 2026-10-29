@@ -198,7 +198,7 @@ Run `m3resp steps` for the list of all steps. The groups are:
 
 | Group | Steps for |
 |---|---|
-| `eit.*` | Load and slice EIT data, filter, find the rates and the breaths, calculate TIV, EELI, pixel TIV and lung regions |
+| `eit.*` | Load and slice EIT data, filter, find the rates and the breaths, calculate TIV, EELI, pixel breaths, pixel TIV, pixel EELI and lung regions |
 | `emg.*` | Load and slice EMG data, filter, remove the ECG, find the baseline and the breaths, calculate the parameters and the quality checks |
 | `ventilator.*` | Load and slice ventilator data, select the channels, find the breaths and the occlusions (Pocc) |
 | `sync.*` | Put the recordings on the shared clock: `sync.raw_modalities`, `sync.skip`, `sync.estimate_offset`, `sync.apply_estimated_offset` (see {doc}`concepts/synchronization-overview`) |

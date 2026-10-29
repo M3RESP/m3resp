@@ -29,6 +29,7 @@ _EIT_STEP_NAMES = [
     "eit.continuous_tiv",
     "eit.eeli",
     "eit.pixel_tiv",
+    "eit.pixel_eeli",
     "eit.pixel_breaths",
     "eit.roi_tiv_lungspace",
     "eit.roi_amplitude_lungspace",
@@ -37,7 +38,7 @@ _EIT_STEP_NAMES = [
 ]
 
 
-def test_all_twenty_eit_steps_are_registered_and_described():
+def test_all_twenty_one_eit_steps_are_registered_and_described():
     descriptions = describe_steps(prefix="eit.")
     assert {d.name for d in descriptions} == set(_EIT_STEP_NAMES)
 
@@ -62,6 +63,9 @@ _M3RESP_ONLY_STEPS = (
     "eit.normalize_breaths",
     "eit.continuous_tiv",
     "eit.eeli",
+    "eit.pixel_breaths",
+    "eit.pixel_tiv",
+    "eit.pixel_eeli",
 )
 
 
@@ -110,14 +114,14 @@ def test_eit_detect_rates_subject_type_choices_match_function_signature():
 
 
 def test_eit_pixel_breaths_phase_correction_choices_match_allowed_set():
-    from m3resp.workflows.steps.eit import _ALLOWED_PIXEL_BREATH_PHASE_MODES
+    from m3resp.eit.processing.pixel_breath import PHASE_CORRECTION_MODES
 
     description = describe_step("eit.pixel_breaths")
     param = next(p for p in description.parameters if p.name == "phase_correction_mode")
     # Every accepted mode is offered, the empty one included: it is a real
     # option meaning "no phase correction", so a GUI built from `choices` must
     # be able to select it.
-    assert set(param.choices or ()) == set(_ALLOWED_PIXEL_BREATH_PHASE_MODES)
+    assert set(param.choices or ()) == set(PHASE_CORRECTION_MODES)
     assert None in (param.choices or ())
 
 
@@ -126,15 +130,15 @@ def test_eit_pixel_breaths_phase_correction_options_have_one_definition():
 
     from typing import get_args, get_type_hints
 
-    from m3resp.workflows.steps.eit import _ALLOWED_PIXEL_BREATH_PHASE_MODES
+    from m3resp.eit.processing.pixel_breath import PHASE_CORRECTION_MODES
     from m3resp.workflows.steps.eit.pixel import pixel_breaths
 
     annotation = get_type_hints(pixel_breaths)["phase_correction_mode"]
     description = describe_step("eit.pixel_breaths")
     param = next(p for p in description.parameters if p.name == "phase_correction_mode")
 
-    assert set(get_args(annotation)) == set(_ALLOWED_PIXEL_BREATH_PHASE_MODES)
-    assert set(param.choices or ()) == set(_ALLOWED_PIXEL_BREATH_PHASE_MODES)
+    assert set(get_args(annotation)) == set(PHASE_CORRECTION_MODES)
+    assert set(param.choices or ()) == set(PHASE_CORRECTION_MODES)
 
 
 def test_eit_roi_filter_by_size_connectivity_choices_are_one_or_two():

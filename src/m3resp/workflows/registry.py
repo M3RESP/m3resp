@@ -74,6 +74,11 @@ SIGNAL_ARTIFACT_TYPES = frozenset(("eit_pixel_signal", "eit_impedance_waveform")
 BREATHS_ARTIFACT_TYPE = "breaths"
 BREATH_ARTIFACT_TYPES = frozenset(("breath_event_list", "interval_data"))
 
+#: Artifact type of a ``PixelBreaths``: the global breaths with the start,
+#: end of inspiration and end time of the breath of each pixel. An input of
+#: this type accepts only a ``PixelBreaths``.
+PIXEL_BREATHS_ARTIFACT_TYPE = "pixel_breaths"
+
 #: The artifact types each group input type accepts, besides its own type.
 ACCEPTED_ARTIFACT_TYPES: Mapping[str, frozenset[str]] = {
     "signal": SIGNAL_ARTIFACT_TYPES,
@@ -300,7 +305,9 @@ def register_step(
     Args:
         name: Operation name in lowercase prefix.operation form.
         reads: Function arguments mapped to default context keys. None values
-            require explicit input bindings in the spec.
+            require explicit input bindings in the spec; for a name in
+            optional_reads, None means the input is used only when the spec
+            binds it.
         optional_reads: Names from reads that may be absent at execution time.
         one_of_reads: Groups of names from optional_reads of which at least
             one must be present.

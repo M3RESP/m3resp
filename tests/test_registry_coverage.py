@@ -90,6 +90,9 @@ _M3RESP_ONLY_EIT_STEPS = (
     "eit.normalize_breaths",
     "eit.continuous_tiv",
     "eit.eeli",
+    "eit.pixel_breaths",
+    "eit.pixel_tiv",
+    "eit.pixel_eeli",
 )
 
 

@@ -34,8 +34,9 @@ def save_eit_figures(
 
     Args:
         context_values: Workflow values such as rate_detector/rate_captures,
-            global_impedance, breath_intervals, eeli_result and pixel_tiv. Each figure
-            is attempted when its required values are available.
+            global_impedance, breath_intervals, eeli_result and
+            pixel_tiv_result. Each figure is attempted when its required
+            values are available.
         output_dir: Destination directory. A figures subdirectory is created
             and existing figure files with the same names are replaced.
         session: Session with the start time of each recording. The EELI of
@@ -198,12 +199,26 @@ def _figure_global_impedance(
 
 
 def _figure_pixel_tiv(ctx, figures_dir: Path, plt) -> Path | None:
-    """Mean per-pixel TIV map via the native ``PixelMap.plotting.imshow``."""
+    """Save the mean pixel TIV map over all breaths as a figure.
 
-    pixel_tiv = ctx.get("pixel_tiv")
-    if pixel_tiv is None:
+    The maps are the ``PixelMap``s of ``pixel_tiv_result`` (``eit.pixel_tiv``).
+    The figure uses ``PixelMap.plotting.imshow`` of eitprocessing.
+
+    Args:
+        ctx (Mapping[str, Any]): Workflow values with ``pixel_tiv_result``.
+        figures_dir (Path): Folder for the figure file.
+        plt (Any): The ``matplotlib.pyplot`` module.
+
+    Returns:
+        Path | None: The path of the saved figure. None when there is no
+            ``pixel_tiv_result`` or no map, or eitprocessing plotting is
+            not installed.
+    """
+
+    pixel_tiv = ctx.get("pixel_tiv_result")
+    if pixel_tiv is None or not pixel_tiv.values:
         return None
-    maps = np.asarray(getattr(pixel_tiv, "values", pixel_tiv), dtype=float)
+    maps = np.asarray([np.asarray(m, dtype=float) for m in pixel_tiv.values])
     if maps.ndim != 3 or maps.size == 0:
         return None
     mean_map = np.nanmean(maps, axis=0)

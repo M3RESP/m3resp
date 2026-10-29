@@ -26,12 +26,15 @@ from m3resp.adapters.eitprocessing_adapter import (
     signal_to_eit_data,
 )
 from m3resp.core.exceptions import OptionalDependencyError
-from m3resp.data import BreathEvent, IntervalData, Signal
+from m3resp.data import BreathEvent, IntervalData, PixelBreaths, Signal
 from m3resp.eit.processing import (
     BreathDetectionSettings,
     RateDetectionSettings,
     end_expiratory_lung_impedance,
     find_breaths,
+    find_pixel_breaths,
+    pixel_end_expiratory_lung_impedance,
+    pixel_tidal_impedance_variation,
     tidal_impedance_variation,
 )
 
@@ -216,31 +219,69 @@ class TestApplyMdn:
             )
 
 
+def _chain_breaths(
+    loaded_chain: dict[str, Any], minimum_duration: float = 2 / 3
+) -> list[BreathEvent]:
+    """The breaths of the filtered global impedance of the test file."""
+
+    return find_breaths(
+        as_signal(loaded_chain["filtered_gi"]),
+        BreathDetectionSettings(minimum_duration=minimum_duration),
+    )
+
+
 class TestFindPixelBreaths:
-    def test_returns_one_interval_per_global_breath_and_stores_once(
+    def test_gives_m3resp_pixel_breaths_and_leaves_the_sequence_unchanged(
         self, loaded_chain: dict[str, Any]
     ):
         sequence = loaded_chain["sequence"]
+        stored_before = dict(sequence.interval_data)
         result = loaded_chain["adapter"].find_pixel_breaths(
             loaded_chain["filtered_eit"],
             loaded_chain["filtered_gi"],
-            sequence=sequence,
             result_label="pixel_breaths_test",
         )
 
-        assert "pixel_breaths_test" in sequence.interval_data
-        assert sequence.interval_data["pixel_breaths_test"] is result
-        assert all(pixel is None for pixel in result.values[0].flat)
-        assert all(pixel is None for pixel in result.values[-1].flat)
+        assert dict(sequence.interval_data) == stored_before
+        assert isinstance(result, PixelBreaths)
+        assert result == find_pixel_breaths(
+            as_signal(loaded_chain["filtered_eit"]),
+            as_signal(loaded_chain["filtered_gi"]),
+            _chain_breaths(loaded_chain),
+            name="pixel_breaths_test",
+        )
+        assert not result.has_breath[0].any()
+        assert not result.has_breath[-1].any()
+        assert result.has_breath[1:-1].any()
 
-    def test_without_sequence_does_not_raise_or_store(
-        self, loaded_chain: dict[str, Any]
-    ):
+    def test_uses_the_given_breaths(self, loaded_chain: dict[str, Any]):
+        breaths = _chain_breaths(loaded_chain)
+
         result = loaded_chain["adapter"].find_pixel_breaths(
-            loaded_chain["filtered_eit"], loaded_chain["filtered_gi"]
+            loaded_chain["filtered_eit"],
+            loaded_chain["filtered_gi"],
+            breaths=breaths_to_interval_data(breaths),
         )
 
-        assert result is not None
+        assert all(a is b for a, b in zip(result.breaths, breaths, strict=True))
+
+    def test_other_minimum_duration_takes_the_sign_from_the_default_breaths(
+        self, loaded_chain: dict[str, Any]
+    ):
+        # eitprocessing takes the sign of each pixel from the breaths found
+        # with the default settings, whatever the minimum duration.
+        result = loaded_chain["adapter"].find_pixel_breaths(
+            loaded_chain["filtered_eit"],
+            loaded_chain["filtered_gi"],
+            minimum_duration_seconds=1.0,
+        )
+
+        assert result == find_pixel_breaths(
+            as_signal(loaded_chain["filtered_eit"]),
+            as_signal(loaded_chain["filtered_gi"]),
+            _chain_breaths(loaded_chain, minimum_duration=1.0),
+            sign_breaths=_chain_breaths(loaded_chain),
+        )
 
     @pytest.mark.parametrize(
         "mode", ["negative amplitude", "phase shift", "none", None]
@@ -254,7 +295,7 @@ class TestFindPixelBreaths:
             phase_correction_mode=mode,
         )
 
-        assert result is not None
+        assert isinstance(result, PixelBreaths)
 
 
 class TestComputeTivAndEeli:
@@ -286,19 +327,51 @@ class TestComputeTivAndEeli:
         assert len(eeli) == len(tiv) == len(breaths) > 0
 
 
-class TestComputePixelTiv:
-    def test_shape_is_breath_row_column(self, loaded_chain: dict[str, Any]):
+class TestComputePixelTivAndEeli:
+    def test_global_timing_gives_m3resp_maps_and_leaves_the_sequence_unchanged(
+        self, loaded_chain: dict[str, Any]
+    ):
         sequence = loaded_chain["sequence"]
-        result = loaded_chain["adapter"].compute_pixel_tiv(
+        sparse_before = dict(sequence.sparse_data)
+        breaths = _chain_breaths(loaded_chain)
+        pixels = as_signal(loaded_chain["filtered_eit"])
+
+        tiv = loaded_chain["adapter"].compute_pixel_tiv(
             loaded_chain["filtered_eit"],
-            loaded_chain["filtered_gi"],
-            sequence=sequence,
-            breath_detector=loaded_chain["breath_detector"],
+            breaths=breaths_to_interval_data(breaths),
+            tiv_method="expiratory",
             result_label="pixel_tiv_test",
         )
+        eeli = loaded_chain["adapter"].compute_pixel_eeli(
+            loaded_chain["filtered_eit"], breaths=breaths
+        )
 
-        assert "pixel_tiv_test" in sequence.sparse_data
-        assert result.values[0].shape == (32, 32)
+        assert dict(sequence.sparse_data) == sparse_before
+        assert tiv == pixel_tidal_impedance_variation(
+            pixels, breaths, method="expiratory", name="pixel_tiv_test"
+        )
+        assert eeli == pixel_end_expiratory_lung_impedance(pixels, breaths)
+        assert tiv.values[0].shape == (32, 32)
+        assert len(tiv) == len(eeli) == len(breaths)
+
+    def test_pixel_breaths_give_the_pixel_timing(self, loaded_chain: dict[str, Any]):
+        adapter = loaded_chain["adapter"]
+        pixel_breaths = adapter.find_pixel_breaths(
+            loaded_chain["filtered_eit"], loaded_chain["filtered_gi"]
+        )
+        pixels = as_signal(loaded_chain["filtered_eit"])
+
+        tiv = adapter.compute_pixel_tiv(
+            loaded_chain["filtered_eit"], breaths=pixel_breaths
+        )
+        eeli = adapter.compute_pixel_eeli(
+            loaded_chain["filtered_eit"], breaths=pixel_breaths
+        )
+
+        assert tiv == pixel_tidal_impedance_variation(pixels, pixel_breaths)
+        assert eeli == pixel_end_expiratory_lung_impedance(pixels, pixel_breaths)
+        assert tiv.metadata["tiv_timing"] == "pixel"
+        assert eeli.metadata["eeli_timing"] == "pixel"
 
 
 class TestRoiLungspaceMethods:
@@ -415,11 +488,34 @@ class TestOptionalDependencyBehavior:
         assert filtered.values.shape == images.values.shape
         assert filtered.method == "m3resp.eit.processing.mdn_filter"
 
-    def test_find_pixel_breaths_raises_optional_dependency_error(
+    def test_pixel_methods_run_without_eitprocessing(
         self, blocked_adapter: EITProcessingAdapter
     ):
-        with pytest.raises(OptionalDependencyError):
-            blocked_adapter.find_pixel_breaths(object(), object())
+        fs = 20.0
+        time = np.arange(int(40 * fs)) / fs
+        breathing = np.sin(2 * np.pi * 0.25 * time)
+        images = Signal(
+            values=breathing[:, None, None] * np.ones((len(time), 2, 2)) + 5.0,
+            time=time,
+            sample_frequency=fs,
+            name="images",
+            modality="eit",
+        )
+        waveform = Signal(
+            values=4 * breathing + 20.0,
+            time=time,
+            sample_frequency=fs,
+            name="global_impedance",
+            modality="eit",
+        )
+
+        pixel_breaths = blocked_adapter.find_pixel_breaths(images, waveform)
+        tiv = blocked_adapter.compute_pixel_tiv(images, breaths=pixel_breaths)
+        eeli = blocked_adapter.compute_pixel_eeli(images, breaths=pixel_breaths.breaths)
+
+        assert pixel_breaths.has_breath[1:-1].all()
+        np.testing.assert_allclose(tiv.values[1].values, 2.0, atol=1e-2)
+        np.testing.assert_allclose(eeli.values[1].values, 4.0, atol=1e-2)
 
     def test_compute_tiv_and_eeli_run_without_eitprocessing(
         self, blocked_adapter: EITProcessingAdapter
@@ -437,14 +533,6 @@ class TestOptionalDependencyBehavior:
         eeli = blocked_adapter.compute_eeli(waveform, breaths=breaths)
 
         assert tiv.values[0] == 2.0 and eeli.values[0] == 2.0
-
-    def test_compute_pixel_tiv_raises_optional_dependency_error(
-        self, blocked_adapter: EITProcessingAdapter
-    ):
-        with pytest.raises(OptionalDependencyError):
-            blocked_adapter.compute_pixel_tiv(
-                object(), object(), sequence=object(), breath_detector=object()
-            )
 
     def test_compute_tiv_lungspace_raises_optional_dependency_error(
         self, blocked_adapter: EITProcessingAdapter

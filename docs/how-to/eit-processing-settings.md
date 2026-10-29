@@ -40,8 +40,9 @@ Set a result to `False` to skip it:
 | `compute_continuous_tiv` | The tidal impedance variation (TIV) of each breath |
 | `compute_eeli` | The end-expiratory lung impedance (EELI) of each breath |
 | `compute_pixel_tiv` | A TIV map per breath, with one value per pixel |
+| `compute_pixel_eeli` | An EELI map per breath, with one value per pixel. Off by default: set it to `True`. |
 
-TIV, EELI and pixel TIV need the breaths. If you set `compute_breath_intervals=False`, also set the three TIV and EELI settings to `False`.
+TIV, EELI, pixel TIV and pixel EELI need the breaths. If you set `compute_breath_intervals=False`, also set the TIV and EELI settings to `False`.
 
 ## Keep more than one result
 

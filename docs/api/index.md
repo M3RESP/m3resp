@@ -77,6 +77,7 @@ These objects and functions hold breaths, events and values per breath, and put 
    m3resp.PixelMap
    m3resp.PixelMask
    m3resp.PixelMaskCollection
+   m3resp.PixelBreaths
    m3resp.pixel_breath_events
    m3resp.LinkedBreath
    m3resp.coerce_event
@@ -159,7 +160,7 @@ These functions read one EIT file of a Draeger, Sentec or Timpel device. Each re
 
 ## EIT calculations
 
-`global_impedance` sums the pixels of each EIT image into the global impedance waveform. `regional_impedance` and `functional_impedance` sum the pixels inside a mask. Each of these three functions returns a `Signal`. `detect_rates` finds the breathing rate and the heart rate of the EIT images, in Hz, from their frequency spectra. `find_breaths` finds the breaths of an impedance waveform and returns them as `BreathEvent`s. `RateDetectionSettings` and `BreathDetectionSettings` hold the settings of these two functions. `mdn_filter` removes the heart signal from EIT images or a waveform with the MDN (multiple digital notch) filter and returns a `Signal`; `mdn_frequency_bands` gives the frequency bands that it removes. `tidal_impedance_variation` and `end_expiratory_lung_impedance` give the TIV and the EELI of each breath of an impedance waveform, as an `IntervalData`; the breaths are `BreathEvent`s of any modality, on the time axis of the waveform. `TIV_METHODS` lists the three TIV methods.
+`global_impedance` sums the pixels of each EIT image into the global impedance waveform. `regional_impedance` and `functional_impedance` sum the pixels inside a mask. Each of these three functions returns a `Signal`. `detect_rates` finds the breathing rate and the heart rate of the EIT images, in Hz, from their frequency spectra. `find_breaths` finds the breaths of an impedance waveform and returns them as `BreathEvent`s. `RateDetectionSettings` and `BreathDetectionSettings` hold the settings of these two functions. `mdn_filter` removes the heart signal from EIT images or a waveform with the MDN (multiple digital notch) filter and returns a `Signal`; `mdn_frequency_bands` gives the frequency bands that it removes. `tidal_impedance_variation` and `end_expiratory_lung_impedance` give the TIV and the EELI of each breath of an impedance waveform, as an `IntervalData`; the breaths are `BreathEvent`s of any modality, on the time axis of the waveform. `TIV_METHODS` lists the three TIV methods. `find_pixel_breaths` finds the breaths of each pixel of EIT images from the global breaths and returns a `PixelBreaths`. `pixel_tidal_impedance_variation` and `pixel_end_expiratory_lung_impedance` give one `PixelMap` of TIV or EELI per breath, with the times of the global breaths or of the breaths of each pixel.
 
 ```{eval-rst}
 .. autosummary::
@@ -177,6 +178,9 @@ These functions read one EIT file of a Draeger, Sentec or Timpel device. Each re
    m3resp.eit.processing.mdn_frequency_bands
    m3resp.eit.processing.tidal_impedance_variation
    m3resp.eit.processing.end_expiratory_lung_impedance
+   m3resp.eit.processing.find_pixel_breaths
+   m3resp.eit.processing.pixel_tidal_impedance_variation
+   m3resp.eit.processing.pixel_end_expiratory_lung_impedance
    m3resp.eit.processing.slicing.slice_file_data
    m3resp.processing.slicing.slice_by_index
    m3resp.processing.slicing.slice_by_time

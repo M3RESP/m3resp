@@ -316,6 +316,10 @@ def _check_bindings(
 
     for param, default in definition.reads.items():
         context_key = step_spec.inputs.get(param, default)
+        if context_key is None and param in definition.optional_reads:
+            # An optional input with no default key is passed only when
+            # 'in:' binds it.
+            continue
         if context_key is None:
             diagnostics.append(
                 Diagnostic(
