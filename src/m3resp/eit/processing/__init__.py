@@ -11,7 +11,8 @@ TIV and the EELI of each breath of an impedance waveform, and
 ``pixel_tidal_impedance_variation`` and ``pixel_end_expiratory_lung_impedance``
 give one map of TIV or EELI values per breath for the pixels of EIT images.
 ``find_pixel_breaths`` finds the breaths of each pixel from the global
-breaths.
+breaths. ``minute_image`` gives the mean pixel TIV over the breaths in a time
+window.
 """
 
 from m3resp.eit.processing.breath_detection import (
@@ -28,6 +29,7 @@ from m3resp.eit.processing.impedance import (
     regional_impedance,
 )
 from m3resp.eit.processing.mdn_filter import mdn_filter, mdn_frequency_bands
+from m3resp.eit.processing.minute_image import minute_image
 from m3resp.eit.processing.pixel_breath import find_pixel_breaths
 from m3resp.eit.processing.rate_detection import (
     RateDetectionSettings,
@@ -51,6 +53,7 @@ __all__ = [
     "global_impedance",
     "mdn_filter",
     "mdn_frequency_bands",
+    "minute_image",
     "pixel_end_expiratory_lung_impedance",
     "pixel_tidal_impedance_variation",
     "regional_impedance",

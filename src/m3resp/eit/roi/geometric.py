@@ -40,7 +40,7 @@ Modified for M3RESP:
       (eitprocessing makes the dorsal, anatomical left and quadrant masks by
       flipping and multiplying other masks). The grids are the same.
     - The error for an image height that does not divide shows the number
-      (eitprocessing issue I19: "{height_divisor}" in the message).
+      (the eitprocessing message shows the text "{height_divisor}").
     - A shape that is not two positive whole numbers raises ValueError.
     - Error messages are reworded.
 

@@ -22,6 +22,7 @@ import numpy as np
 
 from m3resp.adapters.eitprocessing_adapter import breath_intervals_to_breath_events
 from m3resp.core.session import M3Session
+from m3resp.data.pixel_maps import PixelMap
 from m3resp.synchronization.start_times import on_clock_of
 
 
@@ -46,8 +47,7 @@ def save_eit_figures(
 
     Returns:
         list[Path]: Written paths in rate_detection, global_impedance, pixel_tiv
-            order. Missing figure inputs are skipped. An unavailable eitprocessing
-            plotting package skips the pixel-TIV figure. An empty list means
+            order. Missing figure inputs are skipped. An empty list means
             no figures were produced.
 
     Raises:
@@ -202,7 +202,8 @@ def _figure_pixel_tiv(ctx, figures_dir: Path, plt) -> Path | None:
     """Save the mean pixel TIV map over all breaths as a figure.
 
     The maps are the ``PixelMap``s of ``pixel_tiv_result`` (``eit.pixel_tiv``).
-    The figure uses ``PixelMap.plotting.imshow`` of eitprocessing.
+    The figure draws their mean with ``plot_pixel_map`` in the style of a
+    plain map (``viridis``, scale from the smallest to the largest value).
 
     Args:
         ctx (Mapping[str, Any]): Workflow values with ``pixel_tiv_result``.
@@ -211,9 +212,11 @@ def _figure_pixel_tiv(ctx, figures_dir: Path, plt) -> Path | None:
 
     Returns:
         Path | None: The path of the saved figure. None when there is no
-            ``pixel_tiv_result`` or no map, or eitprocessing plotting is
-            not installed.
+            ``pixel_tiv_result`` or no map.
     """
+
+    from m3resp.visualization.pixel_map_style import pixel_map_style
+    from m3resp.visualization.pixel_maps import plot_pixel_map
 
     pixel_tiv = ctx.get("pixel_tiv_result")
     if pixel_tiv is None or not pixel_tiv.values:
@@ -221,19 +224,13 @@ def _figure_pixel_tiv(ctx, figures_dir: Path, plt) -> Path | None:
     maps = np.asarray([np.asarray(m, dtype=float) for m in pixel_tiv.values])
     if maps.ndim != 3 or maps.size == 0:
         return None
-    mean_map = np.nanmean(maps, axis=0)
-
-    try:
-        from eitprocessing.plotting.pixelmap import PixelMap
-    except ImportError:  # pragma: no cover - depends on local extras
-        return None
+    mean_map = PixelMap.from_aggregate(
+        maps, np.nanmean, name="mean tidal impedance variation"
+    )
 
     plt.close("all")
     fig, ax = plt.subplots(figsize=(5.0, 4.6))
-    plt.sca(ax)
-    PixelMap(mean_map, label="mean tidal impedance variation").plotting.imshow(
-        colorbar=True
-    )
+    plot_pixel_map(mean_map, ax, colorbar=True, style=pixel_map_style(None))
     ax.set_title(f"Mean pixel TIV over {maps.shape[0]} breaths")
     fig.tight_layout()
     path = figures_dir / "pixel_tiv.png"

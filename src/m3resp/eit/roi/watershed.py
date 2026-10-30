@@ -42,10 +42,14 @@ Modified for M3RESP:
       `Signal`s. The global breaths are an input (eitprocessing runs
       `BreathDetection` with the default settings on the timing data).
     - The pixel TIV and the pixel amplitude per breath are computed once
-      (eitprocessing computes them in `TIVLungspace.apply` and in
-      `AmplitudeLungspace.apply`, and then uses only their captures). The
-      mean maps and masks of those two calls are still made, so the errors
-      and warnings are the same. The masks and the captures are the same.
+      (eitprocessing runs `TIVLungspace.apply` and
+      `AmplitudeLungspace.apply` in full, and then uses only their
+      captures). The masks and the captures are the same.
+    - The "no breaths" ValueError comes only from breaths without TIV or
+      amplitude values; other errors of the pixel TIV and the pixel
+      amplitude reach the user unchanged.
+    - The warning for a negative mean amplitude checks the mean over the
+      shared breaths (eitprocessing checks the mean over all breaths).
     - The captures "mean tiv" and "mean amplitude" are named
       "mean TIV of shared breaths" and "mean amplitude of shared breaths".
     - The captures have m3resp types: `PixelMap` for the mean maps,
@@ -82,9 +86,8 @@ from skimage import feature, segmentation
 
 from m3resp.data import BreathEvent, PixelMap, PixelMask, Signal
 from m3resp.eit.processing import pixel_tidal_impedance_variation
-from m3resp.eit.roi._shared import check_threshold, finish_mask, per_breath_grids
+from m3resp.eit.roi._shared import check_per_breath, check_threshold, finish_mask
 from m3resp.eit.roi.amplitude import pixel_amplitude_per_breath
-from m3resp.eit.roi.tiv import mean_map_and_mask
 
 NAME = "watershed_lungspace_mask"
 METHOD = "m3resp.eit.roi.watershed_lungspace"
@@ -135,40 +138,31 @@ def watershed_lungspace(
     Raises:
         TypeError: If ``threshold_fraction`` is not a float.
         ValueError: If ``threshold_fraction`` is not between 0 and 1, no
-            breath has both TIV and amplitude values, or no local maximum
-            lies inside the TIV mask.
+            breath has TIV or amplitude values, no breath has both, or no
+            local maximum lies inside the TIV mask. The errors of the pixel
+            TIV and the pixel amplitude (for example images that are not
+            (time, row, column)) are raised as they are.
 
     Warns:
-        UserWarning: If a mean amplitude is negative.
+        UserWarning: If the mean amplitude of a pixel over the shared
+            breaths is negative.
         RuntimeWarning: The warnings of the pixel breath search.
     """
 
     check_threshold(
         threshold_fraction, name="threshold_fraction", function="watershed_lungspace"
     )
+    tiv = pixel_tidal_impedance_variation(pixels, breaths)
+    amplitude = pixel_amplitude_per_breath(pixels, signal, breaths)
     try:
-        tiv = pixel_tidal_impedance_variation(pixels, breaths)
-        amplitude = pixel_amplitude_per_breath(pixels, signal, breaths)
-        # The masks of all breaths are not used; they are made for the same
-        # errors and warnings as eitprocessing, which runs TIVLungspace and
-        # AmplitudeLungspace in full.
-        mean_map_and_mask(
-            tiv, quantity="TIV", threshold=threshold_fraction, captures=None
-        )
-        mean_map_and_mask(
-            amplitude,
-            quantity="amplitude",
-            threshold=threshold_fraction,
-            captures=None,
-        )
+        tiv_grids = check_per_breath(tiv, quantity="TIV")
+        amplitude_grids = check_per_breath(amplitude, quantity="amplitude")
     except ValueError as error:
         raise ValueError(
             "No breaths with TIV or amplitude values were found, so no "
             "functional lung space can be found."
         ) from error
 
-    tiv_grids = per_breath_grids(tiv)
-    amplitude_grids = per_breath_grids(amplitude)
     shared = ~np.all(np.isnan(tiv_grids), axis=(1, 2)) & ~np.all(
         np.isnan(amplitude_grids), axis=(1, 2)
     )
@@ -202,7 +196,6 @@ def watershed_lungspace(
         np.nanmean,
         name="mean amplitude of shared breaths",
         kind="amplitude",
-        suppress_negative_warning=True,
         **fields,
     )
     amplitude_mask = mean_amplitude.create_mask_from_threshold(

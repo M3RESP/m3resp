@@ -47,6 +47,8 @@ Portions of `src/m3resp/processing/filters.py`,
 `src/m3resp/eit/processing/mdn_filter.py`, `src/m3resp/eit/processing/tidal_impedance_variation.py`, `src/m3resp/eit/processing/eeli.py`,
 `src/m3resp/eit/processing/pixel_breath.py`,
 `src/m3resp/visualization/rate_detection.py`,
+`src/m3resp/visualization/pixel_map_style.py`, `src/m3resp/visualization/pixel_maps.py`,
+`src/m3resp/visualization/_tick_formats.py`, `src/m3resp/visualization/plot_data.py`,
 `src/m3resp/processing/slicing.py`, and
 `src/m3resp/adapters/eitprocessing_adapter/_slicing.py` are derived from eitprocessing; see the per-module "Provenance"
 notes in those files for the specific functions and upstream revision.

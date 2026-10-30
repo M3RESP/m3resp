@@ -226,6 +226,34 @@ The steps `eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace`, `eit.roi_water
 
 See {doc}`../../concepts/pixel-maps`.
 
+## Plotting
+
+`m3resp.visualization.pixel_maps.plot_pixel_map` draws a pixel map or a mask as `PixelMap.plotting.imshow` does, with the colours and the colour bar of the map kind. `add_region_labels` writes the region numbers as `add_region_markers` does.
+
+| eitprocessing | M3Resp |
+|---|---|
+| `TIVMap(values).plotting.imshow(ax=ax)` | `plot_pixel_map(PixelMap(name=..., values=..., kind="tiv"), ax)` |
+| `imshow(colorbar, normalize, percentage, absolute, colorbar_kwargs, facecolor, **kwargs)` | `plot_pixel_map(..., colorbar, normalize, percentage, absolute, colorbar_options, background, **imshow_options)`, and `hide_axes` |
+| `PixelMask(...).plotting.imshow()` | `plot_pixel_map(mask)` |
+| `regions.plotting.add_region_markers(ax, label_map, **kwargs)` | `add_region_labels(regions, ax, labels, **text_options)`, for a map of kind `"integer"` |
+| `get_plot_config(TIVMap)`, the 10 `*PlotConfig` classes | `m3resp.visualization.pixel_map_style.pixel_map_style("tiv")`, one `PixelMapStyle` per kind, for kind None and for `"mask"` |
+| `set_pixelmap_plot_config(TIVMap, ...)` | `plot_pixel_map(..., style=pixel_map_style("tiv", ...))` for one figure |
+| `RateDetection.plotting.plot` | `m3resp.visualization.plot_rate_detection(settings, **captures)` |
+
+With the same values and settings, the image, the scale ends, the colour of each pixel, the colour bar label, ticks and tick texts are those of eitprocessing 1.8.7. The differences:
+
+| eitprocessing | M3Resp |
+|---|---|
+| `add_region_markers` of a map of another kind raises `NotImplementedError` | `add_region_labels` raises `TypeError` |
+| `add_region_markers` writes "0" in the background (region 0) | `add_region_labels` gives region 0 no label |
+| A TIV, amplitude, perfusion or pendelluft map with only negative values: Matplotlib stops with an error, or, with a colour bar, uses a scale from 1.1 times the largest value to 0 | The scale goes from the largest value to 0 |
+| `contour` and `surface` (3D) | No function |
+| The filter figure (`plotting/filter.py`) | No function |
+
+`pixel_tiv.png` of `save_eit_figures` is drawn with `plot_pixel_map`, so it is written without eitprocessing. The picture is the same as before.
+
+The GUI reads the maps, masks, EIT images, lung-space captures and rate spectra as plot data, from `m3resp.visualization.plot_data` (see {doc}`../../concepts/pixel-maps`).
+
 ## Filter and detect breaths
 
 `session.preprocess_eit()` runs rate detection, filter, breath detection, TIV, EELI and pixel TIV in one call, and pixel EELI with `compute_pixel_eeli=True`. All parts use M3Resp code. Each part has settings in `preprocess_eit`:

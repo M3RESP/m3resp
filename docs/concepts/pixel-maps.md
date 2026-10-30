@@ -1,6 +1,6 @@
 # Pixel maps and masks
 
-An EIT image is a grid of pixels, in rows and columns. M3Resp has two objects with one number per pixel: a `PixelMap` holds a value per pixel, and a `PixelMask` selects the pixels of a region. This page also gives the names of the EIT impedance waveforms.
+An EIT image is a grid of pixels, in rows and columns. M3Resp has two objects with one number per pixel: a `PixelMap` holds a value per pixel, and a `PixelMask` selects the pixels of a region. This page also gives the names of the EIT impedance waveforms, and shows how to draw the maps and masks.
 
 ## Global, regional and pixel impedance
 
@@ -250,6 +250,75 @@ With the global timing, the sum of the pixel values of a breath (NaN pixels left
 ```
 
 The input `pixel_breaths` takes only a `PixelBreaths`, so the workflow check refuses `pixel_breath_timing_result` there.
+
+## The minute image
+
+`m3resp.eit.processing.minute_image(pixels, breaths, start=..., end=...)` gives the mean pixel TIV over the breaths that lie fully inside a time window, in seconds. A breath is inside when it starts at or after `start` and ends at or before `end`. The TIV uses the times of the global breaths for every pixel. The result is a `PixelMap` of kind `"tiv"`; its `metadata` holds `start`, `end`, `breath_count` and `tiv_method`. Without `start` and `end`, the window is the whole recording. When no breath lies inside the window, the function raises `ValueError`.
+
+```python
+from m3resp.eit.processing import minute_image
+
+image = minute_image(pixels, global_breaths, start=60.0, end=120.0)
+print(image.metadata["breath_count"])
+```
+
+## Draw a pixel map
+
+`m3resp.visualization.pixel_maps.plot_pixel_map(item, ax)` draws a `PixelMap` or a `PixelMask` with Matplotlib, with a colour bar, and returns the Matplotlib image. It gives the picture of `PixelMap.plotting.imshow` of `eitprocessing` 1.8.7. Each map kind has its own style: the colours, the two ends of the colour scale and the label of the colour bar.
+
+| Kind | Colours | Ends of the colour scale |
+|---|---|---|
+| None (plain map) | `viridis` | The smallest and the largest value |
+| `"tiv"`, `"amplitude"` | Dark blue (0) to white (largest value); values below 0 are purple | 0 and the largest value |
+| `"odcl"` | White, black, dark orange | −1 and 1; the colour bar shows the absolute value in % |
+| `"difference"` | `vanimo` | Centred on 0, out to the value farthest from 0 |
+| `"perfusion"` | Black to red | 0 and the largest value |
+| `"pendelluft"` | Black to forest green | 0 and the largest value |
+| `"signed_pendelluft"` | Deep pink, black, forest green | Centred on 0; the colour bar shows the absolute value |
+| `"integer"` | `tab20`: one colour for each whole number from 0 to 19 | −0.5 and 19.5 |
+| A `PixelMask` | One colour (`tab:blue`), no colour bar | 0 and 2 |
+
+A NaN pixel shows the dark grey background. For `"tiv"` and `"amplitude"`, the colour bar ends in a point at the low end, for the purple values below 0.
+
+```python
+import matplotlib.pyplot as plt
+
+from m3resp.visualization.pixel_maps import add_region_labels, plot_pixel_map
+
+fig, ax = plt.subplots()
+plot_pixel_map(image, ax)  # the minute image, kind "tiv"
+```
+
+The arguments `colorbar`, `normalize`, `percentage`, `absolute`, `hide_axes` and `background` change one setting of the style for this figure. With `normalize=True`, the values are divided by the largest value, or by 1 when the largest value is below 1, as in `eitprocessing`. `style=pixel_map_style("tiv", colorbar_label="TIV (mL)")` gives a changed style. Other arguments, such as `vmin`, `vmax` and `cmap`, go to Matplotlib `imshow`.
+
+`add_region_labels(regions, ax)` writes the number of each region at a point inside that region, in a white box. `regions` is a map of kind `"integer"`, for example the capture `"watershed regions"`. `labels` gives other texts for some region numbers.
+
+`pixel_map_style(kind)` in `m3resp.visualization.pixel_map_style` gives the style of a kind. `scale_limits(style, values)` gives the two ends of the colour scale, and `pixel_colors(style, values)` the colour of each pixel, as red, green, blue and alpha from 0 to 1. These three functions work without Matplotlib. The colours are stored in the package, so the figures and the GUI use the same colours.
+
+## Plot data for the GUI
+
+The GUI draws the EIT results in the browser. The functions of `m3resp.visualization.plot_data` give these results as dictionaries of numbers, text, lists, True/False and None, so `json.dumps` writes them as they are. A grid is a list of rows, with None for a NaN pixel. Each picture comes with its style and the two ends of its colour scale.
+
+| Function | Plot data |
+|---|---|
+| `pixel_map_plot_data(pixel_map)` | A `PixelMap`: name, kind, unit, shape, values and style |
+| `pixel_mask_plot_data(mask)` | A `PixelMask`: values (1 or a weight, None outside), number and fraction of included pixels |
+| `eit_image_plot_data(pixels, time)` | The EIT image at the sample nearest to `time`, with the time and the number of that sample |
+| `eit_images_plot_data(pixels, start, end, step)` | One image per `step` seconds from `start` to `end`, with one colour scale for all images |
+| `lungspace_plot_data(captures, mask=...)` | The captures of a lung-space method: mean maps, masks, watershed regions with the point of each region label, and peaks |
+| `rate_spectrum_plot_data(captures, settings)` | The spectra of `detect_rates`, in Hz, and the breathing rate and heart rate |
+
+A time outside the time axis of the images gives `ValueError`. An infinite value gives `ValueError`, because JSON has no infinite numbers.
+
+```python
+import json
+
+from m3resp.visualization.plot_data import eit_image_plot_data, pixel_map_plot_data
+
+frame = eit_image_plot_data(pixels, time=12.3)
+print(frame["time"], frame["style"]["limits"])
+text = json.dumps(pixel_map_plot_data(image), allow_nan=False)
+```
 
 ## Export
 

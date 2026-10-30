@@ -303,7 +303,6 @@ def test_the_pixel_tiv_figure_shows_the_mean_map_of_pixel_tiv_result(
     tmp_path, monkeypatch
 ) -> None:
     pytest.importorskip("matplotlib")
-    pytest.importorskip("eitprocessing")
     from matplotlib.figure import Figure
 
     from m3resp.visualization.eit_figures import save_eit_figures
@@ -322,6 +321,52 @@ def test_the_pixel_tiv_figure_shows_the_mean_map_of_pixel_tiv_result(
     assert [path.name for path in paths] == ["pixel_tiv.png"]
     [image] = shown
     np.testing.assert_allclose(image, np.nanmean(_maps(pixel_tiv), axis=0))
+
+
+def test_the_pixel_tiv_figure_is_written_without_eitprocessing(
+    tmp_path, monkeypatch
+) -> None:
+    pytest.importorskip("matplotlib")
+    import sys
+
+    from m3resp.visualization.eit_figures import save_eit_figures
+
+    for name in [n for n in sys.modules if n.split(".")[0] == "eitprocessing"]:
+        monkeypatch.delitem(sys.modules, name)
+    monkeypatch.setitem(sys.modules, "eitprocessing", None)
+
+    paths = save_eit_figures({"pixel_tiv_result": _small_pixel_tiv()}, tmp_path)
+
+    assert [path.name for path in paths] == ["pixel_tiv.png"]
+    assert paths[0].stat().st_size > 0
+
+
+def test_the_pixel_tiv_figure_equals_the_eitprocessing_picture(tmp_path) -> None:
+    """The figure is the picture that eitprocessing ``imshow`` of a plain
+    ``PixelMap`` draws (``viridis``), pixel for pixel."""
+
+    pytest.importorskip("matplotlib")
+    upstream = pytest.importorskip("eitprocessing.datahandling.pixelmap")
+    import matplotlib.pyplot as plt
+
+    from m3resp.visualization.eit_figures import save_eit_figures
+
+    pixel_tiv = _small_pixel_tiv()
+    [path] = save_eit_figures({"pixel_tiv_result": pixel_tiv}, tmp_path)
+
+    mean_map = np.nanmean(_maps(pixel_tiv), axis=0)
+    fig, ax = plt.subplots(figsize=(5.0, 4.6))
+    plt.sca(ax)
+    upstream.PixelMap(mean_map, label="mean tidal impedance variation").plotting.imshow(
+        colorbar=True
+    )
+    ax.set_title(f"Mean pixel TIV over {len(pixel_tiv.values)} breaths")
+    fig.tight_layout()
+    expected_path = tmp_path / "expected.png"
+    fig.savefig(expected_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    assert np.array_equal(plt.imread(path), plt.imread(expected_path))
 
 
 def test_the_eit_summary_gives_the_shape_of_the_pixel_tiv_maps() -> None:

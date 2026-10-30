@@ -5,12 +5,15 @@ Each method must give the values, warnings and errors of eitprocessing
 weights, on grids that are NaN everywhere and on grids of zeros. The
 warnings are compared by topic, because the messages are reworded. The
 differences that the Provenance block of `m3resp/data/pixel_maps.py` names
-(issues I20 and I21, no all-NaN warning for a map) have their own tests.
+(division warnings, no all-NaN warning for a map, the negative warning in
+copies, NumPy numbers in ``normalize``) have their own tests.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import operator
+import os
 import warnings
 from collections.abc import Callable
 from typing import Any
@@ -18,6 +21,7 @@ from typing import Any
 import numpy as np
 import pytest
 
+import m3resp
 from m3resp.data import PixelMap, PixelMask, PixelMaskCollection, Signal
 from m3resp.data.pixel_maps import PIXEL_MAP_KINDS
 
@@ -431,7 +435,7 @@ def test_numpy_integer_works_like_a_python_number():
 
 
 def test_division_gives_no_numpy_warning():
-    # I21: the result is filled with NaN first.
+    # The result is filled with NaN first.
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         _our_map(GRIDS["positive"]) / _our_map(GRIDS["positive"])
@@ -459,6 +463,126 @@ def test_map_with_a_number_keeps_its_fields_and_a_copy_of_the_metadata():
     assert (doubled.name, doubled.unit, doubled.kind) == ("tiv", pixel_map.unit, "tiv")
     doubled.metadata["n"] = 2
     assert pixel_map.metadata == {"n": 1}
+
+
+def test_copies_keep_the_switched_off_negative_warning():
+    pixel_map = PixelMap(
+        name="a",
+        values=[[-1.0, 2.0], [3.0, 4.0]],
+        kind="amplitude",
+        suppress_negative_warning=True,
+    )
+    mask = PixelMask(name="m", values=[[1.0, 1.0], [1.0, np.nan]])
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        pixel_map * 2
+        2 - pixel_map
+        pixel_map.normalize(mode="maximum")
+        pixel_map.convert_to("perfusion")
+        mask.apply(pixel_map)
+        PixelMaskCollection([mask]).apply(pixel_map, name_format="{mask_name} map")
+        dataclasses.replace(pixel_map, name="b")
+
+
+def test_mask_collection_apply_gives_each_masked_map_with_its_fields():
+    pixel_map = PixelMap(
+        name="a", values=[[1.0, 2.0], [3.0, 4.0]], kind="tiv", metadata={"n": 1}
+    )
+    masks = [
+        PixelMask(name="left", values=[[1.0, np.nan], [1.0, np.nan]]),
+        PixelMask(name="right", values=[[np.nan, 0.5], [np.nan, 0.5]]),
+    ]
+    found = PixelMaskCollection(masks).apply(
+        pixel_map, name_format="tiv in {mask_name}", unit="AU"
+    )
+
+    assert list(found) == ["left", "right"]
+    for mask in masks:
+        result = found[mask.name]
+        assert result.name == f"tiv in {mask.name}"
+        assert (result.kind, result.unit) == ("tiv", "a.u.")
+        assert np.array_equal(
+            result.values, pixel_map.values * mask.values, equal_nan=True
+        )
+        result.metadata["n"] = 2
+    assert pixel_map.metadata == {"n": 1}
+
+
+def test_the_warning_of_a_copy_points_to_the_line_of_the_user():
+    pixel_map = PixelMap(name="a", values=[[1.0, 2.0]], kind="amplitude")
+
+    with pytest.warns(UserWarning, match="negative") as record:
+        pixel_map * -1
+
+    assert record[0].filename == __file__
+
+
+def test_the_warning_of_a_map_made_inside_m3resp_points_to_the_line_of_the_user():
+    # A function with a file name in the m3resp package, as an m3resp method
+    # that makes an amplitude map.
+    package = os.path.dirname(os.path.abspath(m3resp.__file__))
+    source = (
+        "def make_map():\n"
+        "    return PixelMap(name='a', values=[[-1.0, 2.0]], kind='amplitude')\n"
+    )
+    namespace = {"PixelMap": PixelMap}
+    code = compile(source, os.path.join(package, "eit", "method.py"), "exec")
+    exec(code, namespace)  # noqa: S102 - fixed test source
+
+    with pytest.warns(UserWarning, match="negative") as record:
+        namespace["make_map"]()
+
+    assert record[0].filename == __file__
+
+
+@pytest.mark.parametrize("flag", [True, False, np.True_])
+def test_calculation_with_a_map_refuses_true_and_false(flag):
+    pixel_map = _our_map(GRIDS["positive"])
+
+    for calculate in (
+        lambda: pixel_map + flag,
+        lambda: flag - pixel_map,
+        lambda: pixel_map * flag,
+        lambda: pixel_map / flag,
+        lambda: flag / pixel_map,
+    ):
+        with pytest.raises(TypeError, match="not with True or False"):
+            calculate()
+
+
+def test_normalize_takes_numpy_numbers_and_refuses_true_and_false():
+    pixel_map = _our_map(GRIDS["positive"])
+
+    for reference in (np.int64(2), np.float32(2.0)):
+        np.testing.assert_allclose(
+            pixel_map.normalize(mode="reference", reference=reference).values,
+            pixel_map.values / 2,
+        )
+    for reference in (True, np.bool_(True)):
+        with pytest.raises(TypeError, match="must be a number"):
+            pixel_map.normalize(mode="reference", reference=reference)
+        with pytest.raises(TypeError, match="must be a number"):
+            pixel_map.create_mask_from_threshold(reference)
+
+
+def test_a_mask_leaves_the_given_grid_unchanged():
+    grid = np.array([[0.0, 1.0], [0.5, np.nan]])
+    weights = PixelMask(name="k", values=grid.copy(), keep_zeros=True)
+
+    _quiet(lambda: PixelMask(name="x", values=grid))
+    _quiet(lambda: PixelMaskCollection([weights]).combine(name="combined"))
+
+    np.testing.assert_array_equal(grid, [[0.0, 1.0], [0.5, np.nan]])
+    np.testing.assert_array_equal(weights.values, [[0.0, 1.0], [0.5, np.nan]])
+
+
+def test_an_integer_map_with_fractions_names_convert_to():
+    regions = PixelMap(name="regions", values=[[1.0, 2.0]], kind="integer")
+
+    with pytest.raises(TypeError, match=r"convert_to\(None\)"):
+        regions / 2
+    np.testing.assert_array_equal((regions.convert_to(None) / 2).values, [[0.5, 1.0]])
 
 
 # --- from_aggregate and arrays ----------------------------------------------
@@ -611,7 +735,14 @@ def test_apply_equals_upstream_on_arrays_and_maps():
     up_collection = upstream_collection.PixelMaskCollection(
         [_quiet(lambda n=name: _upstream_mask(n).update(label=n)) for name in names]
     )
-    our_collection = PixelMaskCollection(items=[_our_mask(name) for name in names])
+    # `update` runs the checks again with the default settings, so a weight
+    # of 0 becomes NaN; `dataclasses.replace` does the same here.
+    our_collection = PixelMaskCollection(
+        items=[
+            _quiet(lambda n=name: dataclasses.replace(_our_mask(n), name=n))
+            for name in names
+        ]
+    )
     images = np.random.default_rng(3).normal(size=(4, 6, 5))
 
     up_arrays = up_collection.apply(images)

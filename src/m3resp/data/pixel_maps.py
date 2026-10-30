@@ -62,6 +62,14 @@ Modified for M3RESP:
     - A map of kind "integer" holds whole numbers, stored as floats; NaN or
       infinity raises TypeError, as in eitprocessing `IntegerMap`.
     - A `PixelMap` that is NaN everywhere gives no warning.
+    - A map keeps its `suppress_negative_warning` choice in its copies
+      (`with_values`, `dataclasses.replace`, `normalize`, `convert_to`,
+      `+ - * /` with a number or a grid, `PixelMask.apply`); eitprocessing
+      checks each copy with the default setting.
+    - Warnings point to the line of the user's code that made the map or
+      the mask.
+    - `normalize(mode="reference")`, `create_mask_from_threshold` and
+      `+ - * /` take NumPy numbers and refuse True and False.
     - A map combined with a number or a grid keeps its name; a map combined
       with another map gets the name "a + b", "a - b", "a * b" or "a / b",
       and keeps the category and the unit when both maps have the same
@@ -71,9 +79,9 @@ Modified for M3RESP:
     - NumPy numbers (for example `numpy.int64`) work like Python numbers in
       `+ - * /`.
     - Dividing by the number 0 gives the "Dividing by 0" warning, the same
-      as dividing by a grid with a 0 (eitprocessing issue I20).
+      as dividing by a grid with a 0 (eitprocessing warns for a grid only).
     - The division fills the result with NaN first, so NumPy gives no
-      "'where' used without 'out'" warning (eitprocessing issue I21).
+      "'where' used without 'out'" warning (eitprocessing gives it).
     - `create_mask_from_threshold` takes a `name` for the mask.
     - Error and warning messages are reworded.
 
@@ -84,9 +92,13 @@ Full attribution notice: see top-level NOTICE.md.
 
 from __future__ import annotations
 
+import dataclasses
+import os
+import sys
 import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import InitVar, dataclass, field, replace
+from types import CodeType, FrameType
 from typing import Any, Literal, overload
 
 import numpy as np
@@ -137,7 +149,14 @@ class PixelMap:
 
     A map of kind ``"amplitude"``, ``"perfusion"`` or ``"pendelluft"`` with
     a negative value gives a warning, unless
-    ``suppress_negative_warning=True``.
+    ``suppress_negative_warning=True``. Copies of the map (``with_values``,
+    ``dataclasses.replace``, ``normalize``, ``+ - * /`` with a number or a
+    grid, ``PixelMask.apply``) keep this choice.
+
+    A map of kind ``"integer"`` keeps its kind in ``+ - * /`` with a number
+    or a grid, so a result that is not whole (``regions / 2``) or that holds
+    NaN (``regions / 0``) raises TypeError. Use ``regions.convert_to(None)``
+    first for a plain map.
 
     Attributes:
         name: What the numbers are, e.g. ``'pixel_tiv'``.
@@ -150,6 +169,9 @@ class PixelMap:
         method: Name of the method that produced the values.
         metadata: Optional extra information.
         kind: One of :data:`PIXEL_MAP_KINDS`, or None for a plain map.
+        suppress_negative_warning: True skips the warning for negative
+            values of the kinds ``"amplitude"``, ``"perfusion"`` and
+            ``"pendelluft"``.
 
     Raises:
         ValueError: If ``values`` is not a 2D grid, or ``kind`` is unknown.
@@ -166,13 +188,13 @@ class PixelMap:
     method: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     kind: str | None = None
-    suppress_negative_warning: InitVar[bool] = field(default=False, kw_only=True)
+    suppress_negative_warning: bool = field(default=False, kw_only=True, repr=False)
 
     #: A NumPy number or array on the left of ``+ - * /`` gives the
     #: calculation to the map, so the result is a ``PixelMap``.
     __array_priority__ = 1000
 
-    def __post_init__(self, suppress_negative_warning: bool) -> None:
+    def __post_init__(self) -> None:
         """Check the 2D numeric grid and the kind, then normalize unit and category names."""
 
         self.values = _as_float_grid(self.values, owner="PixelMap")
@@ -189,19 +211,18 @@ class PixelMap:
         ):
             raise TypeError(
                 f"PixelMap '{self.name}' of kind 'integer' must hold a whole "
-                "number in every pixel (no NaN or infinity)."
+                "number in every pixel (no NaN or infinity). Use "
+                "convert_to(None) first to calculate with a plain map."
             )
         if (
             self.kind in _NON_NEGATIVE_KINDS
-            and not suppress_negative_warning
+            and not self.suppress_negative_warning
             and np.any(self.values < 0)
         ):
-            warnings.warn(
+            _warn(
                 f"PixelMap '{self.name}' of kind '{self.kind}' holds negative "
                 "values; values of this kind are normally 0 or more. Pass "
-                "suppress_negative_warning=True to skip this warning.",
-                UserWarning,
-                stacklevel=3,
+                "suppress_negative_warning=True to skip this warning."
             )
 
     @property
@@ -264,8 +285,9 @@ class PixelMap:
             **changes: Other fields to change, e.g. ``name`` or ``kind``.
 
         Returns:
-            PixelMap: The copy, with a copy of the metadata. The checks of
-                the kind run again.
+            PixelMap: The copy, with a copy of the metadata and the same
+                ``suppress_negative_warning``. The checks of the kind run
+                again.
         """
 
         fields: dict[str, Any] = {"values": values, "metadata": dict(self.metadata)}
@@ -375,7 +397,7 @@ class PixelMap:
         if mode == "reference":
             if reference is None:
                 raise ValueError("'reference' is required with mode='reference'.")
-            if not isinstance(reference, (float, int)):
+            if not _is_number(reference):
                 raise TypeError(
                     f"'reference' must be a number, got {type(reference).__name__}."
                 )
@@ -445,7 +467,7 @@ class PixelMap:
             ValueError: If the map is NaN everywhere.
         """
 
-        if not isinstance(threshold, (float, np.floating, int, np.integer)):
+        if not _is_number(threshold):
             raise TypeError(
                 f"'threshold' must be a number, got {type(threshold).__name__}."
             )
@@ -533,7 +555,12 @@ class PixelMap:
     def _other_values(self, other: Any) -> Any:
         """Return the values of ``other`` for a pixel-by-pixel calculation."""
 
-        if isinstance(other, (int, float, np.number)):
+        if isinstance(other, (bool, np.bool_)):
+            raise TypeError(
+                f"PixelMap '{self.name}' can be combined with a number, a grid or "
+                "a PixelMap, not with True or False."
+            )
+        if _is_number(other):
             return other
         other_values = np.asarray(
             other.values if isinstance(other, PixelMap) else other
@@ -696,11 +723,9 @@ class PixelMask:
 
         all_nan = bool(np.all(np.isnan(grid)))
         if all_nan and not suppress_all_nan_warning:
-            warnings.warn(
+            _warn(
                 f"PixelMask '{self.name}' is NaN everywhere, so applying it "
-                "gives NaN for every pixel.",
-                UserWarning,
-                stacklevel=3,
+                "gives NaN for every pixel."
             )
         if (
             not all_nan
@@ -714,15 +739,13 @@ class PixelMask:
             )
         if not keep_zeros and np.any(grid == 0):
             if not is_boolean_mask and not suppress_zero_conversion_warning:
-                warnings.warn(
+                _warn(
                     f"PixelMask '{self.name}' holds 0 values, which are turned "
                     "into NaN (outside the region). Pass keep_zeros=True to "
                     "keep them as weight 0, or "
-                    "suppress_zero_conversion_warning=True to skip this warning.",
-                    UserWarning,
-                    stacklevel=3,
+                    "suppress_zero_conversion_warning=True to skip this warning."
                 )
-            grid[grid == 0] = np.nan
+            grid = np.where(grid == 0, np.nan, grid)
         self.values = grid
 
     @property
@@ -834,11 +857,7 @@ class PixelMask:
                 metadata=dict(data.metadata),
             )
         if isinstance(data, PixelMap):
-            return replace(
-                data,
-                values=self._multiply(data.values),
-                metadata=dict(data.metadata),
-            )
+            return data.with_values(self._multiply(data.values))
         if isinstance(data, np.ndarray):
             return self._multiply(data)
         raise TypeError(
@@ -982,17 +1001,59 @@ def _check_normalization_reference(divisor: float) -> None:
             "the map has no value other than NaN."
         )
     if divisor < 0:
-        warnings.warn(
+        _warn(
             f"PixelMap.normalize divides by a negative number ({divisor}), so "
-            "the sign of the values turns around.",
-            UserWarning,
-            stacklevel=3,
+            "the sign of the values turns around."
         )
 
 
 def _warn_division_by_zero() -> None:
-    warnings.warn(
-        "Dividing by 0 gives NaN for those pixels.", UserWarning, stacklevel=3
+    _warn("Dividing by 0 gives NaN for those pixels.")
+
+
+def _is_number(value: Any) -> bool:
+    """Return True for a Python or NumPy number; True and False do not count."""
+
+    return isinstance(value, (int, float, np.integer, np.floating)) and not isinstance(
+        value, (bool, np.bool_)
+    )
+
+
+#: Folder of the m3resp package; warnings point to the first line outside it.
+_PACKAGE_FOLDER = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_DATACLASSES_FILE = os.path.abspath(dataclasses.__file__)
+
+
+def _warn(message: str) -> None:
+    """Give a UserWarning that points to the line that called m3resp.
+
+    The warning shows the first line outside the m3resp package and the
+    Python ``dataclasses`` code. So the warning of a copy such as ``m * 2``
+    points to the line with ``m * 2``, and a warning of a map that an m3resp
+    function makes points to the line that called that function.
+
+    Args:
+        message (str): The text of the warning.
+    """
+
+    frame: FrameType | None = sys._getframe(1)
+    stacklevel = 2
+    while frame is not None and _is_package_code(frame.f_code):
+        frame = frame.f_back
+        stacklevel += 1
+    warnings.warn(message, UserWarning, stacklevel=stacklevel)
+
+
+def _is_package_code(code: CodeType) -> bool:
+    """Return True for code of the m3resp package or of ``dataclasses``."""
+
+    filename = code.co_filename
+    if filename == "<string>":
+        # The __init__ that dataclasses writes for each class.
+        return code.co_name == "__init__"
+    filename = os.path.abspath(filename)
+    return filename == _DATACLASSES_FILE or filename.startswith(
+        _PACKAGE_FOLDER + os.sep
     )
 
 

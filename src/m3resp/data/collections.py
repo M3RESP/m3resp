@@ -240,6 +240,12 @@ class PixelMaskCollection:
         pixels in at least one mask, weights added up to 1. ``"product"``
         multiplies them (``a * b * ...``): the pixels in every mask.
 
+        The result runs the checks of :class:`PixelMask` again with the
+        default settings, as in eitprocessing, also for a collection of one
+        mask. So a weight of 0 becomes NaN (with a warning), and a mask made
+        with ``suppress_value_range_error=True`` and values outside 0 to 1
+        raises ValueError.
+
         Args:
             method (str): ``"sum"`` or ``"product"``.
             name (str): Name of the combined mask.
@@ -249,8 +255,13 @@ class PixelMaskCollection:
                 mask.
 
         Raises:
-            ValueError: If the collection is empty, ``method`` is unknown, or
-                the masks differ in shape.
+            ValueError: If the collection is empty, ``method`` is unknown,
+                the masks differ in shape, or a value of the result is
+                outside 0 to 1.
+
+        Warns:
+            UserWarning: If the result holds a 0 (it becomes NaN) or is NaN
+                everywhere.
         """
 
         if not self.items:
@@ -331,11 +342,14 @@ class PixelMaskCollection:
 
         results: dict[str, Any] = {}
         for mask in self.items:
-            masked = mask.apply(data)
-            fields = dict(changes)
+            fields = {
+                "values": mask.apply(np.asarray(data.values)),
+                "metadata": dict(data.metadata),
+                **changes,
+            }
             if name_format is not None:
                 fields["name"] = name_format.format(mask_name=mask.name)
-            results[mask.name] = replace(masked, **fields) if fields else masked
+            results[mask.name] = replace(data, **fields)
         return results
 
     def __iter__(self) -> Iterator[PixelMask]:

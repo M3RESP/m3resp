@@ -111,10 +111,28 @@ Changes that a user can see:
 - The captures hold m3resp objects: `IntervalData` with one `PixelMap` per breath, `PixelMap`, `PixelMask` and (row, column) arrays of peaks. In the watershed captures, `"mean tiv"` and `"mean amplitude"` are named `"mean TIV of shared breaths"` and `"mean amplitude of shared breaths"`.
 - The watershed method leaves the pixels with a NaN mean amplitude out of the search for local maxima and out of the watershed regions (region number 0). eitprocessing reads NaN as 0 for the maxima and gives NaN to the watershed, so its region borders near these pixels depend on scikit-image. At the default threshold, the masks of the test files are the same; at a threshold of 0.05, the Timpel test file has 2 (raw) or 7 (filtered) pixels fewer.
 - The watershed capture `"included watershed regions"` holds the included regions, NaN elsewhere. In eitprocessing it holds every region.
-- The watershed method computes the pixel TIV and the pixel amplitude once. eitprocessing computes them twice. The masks are the same.
+- The watershed method computes the pixel TIV and the pixel amplitude once. eitprocessing computes them twice. The masks are the same. Its "no breaths" error comes only from breaths without TIV or amplitude values; other errors, such as images that are not (time, row, column), keep their own message. The warning for a negative mean amplitude checks the mean over the shared breaths.
 - The masks have `metadata` with the settings, `breath_count`, `included_pixel_count` and `included_pixel_fraction`. The provenance of the four steps names m3resp.
 - The adapter methods `compute_tiv_lungspace`, `compute_amplitude_lungspace` and `compute_watershed_lungspace` have the new argument `breaths` and return an m3resp `PixelMask` under `"mask"`. `filter_roi_by_size` returns an m3resp `PixelMask`; it also takes an eitprocessing mask.
 - Dividing a `PixelMap` by the number 0 gives a warning, as dividing by a grid with a 0 does. A division gives no NumPy warning. The error of `geometric_mask` for a shape that does not divide gives the number; eitprocessing shows `{height_divisor}`.
+- A `PixelMap` made with `suppress_negative_warning=True` keeps this setting in its copies (`m * 2`, `normalize`, `convert_to`, `PixelMask.apply`, `dataclasses.replace`). Warnings of `PixelMap` and `PixelMask` point to the line of your own code, also for a map that an m3resp function makes. `normalize(mode="reference")`, `create_mask_from_threshold` and `+ - * /` take NumPy numbers and refuse `True` and `False`. A `PixelMask` leaves the grid you give it unchanged.
+
+### m3resp draws the pixel maps and gives plot data for the GUI
+
+`m3resp.visualization.pixel_maps.plot_pixel_map` draws a `PixelMap` or a `PixelMask` with a colour bar, in the style of its kind, as `PixelMap.plotting.imshow` of eitprocessing 1.8.7 does. `add_region_labels` writes the number of each region of a map of kind `"integer"` inside that region, as `add_region_markers` does. On the test maps, the colour of each pixel, the scale ends and the colour bar label, ticks and tick texts are the same as in eitprocessing.
+
+`m3resp.visualization.pixel_map_style` holds the style of each map kind, of a plain map and of a mask (`PixelMapStyle`, `pixel_map_style`): the colours, the colours below and above the scale, the rule for the scale ends and the colour bar. `scale_limits` and `pixel_colors` give the scale ends and the colour of each pixel without Matplotlib. The colours come from Matplotlib and are stored in the package (`pixel_map_colors.json`, made by `scripts/make_pixel_map_colors.py`), so the figures and the GUI use the same colours.
+
+`m3resp.visualization.plot_data` gives plot data for the GUI: `pixel_map_plot_data`, `pixel_mask_plot_data`, `eit_image_plot_data` (the EIT image at one time), `eit_images_plot_data` (the images from one time to another, with one colour scale), `lungspace_plot_data` (the captures of the lung-space methods) and `rate_spectrum_plot_data` (the spectra of `detect_rates`). Each result holds only numbers, text, lists, True/False and None, with None for a NaN pixel, so `json.dumps(..., allow_nan=False)` writes it.
+
+`m3resp.eit.processing.minute_image(pixels, breaths, start=..., end=...)` gives the mean pixel TIV over the breaths fully inside a time window, as a `PixelMap` of kind `"tiv"`. A breath with NaN TIV in every pixel, such as a breath that reaches past the data, does not count in the mean or in `breath_count`.
+
+Changes that a user can see:
+
+- `pixel_tiv.png` of `save_eit_figures` is drawn with `plot_pixel_map`, so it is written also when eitprocessing is not installed. Before, the figure was left out without eitprocessing. The picture is the same as before, pixel for pixel.
+- `add_region_labels` of a map of another kind raises `TypeError`; eitprocessing raises `NotImplementedError`.
+- Region 0, the background of the watershed regions, gets no label in `add_region_labels` and no label point in `lungspace_plot_data`. eitprocessing writes "0" in the background.
+- A TIV, amplitude, perfusion or pendelluft map with only negative values gets the colour scale from its largest value to 0. In eitprocessing the scale goes from 0 down to that value: Matplotlib stops with an error, or, with a colour bar, turns the scale around and widens it by 10 %.
 
 ### Fixed: the EIT summary figure after a workflow
 

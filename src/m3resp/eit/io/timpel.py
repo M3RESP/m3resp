@@ -336,7 +336,7 @@ def _make_breaths(
     two minima have more than one maximum between them, the lower of the
     first two maxima is removed.
 
-    Known issue I1, copied from eitprocessing 1.8.7: ``peak_values`` comes
+    Known issue, copied from eitprocessing 1.8.7: ``peak_values`` comes
     from all maxima, but ``peak_indices`` was first cut at the edges. When
     maxima are cut at the start, the two lists are out of step, so the
     wrong one of two close maxima can be removed.

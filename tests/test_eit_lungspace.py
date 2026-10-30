@@ -17,6 +17,7 @@ captures with these two rules.
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import json
 import os
@@ -525,6 +526,15 @@ def test_no_breaths_is_an_error(method) -> None:
 
     with pytest.raises(ValueError, match="breaths"):
         _quiet(calls[method])
+
+
+def test_watershed_gives_the_errors_of_the_pixel_values_unchanged() -> None:
+    pixels, waveform = _synthetic(1, "one maximum")
+    breaths = _breaths((pixels, waveform))
+    flat_pixels = dataclasses.replace(pixels, values=pixels.values[:, :, 0])
+
+    with pytest.raises(ValueError, match=r"shape \(time, row, column\)"):
+        _quiet(lambda: watershed_lungspace(flat_pixels, waveform, breaths))
 
 
 # --- the size filter ---------------------------------------------------------------

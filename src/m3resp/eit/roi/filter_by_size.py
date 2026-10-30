@@ -11,7 +11,7 @@ pixels that are not NaN), and keeps the groups with at least
   ``scipy.ndimage.label``.
 
 The result has 1 for the pixels of the kept groups and NaN elsewhere, so the
-weights of a weighted mask are not kept (issue I6).
+weights of a weighted mask are not kept.
 
 ---------------------------------------------------------------------------
 Provenance
@@ -34,8 +34,7 @@ Modified for M3RESP:
     - The mask has a `name`, and `metadata` with the settings and the count
       and fraction of included pixels. With a `captures` dictionary, the
       group numbers and sizes are stored.
-    - The weights of a weighted mask are lost, as in eitprocessing (issue
-      I6).
+    - The weights of a weighted mask are lost, as in eitprocessing.
     - Error messages are reworded.
 
 The original copyright and license notices are retained per Apache-2.0 §4.
@@ -100,7 +99,7 @@ def filter_mask_by_size(
         )
     structure = _structure(connectivity)
     labels, count = ndimage.label(~np.isnan(mask.values), structure=structure)
-    sizes = [int(np.sum(labels == number)) for number in range(1, count + 1)]
+    sizes = np.bincount(labels.ravel(), minlength=count + 1)[1:].tolist()
     kept = [
         number
         for number, size in zip(range(1, count + 1), sizes, strict=True)
