@@ -25,17 +25,23 @@ from m3resp.adapters.eitprocessing_adapter import (
     breaths_to_interval_data,
     signal_to_eit_data,
 )
-from m3resp.core.exceptions import OptionalDependencyError
-from m3resp.data import BreathEvent, IntervalData, PixelBreaths, Signal
+from m3resp.data import BreathEvent, IntervalData, PixelBreaths, PixelMask, Signal
 from m3resp.eit.processing import (
     BreathDetectionSettings,
     RateDetectionSettings,
     end_expiratory_lung_impedance,
     find_breaths,
     find_pixel_breaths,
+    global_impedance,
     pixel_end_expiratory_lung_impedance,
     pixel_tidal_impedance_variation,
     tidal_impedance_variation,
+)
+from m3resp.eit.roi import (
+    amplitude_lungspace,
+    filter_mask_by_size,
+    tiv_lungspace,
+    watershed_lungspace,
 )
 
 pytest.importorskip("eitprocessing")
@@ -375,37 +381,71 @@ class TestComputePixelTivAndEeli:
 
 
 class TestRoiLungspaceMethods:
-    def test_tiv_lungspace_returns_mask_and_captures(
+    """The adapter methods run the m3resp lung-space functions on the breaths
+    found with the default settings, as eitprocessing does."""
+
+    def test_lungspace_methods_equal_the_m3resp_functions(
         self, loaded_chain: dict[str, Any]
     ):
-        result = loaded_chain["adapter"].compute_tiv_lungspace(
+        adapter = loaded_chain["adapter"]
+        pixels = as_signal(loaded_chain["filtered_eit"])
+        waveform = as_signal(loaded_chain["filtered_gi"])
+        breaths = find_breaths(waveform, BreathDetectionSettings())
+
+        tiv = adapter.compute_tiv_lungspace(
+            loaded_chain["filtered_eit"], timing_data=loaded_chain["filtered_gi"]
+        )
+        amplitude = adapter.compute_amplitude_lungspace(
+            loaded_chain["filtered_eit"], timing_data=loaded_chain["filtered_gi"]
+        )
+        watershed = adapter.compute_watershed_lungspace(
             loaded_chain["filtered_eit"], timing_data=loaded_chain["filtered_gi"]
         )
 
-        assert result["mask"].mask.shape == (32, 32)
-        assert "mean TIV" in result["captures"]
+        for result, expected in (
+            (tiv, tiv_lungspace(pixels, breaths)),
+            (amplitude, amplitude_lungspace(pixels, waveform, breaths)),
+            (watershed, watershed_lungspace(pixels, waveform, breaths)),
+        ):
+            assert isinstance(result["mask"], PixelMask)
+            assert result["mask"].shape == (32, 32)
+            np.testing.assert_array_equal(result["mask"].values, expected.values)
+        assert set(tiv["captures"]) == {"TIV per breath", "mean TIV"}
+        assert set(amplitude["captures"]) == {"amplitude per breath", "mean amplitude"}
+        assert "included region" in watershed["captures"]
 
-    def test_amplitude_lungspace_returns_mask_and_captures(
-        self, loaded_chain: dict[str, Any]
-    ):
-        result = loaded_chain["adapter"].compute_amplitude_lungspace(
-            loaded_chain["filtered_eit"], timing_data=loaded_chain["filtered_gi"]
+    def test_given_breaths_equal_the_found_breaths(self, loaded_chain: dict[str, Any]):
+        adapter = loaded_chain["adapter"]
+        waveform = as_signal(loaded_chain["filtered_gi"])
+        breaths = find_breaths(waveform, BreathDetectionSettings())
+
+        found = adapter.compute_watershed_lungspace(
+            loaded_chain["filtered_eit"], timing_data=waveform
+        )
+        given = adapter.compute_watershed_lungspace(
+            loaded_chain["filtered_eit"],
+            timing_data=waveform,
+            breaths=breaths_to_interval_data(breaths),
         )
 
-        assert result["mask"].mask.shape == (32, 32)
-        assert "mean amplitude" in result["captures"]
+        np.testing.assert_array_equal(given["mask"].values, found["mask"].values)
 
-    def test_watershed_lungspace_returns_mask_and_captures(
+    def test_no_timing_data_uses_the_sum_of_all_pixels(
         self, loaded_chain: dict[str, Any]
     ):
-        result = loaded_chain["adapter"].compute_watershed_lungspace(
-            loaded_chain["filtered_eit"], timing_data=loaded_chain["filtered_gi"]
+        adapter = loaded_chain["adapter"]
+        pixels = as_signal(loaded_chain["filtered_eit"])
+
+        without = adapter.compute_tiv_lungspace(loaded_chain["filtered_eit"])
+        summed = adapter.compute_tiv_lungspace(
+            loaded_chain["filtered_eit"], timing_data=global_impedance(pixels)
         )
 
-        assert result["mask"].mask.shape == (32, 32)
-        assert "included region" in result["captures"]
+        np.testing.assert_array_equal(without["mask"].values, summed["mask"].values)
 
-    def test_filter_roi_by_size_returns_mask(self, loaded_chain: dict[str, Any]):
+    def test_filter_roi_by_size_returns_an_m3resp_mask(
+        self, loaded_chain: dict[str, Any]
+    ):
         watershed = loaded_chain["adapter"].compute_watershed_lungspace(
             loaded_chain["filtered_eit"], timing_data=loaded_chain["filtered_gi"]
         )
@@ -414,7 +454,11 @@ class TestRoiLungspaceMethods:
             watershed["mask"], min_region_size=1
         )
 
-        assert result.mask.shape == (32, 32)
+        assert isinstance(result, PixelMask)
+        np.testing.assert_array_equal(
+            result.values,
+            filter_mask_by_size(watershed["mask"], min_region_size=1).values,
+        )
 
 
 class TestOptionalDependencyBehavior:
@@ -534,26 +578,27 @@ class TestOptionalDependencyBehavior:
 
         assert tiv.values[0] == 2.0 and eeli.values[0] == 2.0
 
-    def test_compute_tiv_lungspace_raises_optional_dependency_error(
+    def test_lungspace_methods_run_without_eitprocessing(
         self, blocked_adapter: EITProcessingAdapter
     ):
-        with pytest.raises(OptionalDependencyError):
-            blocked_adapter.compute_tiv_lungspace(object())
+        fs = 20.0
+        time = np.arange(int(60 * fs)) / fs
+        rows, columns = np.mgrid[0:8, 0:8]
+        amplitude = np.exp(-((rows - 3.5) ** 2 + (columns - 3.5) ** 2) / 6.0)
+        breathing = 0.5 - 0.5 * np.cos(2 * np.pi * 0.25 * time)
+        images = Signal(
+            values=10.0 + breathing[:, None, None] * amplitude,
+            time=time,
+            sample_frequency=fs,
+            name="images",
+            modality="eit",
+        )
 
-    def test_compute_amplitude_lungspace_raises_optional_dependency_error(
-        self, blocked_adapter: EITProcessingAdapter
-    ):
-        with pytest.raises(OptionalDependencyError):
-            blocked_adapter.compute_amplitude_lungspace(object())
+        tiv = blocked_adapter.compute_tiv_lungspace(images)
+        amplitude_mask = blocked_adapter.compute_amplitude_lungspace(images)
+        watershed = blocked_adapter.compute_watershed_lungspace(images)
+        filtered = blocked_adapter.filter_roi_by_size(watershed["mask"])
 
-    def test_compute_watershed_lungspace_raises_optional_dependency_error(
-        self, blocked_adapter: EITProcessingAdapter
-    ):
-        with pytest.raises(OptionalDependencyError):
-            blocked_adapter.compute_watershed_lungspace(object())
-
-    def test_filter_roi_by_size_raises_optional_dependency_error(
-        self, blocked_adapter: EITProcessingAdapter
-    ):
-        with pytest.raises(OptionalDependencyError):
-            blocked_adapter.filter_roi_by_size(object())
+        for mask in (tiv["mask"], amplitude_mask["mask"], watershed["mask"], filtered):
+            assert isinstance(mask, PixelMask)
+            assert mask.values[3, 3] == 1.0

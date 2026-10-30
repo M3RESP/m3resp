@@ -32,6 +32,7 @@ from m3resp.eit.processing import (
     BreathDetectionSettings,
     RateDetectionSettings,
     end_expiratory_lung_impedance,
+    global_impedance,
     mdn_filter,
     pixel_end_expiratory_lung_impedance,
     pixel_tidal_impedance_variation,
@@ -44,6 +45,12 @@ from m3resp.eit.processing.mdn_filter import (
     NOISE_FREQUENCY_LIMIT,
     NOTCH_DISTANCE,
     ORDER,
+)
+from m3resp.eit.roi import (
+    amplitude_lungspace,
+    filter_mask_by_size,
+    tiv_lungspace,
+    watershed_lungspace,
 )
 
 from ._file_data import (
@@ -133,6 +140,82 @@ def _pixel_or_global_breaths(
     if isinstance(breaths, PixelBreaths):
         return breaths
     return given_breath_events(breaths, function=function)
+
+
+def _lungspace_inputs(
+    eit_data: Any, timing_data: Any, breaths: Any, *, function: str
+) -> tuple[Signal, Signal, list[BreathEvent]]:
+    """Return the images, the waveform and the global breaths of a lung space.
+
+    Args:
+        eit_data (Any): EIT images as a ``Signal`` or an eitprocessing
+            ``EITData``.
+        timing_data (Any): The impedance waveform, or None for the sum of all
+            pixels (eitprocessing: ``EITData.get_summed_impedance``).
+        breaths (Any): Given global breaths in a form of
+            ``given_breath_events``, or None to find them on the waveform
+            with the default ``BreathDetectionSettings``, as eitprocessing
+            does.
+        function (str): Name of the calling function, for the message.
+
+    Returns:
+        tuple[Signal, Signal, list[BreathEvent]]: The images, the waveform
+            and the breaths.
+    """
+
+    pixels = as_signal(eit_data)
+    waveform = (
+        global_impedance(pixels) if timing_data is None else as_signal(timing_data)
+    )
+    if breaths is None:
+        return pixels, waveform, find_breaths_of(waveform, BreathDetectionSettings())
+    return pixels, waveform, given_breath_events(breaths, function=function)
+
+
+def _as_m3resp_pixel_mask(mask: Any) -> PixelMask:
+    """Return a mask as an m3resp ``PixelMask``.
+
+    Args:
+        mask (Any): An m3resp ``PixelMask`` (returned as it is), an
+            eitprocessing ``PixelMask`` (its grid is copied, weights and
+            zeros included), or a 2D numeric array, list or tuple with NaN
+            for excluded pixels (a 0 becomes NaN, as in eitprocessing).
+
+    Returns:
+        PixelMask: The m3resp mask.
+
+    Raises:
+        UnsupportedWorkflowError: If the input has another type or is not a
+            2D numeric grid.
+    """
+
+    if isinstance(mask, PixelMask):
+        return mask
+    if hasattr(mask, "mask"):
+        return PixelMask(
+            name=str(getattr(mask, "label", None) or "mask"),
+            values=np.asarray(mask.mask, dtype=float),
+            keep_zeros=True,
+            suppress_value_range_error=True,
+            suppress_all_nan_warning=True,
+        )
+    if not isinstance(mask, (np.ndarray, list, tuple)):
+        raise UnsupportedWorkflowError(
+            "An ROI mask must be an m3resp PixelMask, an eitprocessing "
+            f"PixelMask, or a 2D array of pixels; got {type(mask).__name__}."
+        )
+    try:
+        array = np.asarray(mask, dtype=float)
+    except (TypeError, ValueError) as error:
+        raise UnsupportedWorkflowError(
+            "An ROI mask must be a 2D (row, column) array of numbers."
+        ) from error
+    if array.ndim != 2:
+        raise UnsupportedWorkflowError(
+            "An ROI mask must be a 2D (row, column) array of pixels; got "
+            f"shape {array.shape}."
+        )
+    return PixelMask(name="mask", values=array)
 
 
 class EITProcessingAdapter:
@@ -711,18 +794,43 @@ class EITProcessingAdapter:
         eit_data: Any,
         *,
         timing_data: Any | None = None,
+        breaths: Any = None,
         threshold: float = 0.15,
     ) -> dict[str, Any]:
-        """Threshold mean pixel TIV into a functional lung-space mask."""
+        """Find the functional lung space from the mean TIV of each pixel.
 
-        (TIVLungspace,) = _lazy_import("eitprocessing.roi.tiv.TIVLungspace")
+        Args:
+            eit_data (Any): EIT images as a ``Signal``, or an eitprocessing
+                ``EITData``, with time, row and column axes.
+            timing_data (Any | None): The impedance waveform of the breaths
+                as a ``Signal``, or an eitprocessing ``ContinuousData``.
+                None uses the sum of all pixels.
+            breaths (Any): The global breaths on the time axis of the
+                images: a list of ``BreathEvent``s, an m3resp
+                ``IntervalData`` of them, or an eitprocessing
+                ``IntervalData`` of ``Breath``s. None finds them on
+                ``timing_data`` with the default settings, as in
+                eitprocessing.
+            threshold (float): Fraction of the largest mean TIV, between 0
+                and 1.
 
-        captures: dict[str, Any] = {}
-        mask = TIVLungspace(threshold=threshold).apply(
-            as_eit_data(eit_data),
-            timing_data=as_continuous_data(timing_data),
-            captures=captures,
+        Returns:
+            dict[str, Any]: ``"mask"``, the m3resp ``PixelMask`` of
+                ``m3resp.eit.roi.tiv_lungspace``, and ``"captures"``, with
+                ``"TIV per breath"`` and ``"mean TIV"``.
+
+        Raises:
+            TypeError: If ``threshold`` is not a float, or a given breath is
+                not a ``BreathEvent``.
+            ValueError: If ``threshold`` is not between 0 and 1, there are no
+                breaths, or every TIV value is NaN.
+        """
+
+        pixels, _, found = _lungspace_inputs(
+            eit_data, timing_data, breaths, function="compute_tiv_lungspace"
         )
+        captures: dict[str, Any] = {}
+        mask = tiv_lungspace(pixels, found, threshold=threshold, captures=captures)
         return {"mask": mask, "captures": captures}
 
     def compute_amplitude_lungspace(
@@ -730,24 +838,47 @@ class EITProcessingAdapter:
         eit_data: Any,
         *,
         timing_data: Any | None = None,
+        breaths: Any = None,
         threshold: float = 0.15,
     ) -> dict[str, Any]:
-        """Threshold mean pixel amplitude into a lung-space mask.
+        """Find a lung space from the mean amplitude of each pixel.
 
-        Upstream does not recommend amplitude alone as a general-purpose
-        functional lung-space definition; it exists primarily to support
-        `compute_watershed_lungspace()`.
+        This lung space can include reconstruction artefacts, so it is not
+        advised on its own; ``compute_watershed_lungspace`` uses the
+        amplitude together with the TIV.
+
+        Args:
+            eit_data (Any): EIT images as a ``Signal``, or an eitprocessing
+                ``EITData``, with time, row and column axes.
+            timing_data (Any | None): The impedance waveform of the breaths,
+                for the phase lag of each pixel, as a ``Signal`` or an
+                eitprocessing ``ContinuousData``. None uses the sum of all
+                pixels.
+            breaths (Any): The global EIT breaths, in one of the forms of
+                ``compute_tiv_lungspace``. None finds them on
+                ``timing_data`` with the default settings, as in
+                eitprocessing.
+            threshold (float): Fraction of the largest mean amplitude,
+                between 0 and 1.
+
+        Returns:
+            dict[str, Any]: ``"mask"``, the m3resp ``PixelMask`` of
+                ``m3resp.eit.roi.amplitude_lungspace``, and ``"captures"``,
+                with ``"amplitude per breath"`` and ``"mean amplitude"``.
+
+        Raises:
+            TypeError: If ``threshold`` is not a float, or a given breath is
+                not a ``BreathEvent``.
+            ValueError: If ``threshold`` is not between 0 and 1, there are no
+                breaths, or every amplitude value is NaN.
         """
 
-        (AmplitudeLungspace,) = _lazy_import(
-            "eitprocessing.roi.amplitude.AmplitudeLungspace"
+        pixels, waveform, found = _lungspace_inputs(
+            eit_data, timing_data, breaths, function="compute_amplitude_lungspace"
         )
-
         captures: dict[str, Any] = {}
-        mask = AmplitudeLungspace(threshold=threshold).apply(
-            as_eit_data(eit_data),
-            timing_data=as_continuous_data(timing_data),
-            captures=captures,
+        mask = amplitude_lungspace(
+            pixels, waveform, found, threshold=threshold, captures=captures
         )
         return {"mask": mask, "captures": captures}
 
@@ -756,18 +887,47 @@ class EITProcessingAdapter:
         eit_data: Any,
         *,
         timing_data: Any | None = None,
+        breaths: Any = None,
         threshold_fraction: float = 0.15,
     ) -> dict[str, Any]:
-        """Derive a lung-space mask with the watershed method (pendelluft-aware)."""
+        """Find the functional lung space with the watershed method.
 
-        (WatershedLungspace,) = _lazy_import(
-            "eitprocessing.roi.watershed.WatershedLungspace"
+        Args:
+            eit_data (Any): EIT images as a ``Signal``, or an eitprocessing
+                ``EITData``, with time, row and column axes.
+            timing_data (Any | None): The impedance waveform of the breaths,
+                for the phase lag of each pixel, as a ``Signal`` or an
+                eitprocessing ``ContinuousData``. None uses the sum of all
+                pixels.
+            breaths (Any): The global EIT breaths, in one of the forms of
+                ``compute_tiv_lungspace``. None finds them on
+                ``timing_data`` with the default settings, as in
+                eitprocessing.
+            threshold_fraction (float): Fraction of the largest mean TIV for
+                the TIV mask, between 0 and 1.
+
+        Returns:
+            dict[str, Any]: ``"mask"``, the m3resp ``PixelMask`` of
+                ``m3resp.eit.roi.watershed_lungspace``, and ``"captures"``
+                with its intermediate results.
+
+        Raises:
+            TypeError: If ``threshold_fraction`` is not a float, or a given
+                breath is not a ``BreathEvent``.
+            ValueError: If ``threshold_fraction`` is not between 0 and 1, no
+                breath has both TIV and amplitude values, or no local maximum
+                of the mean amplitude lies inside the TIV mask.
+        """
+
+        pixels, waveform, found = _lungspace_inputs(
+            eit_data, timing_data, breaths, function="compute_watershed_lungspace"
         )
-
         captures: dict[str, Any] = {}
-        mask = WatershedLungspace(threshold_fraction=threshold_fraction).apply(
-            as_eit_data(eit_data),
-            timing_data=as_continuous_data(timing_data),
+        mask = watershed_lungspace(
+            pixels,
+            waveform,
+            found,
+            threshold_fraction=threshold_fraction,
             captures=captures,
         )
         return {"mask": mask, "captures": captures}
@@ -778,32 +938,35 @@ class EITProcessingAdapter:
         *,
         min_region_size: int = 10,
         connectivity: Literal[1, 2] | np.ndarray = 1,
-    ) -> Any:
-        """Keep mask regions containing at least the specified number of pixels.
+    ) -> PixelMask:
+        """Keep the groups of connected mask pixels with a minimum number of pixels.
 
         Args:
-            mask: An eitprocessing or m3resp ``PixelMask``, or a 2D numeric
-                grid with NaN for excluded pixels.
-            min_region_size: Minimum number of connected pixels to retain.
-            connectivity: ``1`` joins edge neighbours; ``2`` also joins
-                diagonal neighbours. A custom connection array is accepted.
+            mask (Any): An m3resp or eitprocessing ``PixelMask``, or a 2D
+                numeric grid with NaN for excluded pixels.
+            min_region_size (int): Smallest number of pixels of a kept
+                group.
+            connectivity (int | numpy.ndarray): ``1`` joins pixels that
+                share an edge; ``2`` also joins pixels that share a corner.
+                A custom structure array is accepted.
 
         Returns:
-            eitprocessing.PixelMask: Mask with small connected regions removed.
+            PixelMask: The m3resp mask of
+                ``m3resp.eit.roi.filter_mask_by_size``, with 1 for the kept
+                pixels and NaN elsewhere.
 
         Raises:
-            OptionalDependencyError: If eitprocessing is unavailable.
             UnsupportedWorkflowError: If the mask cannot be converted to a
                 2D numeric grid.
+            ValueError: If ``connectivity`` is not 1, 2 or an array.
+            RuntimeError: If no group has ``min_region_size`` pixels or more.
         """
 
-        (FilterROIBySize,) = _lazy_import(
-            "eitprocessing.roi.filter_by_size.FilterROIBySize"
+        return filter_mask_by_size(
+            _as_m3resp_pixel_mask(mask),
+            min_region_size=min_region_size,
+            connectivity=connectivity,
         )
-
-        return FilterROIBySize(
-            min_region_size=min_region_size, connectivity=connectivity
-        ).apply(self.as_pixel_mask(mask))
 
     def as_pixel_mask(self, mask: Any) -> Any:
         """Convert a mask to eitprocessing's ``PixelMask`` representation.

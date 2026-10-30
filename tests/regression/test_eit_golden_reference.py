@@ -230,7 +230,7 @@ def _spec(path: str, vendor: str) -> dict[str, Any]:
             },
             {
                 "uses": "eit.roi_filter_by_size",
-                "in": {"mask": "watershed_lungspace_mask"},
+                "in": {"mask": "watershed_lungspace_result"},
                 "with": {
                     "min_region_size": settings["filter_by_size"]["min_region_size"]
                 },
@@ -419,6 +419,27 @@ def test_m3resp_lung_space_masks_match_golden(
         ("filter_by_size", "size_filtered_roi_result"),
     ):
         assert_mask_matches(result.value(value).values, golden[f"{name}/mask"], name)
+    # The mean maps of the captures, as the GUI reads them from the steps.
+    for name, captures, key, golden_key in (
+        ("tiv_lungspace", "tiv_lungspace_captures", "mean TIV", "mean TIV"),
+        (
+            "amplitude_lungspace",
+            "amplitude_lungspace_captures",
+            "mean amplitude",
+            "mean amplitude",
+        ),
+        (
+            "watershed_lungspace",
+            "watershed_captures",
+            "mean TIV of shared breaths",
+            "mean tiv",
+        ),
+    ):
+        assert_matches(
+            result.value(captures)[key].values,
+            golden[f"{name}/captures/{golden_key}"],
+            f"{name} {key}",
+        )
 
 
 # 4. m3resp through session.preprocess_eit() against the golden files

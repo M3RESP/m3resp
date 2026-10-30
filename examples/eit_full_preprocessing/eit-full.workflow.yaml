@@ -110,28 +110,24 @@ steps:
     in:  { eit_data: filtered_eit, timing_data: global_impedance }
     with: { threshold: 0.15 }
 
-  # Standalone step, included only to exercise the operation - its output is
-  # not consumed by eit.roi_watershed below. eit.roi_watershed computes its
-  # own internal TIV/amplitude lung-space masks via upstream's
-  # WatershedLungspace and needs no other ROI step run first. See
-  # docs/workflows.md for upstream's warning against using amplitude alone
-  # as a general-purpose functional lung-space definition.
+  # Included to show the step; no later step reads its output. The amplitude
+  # lung space can include reconstruction artefacts, so it is not advised on
+  # its own.
   - id: roi_amplitude_lungspace
     uses: eit.roi_amplitude_lungspace
     in:  { eit_data: filtered_eit, timing_data: global_impedance }
     with: { threshold: 0.15 }
 
-  # Self-contained - internally derives its own TIV and amplitude lung-space
-  # masks from filtered_eit/global_impedance; does not depend on the
-  # roi_tiv_lungspace or roi_amplitude_lungspace steps above.
+  # Computes the TIV and the amplitude of each pixel itself from
+  # filtered_eit and global_impedance.
   - id: roi_watershed
     uses: eit.roi_watershed
     in:  { eit_data: filtered_eit, timing_data: global_impedance }
     with: { threshold_fraction: 0.15 }
 
-  # Bound explicitly to the watershed mask rather than relying on an
-  # ambiguous default - eit.roi_filter_by_size.mask has no default binding.
+  # eit.roi_filter_by_size.mask has no default binding, so the spec binds
+  # the watershed mask.
   - id: roi_filter_by_size
     uses: eit.roi_filter_by_size
-    in:  { mask: watershed_lungspace_mask }
+    in:  { mask: watershed_lungspace_result }
     with: { min_region_size: 10, connectivity: 1 }

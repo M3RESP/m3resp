@@ -187,6 +187,22 @@ These functions read one EIT file of a Draeger, Sentec or Timpel device. Each re
    m3resp.processing.slicing.time_slice_indices
 ```
 
+## EIT regions of interest
+
+These functions return a `PixelMask` with 1 for the pixels of a region and NaN for the other pixels. `geometric_mask` gives a fixed part of the image: the ventral or dorsal half, the anatomical right or left half, one of four layers or one of four quadrants (`GEOMETRIC_REGIONS` lists the 12 names). `tiv_lungspace`, `amplitude_lungspace` and `watershed_lungspace` find the functional lung space from the global breaths: the pixels with a large mean TIV, the pixels with a large mean amplitude, or both together with the watershed method. `filter_mask_by_size` keeps the groups of connected pixels of a mask that have a minimum number of pixels. See {doc}`../concepts/pixel-maps`.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   m3resp.eit.roi.geometric_mask
+   m3resp.eit.roi.tiv_lungspace
+   m3resp.eit.roi.amplitude_lungspace
+   m3resp.eit.roi.watershed_lungspace
+   m3resp.eit.roi.filter_mask_by_size
+```
+
 ## Plots
 
 These functions make figures with Matplotlib.

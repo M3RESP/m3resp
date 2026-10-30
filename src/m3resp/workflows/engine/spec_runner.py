@@ -294,10 +294,10 @@ def _maybe_assemble_eit(result: WorkflowResult) -> None:
         "pixel_tiv": ctx.get("pixel_tiv_result"),
         "pixel_eeli": ctx.get("pixel_eeli_result"),
         "pixel_breaths": ctx.get("pixel_breaths"),
-        "tiv_lungspace_mask": ctx.get("tiv_lungspace_mask"),
-        "amplitude_lungspace_mask": ctx.get("amplitude_lungspace_mask"),
-        "watershed_lungspace_mask": ctx.get("watershed_lungspace_mask"),
-        "size_filtered_roi_mask": ctx.get("size_filtered_roi_mask"),
+        "tiv_lungspace_mask": ctx.get("tiv_lungspace_result"),
+        "amplitude_lungspace_mask": ctx.get("amplitude_lungspace_result"),
+        "watershed_lungspace_mask": ctx.get("watershed_lungspace_result"),
+        "size_filtered_roi_mask": ctx.get("size_filtered_roi_result"),
     }
 
 

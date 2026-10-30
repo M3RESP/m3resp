@@ -79,7 +79,10 @@ The packages give no default for these settings, so M3Resp chose the values. Eac
 | `eit.pixel_eeli` | `eeli_timing` | continuous | m3resp (no eitprocessing version) |
 | `eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace` | `threshold` | 0.15 | m3resp (same as eitprocessing) |
 | `eit.roi_watershed` | `threshold_fraction` | 0.15 | m3resp (same as eitprocessing) |
+| `eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace`, `eit.roi_watershed` | breaths without the input `breaths` | found on `timing_data` with the default settings of `eit.detect_breaths` | m3resp (same as eitprocessing) |
+| `eit.roi_amplitude_lungspace`, `eit.roi_watershed` | phase correction of the pixel breaths | phase shift (fixed) | m3resp (same as eitprocessing) |
 | `eit.roi_filter_by_size` | `min_region_size` / `connectivity` | 10 pixels / 1 (4 neighbours) | m3resp (same as eitprocessing) |
+| `eit.geometric_mask` | `region` | none: one of the 12 region names must be chosen | m3resp |
 
 ### EMG (ReSurfEMG)
 

@@ -93,6 +93,11 @@ _M3RESP_ONLY_EIT_STEPS = (
     "eit.pixel_breaths",
     "eit.pixel_tiv",
     "eit.pixel_eeli",
+    "eit.roi_tiv_lungspace",
+    "eit.roi_amplitude_lungspace",
+    "eit.roi_watershed",
+    "eit.roi_filter_by_size",
+    "eit.geometric_mask",
 )
 
 

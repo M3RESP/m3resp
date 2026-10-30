@@ -18,6 +18,7 @@ from .loading import load, load_custom
 from .pixel import pixel_breaths, pixel_eeli, pixel_tiv
 from .rates import detect_rates
 from .roi import (
+    geometric_mask,
     roi_amplitude_lungspace,
     roi_filter_by_size,
     roi_tiv_lungspace,
@@ -38,6 +39,7 @@ __all__ = [
     "detect_breaths",
     "detect_rates",
     "eeli",
+    "geometric_mask",
     "global_impedance",
     "load",
     "load_custom",

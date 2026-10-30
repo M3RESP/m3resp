@@ -44,8 +44,27 @@ print(np.nanmean(tiv_map))  # 1.0
 | `modality` | The device: `"eit"` by default |
 | `category`, `unit` | The physical quantity and the unit |
 | `method`, `metadata` | The calculation and other details |
+| `kind` | What the numbers are: `"tiv"`, `"amplitude"`, `"odcl"`, `"difference"`, `"perfusion"`, `"pendelluft"`, `"signed_pendelluft"` or `"integer"`, or None for a plain map |
 
 M3Resp raises `ValueError` for values that are not a grid of rows and columns, and `TypeError` for values that are not numbers. NumPy functions use the grid of a `PixelMap`, as in the example.
+
+The `kind` follows the types of pixel map in `eitprocessing`. A map of kind `"amplitude"`, `"perfusion"` or `"pendelluft"` with a negative value gives a warning, unless `suppress_negative_warning=True`. A map of kind `"integer"`, for example the region numbers of the watershed method, holds whole numbers only; NaN gives `TypeError`.
+
+A `PixelMap` has these methods:
+
+| Method | Result |
+|---|---|
+| `PixelMap.from_aggregate(maps, np.nanmean)` | One map from several maps of the same shape, for example the mean TIV of each pixel over the breaths. A pixel that is NaN in every map stays NaN. |
+| `normalize(mode=...)` | A copy divided by a reference. `"zero-based"` (default): the values go from 0 to 1. `"symmetric"`: divided by the largest absolute value. `"maximum"`: divided by the largest value. `"reference"`: divided by `reference`. |
+| `create_mask_from_threshold(threshold)` | A `PixelMask` with the pixels whose value is at least `threshold`. With `fraction_of_max=True`, the threshold is that fraction of the largest value. `comparator` (for example `np.less`) and `use_magnitude` change the comparison. |
+| `+`, `-`, `*`, `/` | A new map, pixel by pixel, with a number, a grid or another map. A NaN pixel stays NaN. A division by 0 gives NaN and a warning. A map minus a map has kind `"difference"`. |
+| `convert_to(kind)` | A copy with another kind |
+| `to_non_nan_array(nan=0.0)`, `to_integer_array()`, `to_boolean_array()` | A NumPy grid with a number for NaN pixels; whole numbers with 0 for NaN; `True` for the pixels with a value other than 0 and other than NaN |
+
+```python
+mean_tiv = PixelMap.from_aggregate(pixel_tiv.values, np.nanmean, name="mean TIV")
+large = mean_tiv.create_mask_from_threshold(0.15, fraction_of_max=True)
+```
 
 ## Pixel masks
 
@@ -71,13 +90,91 @@ M3Resp checks the values as `eitprocessing` does:
 weighted = PixelMask(name="ventral_weights", values=grid, keep_zeros=True)
 ```
 
-`lung.apply(data)` multiplies the last two axes of a NumPy array, a `Signal` or a `PixelMap` by the mask, returning the same kind of object. A masked `Signal` or `PixelMap` keeps its other fields. The image size must match the mask size.
+Two masks of the same shape combine pixel by pixel. The name of the result comes from the two names:
 
-`m3resp.eit.processing.regional_impedance(pixel_impedance, lung)` sums the masked images into one value per frame. `functional_impedance` performs the same calculation for a functional lung-space mask. Both return a `Signal` with the time, sampling frequency and device source of the images, in arbitrary units (`a.u.`). NaN pixels are left out of the sum; an image with only NaNs gives 0.
+| Rule | Pixels of the result | Weights | Name |
+|---|---|---|---|
+| `a * b` | In both masks | Multiplied | `"a and b"` |
+| `a + b` | In one mask or in both | Added, up to 1 | `"a or b"` |
+| `a - b` | In `a` and not in `b` | The weight of `b` subtracted, down to 0; a pixel at 0 becomes NaN | `"a without b"` |
 
-Masks from `eitprocessing`, and masks that M3Resp gives to `eitprocessing`, keep their values, also the zeros.
+`is_weighted` is `True` when a pixel holds a number other than NaN or 1. `PixelMaskCollection.combine("sum", name=...)` adds all masks of a collection and `combine("product", name=...)` multiplies them. `PixelMaskCollection.apply(data)` applies each mask to the same data and gives a dictionary with the mask names as keys.
 
-The lung region steps (`eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace`, `eit.roi_watershed`, `eit.roi_filter_by_size`) store their mask in `session.pixel_masks`. `eit.roi_filter_by_size` accepts a `PixelMask` or an `eitprocessing` mask.
+`lung.apply(data)` multiplies the last two axes of a NumPy array, a `Signal` or a `PixelMap` by the mask and returns the same kind of object. A masked `Signal` or `PixelMap` keeps its other fields. The image size must match the mask size.
+
+`m3resp.eit.processing.regional_impedance(pixel_impedance, lung)` sums the masked images into one value per frame. `functional_impedance` performs the same calculation for a functional lung-space mask. Both return a `Signal` with the time, sampling frequency and device source of the images, in arbitrary units (`a.u.`). The sum leaves out NaN pixels; an image with only NaNs gives 0.
+
+Masks from `eitprocessing`, and masks that M3Resp gives to `eitprocessing`, keep their values, including the zeros.
+
+## Geometric masks
+
+`m3resp.eit.roi.geometric_mask(region, shape=(32, 32))` gives the mask of a fixed part of the image, with 1 inside and NaN outside. The rows go from ventral (top of the image) to dorsal (bottom). The anatomical right of the patient is the left side of the image.
+
+| Region | Short name | Pixels |
+|---|---|---|
+| `"ventral"`, `"dorsal"` | `V`, `D` | The top or bottom half of the rows |
+| `"anatomical right"`, `"anatomical left"` | `R`, `L` | The left or right half of the columns |
+| `"layer 1"` to `"layer 4"` | `L1` to `L4` | A quarter of the rows, from ventral to dorsal |
+| `"quadrant 1"` to `"quadrant 4"` | `Q1` to `Q4` | Ventral right, ventral left, dorsal right, dorsal left |
+
+The number of rows must divide by 2 (halves) or 4 (layers), and the number of columns by 2; other shapes give `ValueError`. The masks follow the set rules above: `ventral * anatomical right` is quadrant 1, and `layer 1 + layer 2` is the ventral half.
+
+```python
+from m3resp.eit.processing import regional_impedance
+from m3resp.eit.roi import geometric_mask
+
+ventral = geometric_mask("ventral")
+ventral_impedance = regional_impedance(pixels, ventral)
+```
+
+The step `eit.geometric_mask` makes one mask (parameter `region`) with the rows and columns of its input `eit_data`. Four steps give the four layers or quadrants.
+
+## Functional lung space
+
+The functional lung space is the part of the image that takes part in ventilation. Three functions of `m3resp.eit.roi` find it from the EIT images and the global breaths, as the lung-space methods of `eitprocessing` 1.8.7 do. Each gives a `PixelMask` with 1 for the pixels of the lung space and NaN elsewhere.
+
+| Function | Step | A pixel is in the lung space when |
+|---|---|---|
+| `tiv_lungspace(pixels, breaths, threshold=0.15)` | `eit.roi_tiv_lungspace` | Its mean TIV over the breaths is at least 15 % of the largest mean TIV. The TIV uses the times of the global breaths for every pixel. |
+| `amplitude_lungspace(pixels, signal, breaths, threshold=0.15)` | `eit.roi_amplitude_lungspace` | Its mean amplitude is at least 15 % of the largest mean amplitude. The amplitude is the TIV between the pixel's own breath start and end of inspiration, found in the mode `"phase shift"`, so it is positive for a pixel that is out of phase. The first and the last breath have no amplitude. |
+| `watershed_lungspace(pixels, signal, breaths, threshold_fraction=0.15)` | `eit.roi_watershed` | It lies in a watershed region whose largest amplitude lies inside the TIV mask, and its mean amplitude reaches the TIV threshold. See below. |
+
+Warning: the amplitude lung space can include reconstruction artefacts, so do not use it alone. The watershed method uses it together with the TIV.
+
+The watershed method works in four parts:
+
+1. It computes the TIV and the amplitude of each pixel in each breath, and keeps the breaths that have both. In practice, the first and the last breath drop out.
+2. Over these breaths, it computes the mean TIV and the mean amplitude of each pixel. The TIV mask holds the pixels with a mean TIV of at least `threshold_fraction` times the largest mean TIV. The amplitude mask holds the pixels with a mean amplitude of at least that same TIV value.
+3. The local maxima of the mean amplitude are the centres of the watershed regions. Each pixel belongs to the region of the maximum that it reaches by moving to higher values. Pixels with a NaN mean amplitude belong to no region.
+4. The lung space is the union of the regions whose maximum lies inside the TIV mask, multiplied by the amplitude mask.
+
+A pixel with a low TIV because of pendelluft (air that moves between lung regions during the breath) can still be in the watershed lung space, because its amplitude is large and its region has a maximum in the TIV mask.
+
+There are two TIV masks. `tiv_lungspace` and `eit.roi_tiv_lungspace` use all breaths. The TIV mask inside the watershed method (the capture `"functional tiv mask"`) uses the breaths with both TIV and amplitude, so without the first and the last breath. For the same data and threshold, the two masks can differ by some pixels.
+
+The breaths are an input of the functions. The steps take them from the optional input `breaths`; without it, they find the breaths on `timing_data` with the default `BreathDetectionSettings`, as `eitprocessing` does. `eit.roi_tiv_lungspace` takes breaths of any modality, moved to the EIT clock with the start times of the session. `eit.roi_amplitude_lungspace` and `eit.roi_watershed` take EIT breaths only, because they find the breaths of each pixel from them.
+
+```python
+from m3resp.eit.processing import BreathDetectionSettings, find_breaths
+from m3resp.eit.roi import watershed_lungspace
+
+breaths = find_breaths(global_impedance, BreathDetectionSettings())
+captures = {}
+lung = watershed_lungspace(pixels, global_impedance, breaths, captures=captures)
+print(lung.included_pixel_count, lung.metadata["breath_count"])
+```
+
+With a `captures` dictionary, the functions store their intermediate results. The steps give these dictionaries as `tiv_lungspace_captures`, `amplitude_lungspace_captures` and `watershed_captures`:
+
+| Function | Captures |
+|---|---|
+| `tiv_lungspace` | `"TIV per breath"` (an `IntervalData` with one `PixelMap` per breath), `"mean TIV"` (`PixelMap`) |
+| `amplitude_lungspace` | `"amplitude per breath"`, `"mean amplitude"` |
+| `watershed_lungspace` | `"mean TIV of shared breaths"` and `"mean amplitude of shared breaths"` (`PixelMap`); `"functional tiv mask"`, `"functional amplitude mask"` and `"included region"` (`PixelMask`); `"local peaks"`, `"included peaks"` and `"excluded peaks"` (row and column of each local maximum); `"included marker indices"` (the numbers of the maxima inside the TIV mask); `"watershed regions"` (a `PixelMap` of kind `"integer"` with the region number of each pixel, 0 for a pixel with a NaN mean amplitude); `"included watershed regions"` (the numbers of the included regions, NaN elsewhere) |
+
+`filter_mask_by_size(mask, min_region_size=10, connectivity=1)` keeps the groups of connected pixels of a mask with at least `min_region_size` pixels. With `connectivity=1`, pixels that share an edge are connected; with `2`, also pixels that share a corner. The result holds 1 for the kept pixels, so the weights of a weighted mask are lost. When no group is large enough, it raises `RuntimeError`. The step `eit.roi_filter_by_size` takes a `PixelMask` (for example `watershed_lungspace_result`) or a 2D grid as `mask`; the workflow check refuses other artifact types there.
+
+All lung-space steps store their mask in `session.pixel_masks`. The `metadata` of each mask holds the settings, `breath_count`, `included_pixel_count` and `included_pixel_fraction`.
 
 ## Pixel results per breath
 

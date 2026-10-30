@@ -158,11 +158,6 @@ class _FakeBreathDetector:
         )
 
 
-class _FakePixelMask:
-    def __init__(self, mask: np.ndarray):
-        self.mask = mask
-
-
 class _FakeAdapter:
     """Duck-types every `EITProcessingAdapter` method the migrated EIT steps
     call - no `eitprocessing` import anywhere in this class."""
@@ -224,25 +219,6 @@ class _FakeAdapter:
             processing_state="intermediate",
         )
         return {"filtered_eit": filtered, "filter_captures": {}}
-
-    def compute_tiv_lungspace(self, eit_data: Any, **kwargs: Any) -> dict[str, Any]:
-        mask = np.array([[1.0, np.nan], [np.nan, 1.0]])
-        return {"mask": _FakePixelMask(mask), "captures": {"mean TIV": "fake"}}
-
-    def compute_amplitude_lungspace(
-        self, eit_data: Any, **kwargs: Any
-    ) -> dict[str, Any]:
-        mask = np.array([[1.0, np.nan], [1.0, np.nan]])
-        return {"mask": _FakePixelMask(mask), "captures": {"mean amplitude": "fake"}}
-
-    def compute_watershed_lungspace(
-        self, eit_data: Any, **kwargs: Any
-    ) -> dict[str, Any]:
-        mask = np.array([[1.0, 1.0], [np.nan, np.nan]])
-        return {"mask": _FakePixelMask(mask), "captures": {"included region": "fake"}}
-
-    def filter_roi_by_size(self, mask: Any, **kwargs: Any) -> Any:
-        return _FakePixelMask(mask.mask)
 
 
 def _session_with_fake_adapter() -> M3Session:
@@ -940,51 +916,181 @@ def test_steps_ignore_stored_eit_breaths_that_are_not_breaths():
     assert len(result["eeli_result"]) == 3
 
 
-@pytest.mark.parametrize(
-    "step_func,step_name",
-    [
-        (roi_tiv_lungspace, "eit.roi_tiv_lungspace"),
-        (roi_amplitude_lungspace, "eit.roi_amplitude_lungspace"),
-        (roi_watershed, "eit.roi_watershed"),
-    ],
-)
-def test_roi_lungspace_steps_preserve_nan_as_excluded_pixels(step_func, step_name):
-    session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float))
+def _lungspace_images() -> tuple[Signal, Signal]:
+    """8 x 8 EIT images, 60 s at 20 Hz, one breath every 4 s, with the
+    largest breathing amplitude at the centre and a NaN corner pixel; and
+    their global impedance."""
 
-    kwargs = (
-        {"threshold_fraction": 0.15}
-        if step_func is roi_watershed
-        else {"threshold": 0.15}
+    time = np.arange(1200) / 20.0
+    rows, columns = np.mgrid[0:8, 0:8]
+    amplitude = np.exp(-((rows - 3.5) ** 2 + (columns - 3.5) ** 2) / 6.0)
+    breathing = 0.5 - 0.5 * np.cos(2 * np.pi * 0.25 * time)
+    values = 10.0 + breathing[:, None, None] * amplitude
+    values[:, 0, 0] = np.nan
+    pixels = Signal(
+        values=values,
+        time=time,
+        sample_frequency=20.0,
+        name="images",
+        modality="eit",
+        category="impedance",
     )
-    result = step_func(eit_data=raw, timing_data=raw, session=session, **kwargs)
+    waveform = Signal(
+        values=np.nansum(values, axis=(1, 2)),
+        time=time,
+        sample_frequency=20.0,
+        name="global_impedance",
+        modality="eit",
+        category="impedance",
+    )
+    return pixels, waveform
 
-    assert set(get_step(step_name).writes) <= set(result)
-    mask_key = next(k for k in result if k.endswith("_mask"))
-    assert np.isnan(result[mask_key].mask).any()
-    result_key = next(k for k in result if k.endswith("_result"))
-    assert isinstance(result[result_key], PixelMask)
-    np.testing.assert_array_equal(result[result_key].values, result[mask_key].mask)
-    assert list(session.pixel_masks) == [result[result_key]]
+
+_LUNGSPACE_STEPS = [
+    (roi_tiv_lungspace, "eit.roi_tiv_lungspace", "threshold"),
+    (roi_amplitude_lungspace, "eit.roi_amplitude_lungspace", "threshold"),
+    (roi_watershed, "eit.roi_watershed", "threshold_fraction"),
+]
+
+
+@pytest.mark.parametrize("step_func,step_name,threshold_name", _LUNGSPACE_STEPS)
+def test_roi_lungspace_steps_give_an_m3resp_mask(step_func, step_name, threshold_name):
+    session = M3Session()
+    pixels, waveform = _lungspace_images()
+
+    result = step_func(
+        eit_data=pixels, timing_data=waveform, session=session, **{threshold_name: 0.15}
+    )
+
+    assert set(get_step(step_name).writes) == set(result) - {"_provenance"}
+    [result_key] = [k for k in result if k.endswith("_result")]
+    mask = result[result_key]
+    assert isinstance(mask, PixelMask)
+    assert mask.shape == (8, 8)
+    assert np.isnan(mask.values[0, 0])
+    assert mask.values[3, 3] == 1.0
+    assert mask.metadata["source_package"] == "m3resp"
+    assert mask.metadata["parameters"] == {
+        threshold_name: 0.15,
+        "breaths": "timing_data",
+    }
+    assert list(session.pixel_masks) == [mask]
     assert len(session.parameter_results) == 0
+    assert get_step(step_name).optional_packages == ()
+
+
+@pytest.mark.parametrize("step_func,step_name,threshold_name", _LUNGSPACE_STEPS)
+def test_roi_lungspace_steps_with_eit_breaths_equal_the_steps_without(
+    step_func, step_name, threshold_name
+):
+    """Breaths found with the default settings and given through 'breaths'
+    give the same mask as the breaths the step finds itself."""
+
+    pixels, waveform = _lungspace_images()
+    breaths = find_breaths(waveform, BreathDetectionSettings())
+
+    found = step_func(eit_data=pixels, timing_data=waveform, session=M3Session())
+    given = step_func(
+        eit_data=pixels, timing_data=waveform, session=M3Session(), breaths=breaths
+    )
+
+    [result_key] = [k for k in found if k.endswith("_result")]
+    np.testing.assert_array_equal(given[result_key].values, found[result_key].values)
+    assert given[result_key].metadata["parameters"]["breaths"] == "input"
+
+
+@pytest.mark.parametrize(
+    "step_func",
+    [roi_amplitude_lungspace, roi_watershed],
+    ids=["amplitude", "watershed"],
+)
+def test_amplitude_and_watershed_steps_refuse_breaths_of_another_modality(step_func):
+    pixels, waveform = _lungspace_images()
+    breaths = [
+        dataclasses.replace(breath, modality="ventilator")
+        for breath in find_breaths(waveform, BreathDetectionSettings())
+    ]
+
+    with pytest.raises(ValueError, match="EIT breaths only; got breaths of ventilator"):
+        step_func(
+            eit_data=pixels, timing_data=waveform, session=M3Session(), breaths=breaths
+        )
+
+
+def test_tiv_lungspace_step_takes_breaths_of_another_modality():
+    """Breaths of another modality are moved to the EIT clock."""
+
+    session = M3Session()
+    pixels, waveform = _lungspace_images()
+    breaths = find_breaths(waveform, BreathDetectionSettings())
+    session.start_times["eit"] = 0.0
+    session.start_times["ventilator"] = 1.0
+    ventilator = [
+        dataclasses.replace(
+            breath,
+            modality="ventilator",
+            start_time=breath.start_time - 1.0,
+            end_time=breath.end_time - 1.0,
+            extremum_time=breath.extremum_time - 1.0,
+        )
+        for breath in breaths
+    ]
+
+    with pytest.warns(UserWarning):
+        moved = roi_tiv_lungspace(
+            eit_data=pixels, timing_data=waveform, session=session, breaths=ventilator
+        )
+    found = roi_tiv_lungspace(
+        eit_data=pixels, timing_data=waveform, session=M3Session()
+    )
+
+    np.testing.assert_array_equal(
+        moved["tiv_lungspace_result"].values, found["tiv_lungspace_result"].values
+    )
 
 
 @pytest.mark.parametrize("bad_threshold", [0.0, 1.0, -0.1, 1.5])
 def test_roi_lungspace_steps_reject_out_of_range_threshold(bad_threshold):
-    session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float))
+    pixels, waveform = _lungspace_images()
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="between 0 and 1"):
         roi_tiv_lungspace(
-            eit_data=raw, timing_data=raw, session=session, threshold=bad_threshold
+            eit_data=pixels,
+            timing_data=waveform,
+            session=M3Session(),
+            threshold=bad_threshold,
         )
 
 
-def test_roi_filter_by_size_accepts_the_native_mask_result():
-    """Either form of a mask can be bound: upstream object or m3resp mask."""
+def test_roi_filter_by_size_takes_a_mask_or_a_grid():
+    mask = np.full((4, 4), np.nan)
+    mask[1:3, 1:3] = 1.0
+    mask[0, 0] = 1.0
+
+    from_mask = roi_filter_by_size(
+        PixelMask(name="watershed_lungspace_mask", values=mask),
+        session=M3Session(),
+        min_region_size=2,
+    )["size_filtered_roi_result"]
+    from_grid = roi_filter_by_size(mask, session=M3Session(), min_region_size=2)[
+        "size_filtered_roi_result"
+    ]
+
+    np.testing.assert_array_equal(from_mask.values, from_grid.values)
+    assert np.isnan(from_mask.values[0, 0]), "isolated pixel should be dropped"
+    assert from_mask.name == "size_filtered_roi_mask"
+    assert from_mask.metadata["source_mask"] == "watershed_lungspace_mask"
+
+
+def test_roi_filter_by_size_refuses_other_types():
+    with pytest.raises(TypeError, match="PixelMask or a 2D grid"):
+        roi_filter_by_size(SimpleNamespace(mask=np.ones((2, 2))), session=M3Session())
+
+
+def test_adapter_filter_roi_by_size_takes_every_mask_form():
+    """The adapter also takes an eitprocessing mask, and gives an m3resp mask."""
 
     pytest.importorskip("eitprocessing")
-    import numpy as np
     from eitprocessing.roi import PixelMask as UpstreamPixelMask
 
     from m3resp.adapters import EITProcessingAdapter
@@ -992,37 +1098,34 @@ def test_roi_filter_by_size_accepts_the_native_mask_result():
     mask = np.full((4, 4), np.nan)
     mask[1:3, 1:3] = 1.0
     mask[0, 0] = 1.0
-
     adapter = EITProcessingAdapter()
-    native = PixelMask(name="watershed_lungspace_mask", values=mask, method="test")
 
-    from_native = adapter.filter_roi_by_size(native, min_region_size=2)
-    from_upstream = adapter.filter_roi_by_size(
-        UpstreamPixelMask(mask), min_region_size=2
-    )
+    results = [
+        adapter.filter_roi_by_size(form, min_region_size=2)
+        for form in (PixelMask(name="m", values=mask), UpstreamPixelMask(mask), mask)
+    ]
 
-    np.testing.assert_array_equal(
-        np.nan_to_num(from_native.mask, nan=-1),
-        np.nan_to_num(from_upstream.mask, nan=-1),
-    )
-    assert np.isnan(from_native.mask[0, 0]), "isolated pixel should be dropped"
+    for result in results:
+        assert isinstance(result, PixelMask)
+        np.testing.assert_array_equal(result.values, results[0].values)
+    assert np.isnan(results[0].values[0, 0])
 
 
 def test_roi_filter_by_size_rejects_non_positive_min_region_size():
-    session = _session_with_fake_adapter()
-    mask = _FakePixelMask(np.array([[1.0, np.nan], [np.nan, 1.0]]))
+    mask = PixelMask(name="m", values=np.array([[1.0, np.nan], [np.nan, 1.0]]))
 
-    with pytest.raises(ValueError):
-        roi_filter_by_size(mask, session=session, min_region_size=0)
+    with pytest.raises(ValueError, match="must be positive"):
+        roi_filter_by_size(mask, session=M3Session(), min_region_size=0)
 
 
 def test_roi_filter_by_size_step_matches_declared_writes():
-    session = _session_with_fake_adapter()
-    mask = _FakePixelMask(np.array([[1.0, np.nan], [np.nan, 1.0]]))
+    mask = PixelMask(name="m", values=np.array([[1.0, np.nan], [np.nan, 1.0]]))
 
-    result = roi_filter_by_size(mask, session=session, min_region_size=1)
+    result = roi_filter_by_size(mask, session=M3Session(), min_region_size=1)
 
-    assert set(get_step("eit.roi_filter_by_size").writes) <= set(result)
+    assert set(get_step("eit.roi_filter_by_size").writes) == set(result) - {
+        "_provenance"
+    }
 
 
 # -- YAML/spec-level validation (no execution, so no eitprocessing needed) --
@@ -1082,31 +1185,33 @@ def test_output_renaming_lets_the_same_roi_step_run_twice():
         "steps": [
             {
                 "uses": "eit.roi_tiv_lungspace",
-                "in": {"eit_data": "eit_data", "timing_data": "eit_data"},
+                "in": {"eit_data": "eit_data", "timing_data": "timing_data"},
                 "with": {"threshold": 0.1},
                 "out": {
-                    "tiv_lungspace_mask": "mask_a",
                     "tiv_lungspace_captures": "captures_a",
                     "tiv_lungspace_result": "result_a",
                 },
             },
             {
                 "uses": "eit.roi_tiv_lungspace",
-                "in": {"eit_data": "eit_data", "timing_data": "eit_data"},
+                "in": {"eit_data": "eit_data", "timing_data": "timing_data"},
                 "with": {"threshold": 0.2},
                 "out": {
-                    "tiv_lungspace_mask": "mask_b",
                     "tiv_lungspace_captures": "captures_b",
                     "tiv_lungspace_result": "result_b",
                 },
             },
         ],
     }
-    raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float))
+    pixels, waveform = _lungspace_images()
 
-    result = run_workflow(spec, session=session, extra_context={"eit_data": raw})
+    result = run_workflow(
+        spec,
+        session=session,
+        extra_context={"eit_data": pixels, "timing_data": waveform},
+    )
 
-    assert result.value("mask_a") is not result.value("mask_b")
+    assert result.value("result_a") is not result.value("result_b")
     assert result.value("result_a").metadata["parameters"]["threshold"] == 0.1
     assert result.value("result_b").metadata["parameters"]["threshold"] == 0.2
 

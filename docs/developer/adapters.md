@@ -40,7 +40,8 @@ The code is in `src/m3resp/adapters/eitprocessing_adapter/`.
 | `compute_continuous_tiv`, `compute_eeli` | Give the TIV or the EELI of each given breath, with M3Resp code |
 | `find_pixel_breaths` | Find the breaths of each pixel with `m3resp.eit.processing.find_pixel_breaths`; the result is a `PixelBreaths` |
 | `compute_pixel_tiv`, `compute_pixel_eeli` | Give one map of TIV or EELI per breath, with the global breaths or a `PixelBreaths`, with M3Resp code |
-| `compute_tiv_lungspace`, `compute_amplitude_lungspace`, `compute_watershed_lungspace`, `filter_roi_by_size`, `as_pixel_mask` | Make and filter regions of interest |
+| `compute_tiv_lungspace`, `compute_amplitude_lungspace`, `compute_watershed_lungspace`, `filter_roi_by_size` | Find the functional lung space, or keep the large groups of pixels of a mask, with `m3resp.eit.roi`; the result is an M3Resp `PixelMask`. Without `breaths`, the lung-space methods find the breaths with the default `BreathDetectionSettings`; without `timing_data`, they use the sum of all pixels, as eitprocessing does. |
+| `as_pixel_mask` | Change an M3Resp mask or a grid into an `eitprocessing` `PixelMask`, for `get_regional_impedance` |
 | `preprocess(sequence, ...)` | Run rate detection, filter, breath detection, TIV, EELI, pixel TIV and (with `compute_pixel_eeli=True`) pixel EELI in one call. `session.preprocess_eit()` uses it. |
 | `compute_tiv(sequence, compute=...)` | Run a TIV function that you give |
 

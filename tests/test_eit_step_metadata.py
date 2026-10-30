@@ -35,10 +35,11 @@ _EIT_STEP_NAMES = [
     "eit.roi_amplitude_lungspace",
     "eit.roi_watershed",
     "eit.roi_filter_by_size",
+    "eit.geometric_mask",
 ]
 
 
-def test_all_twenty_one_eit_steps_are_registered_and_described():
+def test_all_twenty_two_eit_steps_are_registered_and_described():
     descriptions = describe_steps(prefix="eit.")
     assert {d.name for d in descriptions} == set(_EIT_STEP_NAMES)
 
@@ -66,6 +67,11 @@ _M3RESP_ONLY_STEPS = (
     "eit.pixel_breaths",
     "eit.pixel_tiv",
     "eit.pixel_eeli",
+    "eit.roi_tiv_lungspace",
+    "eit.roi_amplitude_lungspace",
+    "eit.roi_watershed",
+    "eit.roi_filter_by_size",
+    "eit.geometric_mask",
 )
 
 

@@ -81,7 +81,7 @@ _SPEC: dict[str, Any] = {
         {"uses": "eit.roi_watershed", "with": {"threshold_fraction": 0.15}},
         {
             "uses": "eit.roi_filter_by_size",
-            "in": {"mask": "watershed_lungspace_mask"},
+            "in": {"mask": "watershed_lungspace_result"},
             "with": {"min_region_size": 1},
         },
     ],
@@ -311,10 +311,13 @@ def test_roi_watershed_matches_direct_call(workflow_result):
 
 
 def test_roi_filter_by_size_matches_direct_call(workflow_result):
+    from eitprocessing.roi import PixelMask as UpstreamPixelMask
     from eitprocessing.roi.filter_by_size import FilterROIBySize
 
-    watershed_mask = workflow_result.value("watershed_lungspace_mask")
-    expected_mask = FilterROIBySize(min_region_size=1).apply(watershed_mask)
+    watershed_mask = workflow_result.value("watershed_lungspace_result")
+    expected_mask = FilterROIBySize(min_region_size=1).apply(
+        UpstreamPixelMask(watershed_mask.values)
+    )
 
     result = workflow_result.value("size_filtered_roi_result")
     np.testing.assert_array_equal(result.values, expected_mask.mask)

@@ -95,6 +95,27 @@ Changes that a user can see:
 - `pixel_breath_timing_result` of `eit.pixel_breaths` names the three times `start_time`, `extremum_time` and `end_time` in `metadata["landmarks"]` (before: `middle_time`), and gives the number of rows and columns in `metadata["grid_shape"]`, so that a result with no breaths keeps its grid.
 - A workflow step input that is optional and has no default context key is left out when the spec does not bind it. Before, the workflow check asked for an `in:` binding.
 
+### m3resp finds the lung space and makes the geometric masks
+
+`eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace`, `eit.roi_watershed`, `eit.roi_filter_by_size` and the matching `EITProcessingAdapter` methods run the new functions `tiv_lungspace`, `amplitude_lungspace`, `watershed_lungspace` and `filter_mask_by_size` of `m3resp.eit.roi`. They are copied from `TIVLungspace`, `AmplitudeLungspace`, `WatershedLungspace` and `FilterROIBySize` of eitprocessing 1.8.7. With the default settings, the masks of the three test files are the same as in eitprocessing. The four steps run without eitprocessing. `scikit-image` (0.25.2 or newer) is a main dependency, for the watershed method.
+
+`m3resp.eit.roi.geometric_mask(region, shape)` gives the mask of the ventral or dorsal half, the anatomical right or left half, one of four layers or one of four quadrants, like `get_geometric_mask` of eitprocessing. The new step `eit.geometric_mask` makes one of these masks for the size of its EIT images and gives `geometric_mask_result`.
+
+`PixelMap` has the new field `kind` (`"tiv"`, `"amplitude"`, `"odcl"`, `"difference"`, `"perfusion"`, `"pendelluft"`, `"signed_pendelluft"`, `"integer"` or None) and the methods of the eitprocessing `PixelMap`: `from_aggregate`, `normalize`, `create_mask_from_threshold`, `convert_to`, `to_boolean_array`, `to_integer_array`, `to_non_nan_array` and `+ - * /`. `PixelMask` has `* + -` and `is_weighted`, and `PixelMaskCollection` has `combine` and `apply`.
+
+Changes that a user can see:
+
+- The outputs `tiv_lungspace_mask`, `amplitude_lungspace_mask`, `watershed_lungspace_mask` and `size_filtered_roi_mask` (eitprocessing masks) and the artifact type `roi_mask` are removed. The masks are `tiv_lungspace_result`, `amplitude_lungspace_result`, `watershed_lungspace_result` and `size_filtered_roi_result`, as before. In a spec, bind `eit.roi_filter_by_size` with `in: { mask: watershed_lungspace_result }`. After a workflow, `session.processed["eit"]` holds the m3resp masks under the four old names.
+- The input `mask` of `eit.roi_filter_by_size` has the artifact type `pixel_mask`, so the workflow check refuses other data there. It takes an m3resp `PixelMask` or a 2D grid; another type gives a `TypeError`.
+- `eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace` and `eit.roi_watershed` have the new optional input `breaths`. The TIV mask takes breaths of any modality, moved to the EIT clock; the amplitude and watershed masks take EIT breaths only and give a `ValueError` for other breaths. Without `breaths`, the steps find the breaths with the default settings, as before.
+- The captures hold m3resp objects: `IntervalData` with one `PixelMap` per breath, `PixelMap`, `PixelMask` and (row, column) arrays of peaks. In the watershed captures, `"mean tiv"` and `"mean amplitude"` are named `"mean TIV of shared breaths"` and `"mean amplitude of shared breaths"`.
+- The watershed method leaves the pixels with a NaN mean amplitude out of the search for local maxima and out of the watershed regions (region number 0). eitprocessing reads NaN as 0 for the maxima and gives NaN to the watershed, so its region borders near these pixels depend on scikit-image. At the default threshold, the masks of the test files are the same; at a threshold of 0.05, the Timpel test file has 2 (raw) or 7 (filtered) pixels fewer.
+- The watershed capture `"included watershed regions"` holds the included regions, NaN elsewhere. In eitprocessing it holds every region.
+- The watershed method computes the pixel TIV and the pixel amplitude once. eitprocessing computes them twice. The masks are the same.
+- The masks have `metadata` with the settings, `breath_count`, `included_pixel_count` and `included_pixel_fraction`. The provenance of the four steps names m3resp.
+- The adapter methods `compute_tiv_lungspace`, `compute_amplitude_lungspace` and `compute_watershed_lungspace` have the new argument `breaths` and return an m3resp `PixelMask` under `"mask"`. `filter_roi_by_size` returns an m3resp `PixelMask`; it also takes an eitprocessing mask.
+- Dividing a `PixelMap` by the number 0 gives a warning, as dividing by a grid with a 0 does. A division gives no NumPy warning. The error of `geometric_mask` for a shape that does not divide gives the number; eitprocessing shows `{height_divisor}`.
+
 ### Fixed: the EIT summary figure after a workflow
 
 `m3resp.visualization.plot_eit_processing_summary` stopped with an `AttributeError` after a workflow run, because it read the `label` of the global impedance, which is a `Signal` there. The figure takes the axis label from the name of the `Signal`.
