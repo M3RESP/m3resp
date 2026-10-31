@@ -12,6 +12,7 @@ the real package and skips cleanly without it.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,26 +21,43 @@ from typing import Any
 import numpy as np
 import pytest
 
+from m3resp.adapters.eitprocessing_adapter import (
+    EITPROCESSING_FIELDS,
+    as_signal,
+    eitprocessing_fields,
+)
 from m3resp.core.exceptions import WorkflowSpecError
 from m3resp.core.session import M3Session
 from m3resp.data import (
     BreathEvent,
     Event,
     IntervalData,
+    PixelBreaths,
     PixelMap,
     PixelMask,
+    Signal,
     pixel_breath_events,
 )
+from m3resp.eit.processing import (
+    BreathDetectionSettings,
+    find_breaths,
+    find_pixel_breaths,
+    pixel_end_expiratory_lung_impedance,
+    pixel_tidal_impedance_variation,
+)
 from m3resp.workflows import available_steps, run_workflow
+from m3resp.workflows.engine.spec_runner import _infer_filter_mode
 from m3resp.workflows.registry import get_step
 from m3resp.workflows.spec import load_spec
 from m3resp.workflows.steps.eit import (
     butterworth_filter,
+    continuous_tiv,
     detect_rates,
     eeli,
     load,
     mdn_filter,
     pixel_breaths,
+    pixel_eeli,
     pixel_tiv,
     roi_amplitude_lungspace,
     roi_filter_by_size,
@@ -53,6 +71,7 @@ _NEW_EIT_STEPS = (
     "eit.mdn_filter",
     "eit.eeli",
     "eit.pixel_tiv",
+    "eit.pixel_eeli",
     "eit.pixel_breaths",
     "eit.roi_tiv_lungspace",
     "eit.roi_amplitude_lungspace",
@@ -97,6 +116,7 @@ class _FakeEITData:
         self.time = np.asarray(time, dtype=float)
         self.sample_frequency = 1.0
         self.unit = "a.u."
+        self.vendor = "draeger"
 
     def get_summed_impedance(self, return_label: str | None = None, **_: Any):
         return _FakeContinuousData(
@@ -121,15 +141,6 @@ class _FakeBreath:
         self.end_time = end
 
 
-class _FakeSparseData:
-    def __init__(self, values: Any, time: Any, *, unit: str = "a.u.", label: str = "r"):
-        self.values = values
-        self.time = time
-        self.unit = unit
-        self.label = label
-        self.name = label
-
-
 class _FakeBreathDetector:
     """Finds `count` one-second breaths, like eitprocessing's BreathDetection
     returns them (an object whose `values` are the breaths)."""
@@ -145,11 +156,6 @@ class _FakeBreathDetector:
                 _FakeBreath(float(i), i + 0.5, float(i + 1)) for i in range(self.count)
             ]
         )
-
-
-class _FakePixelMask:
-    def __init__(self, mask: np.ndarray):
-        self.mask = mask
 
 
 class _FakeAdapter:
@@ -193,75 +199,26 @@ class _FakeAdapter:
         *,
         respiratory_rate_hz: float,
         heart_rate_hz: float,
+        label: str = "filtered",
+        name: str | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        filtered = _FakeEITData(signal.pixel_impedance, signal.time, label="filtered")
+        images = as_signal(signal)
+        filtered = Signal(
+            values=images.values,
+            time=images.time,
+            sample_frequency=images.sample_frequency,
+            name=name or images.name,
+            metadata={
+                EITPROCESSING_FIELDS: {**eitprocessing_fields(images), "label": label}
+            },
+            modality="eit",
+            category="impedance",
+            channel="pixel_impedance",
+            source="draeger",
+            processing_state="intermediate",
+        )
         return {"filtered_eit": filtered, "filter_captures": {}}
-
-    def compute_eeli(
-        self, timing_data: Any, *, sequence: Any, breath_detector: Any, **kwargs: Any
-    ) -> Any:
-        return _FakeSparseData(
-            [1.0, 2.0, np.nan], [0.0, 1.0, 2.0], label="continuous_eelis"
-        )
-
-    def compute_pixel_tiv(
-        self,
-        eit_data: Any,
-        timing_data: Any,
-        *,
-        sequence: Any,
-        breath_detector: Any,
-        **kwargs: Any,
-    ) -> Any:
-        values = np.full((2, 2, 2), None, dtype=object)
-        values[0, 0, 0] = 0.5
-        time = np.full((2, 2, 2), None, dtype=object)
-        time[0, 0, 0] = 1.0
-        return _FakeSparseData(values, time, label="pixel_tivs")
-
-    def find_pixel_breaths(
-        self,
-        eit_data: Any,
-        timing_data: Any,
-        *,
-        sequence: Any | None = None,
-        **kwargs: Any,
-    ) -> Any:
-        values = np.full((3, 2, 2), None, dtype=object)
-        values[1, 0, 0] = _FakeBreath(0.0, 0.5, 1.0)
-        result = _FakeSparseData(values, None, label="pixel_breaths")
-        result.intervals = [(-1.0, 0.0), (0.0, 1.0), (1.0, 2.0)]
-        return result
-
-    def find_breaths(self, timing_data: Any, **kwargs: Any) -> Any:
-        # The same breaths as the intervals `find_pixel_breaths` returns.
-        return SimpleNamespace(
-            values=[
-                _FakeBreath(-1.0, -0.5, 0.0),
-                _FakeBreath(0.0, 0.5, 1.0),
-                _FakeBreath(1.0, 1.5, 2.0),
-            ]
-        )
-
-    def compute_tiv_lungspace(self, eit_data: Any, **kwargs: Any) -> dict[str, Any]:
-        mask = np.array([[1.0, np.nan], [np.nan, 1.0]])
-        return {"mask": _FakePixelMask(mask), "captures": {"mean TIV": "fake"}}
-
-    def compute_amplitude_lungspace(
-        self, eit_data: Any, **kwargs: Any
-    ) -> dict[str, Any]:
-        mask = np.array([[1.0, np.nan], [1.0, np.nan]])
-        return {"mask": _FakePixelMask(mask), "captures": {"mean amplitude": "fake"}}
-
-    def compute_watershed_lungspace(
-        self, eit_data: Any, **kwargs: Any
-    ) -> dict[str, Any]:
-        mask = np.array([[1.0, 1.0], [np.nan, np.nan]])
-        return {"mask": _FakePixelMask(mask), "captures": {"included region": "fake"}}
-
-    def filter_roi_by_size(self, mask: Any, **kwargs: Any) -> Any:
-        return _FakePixelMask(mask.mask)
 
 
 def _session_with_fake_adapter() -> M3Session:
@@ -392,7 +349,8 @@ def test_detect_rates_rejects_an_implausible_rate(rate_name, rate):
         _detect_rates_with(rate_name, rate)
 
 
-def test_mdn_filter_step_works_without_eitprocessing_and_matches_declared_writes():
+def test_mdn_filter_step_matches_declared_writes():
+    pytest.importorskip("eitprocessing")
     session = _session_with_fake_adapter()
     raw = _FakeEITData(np.ones((4, 2, 2)), time=np.arange(4, dtype=float))
     sequence = _FakeSequence(raw)
@@ -408,7 +366,36 @@ def test_mdn_filter_step_works_without_eitprocessing_and_matches_declared_writes
 
     assert set(get_step("eit.mdn_filter").writes) <= set(result)
     assert result["filtered_eit_signal"].channel == "pixel_impedance"
-    assert sequence.eit_data["filtered"] is result["filtered_eit"]
+    assert result["filtered_eit"] is result["filtered_eit_signal"]
+    np.testing.assert_array_equal(
+        sequence.eit_data["mdn_filtered"].pixel_impedance,
+        result["filtered_eit"].values,
+    )
+    assert result["filtered_eit"].metadata["operation"] == "eit.mdn_filter"
+    assert result["filtered_eit"].metadata["source_package"] == "m3resp"
+    assert _infer_filter_mode(result["filtered_eit"]) == "mdn"
+
+
+@pytest.mark.parametrize(
+    ("metadata", "label", "mode"),
+    [
+        ({"operation": "eit.mdn_filter"}, None, "mdn"),
+        (
+            {"operation": "eit.butterworth_filter", "parameters": {"mode": "bandstop"}},
+            None,
+            "bandstop",
+        ),
+        ({}, "lowpass_filtered", "lowpass"),
+        ({}, None, "none"),
+    ],
+)
+def test_the_filter_mode_of_a_workflow_comes_from_the_filtered_images(
+    metadata: dict, label: str | None, mode: str
+):
+    filtered = SimpleNamespace(metadata=metadata, label=label)
+
+    assert _infer_filter_mode(filtered) == mode
+    assert _infer_filter_mode(None) == "none"
 
 
 @pytest.mark.parametrize("mode", ["lowpass", "highpass", "bandpass", "bandstop"])
@@ -432,7 +419,10 @@ def test_butterworth_filter_step_supports_every_mode_and_matches_declared_writes
     # Same native signal and session bookkeeping the MDN filter produces.
     assert result["filtered_eit_signal"].channel == "pixel_impedance"
     assert session.signals.for_modality("eit")
-    assert sequence.eit_data["filtered"] is result["filtered_eit"]
+    assert result["filtered_eit"] is result["filtered_eit_signal"]
+    np.testing.assert_array_equal(
+        sequence.eit_data["filtered"].pixel_impedance, result["filtered_eit"].values
+    )
 
 
 def test_butterworth_filter_step_accepts_an_already_filtered_signal():
@@ -451,183 +441,433 @@ def test_butterworth_filter_step_accepts_an_already_filtered_signal():
         once["filtered_eit"], eit_sequence=sequence, session=session, label="pass_two"
     )
 
-    assert twice["filtered_eit"].label == "pass_two"
+    assert twice["filtered_eit"].metadata["eitprocessing_fields"]["label"] == "pass_two"
+    assert sequence.eit_data["pass_two"].label == "pass_two"
     assert get_step("eit.butterworth_filter").reads["signal"] is None
+
+
+def _waveform(values: list[float]) -> _FakeContinuousData:
+    """A global impedance waveform, one sample per second from 0 s."""
+
+    return _FakeContinuousData(
+        "global_impedance", values, np.arange(len(values), dtype=float)
+    )
 
 
 def test_eeli_step_stores_one_value_per_breath():
     session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((3, 1, 1)), time=np.arange(3, dtype=float))
-    sequence = _FakeSequence(raw)
+    waveform = _waveform([10.0, 11.0, 12.0, 13.0])
 
-    result = eeli(
-        raw,
-        eit_sequence=sequence,
-        breath_detector=_FakeBreathDetector(3),
-        session=session,
-    )
+    result = eeli(waveform, breath_detector=_FakeBreathDetector(3), session=session)
 
-    assert set(get_step("eit.eeli").writes) <= set(result)
+    assert set(get_step("eit.eeli").writes) == set(result) - {"_provenance"}
     eeli_result = result["eeli_result"]
     assert isinstance(eeli_result, IntervalData)
-    np.testing.assert_array_equal(eeli_result.values, [1.0, 2.0, np.nan])
+    # The EELI of each breath is the impedance at its end (1, 2 and 3 s).
+    np.testing.assert_array_equal(eeli_result.values, [11.0, 12.0, 13.0])
     assert [b.start_time for b in eeli_result.intervals] == [0.0, 1.0, 2.0]
-    assert eeli_result.method == "eitprocessing.EELI"
+    assert eeli_result.name == "continuous_eelis"
+    assert eeli_result.method == "m3resp.eit.processing.end_expiratory_lung_impedance"
+    assert eeli_result.metadata["source_package"] == "m3resp"
+    assert eeli_result.metadata["operation"] == "eit.eeli"
     assert list(session.interval_data) == [eeli_result]
     assert len(session.parameter_results) == 0
 
 
-def test_eeli_step_refuses_breaths_that_do_not_match_the_values():
+def test_continuous_tiv_step_uses_the_chosen_method():
     session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((3, 1, 1)), time=np.arange(3, dtype=float))
-    sequence = _FakeSequence(raw)
+    waveform = _waveform([1.0, 3.0, 2.0, 6.0, 4.0])
+    detector = _FakeBreathDetector(2)  # breaths (0, 0.5, 1) and (1, 1.5, 2)
 
-    with pytest.raises(ValueError, match="per-breath values"):
-        eeli(
-            raw,
-            eit_sequence=sequence,
-            breath_detector=_FakeBreathDetector(2),
-            session=session,
-        )
+    inspiratory = continuous_tiv(waveform, breath_detector=detector, session=session)[
+        "continuous_tiv_result"
+    ]
+    expiratory = continuous_tiv(
+        waveform, breath_detector=detector, session=session, tiv_method="expiratory"
+    )["continuous_tiv_result"]
+
+    # The middle (0.5 s, 1.5 s) lies halfway, so the later sample is read.
+    np.testing.assert_array_equal(inspiratory.values, [2.0, -1.0])
+    np.testing.assert_array_equal(expiratory.values, [0.0, 0.0])
+    assert expiratory.metadata["tiv_method"] == "expiratory"
+    assert expiratory.metadata["parameters"] == {
+        "tiv_method": "expiratory",
+        "breaths": "breath_detector",
+    }
+    assert inspiratory.intervals[0] is expiratory.intervals[0]
 
 
-def test_pixel_tiv_step_preserves_shape_and_valid_breath_metadata():
+def test_eeli_step_gives_nan_for_breaths_outside_the_data():
     session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float))
-    sequence = _FakeSequence(raw)
+    waveform = _waveform([10.0, 11.0, 12.0, 13.0])
 
-    result = pixel_tiv(
-        eit_data=raw,
-        signal=raw,
-        eit_sequence=sequence,
-        breath_detector=_FakeBreathDetector(2),
-        session=session,
+    with pytest.warns(UserWarning, match="1 of 4 breaths lie partly outside"):
+        result = eeli(waveform, breath_detector=_FakeBreathDetector(4), session=session)
+
+    np.testing.assert_array_equal(
+        result["eeli_result"].values, [11.0, 12.0, 13.0, np.nan]
     )
 
-    assert set(get_step("eit.pixel_tiv").writes) <= set(result)
+
+def _breathing_images() -> tuple[Signal, Signal]:
+    """EIT images of 2 x 2 pixels and their waveform: 40 s at 20 Hz, one
+    breath every 4 s. Pixel (1, 0) goes down during inspiration, pixel (1, 1)
+    is NaN."""
+
+    fs = 20.0
+    time = np.arange(int(40 * fs)) / fs
+    breathing = np.sin(2 * np.pi * 0.25 * time)
+    values = np.empty((len(time), 2, 2))
+    values[:, 0, 0] = 10.0 + breathing
+    values[:, 0, 1] = 10.0 + 2.0 * breathing
+    values[:, 1, 0] = 10.0 - breathing
+    values[:, 1, 1] = np.nan
+    pixels = Signal(
+        values=values,
+        time=time,
+        sample_frequency=fs,
+        name="images",
+        modality="eit",
+        category="impedance",
+        channel="pixel_impedance",
+        unit="a.u.",
+    )
+    waveform = Signal(
+        values=30.0 + 2.0 * breathing,
+        time=time,
+        sample_frequency=fs,
+        name="global_impedance",
+        modality="eit",
+        category="impedance",
+        unit="a.u.",
+    )
+    return pixels, waveform
+
+
+def _default_breaths(waveform: Signal) -> list[BreathEvent]:
+    return find_breaths(waveform, BreathDetectionSettings())
+
+
+def _assert_same_pixel_times(result: PixelBreaths, expected: PixelBreaths) -> None:
+    """The global breaths and every pixel breath time are the same."""
+
+    assert [(b.start_time, b.extremum_time, b.end_time) for b in result.breaths] == [
+        (b.start_time, b.extremum_time, b.end_time) for b in expected.breaths
+    ]
+    for point in ("start_time", "extremum_time", "end_time"):
+        np.testing.assert_array_equal(getattr(result, point), getattr(expected, point))
+
+
+def test_pixel_tiv_step_gives_one_pixel_map_per_global_breath():
+    session = M3Session()
+    pixels, waveform = _breathing_images()
+
+    result = pixel_tiv(
+        eit_data=pixels,
+        signal=waveform,
+        breath_detector=BreathDetectionSettings(),
+        session=session,
+        tiv_method="mean",
+    )
+
+    assert set(get_step("eit.pixel_tiv").writes) == set(result)
     pixel_tiv_result = result["pixel_tiv_result"]
-    assert isinstance(pixel_tiv_result, IntervalData)
-    assert len(pixel_tiv_result) == 2
+    breaths = _default_breaths(waveform)
+    expected = pixel_tidal_impedance_variation(pixels, breaths, method="mean")
+    assert len(pixel_tiv_result) == len(breaths) > 5
     assert all(isinstance(m, PixelMap) for m in pixel_tiv_result.values)
-    assert pixel_tiv_result.values[0].shape == (2, 2)
-    assert pixel_tiv_result.values[0].values[0, 0] == 0.5
-    assert pixel_tiv_result.metadata["valid_breath_indices"] == [0]
-    assert pixel_tiv_result.metadata["axes"] == ["row", "column"]
+    assert pixel_tiv_result.values == expected.values
+    assert pixel_tiv_result.unit == "a.u."
+    assert pixel_tiv_result.method == expected.method
+    metadata = pixel_tiv_result.metadata
+    assert metadata["axes"] == ["row", "column"]
+    assert metadata["tiv_timing"] == "continuous"
+    assert metadata["tiv_method"] == "mean"
+    assert metadata["valid_breath_indices"] == list(range(len(breaths)))
+    assert metadata["source_package"] == "m3resp"
+    assert metadata["parameters"]["breaths"] == "breath_detector"
     assert list(session.interval_data) == [pixel_tiv_result]
 
 
 def test_pixel_tiv_accepts_unfiltered_pixel_data():
     """The input is any pixel signal; filtering is the default, not a demand."""
 
-    session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float), label="raw")
-    sequence = _FakeSequence(raw)
+    definition = get_step("eit.pixel_tiv")
+    assert definition.reads["eit_data"] == "filtered_eit"
+    assert "filtered_eit" not in definition.reads
+
+
+def test_pixel_tiv_keeps_the_given_global_breaths():
+    session = M3Session()
+    pixels, waveform = _breathing_images()
+    breaths = _default_breaths(waveform)
 
     result = pixel_tiv(
-        eit_data=raw,
-        signal=raw,
-        eit_sequence=sequence,
-        breath_detector=_FakeBreathDetector(2),
+        eit_data=pixels, signal=waveform, breaths=breaths, session=session
+    )["pixel_tiv_result"]
+
+    assert all(a is b for a, b in zip(result.intervals, breaths, strict=True))
+    assert result.values == pixel_tidal_impedance_variation(pixels, breaths).values
+
+
+def test_pixel_timing_with_and_without_pixel_breaths_gives_the_same_values():
+    pixels, waveform = _breathing_images()
+    session = M3Session()
+    found = pixel_breaths(eit_data=pixels, timing_data=waveform, session=session)
+
+    connected = pixel_tiv(
+        eit_data=pixels,
+        signal=waveform,
+        pixel_breaths=found["pixel_breaths"],
         session=session,
+        tiv_timing="pixel",
+    )["pixel_tiv_result"]
+    alone = pixel_tiv(
+        eit_data=pixels,
+        signal=waveform,
+        breath_detector=BreathDetectionSettings(),
+        session=M3Session(),
+        tiv_timing="pixel",
+    )["pixel_tiv_result"]
+
+    assert connected.values == alone.values
+    assert connected.metadata["tiv_timing"] == "pixel"
+    # The first and the last global breath never have pixel breaths.
+    assert connected.metadata["valid_breath_indices"] == list(
+        range(1, len(connected) - 1)
     )
 
-    assert len(result["pixel_tiv_result"]) == 2
-    definition = get_step("eit.pixel_tiv")
-    assert "eit_data" in definition.reads
-    assert "filtered_eit" not in definition.reads
+
+def test_the_continuous_timing_leaves_pixel_breaths_unused():
+    pixels, waveform = _breathing_images()
+    session = M3Session()
+    found = pixel_breaths(eit_data=pixels, timing_data=waveform, session=session)
+    breaths = _default_breaths(waveform)
+
+    with_pixel_breaths = pixel_tiv(
+        eit_data=pixels,
+        signal=waveform,
+        breaths=breaths,
+        pixel_breaths=found["pixel_breaths"],
+        session=session,
+    )["pixel_tiv_result"]
+
+    assert (
+        with_pixel_breaths.values
+        == pixel_tidal_impedance_variation(pixels, breaths).values
+    )
+    assert with_pixel_breaths.metadata["tiv_timing"] == "continuous"
+    assert with_pixel_breaths.metadata["parameters"]["breaths"] == "input"
+
+
+def test_pixel_tiv_refuses_pixel_breaths_of_another_type():
+    pixels, waveform = _breathing_images()
+    session = M3Session()
+    found = pixel_breaths(eit_data=pixels, timing_data=waveform, session=session)
+
+    with pytest.raises(TypeError, match="must be the PixelBreaths"):
+        pixel_tiv(
+            eit_data=pixels,
+            signal=waveform,
+            pixel_breaths=found["pixel_breath_timing_result"],
+            session=session,
+            tiv_timing="pixel",
+        )
+
+
+def test_pixel_timing_finds_pixel_breaths_from_eit_breaths_only():
+    pixels, waveform = _breathing_images()
+    emg_breaths = [
+        dataclasses.replace(breath, modality="emg")
+        for breath in _default_breaths(waveform)
+    ]
+
+    with pytest.raises(ValueError, match="EIT breaths only; got breaths of emg"):
+        pixel_tiv(
+            eit_data=pixels,
+            signal=waveform,
+            breaths=emg_breaths,
+            session=M3Session(),
+            tiv_timing="pixel",
+        )
+
+
+@pytest.mark.parametrize("step", [pixel_tiv, pixel_eeli])
+def test_pixel_steps_need_breaths(step):
+    pixels, waveform = _breathing_images()
+
+    with pytest.raises(ValueError, match="needs the breaths"):
+        step(eit_data=pixels, signal=waveform, session=M3Session())
+
+
+@pytest.mark.parametrize(
+    "step,timing", [(pixel_tiv, "tiv_timing"), (pixel_eeli, "eeli_timing")]
+)
+def test_pixel_steps_refuse_an_unknown_timing(step, timing):
+    pixels, waveform = _breathing_images()
+
+    with pytest.raises(ValueError, match=f"'{timing}' must be one of"):
+        step(
+            eit_data=pixels,
+            signal=waveform,
+            breath_detector=BreathDetectionSettings(),
+            session=M3Session(),
+            **{timing: "breath"},
+        )
+
+
+@pytest.mark.parametrize("timing", ["continuous", "pixel"])
+def test_pixel_eeli_step_gives_the_impedance_of_each_pixel_at_the_breath_end(timing):
+    session = M3Session()
+    pixels, waveform = _breathing_images()
+
+    result = pixel_eeli(
+        eit_data=pixels,
+        signal=waveform,
+        breath_detector=BreathDetectionSettings(),
+        session=session,
+        eeli_timing=timing,
+    )
+
+    assert set(get_step("eit.pixel_eeli").writes) == set(result)
+    pixel_eeli_result = result["pixel_eeli_result"]
+    breaths = _default_breaths(waveform)
+    timing_breaths = (
+        breaths
+        if timing == "continuous"
+        else find_pixel_breaths(pixels, waveform, breaths)
+    )
+    expected = pixel_end_expiratory_lung_impedance(pixels, timing_breaths)
+    assert pixel_eeli_result.values == expected.values
+    assert pixel_eeli_result.name == "pixel_eelis"
+    assert pixel_eeli_result.metadata["eeli_timing"] == timing
+    assert pixel_eeli_result.metadata["operation"] == "eit.pixel_eeli"
+    assert list(session.interval_data) == [pixel_eeli_result]
 
 
 def test_pixel_breaths_accepts_the_empty_phase_correction_mode():
     """`null` in a spec / `None` from Python is a real option, not a mistake."""
 
-    session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((3, 2, 2)), time=np.arange(3, dtype=float))
-    sequence = _FakeSequence(raw)
+    pixels, waveform = _breathing_images()
 
     result = pixel_breaths(
-        eit_data=raw,
-        timing_data=raw,
-        eit_sequence=sequence,
-        session=session,
+        eit_data=pixels,
+        timing_data=waveform,
+        session=M3Session(),
         phase_correction_mode=None,
     )
 
-    assert set(get_step("eit.pixel_breaths").writes) <= set(result)
+    assert set(get_step("eit.pixel_breaths").writes) == set(result)
+    assert result["pixel_breaths"].metadata["phase_correction_mode"] is None
 
 
 def test_pixel_breaths_rejects_an_unknown_phase_correction_mode():
-    session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((3, 2, 2)), time=np.arange(3, dtype=float))
-    sequence = _FakeSequence(raw)
+    pixels, waveform = _breathing_images()
 
-    with pytest.raises(ValueError, match="phase_correction_mode"):
+    with pytest.raises(ValueError, match="Unknown phase correction mode"):
         pixel_breaths(
-            eit_data=raw,
-            timing_data=raw,
-            eit_sequence=sequence,
-            session=session,
+            eit_data=pixels,
+            timing_data=waveform,
+            session=M3Session(),
             phase_correction_mode="nope",
         )
 
 
-def test_pixel_breaths_step_converts_object_array_to_landmark_array():
-    session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((3, 2, 2)), time=np.arange(3, dtype=float))
-    sequence = _FakeSequence(raw)
+def test_pixel_breaths_step_gives_pixel_breaths_and_their_time_grids():
+    session = M3Session()
+    pixels, waveform = _breathing_images()
+    stored_first_breath = _default_breaths(waveform)[0]
+    session.add_events("eit_breaths", [stored_first_breath])
 
-    result = pixel_breaths(
-        eit_data=raw, timing_data=raw, eit_sequence=sequence, session=session
+    result = pixel_breaths(eit_data=pixels, timing_data=waveform, session=session)
+
+    found = result["pixel_breaths"]
+    assert isinstance(found, PixelBreaths)
+    _assert_same_pixel_times(
+        found, find_pixel_breaths(pixels, waveform, _default_breaths(waveform))
     )
-
-    assert set(get_step("eit.pixel_breaths").writes) <= set(result)
+    assert found.metadata["operation"] == "eit.pixel_breaths"
+    # A stored EIT breath with the same times is reused.
+    assert found.breaths[0] is stored_first_breath
     timing = result["pixel_breath_timing_result"]
     assert isinstance(timing, IntervalData)
-    assert [b.start_time for b in timing.intervals] == [-1.0, 0.0, 1.0]
-    # The breaths keep their turning point, like the breaths of TIV and EELI.
-    assert [b.extremum_time for b in timing.intervals] == [-0.5, 0.5, 1.5]
+    assert timing.intervals == found.breaths
     assert timing.unit == "s"
-    value = np.stack(timing.values)
-    assert value.shape == (3, 2, 2, 3)
-    assert np.array_equal(value[1, 0, 0], [0.0, 0.5, 1.0])
-    assert np.isnan(value[0]).all()  # unresolved pixel breaths stay NaN
+    grids = np.stack(timing.values)
+    assert grids.shape == (len(found.breaths), 2, 2, 3)
+    np.testing.assert_array_equal(grids[..., 1], found.extremum_time)
+    assert np.isnan(grids[0]).all()
+    assert np.isnan(grids[:, 1, 1]).all()  # the NaN pixel has no breaths
+    assert found.metadata["skipped_pixels"]["no_tiv"] == [[1, 1]]
+    assert timing.metadata["landmarks"] == ["start_time", "extremum_time", "end_time"]
+    assert timing.metadata["valid_pixel_breath_count"] == int(found.has_breath.sum())
     assert list(session.interval_data) == [timing]
 
 
 def test_pixel_breaths_step_output_gives_breath_events_per_pixel():
-    session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((3, 2, 2)), time=np.arange(3, dtype=float))
+    pixels, waveform = _breathing_images()
+    timing = pixel_breaths(eit_data=pixels, timing_data=waveform, session=M3Session())[
+        "pixel_breath_timing_result"
+    ]
+
+    events = pixel_breath_events(timing, row=1, column=0)
+
+    # Pixel (1, 0) goes down during inspiration, so its breath starts at a
+    # maximum of the impedance, one breath period after the global start.
+    assert len(events) == len(timing) - 2
+    assert events[0].metadata["global_breath_id"] == timing.intervals[1].id
+    assert pixels.values[
+        np.searchsorted(pixels.time, events[0].start_time), 1, 0
+    ] == pytest.approx(11.0, abs=1e-3)
+
+
+def test_pixel_breaths_step_uses_the_given_eit_breaths():
+    pixels, waveform = _breathing_images()
+    breaths = _default_breaths(waveform)[:-2]
 
     result = pixel_breaths(
-        eit_data=raw, timing_data=raw, eit_sequence=_FakeSequence(raw), session=session
+        eit_data=pixels, timing_data=waveform, breaths=breaths, session=M3Session()
     )
-    timing = result["pixel_breath_timing_result"]
 
-    events = pixel_breath_events(timing, row=0, column=0)
+    assert result["pixel_breaths"].breaths == breaths
+    assert result["pixel_breaths"].metadata["parameters"]["breaths"] == "input"
 
-    # Pixel (0, 0) has a breath only in the second global breath; the
-    # others are NaN and give no entry.
-    grids = np.stack(timing.values)
-    assert np.isnan(grids[[0, 2], 0, 0]).all()
-    assert [(e.start_time, e.extremum_time, e.end_time) for e in events] == [
-        (0.0, 0.5, 1.0)
+
+def test_pixel_breaths_step_refuses_breaths_of_another_modality():
+    pixels, waveform = _breathing_images()
+    breaths = [
+        dataclasses.replace(breath, modality="ventilator")
+        for breath in _default_breaths(waveform)
     ]
-    assert events[0].metadata["global_breath_id"] == timing.intervals[1].id
 
-
-def test_pixel_breaths_refuses_breaths_that_do_not_match_pixelbreath():
-    session = _session_with_fake_adapter()
-    session.eit_adapter.find_breaths = lambda timing_data, **kwargs: SimpleNamespace(  # type: ignore[attr-defined]
-        values=[_FakeBreath(0.0, 0.5, 1.0)]
-    )
-    raw = _FakeEITData(np.ones((3, 2, 2)), time=np.arange(3, dtype=float))
-
-    with pytest.raises(ValueError, match="do not match"):
+    with pytest.raises(ValueError, match="EIT breaths only; got breaths of ventilator"):
         pixel_breaths(
-            eit_data=raw,
-            timing_data=raw,
-            eit_sequence=_FakeSequence(raw),
-            session=session,
+            eit_data=pixels, timing_data=waveform, breaths=breaths, session=M3Session()
         )
+
+
+def test_pixel_breaths_step_takes_the_sign_from_the_default_breaths():
+    """eitprocessing takes the sign of each pixel from the breaths found with
+    the default settings, also when 'minimum_duration_seconds' differs."""
+
+    pixels, waveform = _breathing_images()
+
+    result = pixel_breaths(
+        eit_data=pixels,
+        timing_data=waveform,
+        session=M3Session(),
+        minimum_duration_seconds=1.0,
+    )
+
+    _assert_same_pixel_times(
+        result["pixel_breaths"],
+        find_pixel_breaths(
+            pixels,
+            waveform,
+            find_breaths(waveform, BreathDetectionSettings(minimum_duration=1.0)),
+            sign_breaths=_default_breaths(waveform),
+        ),
+    )
 
 
 def test_steps_on_the_same_breaths_share_one_detection_and_the_same_breaths():
@@ -636,22 +876,18 @@ def test_steps_on_the_same_breaths_share_one_detection_and_the_same_breaths():
     session.events is reused, so values can be traced to it."""
 
     session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float))
-    sequence = _FakeSequence(raw)
+    raw = _FakeEITData(np.ones((3, 2, 2)), time=np.arange(3, dtype=float))
+    waveform = _waveform([10.0, 11.0, 12.0])
     detector = _FakeBreathDetector(2)
     stored_first_breath = BreathEvent("eit", 0.0, 1.0, extremum_time=0.5)
     session.add_events("eit_breaths", [stored_first_breath])
-    session.eit_adapter.compute_eeli = lambda *args, **kwargs: _FakeSparseData(  # type: ignore[attr-defined]
-        [1.0, 2.0], [1.0, 2.0], label="continuous_eelis"
-    )
 
-    eeli_result = eeli(
-        raw, eit_sequence=sequence, breath_detector=detector, session=session
-    )["eeli_result"]
+    eeli_result = eeli(waveform, breath_detector=detector, session=session)[
+        "eeli_result"
+    ]
     tiv_result = pixel_tiv(
         eit_data=raw,
-        signal=raw,
-        eit_sequence=sequence,
+        signal=waveform,
         breath_detector=detector,
         session=session,
     )["pixel_tiv_result"]
@@ -670,11 +906,9 @@ def test_steps_ignore_stored_eit_breaths_that_are_not_breaths():
 
     session = _session_with_fake_adapter()
     session.add_events("eit_breaths", [Event(name="marker", modality="eit", time=0.0)])
-    raw = _FakeEITData(np.ones((3, 1, 1)), time=np.arange(3, dtype=float))
 
     result = eeli(
-        raw,
-        eit_sequence=_FakeSequence(raw),
+        _waveform([10.0, 11.0, 12.0, 13.0]),
         breath_detector=_FakeBreathDetector(3),
         session=session,
     )
@@ -682,66 +916,181 @@ def test_steps_ignore_stored_eit_breaths_that_are_not_breaths():
     assert len(result["eeli_result"]) == 3
 
 
-def test_pixel_breaths_rejects_unknown_phase_correction_mode():
-    session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((3, 2, 2)), time=np.arange(3, dtype=float))
-    sequence = _FakeSequence(raw)
+def _lungspace_images() -> tuple[Signal, Signal]:
+    """8 x 8 EIT images, 60 s at 20 Hz, one breath every 4 s, with the
+    largest breathing amplitude at the centre and a NaN corner pixel; and
+    their global impedance."""
 
-    with pytest.raises(ValueError):
-        pixel_breaths(
-            eit_data=raw,
-            timing_data=raw,
-            eit_sequence=sequence,
-            session=session,
-            phase_correction_mode="sideways",
-        )
+    time = np.arange(1200) / 20.0
+    rows, columns = np.mgrid[0:8, 0:8]
+    amplitude = np.exp(-((rows - 3.5) ** 2 + (columns - 3.5) ** 2) / 6.0)
+    breathing = 0.5 - 0.5 * np.cos(2 * np.pi * 0.25 * time)
+    values = 10.0 + breathing[:, None, None] * amplitude
+    values[:, 0, 0] = np.nan
+    pixels = Signal(
+        values=values,
+        time=time,
+        sample_frequency=20.0,
+        name="images",
+        modality="eit",
+        category="impedance",
+    )
+    waveform = Signal(
+        values=np.nansum(values, axis=(1, 2)),
+        time=time,
+        sample_frequency=20.0,
+        name="global_impedance",
+        modality="eit",
+        category="impedance",
+    )
+    return pixels, waveform
+
+
+_LUNGSPACE_STEPS = [
+    (roi_tiv_lungspace, "eit.roi_tiv_lungspace", "threshold"),
+    (roi_amplitude_lungspace, "eit.roi_amplitude_lungspace", "threshold"),
+    (roi_watershed, "eit.roi_watershed", "threshold_fraction"),
+]
+
+
+@pytest.mark.parametrize("step_func,step_name,threshold_name", _LUNGSPACE_STEPS)
+def test_roi_lungspace_steps_give_an_m3resp_mask(step_func, step_name, threshold_name):
+    session = M3Session()
+    pixels, waveform = _lungspace_images()
+
+    result = step_func(
+        eit_data=pixels, timing_data=waveform, session=session, **{threshold_name: 0.15}
+    )
+
+    assert set(get_step(step_name).writes) == set(result) - {"_provenance"}
+    [result_key] = [k for k in result if k.endswith("_result")]
+    mask = result[result_key]
+    assert isinstance(mask, PixelMask)
+    assert mask.shape == (8, 8)
+    assert np.isnan(mask.values[0, 0])
+    assert mask.values[3, 3] == 1.0
+    assert mask.metadata["source_package"] == "m3resp"
+    assert mask.metadata["parameters"] == {
+        threshold_name: 0.15,
+        "breaths": "timing_data",
+    }
+    assert list(session.pixel_masks) == [mask]
+    assert len(session.parameter_results) == 0
+    assert get_step(step_name).optional_packages == ()
+
+
+@pytest.mark.parametrize("step_func,step_name,threshold_name", _LUNGSPACE_STEPS)
+def test_roi_lungspace_steps_with_eit_breaths_equal_the_steps_without(
+    step_func, step_name, threshold_name
+):
+    """Breaths found with the default settings and given through 'breaths'
+    give the same mask as the breaths the step finds itself."""
+
+    pixels, waveform = _lungspace_images()
+    breaths = find_breaths(waveform, BreathDetectionSettings())
+
+    found = step_func(eit_data=pixels, timing_data=waveform, session=M3Session())
+    given = step_func(
+        eit_data=pixels, timing_data=waveform, session=M3Session(), breaths=breaths
+    )
+
+    [result_key] = [k for k in found if k.endswith("_result")]
+    np.testing.assert_array_equal(given[result_key].values, found[result_key].values)
+    assert given[result_key].metadata["parameters"]["breaths"] == "input"
 
 
 @pytest.mark.parametrize(
-    "step_func,step_name",
-    [
-        (roi_tiv_lungspace, "eit.roi_tiv_lungspace"),
-        (roi_amplitude_lungspace, "eit.roi_amplitude_lungspace"),
-        (roi_watershed, "eit.roi_watershed"),
-    ],
+    "step_func",
+    [roi_amplitude_lungspace, roi_watershed],
+    ids=["amplitude", "watershed"],
 )
-def test_roi_lungspace_steps_preserve_nan_as_excluded_pixels(step_func, step_name):
-    session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float))
+def test_amplitude_and_watershed_steps_refuse_breaths_of_another_modality(step_func):
+    pixels, waveform = _lungspace_images()
+    breaths = [
+        dataclasses.replace(breath, modality="ventilator")
+        for breath in find_breaths(waveform, BreathDetectionSettings())
+    ]
 
-    kwargs = (
-        {"threshold_fraction": 0.15}
-        if step_func is roi_watershed
-        else {"threshold": 0.15}
+    with pytest.raises(ValueError, match="EIT breaths only; got breaths of ventilator"):
+        step_func(
+            eit_data=pixels, timing_data=waveform, session=M3Session(), breaths=breaths
+        )
+
+
+def test_tiv_lungspace_step_takes_breaths_of_another_modality():
+    """Breaths of another modality are moved to the EIT clock."""
+
+    session = M3Session()
+    pixels, waveform = _lungspace_images()
+    breaths = find_breaths(waveform, BreathDetectionSettings())
+    session.start_times["eit"] = 0.0
+    session.start_times["ventilator"] = 1.0
+    ventilator = [
+        dataclasses.replace(
+            breath,
+            modality="ventilator",
+            start_time=breath.start_time - 1.0,
+            end_time=breath.end_time - 1.0,
+            extremum_time=breath.extremum_time - 1.0,
+        )
+        for breath in breaths
+    ]
+
+    with pytest.warns(UserWarning):
+        moved = roi_tiv_lungspace(
+            eit_data=pixels, timing_data=waveform, session=session, breaths=ventilator
+        )
+    found = roi_tiv_lungspace(
+        eit_data=pixels, timing_data=waveform, session=M3Session()
     )
-    result = step_func(eit_data=raw, timing_data=raw, session=session, **kwargs)
 
-    assert set(get_step(step_name).writes) <= set(result)
-    mask_key = next(k for k in result if k.endswith("_mask"))
-    assert np.isnan(result[mask_key].mask).any()
-    result_key = next(k for k in result if k.endswith("_result"))
-    assert isinstance(result[result_key], PixelMask)
-    np.testing.assert_array_equal(result[result_key].values, result[mask_key].mask)
-    assert list(session.pixel_masks) == [result[result_key]]
-    assert len(session.parameter_results) == 0
+    np.testing.assert_array_equal(
+        moved["tiv_lungspace_result"].values, found["tiv_lungspace_result"].values
+    )
 
 
 @pytest.mark.parametrize("bad_threshold", [0.0, 1.0, -0.1, 1.5])
 def test_roi_lungspace_steps_reject_out_of_range_threshold(bad_threshold):
-    session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float))
+    pixels, waveform = _lungspace_images()
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="between 0 and 1"):
         roi_tiv_lungspace(
-            eit_data=raw, timing_data=raw, session=session, threshold=bad_threshold
+            eit_data=pixels,
+            timing_data=waveform,
+            session=M3Session(),
+            threshold=bad_threshold,
         )
 
 
-def test_roi_filter_by_size_accepts_the_native_mask_result():
-    """Either form of a mask can be bound: upstream object or m3resp mask."""
+def test_roi_filter_by_size_takes_a_mask_or_a_grid():
+    mask = np.full((4, 4), np.nan)
+    mask[1:3, 1:3] = 1.0
+    mask[0, 0] = 1.0
+
+    from_mask = roi_filter_by_size(
+        PixelMask(name="watershed_lungspace_mask", values=mask),
+        session=M3Session(),
+        min_region_size=2,
+    )["size_filtered_roi_result"]
+    from_grid = roi_filter_by_size(mask, session=M3Session(), min_region_size=2)[
+        "size_filtered_roi_result"
+    ]
+
+    np.testing.assert_array_equal(from_mask.values, from_grid.values)
+    assert np.isnan(from_mask.values[0, 0]), "isolated pixel should be dropped"
+    assert from_mask.name == "size_filtered_roi_mask"
+    assert from_mask.metadata["source_mask"] == "watershed_lungspace_mask"
+
+
+def test_roi_filter_by_size_refuses_other_types():
+    with pytest.raises(TypeError, match="PixelMask or a 2D grid"):
+        roi_filter_by_size(SimpleNamespace(mask=np.ones((2, 2))), session=M3Session())
+
+
+def test_adapter_filter_roi_by_size_takes_every_mask_form():
+    """The adapter also takes an eitprocessing mask, and gives an m3resp mask."""
 
     pytest.importorskip("eitprocessing")
-    import numpy as np
     from eitprocessing.roi import PixelMask as UpstreamPixelMask
 
     from m3resp.adapters import EITProcessingAdapter
@@ -749,61 +1098,34 @@ def test_roi_filter_by_size_accepts_the_native_mask_result():
     mask = np.full((4, 4), np.nan)
     mask[1:3, 1:3] = 1.0
     mask[0, 0] = 1.0
-
     adapter = EITProcessingAdapter()
-    native = PixelMask(name="watershed_lungspace_mask", values=mask, method="test")
 
-    from_native = adapter.filter_roi_by_size(native, min_region_size=2)
-    from_upstream = adapter.filter_roi_by_size(
-        UpstreamPixelMask(mask), min_region_size=2
-    )
+    results = [
+        adapter.filter_roi_by_size(form, min_region_size=2)
+        for form in (PixelMask(name="m", values=mask), UpstreamPixelMask(mask), mask)
+    ]
 
-    np.testing.assert_array_equal(
-        np.nan_to_num(from_native.mask, nan=-1),
-        np.nan_to_num(from_upstream.mask, nan=-1),
-    )
-    assert np.isnan(from_native.mask[0, 0]), "isolated pixel should be dropped"
-
-
-def test_pixel_breath_needs_all_three_timings_to_count_as_valid():
-    """A breath missing its middle or end time is not a determined breath."""
-
-    import numpy as np
-
-    from m3resp.workflows.steps.eit.pixel import _pixel_breaths_to_landmark_array
-
-    class _PartialBreath:
-        start_time, middle_time, end_time = 0.0, float("nan"), 1.0
-
-    class _WholeBreath:
-        start_time, middle_time, end_time = 0.0, 0.5, 1.0
-
-    values = np.empty((1, 1, 2), dtype=object)
-    values[0, 0, 0] = _WholeBreath()
-    values[0, 0, 1] = _PartialBreath()
-
-    landmarks = _pixel_breaths_to_landmark_array(values)
-    valid = ~np.isnan(landmarks).any(axis=-1)
-
-    assert valid[0, 0, 0], "fully timed breath is valid"
-    assert not valid[0, 0, 1], "breath with a missing middle time is not valid"
+    for result in results:
+        assert isinstance(result, PixelMask)
+        np.testing.assert_array_equal(result.values, results[0].values)
+    assert np.isnan(results[0].values[0, 0])
 
 
 def test_roi_filter_by_size_rejects_non_positive_min_region_size():
-    session = _session_with_fake_adapter()
-    mask = _FakePixelMask(np.array([[1.0, np.nan], [np.nan, 1.0]]))
+    mask = PixelMask(name="m", values=np.array([[1.0, np.nan], [np.nan, 1.0]]))
 
-    with pytest.raises(ValueError):
-        roi_filter_by_size(mask, session=session, min_region_size=0)
+    with pytest.raises(ValueError, match="must be positive"):
+        roi_filter_by_size(mask, session=M3Session(), min_region_size=0)
 
 
 def test_roi_filter_by_size_step_matches_declared_writes():
-    session = _session_with_fake_adapter()
-    mask = _FakePixelMask(np.array([[1.0, np.nan], [np.nan, 1.0]]))
+    mask = PixelMask(name="m", values=np.array([[1.0, np.nan], [np.nan, 1.0]]))
 
-    result = roi_filter_by_size(mask, session=session, min_region_size=1)
+    result = roi_filter_by_size(mask, session=M3Session(), min_region_size=1)
 
-    assert set(get_step("eit.roi_filter_by_size").writes) <= set(result)
+    assert set(get_step("eit.roi_filter_by_size").writes) == set(result) - {
+        "_provenance"
+    }
 
 
 # -- YAML/spec-level validation (no execution, so no eitprocessing needed) --
@@ -863,31 +1185,33 @@ def test_output_renaming_lets_the_same_roi_step_run_twice():
         "steps": [
             {
                 "uses": "eit.roi_tiv_lungspace",
-                "in": {"eit_data": "eit_data", "timing_data": "eit_data"},
+                "in": {"eit_data": "eit_data", "timing_data": "timing_data"},
                 "with": {"threshold": 0.1},
                 "out": {
-                    "tiv_lungspace_mask": "mask_a",
                     "tiv_lungspace_captures": "captures_a",
                     "tiv_lungspace_result": "result_a",
                 },
             },
             {
                 "uses": "eit.roi_tiv_lungspace",
-                "in": {"eit_data": "eit_data", "timing_data": "eit_data"},
+                "in": {"eit_data": "eit_data", "timing_data": "timing_data"},
                 "with": {"threshold": 0.2},
                 "out": {
-                    "tiv_lungspace_mask": "mask_b",
                     "tiv_lungspace_captures": "captures_b",
                     "tiv_lungspace_result": "result_b",
                 },
             },
         ],
     }
-    raw = _FakeEITData(np.ones((2, 2, 2)), time=np.arange(2, dtype=float))
+    pixels, waveform = _lungspace_images()
 
-    result = run_workflow(spec, session=session, extra_context={"eit_data": raw})
+    result = run_workflow(
+        spec,
+        session=session,
+        extra_context={"eit_data": pixels, "timing_data": waveform},
+    )
 
-    assert result.value("mask_a") is not result.value("mask_b")
+    assert result.value("result_a") is not result.value("result_b")
     assert result.value("result_a").metadata["parameters"]["threshold"] == 0.1
     assert result.value("result_b").metadata["parameters"]["threshold"] == 0.2
 

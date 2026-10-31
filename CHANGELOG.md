@@ -1,5 +1,154 @@
 # Changelog
 
+## Unreleased
+
+### m3resp reads the EIT files
+
+`eit.load` reads Draeger `.bin`, Sentec `.zri` and Timpel `.txt` files with the readers in `m3resp.eit.io` (`read_eit_file`, `read_draeger`, `read_sentec`, `read_timpel`). Each reader returns an `EITFileData`: the images and the waveforms as `Signal`s, the device marks (breath minima and maxima, event markers, QRS complexes) as `EventData`, and the Timpel device breaths as `BreathEvent`s. The readers are copied from eitprocessing 1.8.7 and give the same values. The tests compare them with the saved eitprocessing results in `tests/regression/golden/eit/` and with eitprocessing itself.
+
+The steps after `eit.load` still read an eitprocessing `Sequence`. `m3resp.adapters.eitprocessing_adapter.file_data_to_sequence` builds it from the reader result, field by field, so the `eit` extra still installs eitprocessing. The provenance record of `eit.load` names `m3resp.eit.io.read_eit_file`.
+
+A recording loaded with `M3Session().load_eit` holds the m3resp data next to the `Sequence`: `EITRecording.pixel_impedance`, `signals`, `events`, `intervals` and `sample_frequency`. `m3resp.eit.io.join_eit_files` joins files recorded one after the other. A custom loader may return an `EITFileData`.
+
+### The EIT steps pass Signals
+
+The EIT images and impedance waveforms that the EIT steps give and read are `Signal`s: `raw_eit`, `raw_global_impedance`, `filtered_eit`, `global_impedance`, `regional_impedance` and `functional_impedance`. Before, these were eitprocessing `EITData` and `ContinuousData` objects. The artifact types keep their names: `eit_pixel_signal` is a `Signal` with EIT images (frames, rows, columns) and `eit_impedance_waveform` a `Signal` with one impedance value per frame. They are no longer marked as compatibility types. The outputs with the same Signal under a second name (`raw_pixel_impedance_signal`, `filtered_eit_signal`, ...) stay and have the same artifact type. A step input of type `signal` accepts both EIT types; an input of type `eit_pixel_signal` refuses a waveform before the workflow runs. A step that calls eitprocessing turns its `Signal` inputs into eitprocessing objects first; `m3resp.adapters.eitprocessing_adapter` has the conversions (`signal_to_eit_data`, `signal_to_continuous_data` and back).
+
+`eit.global_impedance` sums the pixels with `m3resp.eit.processing.global_impedance`, a copy of eitprocessing's `EITData.get_summed_impedance` that gives the same values.
+
+`eit.regional_impedance` and `eit.functional_impedance` sum masked images with `m3resp.eit.processing.regional_impedance`. `PixelMask.apply` multiplies the last two axes of an array, a `Signal` or a `PixelMap` by the mask. Masked pixels and regional waveforms have the same values as in eitprocessing.
+
+### Native EIT slicing and device data
+
+`session.slice_eit` and `eit.slice_recording` cut the native images, waveforms, device marks and breaths, then rebuild the eitprocessing Sequence. `eit.slice_signal` cuts native Signals and accepts `start_inclusive` and `end_inclusive` in time mode. The time-selection rules match eitprocessing 1.8.7, including its zero-second interval-boundary behaviour.
+
+Ventilator waveforms can be read from `EITRecording.signals` or an `EITFileData`. Device marks and Timpel breaths remain available in `session.eit.events` and `session.eit.intervals`. Raw EIT Signals record the vendor in `source`. The raw global waveform is available as `session.eit.raw_global_impedance`; when the file has none, m3resp sums the native images.
+
+### m3resp finds the EIT rates and breaths
+
+`eit.detect_rates`, `EITProcessingAdapter.detect_rates` and `session.preprocess_eit()` find the breathing rate and the heart rate with `m3resp.eit.processing.detect_rates`. `eit.detect_breaths`, `EITProcessingAdapter.find_breaths` and `session.preprocess_eit()` find the breaths with `m3resp.eit.processing.find_breaths`. The two functions are copied from `RateDetection` and `BreathDetection` of eitprocessing 1.8.7 and give the same numbers. Their settings are in `RateDetectionSettings` and `BreathDetectionSettings`, with the same names and defaults as in eitprocessing. The `method` of the rate results is `m3resp.eit.processing.detect_rates`.
+
+Some step outputs have a new form:
+
+- `breath_intervals` of `eit.detect_breaths` is an m3resp `IntervalData` whose `intervals` are `BreathEvent`s, with the artifact type `interval_data`. Before, it was an eitprocessing `IntervalData` of `Breath`s (type `interval_collection`). The peak of a breath is in `extremum_time`; eitprocessing calls it `middle_time`.
+- `rate_detector` of `eit.detect_rates` and `breath_detector` of `eit.detect_breaths` are the settings records. The artifact types `eit_rate_detector` and `eit_breath_detector` keep their names and now stand for the m3resp settings records. The TIV, EELI and pixel steps make an eitprocessing `BreathDetection` from the settings record.
+- `metric.interval_cv` reads `BreathEvent`s and `Interval`s, and its input has the type `interval_data`.
+- `eit.detect_rates`, `eit.detect_breaths` and `eit.normalize_breaths` run without eitprocessing.
+
+`session.preprocess_eit()` also stores the breaths in the eitprocessing `Sequence` under `"eit_breaths"`, in the form of eitprocessing. `m3resp.visualization.plot_rate_detection` draws the figure of the rate detection (`rate_detection.png`), with the same look as the eitprocessing figure.
+
+Three cases give a different result from eitprocessing 1.8.7:
+
+- A rate limit of 0 Hz stays 0 Hz. eitprocessing replaces it by the default limit of the subject type.
+- When no frequency of the spectrum lies inside a rate range, `detect_rates` gives a ValueError that names the range in breaths per minute. eitprocessing stops with a numpy error.
+- When the first and the last valley are removed and no valley is left, `find_breaths` gives no breaths. eitprocessing stops with an IndexError.
+
+### m3resp filters the EIT data
+
+`eit.mdn_filter`, `EITProcessingAdapter.apply_mdn` and `session.preprocess_eit()` (filter `"mdn"`) remove the heart signal with `m3resp.eit.processing.mdn_filter`. The function is copied from `MDNFilter` of eitprocessing 1.8.7 and gives the same numbers, with the same settings and defaults. `mdn_frequency_bands` gives the bands that the filter removes. `eit.butterworth_filter` and `session.preprocess_eit()` (filters `"lowpass"` and `"bandpass"`) run `m3resp.processing.filters.butterworth_filter`, which gives the same numbers as eitprocessing's `ButterworthFilter`.
+
+Changes that a user can see:
+
+- `eit.mdn_filter` has three new settings: `noise_frequency_limit_hz` (default 220 per minute), `notch_distance_hz` (default 10 per minute) and `order` (default 10, from 1 to 10). The defaults give the same result as before.
+- `apply_mdn` returns the filtered images as a `Signal`. Before, it returned an eitprocessing `EITData`.
+- In `filter_captures` of both steps and of `session.preprocess_eit()`, `unfiltered_data` and `filtered_data` are the images before and after the filter as `Signal`s. Before, they were eitprocessing `EITData` objects (MDN) or arrays (Butterworth).
+- The filtered images have the device maker in `source` and the filter function in `method`. The provenance of both steps names m3resp.
+- The Butterworth order of EIT images is 1 to 10 in `eit.butterworth_filter` and in `session.preprocess_eit()`. Before, `session.preprocess_eit()` accepted a higher order.
+- A pixel with NaN at some samples becomes NaN at every sample of the MDN result, as in eitprocessing. M3Resp also gives a warning that names these pixels.
+
+### m3resp computes TIV and EELI, also on breaths of another modality
+
+`eit.continuous_tiv`, `eit.eeli`, `EITProcessingAdapter.compute_eeli` and `session.preprocess_eit()` compute the tidal impedance variation (TIV) and the end-expiratory lung impedance (EELI) of each breath with `m3resp.eit.processing.tidal_impedance_variation` and `end_expiratory_lung_impedance`. The functions are copied from `TIV` and `EELI` of eitprocessing 1.8.7 and give the same numbers with the same breaths. They take the breaths as a list of `BreathEvent`s and find no breaths themselves (#113).
+
+Changes that a user can see:
+
+- The steps `eit.continuous_tiv` and `eit.eeli` have a new optional input `breaths`, with the new artifact type `breaths`. It accepts a list of `BreathEvent`s or an `IntervalData` of breaths of any modality. Breaths of another modality are moved to the EIT clock with the start times of the session, with a warning when the recordings were never synchronized. Without `breaths`, the steps find the breaths on their waveform with the settings of `eit.detect_breaths`, as before.
+- TIV and EELI are values at the start, end of inspiration and end of the given breaths. The default EMG breaths and the ventilator breaths of `ventilator.normalize_breaths` mark other moments of the breath (see the documentation of breaths of another modality).
+- The outputs `continuous_tiv` and `eeli` (eitprocessing `SparseData`) and the input `eit_sequence` of the two steps are removed; the results are `continuous_tiv_result` and `eeli_result`. The two steps run without eitprocessing. `session.preprocess_eit()` gives `continuous_tiv` and `eeli` as m3resp `IntervalData`, and the eitprocessing `Sequence` no longer holds `continuous_tivs` and `continuous_eelis`.
+- `eit.continuous_tiv` has the new setting `tiv_method`: `inspiratory` (default, as before), `expiratory` or `mean`.
+- The TIV and EELI results have the unit of the waveform (before: no unit) and the function name in `method`.
+- `EITProcessingAdapter.compute_eeli` takes the breaths (`breaths=`) and returns an `IntervalData`; the new `compute_continuous_tiv` does the same for TIV.
+- `ventilator.normalize_breaths` gives the breaths as the new output `ventilator_breath_events`.
+- A workflow check reports an `eit.continuous_tiv` or `eit.eeli` step that gets neither `breaths` nor `breath_detector`, with the code `missing_one_of_inputs`. A step can list such inputs in the new `one_of_reads` of `register_step`.
+- Each breath time is read at the nearest sample. A breath partly outside the data or in a gap of the time axis gets NaN, with a warning. EELI of eitprocessing reads only a sample at exactly the breath end time.
+
+### m3resp finds the pixel breaths and computes pixel TIV and pixel EELI
+
+`eit.pixel_breaths`, `eit.pixel_tiv`, `EITProcessingAdapter.find_pixel_breaths`, `compute_pixel_tiv` and `session.preprocess_eit()` run m3resp code. `m3resp.eit.processing.find_pixel_breaths` is copied from `PixelBreath` of eitprocessing 1.8.7, and `pixel_tidal_impedance_variation` from the pixel part of `TIV`. With the same global breaths they give the same numbers, with the three phase correction modes, both timings and the three TIV methods. `pixel_end_expiratory_lung_impedance` is new: the impedance of each pixel at the end of each breath (#114).
+
+The new type `m3resp.PixelBreaths` holds the global breaths and the start, end of inspiration and end time of the breath of each pixel, as three (breath, row, column) arrays in seconds, NaN for a pixel with no breath. `pixel(row, column)` gives the breaths of one pixel as `BreathEvent`s. The pixel TIV and pixel EELI functions take a list of `BreathEvent`s (the times of the global breaths for every pixel) or a `PixelBreaths` (the times of each pixel), and give one `PixelMap` per global breath (#136).
+
+Changes that a user can see:
+
+- The output `pixel_breaths` of `eit.pixel_breaths` is the `PixelBreaths`, with the new artifact type `pixel_breaths`. Before, it was an eitprocessing `IntervalData` of `Breath` objects. `pixel_breath_timing_result` has the same grids as before.
+- `eit.pixel_breaths` has the new optional input `breaths`: EIT breaths, for example `breath_intervals` of `eit.detect_breaths`. Breaths of another modality give a `ValueError`. Without `breaths`, the step finds the breaths with `minimum_duration_seconds`, as before.
+- `eit.pixel_tiv` has the new setting `tiv_method` (`inspiratory`, the default as before, `expiratory` or `mean`) and two new optional inputs. `breaths` takes breaths of any modality with the timing `continuous`, as `eit.continuous_tiv`, and EIT breaths with the timing `pixel`. `pixel_breaths` takes the `PixelBreaths` of `eit.pixel_breaths` for the timing `pixel`; by default it reads the output `pixel_breaths` of an earlier `eit.pixel_breaths` step. The timing `continuous` does not use it. With the timing `pixel` and no `pixel_breaths`, the step finds the pixel breaths in the mode "negative amplitude", as before.
+- The new step `eit.pixel_eeli` gives `pixel_eeli_result`, one `PixelMap` of EELI per breath, with the setting `eeli_timing` (`continuous` or `pixel`) and the inputs of `eit.pixel_tiv`. `session.preprocess_eit(compute_pixel_eeli=True)` gives `pixel_eeli`; it is off by default. The new `EITProcessingAdapter.compute_pixel_eeli` gives pixel EELI.
+- The output `pixel_tiv` (eitprocessing `SparseData`) of `eit.pixel_tiv` and the input `eit_sequence` of `eit.pixel_tiv` and `eit.pixel_breaths` are removed; the result is `pixel_tiv_result`. The three pixel steps run without eitprocessing. `session.preprocess_eit()` gives `pixel_tiv` as an m3resp `IntervalData`, and the eitprocessing `Sequence` no longer holds `pixel_tivs` and `pixel_breaths`. After a workflow, `session.processed["eit"]["pixel_tiv"]` is `pixel_tiv_result`.
+- `EITProcessingAdapter.find_pixel_breaths` returns a `PixelBreaths` and takes the global breaths as `breaths=`. `compute_pixel_tiv` takes the images and `breaths=` (global breaths or a `PixelBreaths`) and returns an `IntervalData`. Neither takes a `sequence`.
+- The pixel breath search gives one warning for each reason (no cross-correlation peak; more than 25 % of the breaths left out), with the number of pixels and their positions. eitprocessing gives one warning per pixel, and its text says "more than half". `metadata["skipped_pixels"]` of the `PixelBreaths` lists the pixels with no breaths and the reason.
+- With fewer than 2 global breaths, `find_pixel_breaths` gives no pixel breaths. eitprocessing stops with a `ValueError`.
+- `find_pixel_breaths` leaves out a pixel breath when one of its two search windows lies partly outside the data. eitprocessing moves such a window to the edge of the data and keeps the pixel breath; two global breaths after the end of the data make it stop with a `ValueError`. In the mode "phase shift", the last pixel breath of some pixels is NaN where eitprocessing has a value.
+- The 25 % rule of `find_pixel_breaths` counts each left-out pixel breath once. A pixel with every breath left out is listed under `too_many_breaths_skipped`, with a warning; eitprocessing gives no warning for it.
+- `find_pixel_breaths` gives a `ValueError` when the waveform is not on the time axis of the images, and a warning when no pixel has a breath.
+- `pixel_breath_events` gives a `ValueError` for a pixel breath with NaN in only some of its times, or with times out of order, and a `TypeError` for intervals that are not `BreathEvent`s. Before, it left out such a pixel breath and took any interval.
+- `pixel_breath_timing_result` of `eit.pixel_breaths` names the three times `start_time`, `extremum_time` and `end_time` in `metadata["landmarks"]` (before: `middle_time`), and gives the number of rows and columns in `metadata["grid_shape"]`, so that a result with no breaths keeps its grid.
+- A workflow step input that is optional and has no default context key is left out when the spec does not bind it. Before, the workflow check asked for an `in:` binding.
+
+### m3resp finds the lung space and makes the geometric masks
+
+`eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace`, `eit.roi_watershed`, `eit.roi_filter_by_size` and the matching `EITProcessingAdapter` methods run the new functions `tiv_lungspace`, `amplitude_lungspace`, `watershed_lungspace` and `filter_mask_by_size` of `m3resp.eit.roi`. They are copied from `TIVLungspace`, `AmplitudeLungspace`, `WatershedLungspace` and `FilterROIBySize` of eitprocessing 1.8.7. With the default settings, the masks of the three test files are the same as in eitprocessing. The four steps run without eitprocessing. `scikit-image` (0.25.2 or newer) is a main dependency, for the watershed method.
+
+`m3resp.eit.roi.geometric_mask(region, shape)` gives the mask of the ventral or dorsal half, the anatomical right or left half, one of four layers or one of four quadrants, like `get_geometric_mask` of eitprocessing. The new step `eit.geometric_mask` makes one of these masks for the size of its EIT images and gives `geometric_mask_result`.
+
+`PixelMap` has the new field `kind` (`"tiv"`, `"amplitude"`, `"odcl"`, `"difference"`, `"perfusion"`, `"pendelluft"`, `"signed_pendelluft"`, `"integer"` or None) and the methods of the eitprocessing `PixelMap`: `from_aggregate`, `normalize`, `create_mask_from_threshold`, `convert_to`, `to_boolean_array`, `to_integer_array`, `to_non_nan_array` and `+ - * /`. `PixelMask` has `* + -` and `is_weighted`, and `PixelMaskCollection` has `combine` and `apply`.
+
+Changes that a user can see:
+
+- The outputs `tiv_lungspace_mask`, `amplitude_lungspace_mask`, `watershed_lungspace_mask` and `size_filtered_roi_mask` (eitprocessing masks) and the artifact type `roi_mask` are removed. The masks are `tiv_lungspace_result`, `amplitude_lungspace_result`, `watershed_lungspace_result` and `size_filtered_roi_result`, as before. In a spec, bind `eit.roi_filter_by_size` with `in: { mask: watershed_lungspace_result }`. After a workflow, `session.processed["eit"]` holds the m3resp masks under the four old names.
+- The input `mask` of `eit.roi_filter_by_size` has the artifact type `pixel_mask`, so the workflow check refuses other data there. It takes an m3resp `PixelMask` or a 2D grid; another type gives a `TypeError`.
+- `eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace` and `eit.roi_watershed` have the new optional input `breaths`. The TIV mask takes breaths of any modality, moved to the EIT clock; the amplitude and watershed masks take EIT breaths only and give a `ValueError` for other breaths. Without `breaths`, the steps find the breaths with the default settings, as before.
+- The captures hold m3resp objects: `IntervalData` with one `PixelMap` per breath, `PixelMap`, `PixelMask` and (row, column) arrays of peaks. In the watershed captures, `"mean tiv"` and `"mean amplitude"` are named `"mean TIV of shared breaths"` and `"mean amplitude of shared breaths"`.
+- The watershed method leaves the pixels with a NaN mean amplitude out of the search for local maxima and out of the watershed regions (region number 0). eitprocessing reads NaN as 0 for the maxima and gives NaN to the watershed, so its region borders near these pixels depend on scikit-image. At the default threshold, the masks of the test files are the same; at a threshold of 0.05, the Timpel test file has 2 (raw) or 7 (filtered) pixels fewer.
+- The watershed capture `"included watershed regions"` holds the included regions, NaN elsewhere. In eitprocessing it holds every region.
+- The watershed method computes the pixel TIV and the pixel amplitude once. eitprocessing computes them twice. The masks are the same. Its "no breaths" error comes only from breaths without TIV or amplitude values; other errors, such as images that are not (time, row, column), keep their own message. The warning for a negative mean amplitude checks the mean over the shared breaths.
+- The masks have `metadata` with the settings, `breath_count`, `included_pixel_count` and `included_pixel_fraction`. The provenance of the four steps names m3resp.
+- The adapter methods `compute_tiv_lungspace`, `compute_amplitude_lungspace` and `compute_watershed_lungspace` have the new argument `breaths` and return an m3resp `PixelMask` under `"mask"`. `filter_roi_by_size` returns an m3resp `PixelMask`; it also takes an eitprocessing mask.
+- Dividing a `PixelMap` by the number 0 gives a warning, as dividing by a grid with a 0 does. A division gives no NumPy warning. The error of `geometric_mask` for a shape that does not divide gives the number; eitprocessing shows `{height_divisor}`.
+- A `PixelMap` made with `suppress_negative_warning=True` keeps this setting in its copies (`m * 2`, `normalize`, `convert_to`, `PixelMask.apply`, `dataclasses.replace`). Warnings of `PixelMap` and `PixelMask` point to the line of your own code, also for a map that an m3resp function makes. `normalize(mode="reference")`, `create_mask_from_threshold` and `+ - * /` take NumPy numbers and refuse `True` and `False`. A `PixelMask` leaves the grid you give it unchanged.
+
+### m3resp draws the pixel maps and gives plot data for the GUI
+
+`m3resp.visualization.pixel_maps.plot_pixel_map` draws a `PixelMap` or a `PixelMask` with a colour bar, in the style of its kind, as `PixelMap.plotting.imshow` of eitprocessing 1.8.7 does. `add_region_labels` writes the number of each region of a map of kind `"integer"` inside that region, as `add_region_markers` does. On the test maps, the colour of each pixel, the scale ends and the colour bar label, ticks and tick texts are the same as in eitprocessing.
+
+`m3resp.visualization.pixel_map_style` holds the style of each map kind, of a plain map and of a mask (`PixelMapStyle`, `pixel_map_style`): the colours, the colours below and above the scale, the rule for the scale ends and the colour bar. `scale_limits` and `pixel_colors` give the scale ends and the colour of each pixel without Matplotlib. The colours come from Matplotlib and are stored in the package (`pixel_map_colors.json`, made by `scripts/make_pixel_map_colors.py`), so the figures and the GUI use the same colours.
+
+`m3resp.visualization.plot_data` gives plot data for the GUI: `pixel_map_plot_data`, `pixel_mask_plot_data`, `eit_image_plot_data` (the EIT image at one time), `eit_images_plot_data` (the images from one time to another, with one colour scale), `lungspace_plot_data` (the captures of the lung-space methods) and `rate_spectrum_plot_data` (the spectra of `detect_rates`). Each result holds only numbers, text, lists, True/False and None, with None for a NaN pixel, so `json.dumps(..., allow_nan=False)` writes it.
+
+`m3resp.eit.processing.minute_image(pixels, breaths, start=..., end=...)` gives the mean pixel TIV over the breaths fully inside a time window, as a `PixelMap` of kind `"tiv"`. A breath with NaN TIV in every pixel, such as a breath that reaches past the data, does not count in the mean or in `breath_count`.
+
+Changes that a user can see:
+
+- `pixel_tiv.png` of `save_eit_figures` is drawn with `plot_pixel_map`, so it is written also when eitprocessing is not installed. Before, the figure was left out without eitprocessing. The picture is the same as before, pixel for pixel.
+- `add_region_labels` of a map of another kind raises `TypeError`; eitprocessing raises `NotImplementedError`.
+- Region 0, the background of the watershed regions, gets no label in `add_region_labels` and no label point in `lungspace_plot_data`. eitprocessing writes "0" in the background.
+- A TIV, amplitude, perfusion or pendelluft map with only negative values gets the colour scale from its largest value to 0. In eitprocessing the scale goes from 0 down to that value: Matplotlib stops with an error, or, with a colour bar, turns the scale around and widens it by 10 %.
+
+### Fixed: the EIT summary figure after a workflow
+
+`m3resp.visualization.plot_eit_processing_summary` stopped with an `AttributeError` after a workflow run, because it read the `label` of the global impedance, which is a `Signal` there. The figure takes the axis label from the name of the `Signal`.
+
+### Fixed: EIT reading options that stopped with an error
+
+- Sentec: `first_frame` above 0 together with `max_frames` gives `max_frames` frames from `first_frame` on. eitprocessing 1.8.7 stops with an IndexError.
+- Timpel: with no frame left after `first_frame`, the reader gives a ValueError about `first_frame`. With one frame left, it reads that frame. eitprocessing 1.8.7 stops with an IndexError in both cases.
+- Timpel: when the device minima give fewer than two breath starts, the list of device breaths is empty. eitprocessing 1.8.7 stops with a ValueError.
+- `vendor="simulated"` gives the "No loading method" error of an unknown vendor. eitprocessing 1.8.7 stops with a KeyError.
+
+### Fixed: equal signals with NaN values
+
+`TimeSeries ==`, `Signal ==` and `ParameterResult ==` count a NaN at the same place in both values as equal. Before, two copies of the same Sentec or Timpel images were "not equal", because the pixels outside the chest are NaN. A NaN at a place where the other signal has a number still makes the signals different. Text values compare as before.
+
 ## 0.2.1 (2026-10-26)
 
 ### Interactive plotly figures

@@ -25,7 +25,7 @@ session.detect_eit_breaths()
 print(len(session.events["eit_breaths"]))
 ```
 
-The EIT calculations come from the package `eitprocessing` and the EMG calculations from `resurfemg`. M3Resp calls these packages through adapters, and converts their results to M3Resp objects. The ventilator calculations are part of M3Resp.
+M3Resp reads EIT files, sums global and regional impedance, slices EIT data, finds the breathing rate, the heart rate and the breaths, filters the EIT data, computes the TIV and the EELI of each breath, and finds the breaths, the TIV and the EELI of each pixel with its own code. The lung region calculations use `eitprocessing` through the adapter. EMG calculations use `resurfemg`, and ventilator calculations are part of M3Resp. The results are held in M3Resp objects.
 
 ## Where the session stores the results
 

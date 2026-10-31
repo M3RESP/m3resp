@@ -1,8 +1,8 @@
 """Save static EIT workflow figures from a run's context.
 
 These are the headless, file-writing counterparts of the interactive panels
-in ``tools/visualization_tools/1_annemijn_pipeline_results.py``: the native
-``eitprocessing`` rate-detection figure, the global-impedance/breaths/TIV/EELI
+in ``tools/visualization_tools/1_annemijn_pipeline_results.py``: the
+rate-detection figure (``plot_rate_detection``), the global-impedance/breaths/TIV/EELI
 overview, and the per-pixel TIV map. Each figure is produced only when the
 context carries the keys it needs, so a workflow that ran only part of the EIT
 chain still writes whatever it can rather than failing.
@@ -20,23 +20,34 @@ from typing import Any
 
 import numpy as np
 
+from m3resp.adapters.eitprocessing_adapter import breath_intervals_to_breath_events
+from m3resp.core.session import M3Session
+from m3resp.data.pixel_maps import PixelMap
+from m3resp.synchronization.start_times import on_clock_of
+
 
 def save_eit_figures(
-    context_values: Mapping[str, Any], output_dir: str | Path
+    context_values: Mapping[str, Any],
+    output_dir: str | Path,
+    session: M3Session | None = None,
 ) -> list[Path]:
     """Save available EIT workflow figures as PNG files.
 
     Args:
         context_values: Workflow values such as rate_detector/rate_captures,
-            global_impedance, breath_intervals, eeli and pixel_tiv. Each figure
-            is attempted when its required values are available.
+            global_impedance, breath_intervals, eeli_result and
+            pixel_tiv_result. Each figure is attempted when its required
+            values are available.
         output_dir: Destination directory. A figures subdirectory is created
             and existing figure files with the same names are replaced.
+        session: Session with the start time of each recording. The EELI of
+            breaths of another modality (input ``breaths`` of ``eit.eeli``)
+            is placed on the EIT clock with these start times. None places
+            each EELI at the breath end time as given.
 
     Returns:
         list[Path]: Written paths in rate_detection, global_impedance, pixel_tiv
-            order. Missing figure inputs are skipped. An unavailable eitprocessing
-            plotting package skips the pixel-TIV figure. An empty list means
+            order. Missing figure inputs are skipped. An empty list means
             no figures were produced.
 
     Raises:
@@ -58,28 +69,26 @@ def save_eit_figures(
     figures_dir = Path(output_dir) / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
 
-    written: list[Path] = []
-    for builder in (
-        _figure_rate_detection,
-        _figure_global_impedance,
-        _figure_pixel_tiv,
-    ):
-        path = builder(context_values, figures_dir, plt)
-        if path is not None:
-            written.append(path)
-    return written
+    paths = (
+        _figure_rate_detection(context_values, figures_dir, plt),
+        _figure_global_impedance(context_values, figures_dir, plt, session),
+        _figure_pixel_tiv(context_values, figures_dir, plt),
+    )
+    return [path for path in paths if path is not None]
 
 
 def _figure_rate_detection(ctx, figures_dir: Path, plt) -> Path | None:
-    """Native ``RateDetection.plotting.plot(...)`` from the rate capture."""
+    """``plot_rate_detection`` with the rate settings and the rate captures."""
 
-    detector = ctx.get("rate_detector")
+    from m3resp.visualization.rate_detection import plot_rate_detection
+
+    settings = ctx.get("rate_detector")
     captures = ctx.get("rate_captures")
-    if detector is None or not captures:
+    if settings is None or not captures:
         return None
 
     plt.close("all")
-    fig = detector.plotting.plot(**captures)
+    fig = plot_rate_detection(settings, **captures)
     fig.set_size_inches(11, 4.5)
     path = figures_dir / "rate_detection.png"
     fig.savefig(path, dpi=150, bbox_inches="tight")
@@ -87,13 +96,16 @@ def _figure_rate_detection(ctx, figures_dir: Path, plt) -> Path | None:
     return path
 
 
-def _figure_global_impedance(ctx, figures_dir: Path, plt) -> Path | None:
+def _figure_global_impedance(
+    ctx, figures_dir: Path, plt, session: M3Session | None
+) -> Path | None:
     """Global impedance with per-breath TIV segments and EELI reference band.
 
     Mirrors ``eitprocessing``'s own TIV/EELI example conventions: TIV is the
     "inspiratory" rise ``value_at_middle - value_at_start`` drawn as a vertical
     segment per breath, and EELIs sit on the curve's troughs at each breath's
     end-expiratory sample, with the session mean/median and a +/-1 SD band.
+    The mean, median and SD leave out NaN values (breaths outside the data).
     """
 
     gi = ctx.get("global_impedance")
@@ -109,10 +121,15 @@ def _figure_global_impedance(ctx, figures_dir: Path, plt) -> Path | None:
     fig, ax = plt.subplots(figsize=(11, 4.0))
     ax.plot(t, values, color="#185FA5", linewidth=1.0, label="global impedance")
 
-    breaths = getattr(ctx.get("breath_intervals"), "values", None) or []
+    breath_intervals = ctx.get("breath_intervals")
+    breaths = (
+        breath_intervals_to_breath_events(breath_intervals)
+        if breath_intervals is not None
+        else []
+    )
     if breaths:
         start = np.array([b.start_time - t0 for b in breaths], dtype=float)
-        mid = np.array([b.middle_time - t0 for b in breaths], dtype=float)
+        mid = np.array([b.extremum_time - t0 for b in breaths], dtype=float)
         peak_idx = np.clip(np.searchsorted(t, mid), 0, t.size - 1)
         start_idx = np.clip(np.searchsorted(t, start), 0, t.size - 1)
         peak_y = values[peak_idx]
@@ -136,11 +153,18 @@ def _figure_global_impedance(ctx, figures_dir: Path, plt) -> Path | None:
         seg_y[2::3] = np.nan
         ax.plot(seg_x, seg_y, color="#2A9D8F", linewidth=2.0, label="TIV")
 
-    eeli = ctx.get("eeli")
+    eeli = ctx.get("eeli_result")
     if eeli is not None:
-        eeli_t = np.asarray(getattr(eeli, "time", []), dtype=float) - t0
-        eeli_v = np.asarray(getattr(eeli, "values", []), dtype=float)
-        if eeli_v.size:
+        # The EELI of each breath is placed at the end of the breath, on the
+        # EIT clock.
+        eeli_breaths = (
+            eeli.intervals
+            if session is None
+            else on_clock_of(session, eeli.intervals, "eit")
+        )
+        eeli_t = np.array([b.end_time for b in eeli_breaths], dtype=float) - t0
+        eeli_v = np.asarray(eeli.values, dtype=float)
+        if np.isfinite(eeli_v).any():
             ax.plot(
                 eeli_t,
                 eeli_v,
@@ -150,9 +174,9 @@ def _figure_global_impedance(ctx, figures_dir: Path, plt) -> Path | None:
                 markersize=4,
                 label="EELIs",
             )
-            mean_eeli = float(np.mean(eeli_v))
-            median_eeli = float(np.median(eeli_v))
-            std_eeli = float(np.std(eeli_v))
+            mean_eeli = float(np.nanmean(eeli_v))
+            median_eeli = float(np.nanmedian(eeli_v))
+            std_eeli = float(np.nanstd(eeli_v))
             ax.axhspan(
                 mean_eeli - std_eeli,
                 mean_eeli + std_eeli,
@@ -175,27 +199,38 @@ def _figure_global_impedance(ctx, figures_dir: Path, plt) -> Path | None:
 
 
 def _figure_pixel_tiv(ctx, figures_dir: Path, plt) -> Path | None:
-    """Mean per-pixel TIV map via the native ``PixelMap.plotting.imshow``."""
+    """Save the mean pixel TIV map over all breaths as a figure.
 
-    pixel_tiv = ctx.get("pixel_tiv")
-    if pixel_tiv is None:
+    The maps are the ``PixelMap``s of ``pixel_tiv_result`` (``eit.pixel_tiv``).
+    The figure draws their mean with ``plot_pixel_map`` in the style of a
+    plain map (``viridis``, scale from the smallest to the largest value).
+
+    Args:
+        ctx (Mapping[str, Any]): Workflow values with ``pixel_tiv_result``.
+        figures_dir (Path): Folder for the figure file.
+        plt (Any): The ``matplotlib.pyplot`` module.
+
+    Returns:
+        Path | None: The path of the saved figure. None when there is no
+            ``pixel_tiv_result`` or no map.
+    """
+
+    from m3resp.visualization.pixel_map_style import pixel_map_style
+    from m3resp.visualization.pixel_maps import plot_pixel_map
+
+    pixel_tiv = ctx.get("pixel_tiv_result")
+    if pixel_tiv is None or not pixel_tiv.values:
         return None
-    maps = np.asarray(getattr(pixel_tiv, "values", pixel_tiv), dtype=float)
+    maps = np.asarray([np.asarray(m, dtype=float) for m in pixel_tiv.values])
     if maps.ndim != 3 or maps.size == 0:
         return None
-    mean_map = np.nanmean(maps, axis=0)
-
-    try:
-        from eitprocessing.plotting.pixelmap import PixelMap
-    except ImportError:  # pragma: no cover - depends on local extras
-        return None
+    mean_map = PixelMap.from_aggregate(
+        maps, np.nanmean, name="mean tidal impedance variation"
+    )
 
     plt.close("all")
     fig, ax = plt.subplots(figsize=(5.0, 4.6))
-    plt.sca(ax)
-    PixelMap(mean_map, label="mean tidal impedance variation").plotting.imshow(
-        colorbar=True
-    )
+    plot_pixel_map(mean_map, ax, colorbar=True, style=pixel_map_style(None))
     ax.set_title(f"Mean pixel TIV over {maps.shape[0]} breaths")
     fig.tight_layout()
     path = figures_dir / "pixel_tiv.png"

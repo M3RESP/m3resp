@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from dataclasses import asdict
 from inspect import Parameter, signature
 from typing import Any
 
@@ -11,7 +12,8 @@ import numpy as np
 from m3resp.core.exceptions import OptionalDependencyError
 from m3resp.data import IntervalData, PixelMap, Signal
 from m3resp.data.events import BreathEvent, coerce_breath_events
-from m3resp.data.signals import Modality, ProcessingState
+from m3resp.eit.processing import BreathDetectionSettings, find_breaths
+from m3resp.eit.processing._breath_samples import check_breaths
 
 
 def _optional_dependency_error() -> OptionalDependencyError:
@@ -72,6 +74,31 @@ def add_to_collection(collection: Any, value: Any) -> None:
         collection.add(value, overwrite=True)
     else:
         collection.add(value)
+
+
+#: Highest order of a Butterworth filter of EIT images, as in eitprocessing.
+MAX_EIT_BUTTERWORTH_ORDER = 10
+
+
+def check_eit_butterworth_order(order: int) -> None:
+    """Refuse a Butterworth order outside 1 to 10 for EIT images.
+
+    The filter runs forwards and backwards, so the effective order is twice
+    the given order. Higher orders can give unstable or wrong results.
+
+    Args:
+        order (int): The order of the filter.
+
+    Raises:
+        ValueError: If ``order`` is below 1 or above 10.
+    """
+
+    if not 1 <= order <= MAX_EIT_BUTTERWORTH_ORDER:
+        raise ValueError(
+            "The order of a Butterworth filter of EIT images must be from 1 to "
+            f"{MAX_EIT_BUTTERWORTH_ORDER}, got {order}. Higher orders can give "
+            "unstable results."
+        )
 
 
 def filter_pixels_preserving_gaps(
@@ -146,7 +173,7 @@ def filter_pixels_preserving_gaps(
 
 
 def _breath_intervals_to_dicts(breath_intervals: Any) -> list[dict[str, Any]]:
-    """Return one row per EIT breath, preserving times in seconds.
+    """Return one row per eitprocessing breath, preserving times in seconds.
 
     Read ``breath_intervals.values`` in order and map each breath's
     ``middle_time`` to ``extremum_time``, using None when it is unavailable.
@@ -164,81 +191,180 @@ def _breath_intervals_to_dicts(breath_intervals: Any) -> list[dict[str, Any]]:
     ]
 
 
-def continuous_data_to_signal(
-    obj: Any,
-    *,
-    modality: Modality,
-    channel: str | None,
-    processing_state: ProcessingState,
-    source: str | None = None,
-    method: str | None = None,
-    category: str | None = "impedance",
-    name: str | None = None,
-) -> Signal:
-    """Convert an `eitprocessing.ContinuousData`-shaped object to a `Signal`.
-
-    Everything `eitprocessing` emits through this path is an impedance
-    (global or pixel-resolved), so ``category`` defaults accordingly; pass it
-    explicitly for a channel that measures something else.
-
-    For anything other than ``processing_state="raw"``, ``name`` must be
-    passed explicitly - ``obj``'s own ``.name``/``.label`` is not trusted for
-    a transformed signal. This is a deliberate guard: upstream filter
-    operations (e.g. `eitprocessing`'s `MDNFilter.apply`) deep-copy their raw
-    input and only overwrite attributes passed as explicit kwargs, so a
-    caller that forgets to pass `name`/`label` through to the *upstream*
-    call gets an object whose `.name` still silently says `"raw"` - see the
-    `eit.mdn_filter` regression this guard was added for. Raw data is exempt
-    because its `.name`/`.label` genuinely comes from the loader, not from a
-    copy-then-partially-overwrite operation.
-    """
-
-    if processing_state == "raw":
-        resolved_name = (
-            name or getattr(obj, "name", None) or getattr(obj, "label", None)
-        )
-    elif name is not None:
-        resolved_name = name
-    else:
-        raise ValueError(
-            "continuous_data_to_signal: `name` must be passed explicitly "
-            f"for processing_state={processing_state!r} - obj.name/obj.label "
-            "cannot be trusted for a transformed signal, since upstream "
-            "filter operations may silently leave a stale value there."
-        )
-
-    return Signal(
-        values=obj.values,
-        time=obj.time,
-        sample_frequency=getattr(obj, "sample_frequency", None),
-        unit=getattr(obj, "unit", None),
-        name=resolved_name,
-        modality=modality,
-        category=category,
-        channel=channel,
-        processing_state=processing_state,
-        source=source,
-        method=method,
-    )
-
-
 def breath_intervals_to_breath_events(breath_intervals: Any) -> list[BreathEvent]:
-    """Convert eitprocessing's detected breaths to m3resp ``BreathEvent`` objects.
+    """Return detected EIT breaths as m3resp ``BreathEvent`` objects.
 
     Args:
-        breath_intervals: eitprocessing ``IntervalData`` containing breaths,
-            each with start, middle and end times in seconds.
+        breath_intervals: The breaths, in one of three forms: an m3resp
+            ``IntervalData`` of ``BreathEvent``s (``eit.detect_breaths``), a
+            list of ``BreathEvent``s, or an eitprocessing ``IntervalData`` of
+            ``Breath``s. Times are in seconds.
 
     Returns:
-        list[BreathEvent]: EIT breaths in input order. The middle time becomes
-            ``extremum_time`` and timing retains the input's time axis.
+        list[BreathEvent]: EIT breaths in input order, on the time axis of the
+            input. m3resp breaths are returned as they are; for eitprocessing
+            breaths the middle time becomes ``extremum_time``.
     """
 
+    if isinstance(breath_intervals, IntervalData):
+        return coerce_breath_events(breath_intervals.intervals, modality="eit")
+    if isinstance(breath_intervals, list):
+        return coerce_breath_events(breath_intervals, modality="eit")
     return coerce_breath_events(
         _breath_intervals_to_dicts(breath_intervals),
         modality="eit",
         source="eitprocessing.BreathDetection",
     )
+
+
+def given_breath_events(breaths: Any, *, function: str) -> list[BreathEvent]:
+    """Return the breaths given to a TIV or EELI calculation as ``BreathEvent``s.
+
+    Args:
+        breaths (Any): A list of ``BreathEvent``s of any modality, an m3resp
+            ``IntervalData`` of them, or an eitprocessing ``IntervalData`` of
+            ``Breath``s (EIT breaths). Times are in seconds.
+        function (str): Name of the calling function or step, for the message.
+
+    Returns:
+        list[BreathEvent]: The breaths in input order. ``BreathEvent``s are
+            returned as they are; eitprocessing breaths are converted with
+            ``breath_intervals_to_breath_events``.
+
+    Raises:
+        TypeError: If an item of a list or of an m3resp ``IntervalData`` is
+            not a ``BreathEvent``.
+    """
+
+    if isinstance(breaths, IntervalData):
+        return check_breaths(breaths.intervals, function=function)
+    if isinstance(breaths, (list, tuple)):
+        return check_breaths(breaths, function=function)
+    return breath_intervals_to_breath_events(breaths)
+
+
+def breaths_to_interval_data(
+    breaths: list[BreathEvent], *, name: str = "eit_breaths"
+) -> IntervalData:
+    """Return EIT breaths as an m3resp ``IntervalData`` without values.
+
+    Args:
+        breaths (list[BreathEvent]): The breaths, in time order.
+        name (str): The name of the result.
+
+    Returns:
+        IntervalData: The breaths in ``intervals``, modality ``"eit"``,
+            category ``"breath"`` and method
+            ``"m3resp.eit.processing.find_breaths"``.
+    """
+
+    return IntervalData(
+        name=name,
+        modality="eit",
+        intervals=list(breaths),
+        category="breath",
+        method="m3resp.eit.processing.find_breaths",
+    )
+
+
+def breaths_to_eitprocessing(
+    breaths: list[BreathEvent],
+    settings: BreathDetectionSettings,
+    *,
+    label: str,
+    derived_from: list[Any],
+) -> Any:
+    """Return EIT breaths as an eitprocessing ``IntervalData`` of ``Breath``s.
+
+    This is the form ``BreathDetection.find_breaths`` gives, for a
+    ``Sequence``.
+
+    Args:
+        breaths (list[BreathEvent]): The breaths, in time order.
+        settings (BreathDetectionSettings): The settings the breaths were
+            found with; stored in ``parameters``.
+        label (str): The label of the result.
+        derived_from (list[Any]): The data the breaths were found in.
+
+    Returns:
+        Any: An eitprocessing ``IntervalData`` with category ``"breath"``.
+            ``extremum_time`` becomes the ``middle_time`` of each ``Breath``.
+
+    Raises:
+        OptionalDependencyError: If eitprocessing is not installed.
+    """
+
+    Breath, UpstreamIntervalData = _lazy_import(
+        "eitprocessing.datahandling.breath.Breath",
+        "eitprocessing.datahandling.intervaldata.IntervalData",
+    )
+    return UpstreamIntervalData(
+        label=label,
+        name="Breaths as determined by m3resp.eit.processing.find_breaths",
+        unit=None,
+        category="breath",
+        intervals=[(breath.start_time, breath.end_time) for breath in breaths],
+        values=[
+            Breath(breath.start_time, breath.extremum_time, breath.end_time)
+            for breath in breaths
+        ],
+        parameters={BreathDetectionSettings: asdict(settings)},
+        derived_from=list(derived_from),
+    )
+
+
+def pixel_sign_breaths(signal: Signal, detector: Any) -> list[BreathEvent] | None:
+    """Return the breaths that give the sign of each pixel in the pixel breath search.
+
+    eitprocessing 1.8.7 finds these breaths on the waveform with the default
+    settings of the breath detection, whatever the settings of the global
+    breaths. The result goes to ``sign_breaths`` of
+    ``m3resp.eit.processing.find_pixel_breaths``, so the pixel breaths are
+    the same as in eitprocessing.
+
+    Args:
+        signal (Signal): The waveform the global breaths were found in.
+        detector (Any): The settings of the global breaths
+            (``BreathDetectionSettings``), or an eitprocessing
+            ``BreathDetection``.
+
+    Returns:
+        list[BreathEvent] | None: The breaths of ``signal`` found with the
+            default settings. None when ``detector`` holds the default
+            settings, because the global breaths are then the same breaths.
+    """
+
+    default = BreathDetectionSettings()
+    if detector == default:
+        return None
+    return find_breaths(signal, default)
+
+
+def as_breath_detection(detector: Any) -> Any:
+    """Return a breath detector as an eitprocessing ``BreathDetection``.
+
+    The eitprocessing TIV, EELI and pixel-TIV calculations take an
+    eitprocessing ``BreathDetection``. It is made from the same settings, so
+    it finds the same breaths as ``m3resp.eit.processing.find_breaths``.
+
+    Args:
+        detector: ``BreathDetectionSettings``, or an eitprocessing
+            ``BreathDetection``.
+
+    Returns:
+        Any: An eitprocessing ``BreathDetection`` with the same settings; an
+            eitprocessing detector is returned as it is.
+
+    Raises:
+        OptionalDependencyError: If eitprocessing is not installed.
+    """
+
+    if not isinstance(detector, BreathDetectionSettings):
+        return detector
+    (BreathDetection,) = _lazy_import(
+        "eitprocessing.features.breath_detection.BreathDetection"
+    )
+    return BreathDetection(**asdict(detector))
 
 
 def sparse_data_to_interval_data(

@@ -138,9 +138,9 @@ class _CoreMixin:
         if self._eit_loader is not None:
             sequence = self._eit_loader(path, **eit_kwargs)
         else:
-            from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
+            from m3resp.modalities.eit import load
 
-            sequence = EITProcessingAdapter().load(str(path), **eit_kwargs)
+            sequence = load(path, **eit_kwargs)
 
         return self._eit_payload(sequence, **kwargs)
 

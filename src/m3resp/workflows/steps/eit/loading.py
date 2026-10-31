@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any
 
 from m3resp.adapters.eitprocessing_adapter import (
+    EITPROCESSING_FIELDS,
+    continuous_data_fields,
     continuous_data_to_signal,
+    eit_data_fields,
+    eit_data_to_signal,
 )
 from m3resp.core.session import M3Session
-from m3resp.data.signals import Signal
 from m3resp.workflows.registry import (
     StepArtifact,
     StepParameter,
@@ -42,15 +46,13 @@ _LOAD_OUTPUTS = (
     StepArtifact(
         name="raw_eit",
         artifact_type="eit_pixel_signal",
-        description="Raw upstream EITData object (pixel impedance).",
-        compatibility_only=True,
+        description="Raw EIT images (pixel impedance) as a Signal with values of shape (frames, rows, columns).",
     ),
     StepArtifact(
         name="raw_global_impedance",
         artifact_type="eit_impedance_waveform",
         required=False,
-        description="Raw global impedance (the upstream object), when present.",
-        compatibility_only=True,
+        description="Raw global impedance as a Signal, when the recording has one.",
     ),
     StepArtifact(
         name="eit_sequence",
@@ -61,14 +63,14 @@ _LOAD_OUTPUTS = (
     ),
     StepArtifact(
         name="raw_global_impedance_signal",
-        artifact_type="signal",
+        artifact_type="eit_impedance_waveform",
         required=False,
-        description="Native Signal wrapping the raw global impedance, when present.",
+        description="The same Signal as 'raw_global_impedance'.",
     ),
     StepArtifact(
         name="raw_pixel_impedance_signal",
-        artifact_type="signal",
-        description="Native Signal wrapping the raw pixel impedance.",
+        artifact_type="eit_pixel_signal",
+        description="The same Signal as 'raw_eit'.",
     ),
 )
 
@@ -78,7 +80,7 @@ _LOAD_OUTPUTS = (
     reads={"session": "session"},
     writes=_LOAD_WRITES,
     summary="Load an EIT recording into the session.",
-    description="Load a vendor EIT recording file through EITProcessingAdapter and expose the raw pixel/global-impedance data.",
+    description="Load a Draeger, Sentec or Timpel EIT recording file and give the raw images (pixel impedance) and the raw global impedance as Signals.",
     category="loading",
     modality="eit",
     optional_packages=_EITPROCESSING,
@@ -226,7 +228,9 @@ def load(
     return {
         **_loaded_recording_outputs(session),
         "_provenance": _upstream_metadata(
-            source_function="eitprocessing.datahandling.loading.load_eit_data",
+            source_function="m3resp.eit.io.read_eit_file",
+            source_package="m3resp",
+            implementation="m3resp.eit.io",
             operation="eit.load",
             parameters={
                 "vendor": vendor,
@@ -353,37 +357,51 @@ def _loaded_recording_outputs(
         ]
 
     raw_global_impedance_signal = None
-    if recording.global_impedance is not None:
+    native_global = recording.raw_global_impedance
+    source = (
+        recording.pixel_impedance.source
+        if recording.pixel_impedance is not None
+        else recording.vendor
+    )
+    if native_global is not None:
+        raw_global_impedance_signal = replace(
+            native_global,
+            metadata={
+                **native_global.metadata,
+                EITPROCESSING_FIELDS: continuous_data_fields(
+                    recording.global_impedance
+                ),
+            },
+        )
+        session.signals.add(raw_global_impedance_signal)
+    elif recording.global_impedance is not None:
         raw_global_impedance_signal = continuous_data_to_signal(
             recording.global_impedance,
             modality="eit",
             channel="global_impedance",
             processing_state="raw",
-            source="eitprocessing",
+            source=source,
         )
         session.signals.add(raw_global_impedance_signal)
 
-    # The pixel impedance is also stored as its own Signal. It carries the same category as the
-    # global impedance - both are impedances - and is told apart by its
-    # channel.
-    raw_pixel_impedance_signal = Signal(
-        values=recording.raw.pixel_impedance,
-        time=recording.raw.time,
-        sample_frequency=getattr(recording.raw, "sample_frequency", None),
-        unit=getattr(recording.raw, "unit", None),
-        name=getattr(recording.raw, "name", None)
-        or getattr(recording.raw, "label", None),
-        modality="eit",
-        category="impedance",
-        channel="pixel_impedance",
-        processing_state="raw",
-        source="eitprocessing",
-    )
+    # The pixel impedance has the same category as the global impedance (both
+    # are impedances) and is told apart by its channel.
+    if recording.pixel_impedance is not None:
+        pixels = recording.pixel_impedance
+        raw_pixel_impedance_signal = replace(
+            pixels,
+            metadata={
+                **pixels.metadata,
+                EITPROCESSING_FIELDS: eit_data_fields(recording.raw),
+            },
+        )
+    else:
+        raw_pixel_impedance_signal = eit_data_to_signal(recording.raw, source=source)
     session.signals.add(raw_pixel_impedance_signal)
 
     return {
-        "raw_eit": recording.raw,
-        "raw_global_impedance": recording.global_impedance,
+        "raw_eit": raw_pixel_impedance_signal,
+        "raw_global_impedance": raw_global_impedance_signal,
         "eit_sequence": recording.data,
         "raw_global_impedance_signal": raw_global_impedance_signal,
         "raw_pixel_impedance_signal": raw_pixel_impedance_signal,

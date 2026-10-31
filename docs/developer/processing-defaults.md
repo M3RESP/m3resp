@@ -45,7 +45,7 @@ The packages give no default for these settings, so M3Resp chose the values. Eac
 
 | Step | Setting | Value |
 |---|---|---|
-| `eit.butterworth_filter` | `mode` / `lowpass_hz` / `highpass_hz` / `order` | `lowpass` / 1.0 Hz / 0.05 Hz / 4 |
+| `eit.butterworth_filter` | `mode` / `lowpass_hz` / `highpass_hz` / `order` | `lowpass` / 1.0 Hz / 0.05 Hz / 4 (1 to 10) |
 | `emg.detect_breaths` | shortest breath (`min_breath_width_seconds`) | 0.5 s |
 | `ventilator.detect_breaths` | `breath_width_seconds` | 0.5 s |
 | `ventilator.detect_pressure_breaths` | `smoothing_seconds` / `min_depth` / `min_interval_seconds` | 0.2 s / 0.15 / 2.0 s |
@@ -59,24 +59,30 @@ The packages give no default for these settings, so M3Resp chose the values. Eac
 | Step | Setting | Value | Set by |
 |---|---|---|---|
 | `eit.detect_breaths` | shortest breath | 0.67 s | m3resp (same as eitprocessing) |
-| | moving-average window | 15 s, Blackman shape | eitprocessing |
-| | smallest breath, as a fraction of the typical breath | 0.25 | eitprocessing |
-| | removal of bad data: window / percentile / factor | 0.5 s / 5th / ×4 | eitprocessing |
+| | moving-average window | 15 s, Blackman shape | m3resp (same as eitprocessing) |
+| | smallest breath, as a fraction of the typical breath | 0.25 | m3resp (same as eitprocessing) |
+| | removal of bad data: window / percentile / factor | 0.5 s / 5th / ×4 | m3resp (same as eitprocessing) |
 | `eit.detect_rates` | `subject_type` | adult | m3resp |
-| | Welch window | 30 s (shortest allowed 10 s) | eitprocessing, can be set with `welch_window_seconds` |
-| | Welch overlap | 0.5 | eitprocessing |
-| | breathing rate, adult / neonate | 6 to 60 /min / 15 to 85 /min | eitprocessing |
-| | heart rate, adult / neonate | 40 to 200 /min / 90 to 210 /min | eitprocessing |
-| `eit.mdn_filter` | upper noise limit | 220 /min | eitprocessing |
-| | notch distance | 10 /min | eitprocessing |
-| | filter order | 10 | eitprocessing |
+| | Welch window | 30 s (shortest allowed 10 s) | m3resp (same as eitprocessing), can be set with `welch_window_seconds` |
+| | Welch overlap | 0.5 | m3resp (same as eitprocessing) |
+| | breathing rate, adult / neonate | 6 to 60 /min / 15 to 85 /min | m3resp (same as eitprocessing) |
+| | heart rate, adult / neonate | 40 to 200 /min / 90 to 210 /min | m3resp (same as eitprocessing) |
+| `eit.mdn_filter` | upper noise limit | 220 /min | m3resp (same as eitprocessing), can be set with `noise_frequency_limit_hz` |
+| | notch distance | 10 /min | m3resp (same as eitprocessing), can be set with `notch_distance_hz` |
+| | filter order | 10 | m3resp (same as eitprocessing), can be set with `order` (1 to 10) |
 | `eit.butterworth_filter` | see section 2 | | m3resp |
+| `eit.continuous_tiv` | `tiv_method` | inspiratory | m3resp (same as eitprocessing) |
 | `eit.pixel_breaths` | `phase_correction_mode` | negative amplitude | m3resp (same as eitprocessing) |
 | | `minimum_duration_seconds` | 0.67 s | m3resp (same as eitprocessing) |
-| `eit.pixel_tiv` | `tiv_timing` | continuous | m3resp |
+| `eit.pixel_tiv` | `tiv_timing` | continuous | m3resp (eitprocessing: pixel) |
+| | `tiv_method` | inspiratory | m3resp (same as eitprocessing) |
+| `eit.pixel_eeli` | `eeli_timing` | continuous | m3resp (no eitprocessing version) |
 | `eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace` | `threshold` | 0.15 | m3resp (same as eitprocessing) |
 | `eit.roi_watershed` | `threshold_fraction` | 0.15 | m3resp (same as eitprocessing) |
+| `eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace`, `eit.roi_watershed` | breaths without the input `breaths` | found on `timing_data` with the default settings of `eit.detect_breaths` | m3resp (same as eitprocessing) |
+| `eit.roi_amplitude_lungspace`, `eit.roi_watershed` | phase correction of the pixel breaths | phase shift (fixed) | m3resp (same as eitprocessing) |
 | `eit.roi_filter_by_size` | `min_region_size` / `connectivity` | 10 pixels / 1 (4 neighbours) | m3resp (same as eitprocessing) |
+| `eit.geometric_mask` | `region` | none: one of the 12 region names must be chosen | m3resp |
 
 ### EMG (ReSurfEMG)
 

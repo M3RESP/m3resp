@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from m3resp.core.session import M3Session
-from m3resp.processing.slicing import slice_signal_by_mode
+from m3resp.processing.slicing import slice_by_time, slice_signal_by_mode
 from m3resp.workflows.registry import (
     ANY_ARTIFACT_TYPE,
     StepArtifact,
@@ -21,26 +21,18 @@ from .loading import _LOAD_OUTPUTS, _LOAD_WRITES, _loaded_recording_outputs
 @register_step(
     "eit.slice_signal",
     reads={"signal": "raw_eit"},
-    # Named `eit.slice` until the slicing steps were renamed:
-    # `*.slice_recording` cuts the loaded recording, `*.slice_signal` one signal.
     aliases=("eit.slice",),
     writes=("result",),
     summary="Cut one EIT signal to a window, by sample index or time.",
-    description="Cut one EIT signal passed along in the workflow to a window, e.g. to select a detection window. Works on m3resp Signals and on eitprocessing data (raw EIT, global impedance, a Sequence). The loaded recording in the session is not changed; use eit.slice_recording for that. In time mode, times are the signal's own time values: for data read from an EIT file that is the time of day stored in the file.",
+    description="Copy a window of one EIT Signal, by sample index or by time in seconds on its own clock. For Draeger data the clock may be the time of day. The boundary flags in time mode follow eitprocessing's sample-selection rules. Use eit.slice_recording to cut the loaded recording.",
     category="preprocessing",
     modality="eit",
-    optional_packages=_EITPROCESSING,
     input_artifacts=(
         StepArtifact(
             name="signal",
-            # Genuine passthrough - this step accepts *any* upstream EIT
-            # signal (raw, filtered, global impedance, ...), not one fixed
-            # type, so it uses the "any" sentinel rather than a specific
-            # artifact type (Phase 10 artifact-type compatibility check).
             artifact_type=ANY_ARTIFACT_TYPE,
             default_context_key="raw_eit",
             description="EIT signal to cut: an m3resp Signal or eitprocessing data.",
-            compatibility_only=True,
         ),
     ),
     parameters=(
@@ -63,13 +55,24 @@ from .loading import _LOAD_OUTPUTS, _LOAD_WRITES, _loaded_recording_outputs
             choices=("index", "time"),
             description="Whether 'start'/'end' are sample indices or seconds.",
         ),
+        StepParameter(
+            name="start_inclusive",
+            value_type="boolean",
+            default=False,
+            description="In time mode, keep the sample before a start that falls between samples. An exact start is kept with either setting.",
+        ),
+        StepParameter(
+            name="end_inclusive",
+            value_type="boolean",
+            default=False,
+            description="In time mode, keep the first sample at or after the end time.",
+        ),
     ),
     output_artifacts=(
         StepArtifact(
             name="result",
             artifact_type=ANY_ARTIFACT_TYPE,
             description="The cut signal, of the same type as the input.",
-            compatibility_only=True,
         ),
     ),
 )
@@ -79,7 +82,21 @@ def slice_signal(
     start: float,
     end: float,
     mode: Literal["index", "time"] = "index",
+    start_inclusive: bool = False,
+    end_inclusive: bool = False,
 ) -> dict[str, Any]:
+    if mode == "time":
+        return {
+            "result": slice_by_time(
+                signal,
+                start=start,
+                end=end,
+                start_inclusive=start_inclusive,
+                end_inclusive=end_inclusive,
+            )
+        }
+    if start_inclusive or end_inclusive:
+        raise ValueError("The inclusive boundary flags apply to mode='time'.")
     return {
         "result": slice_signal_by_mode(signal, start=start, end=end, slicing_mode=mode)
     }
@@ -91,7 +108,7 @@ def slice_signal(
     writes=("eit_slice", *_LOAD_WRITES),
     replaces=_LOAD_WRITES,
     summary="Keep only a time window of the loaded EIT recording.",
-    description="Keep only the part of the loaded EIT recording between two times, for example to analyse one ventilator setting or leave out a disturbed stretch. The cutting is done by eitprocessing, so pixel data, global impedance, pressure/flow channels and markers are cut to the same frames. A ventilator recording from the same EIT file is cut the same way. The step gives the cut recording under the same names as eit.load (raw_eit, eit_sequence, ...), so the steps after it work on the cut part, and its raw signals replace the uncut ones in session.signals. Run before eit.preprocess.",
+    description="Keep a time window of the native EIT images, waveforms, device marks and breaths, and rebuild the eitprocessing Sequence. A ventilator recording from the same EIT file is cut at the same frames. The outputs have the same names as eit.load (raw_eit, eit_sequence, ...), and the cut raw Signals replace the full ones in session.signals. Run before preprocessing.",
     category="preprocessing",
     modality="eit",
     optional_packages=_EITPROCESSING,

@@ -165,7 +165,7 @@
     {
       "id": "roi_filter_by_size",
       "in": {
-        "mask": "watershed_lungspace_mask"
+        "mask": "watershed_lungspace_result"
       },
       "out": {},
       "uses": "eit.roi_filter_by_size",

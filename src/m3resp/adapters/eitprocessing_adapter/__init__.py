@@ -6,7 +6,7 @@ values per breath from eitprocessing results.
 
 from __future__ import annotations
 
-import copy
+import dataclasses
 import math
 from collections.abc import Callable, Iterable
 from typing import Any, Literal, cast
@@ -14,34 +14,208 @@ from typing import Any, Literal, cast
 import numpy as np
 
 from m3resp.core.exceptions import OptionalDependencyError, UnsupportedWorkflowError
-from m3resp.data import IntervalData, ParameterResult, PixelMask, QualityFlag, Signal
+from m3resp.data import (
+    IntervalData,
+    ParameterResult,
+    PixelBreaths,
+    PixelMask,
+    QualityFlag,
+    Signal,
+)
 from m3resp.data.events import (
     BreathEvent,
     coerce_breath_events,
     reuse_matching_breaths,
 )
-from m3resp.processing.filters import butterworth_filter
+from m3resp.eit.io import EITFileData, join_eit_files, read_eit_file
+from m3resp.eit.processing import (
+    BreathDetectionSettings,
+    RateDetectionSettings,
+    end_expiratory_lung_impedance,
+    global_impedance,
+    mdn_filter,
+    pixel_end_expiratory_lung_impedance,
+    pixel_tidal_impedance_variation,
+    tidal_impedance_variation,
+)
+from m3resp.eit.processing import detect_rates as detect_rates_of
+from m3resp.eit.processing import find_breaths as find_breaths_of
+from m3resp.eit.processing import find_pixel_breaths as find_pixel_breaths_of
+from m3resp.eit.processing.mdn_filter import (
+    NOISE_FREQUENCY_LIMIT,
+    NOTCH_DISTANCE,
+    ORDER,
+)
+from m3resp.eit.roi import (
+    amplitude_lungspace,
+    filter_mask_by_size,
+    tiv_lungspace,
+    watershed_lungspace,
+)
 
+from ._file_data import (
+    file_data_to_sequence,
+    load_eit_file_as_sequence,
+    sequence_to_file_data,
+)
+from ._filtering import butterworth_filter_images
 from ._joining import eit_file_paths, join_eit_sequences
 from ._shared import (
-    _breath_intervals_to_dicts,
+    MAX_EIT_BUTTERWORTH_ORDER,
     _lazy_import,
     _require_eit_sequence,
     add_to_collection,
+    as_breath_detection,
     breath_intervals_to_breath_events,
-    continuous_data_to_signal,
+    breaths_to_eitprocessing,
+    breaths_to_interval_data,
+    check_eit_butterworth_order,
     filter_pixels_preserving_gaps,
+    given_breath_events,
+    pixel_sign_breaths,
     sparse_data_to_interval_data,
+)
+from ._signals import (
+    EITPROCESSING_FIELDS,
+    as_continuous_data,
+    as_eit_data,
+    as_eitprocessing,
+    as_signal,
+    continuous_data_fields,
+    continuous_data_to_signal,
+    eit_data_fields,
+    eit_data_to_signal,
+    eitprocessing_fields,
+    signal_to_continuous_data,
+    signal_to_eit_data,
 )
 
 __all__ = [
+    "EITPROCESSING_FIELDS",
+    "MAX_EIT_BUTTERWORTH_ORDER",
     "EITProcessingAdapter",
     "add_to_collection",
+    "as_breath_detection",
+    "as_continuous_data",
+    "as_eit_data",
+    "as_eitprocessing",
+    "as_signal",
     "breath_intervals_to_breath_events",
+    "breaths_to_eitprocessing",
+    "breaths_to_interval_data",
+    "butterworth_filter_images",
+    "check_eit_butterworth_order",
+    "continuous_data_fields",
     "continuous_data_to_signal",
+    "eit_data_fields",
+    "eit_data_to_signal",
+    "eitprocessing_fields",
+    "file_data_to_sequence",
     "filter_pixels_preserving_gaps",
+    "given_breath_events",
+    "load_eit_file_as_sequence",
+    "pixel_sign_breaths",
+    "sequence_to_file_data",
+    "signal_to_continuous_data",
+    "signal_to_eit_data",
     "sparse_data_to_interval_data",
 ]
+
+
+def _pixel_or_global_breaths(
+    breaths: Any, *, function: str
+) -> list[BreathEvent] | PixelBreaths:
+    """Return the breaths of a pixel TIV or pixel EELI calculation.
+
+    Args:
+        breaths (Any): A ``PixelBreaths`` (pixel timing), or global breaths
+            in a form of ``given_breath_events``.
+        function (str): Name of the calling function, for the message.
+
+    Returns:
+        list[BreathEvent] | PixelBreaths: A ``PixelBreaths`` as it is; other
+            breaths as a list of ``BreathEvent``s.
+    """
+
+    if isinstance(breaths, PixelBreaths):
+        return breaths
+    return given_breath_events(breaths, function=function)
+
+
+def _lungspace_inputs(
+    eit_data: Any, timing_data: Any, breaths: Any, *, function: str
+) -> tuple[Signal, Signal, list[BreathEvent]]:
+    """Return the images, the waveform and the global breaths of a lung space.
+
+    Args:
+        eit_data (Any): EIT images as a ``Signal`` or an eitprocessing
+            ``EITData``.
+        timing_data (Any): The impedance waveform, or None for the sum of all
+            pixels (eitprocessing: ``EITData.get_summed_impedance``).
+        breaths (Any): Given global breaths in a form of
+            ``given_breath_events``, or None to find them on the waveform
+            with the default ``BreathDetectionSettings``, as eitprocessing
+            does.
+        function (str): Name of the calling function, for the message.
+
+    Returns:
+        tuple[Signal, Signal, list[BreathEvent]]: The images, the waveform
+            and the breaths.
+    """
+
+    pixels = as_signal(eit_data)
+    waveform = (
+        global_impedance(pixels) if timing_data is None else as_signal(timing_data)
+    )
+    if breaths is None:
+        return pixels, waveform, find_breaths_of(waveform, BreathDetectionSettings())
+    return pixels, waveform, given_breath_events(breaths, function=function)
+
+
+def _as_m3resp_pixel_mask(mask: Any) -> PixelMask:
+    """Return a mask as an m3resp ``PixelMask``.
+
+    Args:
+        mask (Any): An m3resp ``PixelMask`` (returned as it is), an
+            eitprocessing ``PixelMask`` (its grid is copied, weights and
+            zeros included), or a 2D numeric array, list or tuple with NaN
+            for excluded pixels (a 0 becomes NaN, as in eitprocessing).
+
+    Returns:
+        PixelMask: The m3resp mask.
+
+    Raises:
+        UnsupportedWorkflowError: If the input has another type or is not a
+            2D numeric grid.
+    """
+
+    if isinstance(mask, PixelMask):
+        return mask
+    if hasattr(mask, "mask"):
+        return PixelMask(
+            name=str(getattr(mask, "label", None) or "mask"),
+            values=np.asarray(mask.mask, dtype=float),
+            keep_zeros=True,
+            suppress_value_range_error=True,
+            suppress_all_nan_warning=True,
+        )
+    if not isinstance(mask, (np.ndarray, list, tuple)):
+        raise UnsupportedWorkflowError(
+            "An ROI mask must be an m3resp PixelMask, an eitprocessing "
+            f"PixelMask, or a 2D array of pixels; got {type(mask).__name__}."
+        )
+    try:
+        array = np.asarray(mask, dtype=float)
+    except (TypeError, ValueError) as error:
+        raise UnsupportedWorkflowError(
+            "An ROI mask must be a 2D (row, column) array of numbers."
+        ) from error
+    if array.ndim != 2:
+        raise UnsupportedWorkflowError(
+            "An ROI mask must be a 2D (row, column) array of pixels; got "
+            f"shape {array.shape}."
+        )
+    return PixelMask(name="mask", values=array)
 
 
 class EITProcessingAdapter:
@@ -93,27 +267,57 @@ class EITProcessingAdapter:
     def load_with_eitprocessing(
         self, path: str, vendor: str | None = None, **kwargs: Any
     ) -> Any:
-        """Load a Draeger, Sentec or Timpel file with `eitprocessing`.
+        """Load a Draeger, Sentec or Timpel file into an eitprocessing Sequence.
 
-        Several files are read as one recording: each file is read, then they
-        are joined in the given order (see `join_eit_sequences`).
+        The same as `load_with_native_data`, without the m3resp data.
 
         Args:
             path: The EIT file to read, or a list of files recorded one after
                 the other.
             vendor: ``"draeger"``, ``"sentec"`` or ``"timpel"``.
-            **kwargs: Passed on to ``eitprocessing``'s ``load_eit_data``
-                (``sample_frequency``, ``first_frame``, ``max_frames``, label
-                and name).
+            **kwargs: See `load_with_native_data`.
 
         Returns:
             The loaded eitprocessing Sequence.
 
         Raises:
+            ValueError: See `load_with_native_data`.
+            OptionalDependencyError: If eitprocessing is not installed.
+        """
+
+        sequence, _ = self.load_with_native_data(path, vendor=vendor, **kwargs)
+        return sequence
+
+    def load_with_native_data(
+        self, path: str, vendor: str | None = None, **kwargs: Any
+    ) -> tuple[Any, EITFileData]:
+        """Load a Draeger, Sentec or Timpel file as m3resp data and as a Sequence.
+
+        Each file is read by the m3resp reader of its vendor
+        (`m3resp.eit.io.read_eit_file`). Several files are read as one
+        recording: the m3resp data of the files is joined in the given order
+        (`m3resp.eit.io.join_eit_files`). The eitprocessing Sequence of each
+        file is built with `file_data_to_sequence`, and the Sequences are
+        joined with `join_eit_sequences`, so the Sequence is the one
+        eitprocessing's ``load_eit_data`` gives.
+
+        Args:
+            path: The EIT file to read, or a list of files recorded one after
+                the other.
+            vendor: ``"draeger"``, ``"sentec"`` or ``"timpel"``.
+            **kwargs: ``sample_frequency``, ``first_frame`` and
+                ``max_frames`` for the reader; ``label``, ``name`` and
+                ``description`` for the Sequence.
+
+        Returns:
+            tuple[Any, EITFileData]: The eitprocessing Sequence, and the
+            m3resp data of all files joined (its ``path`` is the first file).
+
+        Raises:
             ValueError: If vendor is None; if ``first_frame`` or
-                ``max_frames`` is set with more than one file (eitprocessing
-                would apply them to each file); or if the files cannot be
-                joined.
+                ``max_frames`` is set with more than one file (they would
+                apply to each file); or if the files cannot be joined.
+            TypeError: If a keyword argument is unknown.
             OptionalDependencyError: If eitprocessing is not installed.
         """
 
@@ -123,29 +327,45 @@ class EITProcessingAdapter:
                 "'sentec', or 'timpel') when no loader is injected."
             )
 
-        (load_eit_data,) = _lazy_import(
-            "eitprocessing.datahandling.loading.load_eit_data",
+        _lazy_import(
+            "eitprocessing.datahandling.sequence.Sequence",
             error=lambda: OptionalDependencyError(
                 "EIT support requires the optional dependency `eitprocessing`. "
                 'Install with `pip install "m3resp[eit]"` or inject a loader.'
             ),
         )
 
-        paths = eit_file_paths(path)
-        if len(paths) == 1:
-            return load_eit_data(paths[0], vendor=vendor, **kwargs)
+        sequence_options = {
+            key: kwargs.pop(key)
+            for key in ("label", "name", "description")
+            if key in kwargs
+        }
+        unknown = set(kwargs) - {"sample_frequency", "first_frame", "max_frames"}
+        if unknown:
+            raise TypeError(
+                f"Unknown EIT loading option(s) {sorted(unknown)}. Known: "
+                "sample_frequency, first_frame, max_frames, label, name, "
+                "description."
+            )
 
-        if kwargs.get("first_frame") or kwargs.get("max_frames") is not None:
+        paths = eit_file_paths(path)
+        if len(paths) > 1 and (
+            kwargs.get("first_frame") or kwargs.get("max_frames") is not None
+        ):
             raise ValueError(
                 "first_frame and max_frames apply to each file, so they cannot "
                 "be used when loading several EIT files at once. Load the "
                 "files, then cut the recording with eit.slice_recording "
                 "(session.slice_eit)."
             )
+        files = [read_eit_file(single_path, vendor, **kwargs) for single_path in paths]
+        native = join_eit_files(files, paths)
         sequences = [
-            load_eit_data(single_path, vendor=vendor, **kwargs) for single_path in paths
+            file_data_to_sequence(file_data, **sequence_options) for file_data in files
         ]
-        return join_eit_sequences(sequences, paths)
+        if len(sequences) == 1:
+            return sequences[0], native
+        return join_eit_sequences(sequences, paths, check_order=False), native
 
     def get_raw_eit(self, sequence: Any, label: str = "raw") -> Any:
         """Return the raw EIT data object from an upstream sequence."""
@@ -193,7 +413,7 @@ class EITProcessingAdapter:
         """
 
         upstream_mask = self.as_pixel_mask(mask)
-        masked = upstream_mask.apply(eit_data)
+        masked = upstream_mask.apply(as_eit_data(eit_data))
         return masked.get_summed_impedance(
             return_label=label,
             name=label.replace("_", " ").capitalize(),
@@ -204,25 +424,19 @@ class EITProcessingAdapter:
         """Return a copy of `sequence` keeping frames `start_index` up to (not
         including) `end_index`.
 
-        Uses `eitprocessing`'s own `Sequence.select_by_index`, which cuts the
-        pixel data, every continuous signal (global impedance, pressures,
-        flow) and the vendor's markers to the same frames. The time values
-        are kept as they were, so the first kept frame keeps its original
-        time stamp.
+        m3resp cuts the native images, waveforms, device marks and breaths,
+        then rebuilds a Sequence with the original collection keys and field
+        spellings. Frame times keep their original values.
         """
 
-        select_by_index = getattr(sequence, "select_by_index", None)
-        if select_by_index is None:
-            raise TypeError(
-                "Slicing EIT data needs an eitprocessing Sequence (or an "
-                "object with select_by_index); got "
-                f"{type(sequence).__name__}."
-            )
-        return select_by_index(start=start_index, end=end_index)
+        from ._slicing import slice_sequence
+
+        return slice_sequence(sequence, start_index, end_index)
 
     # -- Phase 1: reusable adapter operations ----------------------------------
     #
-    # Small public methods, each wrapping exactly one `eitprocessing` operation.
+    # Small public methods, each running one calculation: an `eitprocessing`
+    # operation, or its m3resp port (`detect_rates`, `find_breaths`).
     # `preprocess()` and the granular workflow steps in
     # `m3resp.workflows.steps.eit` both call these so the two paths cannot
     # drift. Upstream imports stay local to each method so `m3resp` installs
@@ -236,31 +450,46 @@ class EITProcessingAdapter:
         welch_window_seconds: float | None = None,
         capture: bool = False,
     ) -> dict[str, Any]:
-        """Estimate respiratory and heart rate from an EIT (or continuous) signal."""
+        """Find the breathing rate and the heart rate of EIT images.
 
-        (RateDetection,) = _lazy_import(
-            "eitprocessing.features.rate_detection.RateDetection"
-        )
+        Args:
+            signal: EIT images as a ``Signal`` with values of shape (frames,
+                rows, columns), or an eitprocessing ``EITData``.
+            subject_type: ``"adult"`` or ``"neonate"``; sets the rate ranges.
+            welch_window_seconds: Length of one Welch window in seconds.
+                None gives 30 s.
+            capture: If True, also return the spectra for the rate figure and
+                give no warnings about short data or a rate at the edge of
+                its range.
 
-        detector = (
-            RateDetection(subject_type)
+        Returns:
+            dict[str, Any]: ``respiratory_rate_hz`` and ``heart_rate_hz`` in
+                Hz, ``rate_detector`` (the ``RateDetectionSettings``) and
+                ``rate_captures`` (the spectra, empty when ``capture`` is
+                False).
+
+        Raises:
+            ValueError: If a setting is invalid, or the images cannot give a
+                rate (see ``m3resp.eit.processing.detect_rates``).
+        """
+
+        settings = (
+            RateDetectionSettings(subject_type)
             if welch_window_seconds is None
-            else RateDetection(subject_type, welch_window=welch_window_seconds)
+            else RateDetectionSettings(subject_type, welch_window=welch_window_seconds)
         )
         captures: dict[str, Any] = {}
-        if capture:
-            respiratory_rate_hz, heart_rate_hz = detector.apply(
-                signal,
-                captures=captures,
-                suppress_length_warnings=True,
-                suppress_edge_case_warning=True,
-            )
-        else:
-            respiratory_rate_hz, heart_rate_hz = detector.apply(signal)
+        respiratory_rate_hz, heart_rate_hz = detect_rates_of(
+            as_signal(signal),
+            settings,
+            captures=captures if capture else None,
+            suppress_length_warnings=capture,
+            suppress_edge_case_warning=capture,
+        )
         return {
-            "respiratory_rate_hz": float(respiratory_rate_hz),
-            "heart_rate_hz": float(heart_rate_hz),
-            "rate_detector": detector,
+            "respiratory_rate_hz": respiratory_rate_hz,
+            "heart_rate_hz": heart_rate_hz,
+            "rate_detector": settings,
             "rate_captures": captures,
         }
 
@@ -270,13 +499,44 @@ class EITProcessingAdapter:
         *,
         respiratory_rate_hz: float,
         heart_rate_hz: float,
+        noise_frequency_limit_hz: float = NOISE_FREQUENCY_LIMIT,
+        notch_distance_hz: float = NOTCH_DISTANCE,
+        order: int = ORDER,
         label: str = "filtered",
         name: str | None = None,
         description: str | None = None,
     ) -> dict[str, Any]:
-        """Apply an MDN heart-rate-removal filter to EIT pixel data."""
+        """Remove the heart signal from EIT images with the MDN filter.
 
-        (MDNFilter,) = _lazy_import("eitprocessing.filters.mdn.MDNFilter")
+        Args:
+            signal (Any): EIT images as a ``Signal`` (time along the first
+                axis), or an eitprocessing ``EITData``.
+            respiratory_rate_hz (float): Breathing rate in Hz.
+            heart_rate_hz (float): Heart rate in Hz.
+            noise_frequency_limit_hz (float): Low-pass edge in Hz. Defaults
+                to 220 per minute.
+            notch_distance_hz (float): Half the width of each removed band,
+                in Hz. Defaults to 10 per minute.
+            order (int): Butterworth order of each filter. Defaults to 10.
+            label (str): Label of the filtered images in an eitprocessing
+                ``Sequence``.
+            name (str | None): Name of the filtered images. None keeps the
+                name of ``signal``.
+            description (str | None): Description of the filtered images in
+                an eitprocessing ``Sequence``. None keeps the description of
+                ``signal``.
+
+        Returns:
+            dict[str, Any]: ``filtered_eit``, the filtered images as a
+                ``Signal`` (``signal_to_eit_data`` gives the eitprocessing
+                ``EITData`` with ``label``, ``name`` and ``description``), and
+                ``filter_captures``, the in-between results of
+                ``m3resp.eit.processing.mdn_filter``.
+
+        Raises:
+            ValueError: If a rate is not a finite number above 0, or if
+                ``mdn_filter`` refuses the rates or the settings.
+        """
 
         for rate_name, rate in (
             ("respiratory_rate_hz", respiratory_rate_hz),
@@ -287,43 +547,47 @@ class EITProcessingAdapter:
                     f"{rate_name} must be a finite, positive value in Hz, got {rate!r}."
                 )
 
-        apply_kwargs: dict[str, Any] = {"label": label}
-        if name is not None:
-            apply_kwargs["name"] = name
-        if description is not None:
-            apply_kwargs["description"] = description
-
+        images = as_signal(signal)
         captures: dict[str, Any] = {}
-        filtered_eit = MDNFilter(
+        filtered_eit = mdn_filter(
+            images,
             respiratory_rate=respiratory_rate_hz,
             heart_rate=heart_rate_hz,
-        ).apply(signal, captures=captures, **apply_kwargs)
+            noise_frequency_limit=noise_frequency_limit_hz,
+            notch_distance=notch_distance_hz,
+            order=order,
+            name=name,
+            captures=captures,
+        )
+        fields = {
+            **eitprocessing_fields(images),
+            "type": "EITData",
+            "label": label,
+            "name": filtered_eit.name,
+        }
+        if description is not None:
+            fields["description"] = description
+        filtered_eit.metadata[EITPROCESSING_FIELDS] = fields
         return {"filtered_eit": filtered_eit, "filter_captures": captures}
 
     def find_breaths(
         self, timing_data: Any, *, minimum_duration_seconds: float = 2 / 3
-    ) -> Any:
-        """Detect breaths on a global or regional impedance waveform.
+    ) -> IntervalData:
+        """Find the breaths of a global or regional impedance waveform.
 
         Args:
-            timing_data: eitprocessing ``ContinuousData`` containing the
-                waveform and its time axis in seconds.
-            minimum_duration_seconds: Minimum separation used by the breath
-                detector, in seconds.
+            timing_data: The waveform as a ``Signal``, or an eitprocessing
+                ``ContinuousData``, with time in seconds.
+            minimum_duration_seconds: Shortest expected breath, in seconds.
 
         Returns:
-            eitprocessing.IntervalData: Detected breaths with start, middle
-                and end times on the waveform's time axis.
-
-        Raises:
-            OptionalDependencyError: If eitprocessing is unavailable.
+            IntervalData: The breaths as ``BreathEvent``s (start, peak in
+                ``extremum_time``, end) on the time axis of the waveform.
         """
 
-        (BreathDetection,) = _lazy_import(
-            "eitprocessing.features.breath_detection.BreathDetection"
-        )
-        return BreathDetection(minimum_duration=minimum_duration_seconds).find_breaths(
-            timing_data
+        settings = BreathDetectionSettings(minimum_duration=minimum_duration_seconds)
+        return breaths_to_interval_data(
+            find_breaths_of(as_signal(timing_data), settings)
         )
 
     def find_pixel_breaths(
@@ -331,95 +595,242 @@ class EITProcessingAdapter:
         eit_data: Any,
         timing_data: Any,
         *,
-        sequence: Any | None = None,
+        breaths: Any = None,
         phase_correction_mode: Literal["negative amplitude", "phase shift", "none"]
         | None = "negative amplitude",
         minimum_duration_seconds: float = 2 / 3,
         result_label: str = "pixel_breaths",
-    ) -> Any:
-        """Detect per-pixel breath timing (start/middle/end of in-/deflation)."""
+    ) -> PixelBreaths:
+        """Find the breaths of each pixel of EIT images.
 
-        BreathDetection, PixelBreath = _lazy_import(
-            "eitprocessing.features.breath_detection.BreathDetection",
-            "eitprocessing.features.pixel_breath.PixelBreath",
-        )
+        Args:
+            eit_data (Any): EIT images as a ``Signal``, or an eitprocessing
+                ``EITData``, with time, row and column axes.
+            timing_data (Any): The global or regional impedance waveform as
+                a ``Signal``, or an eitprocessing ``ContinuousData``, on the
+                time axis of ``eit_data``.
+            breaths (Any): The global breaths on the time axis of the
+                waveform: a list of ``BreathEvent``s, an m3resp
+                ``IntervalData`` of them, or an eitprocessing
+                ``IntervalData`` of ``Breath``s. None finds them on
+                ``timing_data``.
+            phase_correction_mode (str | None): ``"negative amplitude"``,
+                ``"phase shift"``, ``"none"`` or None.
+            minimum_duration_seconds (float): Shortest expected breath, in
+                seconds, for the breaths found on ``timing_data``.
+            result_label (str): Name of the result.
 
-        breath_detector = BreathDetection(minimum_duration=minimum_duration_seconds)
-        result = PixelBreath(
-            breath_detection=breath_detector,
+        Returns:
+            PixelBreaths: The result of
+                ``m3resp.eit.processing.find_pixel_breaths``. For breaths
+                found on ``timing_data``, the sign of each pixel comes from
+                the breaths found with the default settings, as in
+                eitprocessing. Given breaths give the sign themselves.
+
+        Raises:
+            TypeError: If a breath of a list or of an m3resp ``IntervalData``
+                is not a ``BreathEvent``.
+            ValueError: If ``find_pixel_breaths`` refuses the data, the
+                breaths or the phase correction mode.
+        """
+
+        waveform = as_signal(timing_data)
+        sign_breaths = None
+        if breaths is None:
+            settings = BreathDetectionSettings(
+                minimum_duration=minimum_duration_seconds
+            )
+            global_breaths = find_breaths_of(waveform, settings)
+            sign_breaths = pixel_sign_breaths(waveform, settings)
+        else:
+            global_breaths = given_breath_events(breaths, function="find_pixel_breaths")
+        return find_pixel_breaths_of(
+            as_signal(eit_data),
+            waveform,
+            global_breaths,
             phase_correction_mode=phase_correction_mode,
-        ).find_pixel_breaths(
-            eit_data,
-            timing_data,
-            sequence=sequence,
-            store=False,
-            result_label=result_label,
+            name=result_label,
+            sign_breaths=sign_breaths,
         )
-        if sequence is not None:
-            add_to_collection(sequence.interval_data, result)
-        return result
+
+    def compute_continuous_tiv(
+        self,
+        timing_data: Any,
+        *,
+        breaths: Any,
+        tiv_method: str = "inspiratory",
+        result_label: str = "continuous_tivs",
+    ) -> IntervalData:
+        """Compute the tidal impedance variation (TIV) of each breath.
+
+        Args:
+            timing_data: The impedance waveform as a ``Signal``, or an
+                eitprocessing ``ContinuousData``, with time in seconds.
+            breaths: The breaths on the time axis of the waveform: a list of
+                ``BreathEvent``s, an m3resp ``IntervalData`` of them, or an
+                eitprocessing ``IntervalData`` of ``Breath``s.
+            tiv_method: ``"inspiratory"``, ``"expiratory"`` or ``"mean"``.
+            result_label: Name of the result.
+
+        Returns:
+            IntervalData: One TIV value per breath, from
+                ``m3resp.eit.processing.tidal_impedance_variation``.
+
+        Raises:
+            TypeError: If a breath of a list or of an m3resp ``IntervalData``
+                is not a ``BreathEvent``.
+        """
+
+        return tidal_impedance_variation(
+            as_signal(timing_data),
+            given_breath_events(breaths, function="compute_continuous_tiv"),
+            method=tiv_method,
+            name=result_label,
+        )
 
     def compute_eeli(
         self,
         timing_data: Any,
         *,
-        sequence: Any,
-        breath_detector: Any,
+        breaths: Any,
         result_label: str = "continuous_eelis",
-    ) -> Any:
-        """Compute end-expiratory lung impedance (EELI) per breath."""
+    ) -> IntervalData:
+        """Compute the end-expiratory lung impedance (EELI) of each breath.
 
-        (EELI,) = _lazy_import("eitprocessing.parameters.eeli.EELI")
+        Args:
+            timing_data: The impedance waveform as a ``Signal``, or an
+                eitprocessing ``ContinuousData``, with time in seconds.
+            breaths: The breaths on the time axis of the waveform: a list of
+                ``BreathEvent``s, an m3resp ``IntervalData`` of them, or an
+                eitprocessing ``IntervalData`` of ``Breath``s.
+            result_label: Name of the result.
 
-        result = EELI(breath_detection=breath_detector).compute_parameter(
-            timing_data,
-            sequence=sequence,
-            store=False,
-            result_label=result_label,
+        Returns:
+            IntervalData: One EELI value per breath, from
+                ``m3resp.eit.processing.end_expiratory_lung_impedance``.
+
+        Raises:
+            TypeError: If a breath of a list or of an m3resp ``IntervalData``
+                is not a ``BreathEvent``.
+        """
+
+        return end_expiratory_lung_impedance(
+            as_signal(timing_data),
+            given_breath_events(breaths, function="compute_eeli"),
+            name=result_label,
         )
-        add_to_collection(sequence.sparse_data, result)
-        return result
 
     def compute_pixel_tiv(
         self,
         eit_data: Any,
-        timing_data: Any,
         *,
-        sequence: Any,
-        breath_detector: Any,
-        tiv_timing: Literal["pixel", "continuous"] = "continuous",
+        breaths: Any,
+        tiv_method: str = "inspiratory",
         result_label: str = "pixel_tivs",
-    ) -> Any:
-        """Compute per-pixel tidal impedance variation (TIV)."""
+    ) -> IntervalData:
+        """Compute the tidal impedance variation (TIV) of each pixel and breath.
 
-        (TIV,) = _lazy_import("eitprocessing.parameters.tidal_impedance_variation.TIV")
+        Args:
+            eit_data (Any): EIT images as a ``Signal``, or an eitprocessing
+                ``EITData``, with time, row and column axes.
+            breaths (Any): The breaths on the time axis of the images.
+                Global timing: a list of ``BreathEvent``s, an m3resp
+                ``IntervalData`` of them, or an eitprocessing
+                ``IntervalData`` of ``Breath``s. Pixel timing: a
+                ``PixelBreaths`` (see ``find_pixel_breaths``).
+            tiv_method (str): ``"inspiratory"``, ``"expiratory"`` or
+                ``"mean"``.
+            result_label (str): Name of the result.
 
-        result: Any = TIV(breath_detection=breath_detector).compute_parameter(
-            eit_data,
-            timing_data,
-            sequence,
-            tiv_timing=tiv_timing,
-            store=False,
-            result_label=result_label,
+        Returns:
+            IntervalData: One ``PixelMap`` of TIV per breath, from
+                ``m3resp.eit.processing.pixel_tidal_impedance_variation``.
+
+        Raises:
+            TypeError: If a breath of a list or of an m3resp ``IntervalData``
+                is not a ``BreathEvent``.
+        """
+
+        return pixel_tidal_impedance_variation(
+            as_signal(eit_data),
+            _pixel_or_global_breaths(breaths, function="compute_pixel_tiv"),
+            method=tiv_method,
+            name=result_label,
         )
-        add_to_collection(sequence.sparse_data, result)
-        return result
+
+    def compute_pixel_eeli(
+        self,
+        eit_data: Any,
+        *,
+        breaths: Any,
+        result_label: str = "pixel_eelis",
+    ) -> IntervalData:
+        """Compute the end-expiratory lung impedance (EELI) of each pixel and breath.
+
+        Args:
+            eit_data (Any): EIT images as a ``Signal``, or an eitprocessing
+                ``EITData``, with time, row and column axes.
+            breaths (Any): The breaths on the time axis of the images, in
+                one of the forms of ``compute_pixel_tiv``.
+            result_label (str): Name of the result.
+
+        Returns:
+            IntervalData: One ``PixelMap`` of EELI per breath, from
+                ``m3resp.eit.processing.pixel_end_expiratory_lung_impedance``.
+
+        Raises:
+            TypeError: If a breath of a list or of an m3resp ``IntervalData``
+                is not a ``BreathEvent``.
+        """
+
+        return pixel_end_expiratory_lung_impedance(
+            as_signal(eit_data),
+            _pixel_or_global_breaths(breaths, function="compute_pixel_eeli"),
+            name=result_label,
+        )
 
     def compute_tiv_lungspace(
         self,
         eit_data: Any,
         *,
         timing_data: Any | None = None,
+        breaths: Any = None,
         threshold: float = 0.15,
     ) -> dict[str, Any]:
-        """Threshold mean pixel TIV into a functional lung-space mask."""
+        """Find the functional lung space from the mean TIV of each pixel.
 
-        (TIVLungspace,) = _lazy_import("eitprocessing.roi.tiv.TIVLungspace")
+        Args:
+            eit_data (Any): EIT images as a ``Signal``, or an eitprocessing
+                ``EITData``, with time, row and column axes.
+            timing_data (Any | None): The impedance waveform of the breaths
+                as a ``Signal``, or an eitprocessing ``ContinuousData``.
+                None uses the sum of all pixels.
+            breaths (Any): The global breaths on the time axis of the
+                images: a list of ``BreathEvent``s, an m3resp
+                ``IntervalData`` of them, or an eitprocessing
+                ``IntervalData`` of ``Breath``s. None finds them on
+                ``timing_data`` with the default settings, as in
+                eitprocessing.
+            threshold (float): Fraction of the largest mean TIV, between 0
+                and 1.
 
-        captures: dict[str, Any] = {}
-        mask = TIVLungspace(threshold=threshold).apply(
-            eit_data, timing_data=timing_data, captures=captures
+        Returns:
+            dict[str, Any]: ``"mask"``, the m3resp ``PixelMask`` of
+                ``m3resp.eit.roi.tiv_lungspace``, and ``"captures"``, with
+                ``"TIV per breath"`` and ``"mean TIV"``.
+
+        Raises:
+            TypeError: If ``threshold`` is not a float, or a given breath is
+                not a ``BreathEvent``.
+            ValueError: If ``threshold`` is not between 0 and 1, there are no
+                breaths, or every TIV value is NaN.
+        """
+
+        pixels, _, found = _lungspace_inputs(
+            eit_data, timing_data, breaths, function="compute_tiv_lungspace"
         )
+        captures: dict[str, Any] = {}
+        mask = tiv_lungspace(pixels, found, threshold=threshold, captures=captures)
         return {"mask": mask, "captures": captures}
 
     def compute_amplitude_lungspace(
@@ -427,22 +838,47 @@ class EITProcessingAdapter:
         eit_data: Any,
         *,
         timing_data: Any | None = None,
+        breaths: Any = None,
         threshold: float = 0.15,
     ) -> dict[str, Any]:
-        """Threshold mean pixel amplitude into a lung-space mask.
+        """Find a lung space from the mean amplitude of each pixel.
 
-        Upstream does not recommend amplitude alone as a general-purpose
-        functional lung-space definition; it exists primarily to support
-        `compute_watershed_lungspace()`.
+        This lung space can include reconstruction artefacts, so it is not
+        advised on its own; ``compute_watershed_lungspace`` uses the
+        amplitude together with the TIV.
+
+        Args:
+            eit_data (Any): EIT images as a ``Signal``, or an eitprocessing
+                ``EITData``, with time, row and column axes.
+            timing_data (Any | None): The impedance waveform of the breaths,
+                for the phase lag of each pixel, as a ``Signal`` or an
+                eitprocessing ``ContinuousData``. None uses the sum of all
+                pixels.
+            breaths (Any): The global EIT breaths, in one of the forms of
+                ``compute_tiv_lungspace``. None finds them on
+                ``timing_data`` with the default settings, as in
+                eitprocessing.
+            threshold (float): Fraction of the largest mean amplitude,
+                between 0 and 1.
+
+        Returns:
+            dict[str, Any]: ``"mask"``, the m3resp ``PixelMask`` of
+                ``m3resp.eit.roi.amplitude_lungspace``, and ``"captures"``,
+                with ``"amplitude per breath"`` and ``"mean amplitude"``.
+
+        Raises:
+            TypeError: If ``threshold`` is not a float, or a given breath is
+                not a ``BreathEvent``.
+            ValueError: If ``threshold`` is not between 0 and 1, there are no
+                breaths, or every amplitude value is NaN.
         """
 
-        (AmplitudeLungspace,) = _lazy_import(
-            "eitprocessing.roi.amplitude.AmplitudeLungspace"
+        pixels, waveform, found = _lungspace_inputs(
+            eit_data, timing_data, breaths, function="compute_amplitude_lungspace"
         )
-
         captures: dict[str, Any] = {}
-        mask = AmplitudeLungspace(threshold=threshold).apply(
-            eit_data, timing_data=timing_data, captures=captures
+        mask = amplitude_lungspace(
+            pixels, waveform, found, threshold=threshold, captures=captures
         )
         return {"mask": mask, "captures": captures}
 
@@ -451,17 +887,48 @@ class EITProcessingAdapter:
         eit_data: Any,
         *,
         timing_data: Any | None = None,
+        breaths: Any = None,
         threshold_fraction: float = 0.15,
     ) -> dict[str, Any]:
-        """Derive a lung-space mask with the watershed method (pendelluft-aware)."""
+        """Find the functional lung space with the watershed method.
 
-        (WatershedLungspace,) = _lazy_import(
-            "eitprocessing.roi.watershed.WatershedLungspace"
+        Args:
+            eit_data (Any): EIT images as a ``Signal``, or an eitprocessing
+                ``EITData``, with time, row and column axes.
+            timing_data (Any | None): The impedance waveform of the breaths,
+                for the phase lag of each pixel, as a ``Signal`` or an
+                eitprocessing ``ContinuousData``. None uses the sum of all
+                pixels.
+            breaths (Any): The global EIT breaths, in one of the forms of
+                ``compute_tiv_lungspace``. None finds them on
+                ``timing_data`` with the default settings, as in
+                eitprocessing.
+            threshold_fraction (float): Fraction of the largest mean TIV for
+                the TIV mask, between 0 and 1.
+
+        Returns:
+            dict[str, Any]: ``"mask"``, the m3resp ``PixelMask`` of
+                ``m3resp.eit.roi.watershed_lungspace``, and ``"captures"``
+                with its intermediate results.
+
+        Raises:
+            TypeError: If ``threshold_fraction`` is not a float, or a given
+                breath is not a ``BreathEvent``.
+            ValueError: If ``threshold_fraction`` is not between 0 and 1, no
+                breath has both TIV and amplitude values, or no local maximum
+                of the mean amplitude lies inside the TIV mask.
+        """
+
+        pixels, waveform, found = _lungspace_inputs(
+            eit_data, timing_data, breaths, function="compute_watershed_lungspace"
         )
-
         captures: dict[str, Any] = {}
-        mask = WatershedLungspace(threshold_fraction=threshold_fraction).apply(
-            eit_data, timing_data=timing_data, captures=captures
+        mask = watershed_lungspace(
+            pixels,
+            waveform,
+            found,
+            threshold_fraction=threshold_fraction,
+            captures=captures,
         )
         return {"mask": mask, "captures": captures}
 
@@ -471,32 +938,35 @@ class EITProcessingAdapter:
         *,
         min_region_size: int = 10,
         connectivity: Literal[1, 2] | np.ndarray = 1,
-    ) -> Any:
-        """Keep mask regions containing at least the specified number of pixels.
+    ) -> PixelMask:
+        """Keep the groups of connected mask pixels with a minimum number of pixels.
 
         Args:
-            mask: An eitprocessing or m3resp ``PixelMask``, or a 2D numeric
-                grid with NaN for excluded pixels.
-            min_region_size: Minimum number of connected pixels to retain.
-            connectivity: ``1`` joins edge neighbours; ``2`` also joins
-                diagonal neighbours. A custom connection array is accepted.
+            mask (Any): An m3resp or eitprocessing ``PixelMask``, or a 2D
+                numeric grid with NaN for excluded pixels.
+            min_region_size (int): Smallest number of pixels of a kept
+                group.
+            connectivity (int | numpy.ndarray): ``1`` joins pixels that
+                share an edge; ``2`` also joins pixels that share a corner.
+                A custom structure array is accepted.
 
         Returns:
-            eitprocessing.PixelMask: Mask with small connected regions removed.
+            PixelMask: The m3resp mask of
+                ``m3resp.eit.roi.filter_mask_by_size``, with 1 for the kept
+                pixels and NaN elsewhere.
 
         Raises:
-            OptionalDependencyError: If eitprocessing is unavailable.
             UnsupportedWorkflowError: If the mask cannot be converted to a
                 2D numeric grid.
+            ValueError: If ``connectivity`` is not 1, 2 or an array.
+            RuntimeError: If no group has ``min_region_size`` pixels or more.
         """
 
-        (FilterROIBySize,) = _lazy_import(
-            "eitprocessing.roi.filter_by_size.FilterROIBySize"
+        return filter_mask_by_size(
+            _as_m3resp_pixel_mask(mask),
+            min_region_size=min_region_size,
+            connectivity=connectivity,
         )
-
-        return FilterROIBySize(
-            min_region_size=min_region_size, connectivity=connectivity
-        ).apply(self.as_pixel_mask(mask))
 
     def as_pixel_mask(self, mask: Any) -> Any:
         """Convert a mask to eitprocessing's ``PixelMask`` representation.
@@ -567,6 +1037,7 @@ class EITProcessingAdapter:
         compute_continuous_tiv: bool = True,
         compute_eeli: bool = True,
         compute_pixel_tiv: bool = True,
+        compute_pixel_eeli: bool = False,
         include_filtered_data: bool = True,
         include_global_impedance: bool = True,
     ) -> dict[str, Any]:
@@ -584,13 +1055,14 @@ class EITProcessingAdapter:
             filter_enabled: Use the selected filter when True; otherwise use none.
             lowpass_hz: Low-pass cutoff, or band-pass upper cutoff, in Hz.
             highpass_hz: Band-pass lower cutoff in Hz.
-            filter_order: Butterworth filter order for lowpass or bandpass.
+            filter_order: Butterworth filter order for lowpass or bandpass, 1 to 10.
             breath_min_duration_seconds: Minimum detected breath duration in seconds.
             compute_rates: Estimate respiratory and heart rates.
             compute_breath_intervals: Detect and store EIT breath intervals.
             compute_continuous_tiv: Compute a tidal impedance variation per breath.
             compute_eeli: Compute end-expiratory lung impedance per breath.
             compute_pixel_tiv: Compute a pixel-TIV map per breath.
+            compute_pixel_eeli: Compute a pixel-EELI map per breath.
             include_filtered_data: Include the filtered EIT object in the return mapping.
             include_global_impedance: Obtain raw global impedance and, after filtering,
                 filtered global impedance. Breath calculations obtain global impedance
@@ -598,22 +1070,30 @@ class EITProcessingAdapter:
 
         Returns:
             dict[str, Any]: The sequence, raw/filtered EIT and global impedance,
-                filter mode and captures, rate detector and captures, respiratory
-                and heart rates in Hz, breath intervals, TIV, EELI and pixel TIV.
-                Disabled optional results are None; capture mappings are empty when
-                their calculation is skipped. Impedance results retain input units.
+                filter mode and captures, rate settings (``rate_detector``) and
+                captures, respiratory and heart rates in Hz, the breaths
+                (``breath_intervals``, an m3resp ``IntervalData`` of
+                ``BreathEvent``s; the ``Sequence`` also gets them as
+                ``"eit_breaths"``), TIV and EELI (m3resp ``IntervalData``,
+                one value per breath of ``breath_intervals``), and pixel TIV
+                and pixel EELI (m3resp ``IntervalData``, one ``PixelMap``
+                per breath of ``breath_intervals``, with the timing of the
+                global breaths). Results that are switched off are None;
+                the captures are empty when their calculation is skipped.
+                Impedance results keep the unit of the input.
 
         Raises:
             OptionalDependencyError: If eitprocessing is unavailable.
             TypeError: If sequence does not provide the expected EIT collections.
             KeyError: If sequence.eit_data has no raw EIT entry.
-            ValueError: If the filter mode is unsupported, or TIV/EELI/pixel TIV
-                is requested while breath-interval calculation is disabled.
+            ValueError: If the filter mode is unsupported, if the Butterworth order
+                is outside 1 to 10, or TIV, EELI, pixel TIV or pixel EELI is
+                requested while breath-interval calculation is disabled.
         """
 
-        BreathDetection, TIV = _lazy_import(
-            "eitprocessing.features.breath_detection.BreathDetection",
-            "eitprocessing.parameters.tidal_impedance_variation.TIV",
+        # The Sequence and the filtered images in it need eitprocessing.
+        _lazy_import(
+            "eitprocessing.datahandling.sequence.Sequence",
             error=lambda: OptionalDependencyError(
                 "EIT preprocessing requires the optional dependency "
                 '`eitprocessing`. Install with `pip install "m3resp[eit]"`.'
@@ -623,10 +1103,13 @@ class EITProcessingAdapter:
         _require_eit_sequence(sequence)
 
         if not compute_breath_intervals and (
-            compute_continuous_tiv or compute_eeli or compute_pixel_tiv
+            compute_continuous_tiv
+            or compute_eeli
+            or compute_pixel_tiv
+            or compute_pixel_eeli
         ):
             raise ValueError(
-                "EIT TIV, EELI, and pixel TIV require breath intervals. "
+                "EIT TIV, EELI, pixel TIV and pixel EELI require breath intervals. "
                 "Enable eit.processing.outputs.breath_intervals or disable "
                 "the dependent EIT outputs."
             )
@@ -674,7 +1157,9 @@ class EITProcessingAdapter:
                 name="MDN-filtered EIT data",
                 description="EIT data filtered with MDN heart-rate noise removal.",
             )
-            filtered_eit = mdn_result["filtered_eit"]
+            # The filtered images go into the Sequence, so they go on as an
+            # eitprocessing ``EITData``.
+            filtered_eit = signal_to_eit_data(mdn_result["filtered_eit"])
             filter_captures = mdn_result["filter_captures"]
         elif normalized_filter_mode in {"lowpass", "bandpass"}:
             butterworth_filter_type = cast(
@@ -685,27 +1170,15 @@ class EITProcessingAdapter:
                 if butterworth_filter_type == "lowpass"
                 else (highpass_hz, lowpass_hz)
             )
-            filtered_pixels = filter_pixels_preserving_gaps(
-                raw_eit.pixel_impedance,
+            filtered_images, filter_captures = butterworth_filter_images(
+                as_signal(raw_eit),
+                mode=butterworth_filter_type,
+                cutoff_frequency=cutoff_frequency,
+                order=filter_order,
+                label=f"{normalized_filter_mode}_filtered",
                 operation=f"preprocess(filter_mode={normalized_filter_mode!r})",
-                apply=lambda pixels: butterworth_filter(
-                    pixels,
-                    filter_type=butterworth_filter_type,
-                    cutoff_frequency=cutoff_frequency,
-                    sample_frequency=raw_eit.sample_frequency,
-                    order=filter_order,
-                    axis=0,
-                    captures=filter_captures,
-                ),
-                captures=filter_captures,
             )
-            filtered_eit = copy.deepcopy(raw_eit)
-            filtered_eit.label = f"{normalized_filter_mode}_filtered"
-            filtered_eit.name = f"{normalized_filter_mode.title()}-filtered EIT data"
-            filtered_eit.description = (
-                f"EIT data filtered with a {normalized_filter_mode} Butterworth filter."
-            )
-            filtered_eit.pixel_impedance = filtered_pixels
+            filtered_eit = signal_to_eit_data(filtered_images)
 
         if filtered_eit is not raw_eit:
             add_to_collection(sequence.eit_data, filtered_eit)
@@ -726,53 +1199,53 @@ class EITProcessingAdapter:
                 filtered_global_impedance = self.get_global_impedance(
                     sequence, label=filtered_eit.label
                 )
-            breath_detector = BreathDetection(
+            breath_detector = BreathDetectionSettings(
                 minimum_duration=breath_min_duration_seconds
             )
-            breath_intervals = breath_detector.find_breaths(
-                filtered_global_impedance,
-                result_label="eit_breaths",
-                store=False,
+            breaths = find_breaths_of(
+                as_signal(filtered_global_impedance), breath_detector
             )
-            add_to_collection(sequence.interval_data, breath_intervals)
+            breath_intervals = breaths_to_interval_data(breaths)
+            add_to_collection(
+                sequence.interval_data,
+                breaths_to_eitprocessing(
+                    breaths,
+                    breath_detector,
+                    label="eit_breaths",
+                    derived_from=[filtered_global_impedance],
+                ),
+            )
 
         # `compute_breath_intervals` is guaranteed True here (validated above
-        # whenever any of these three outputs is requested), so
-        # `breath_detector`/`filtered_global_impedance` are always populated;
+        # whenever any of these four outputs is requested), so
+        # `breath_intervals`, `breath_detector` and `filtered_global_impedance` are set;
         # the asserts only narrow the type for mypy.
         if compute_continuous_tiv:
-            assert breath_detector is not None
+            assert breath_intervals is not None
             assert filtered_global_impedance is not None
-            tiv_calculator = TIV(breath_detection=breath_detector)
-            continuous_tiv = tiv_calculator.compute_parameter(
-                filtered_global_impedance,
-                sequence=sequence,
-                store=False,
-                result_label="continuous_tivs",
+            continuous_tiv = self.compute_continuous_tiv(
+                filtered_global_impedance, breaths=breath_intervals
             )
-            add_to_collection(sequence.sparse_data, continuous_tiv)
 
         if compute_eeli:
-            assert breath_detector is not None
+            assert breath_intervals is not None
             assert filtered_global_impedance is not None
             eeli = self.compute_eeli(
-                filtered_global_impedance,
-                sequence=sequence,
-                breath_detector=breath_detector,
-                result_label="continuous_eelis",
+                filtered_global_impedance, breaths=breath_intervals
             )
 
-        pixel_tiv: Any = None
+        pixel_tiv = None
         if compute_pixel_tiv:
-            assert breath_detector is not None
-            assert filtered_global_impedance is not None
+            assert breath_intervals is not None
             pixel_tiv = self.compute_pixel_tiv(
-                filtered_eit,
-                filtered_global_impedance,
-                sequence=sequence,
-                breath_detector=breath_detector,
-                tiv_timing="continuous",
-                result_label="pixel_tivs",
+                filtered_eit, breaths=breath_intervals, result_label="pixel_tivs"
+            )
+
+        pixel_eeli = None
+        if compute_pixel_eeli:
+            assert breath_intervals is not None
+            pixel_eeli = self.compute_pixel_eeli(
+                filtered_eit, breaths=breath_intervals, result_label="pixel_eelis"
             )
 
         return {
@@ -791,6 +1264,7 @@ class EITProcessingAdapter:
             "continuous_tiv": continuous_tiv,
             "eeli": eeli,
             "pixel_tiv": pixel_tiv,
+            "pixel_eeli": pixel_eeli,
         }
 
     def detect_breaths(self, data: Any, **kwargs: Any) -> list[BreathEvent]:
@@ -804,12 +1278,7 @@ class EITProcessingAdapter:
                     "`preprocess_eit()`. Pass `detector=callable` to normalize "
                     "custom detections."
                 )
-            detections = _breath_intervals_to_dicts(data["breath_intervals"])
-            return coerce_breath_events(
-                detections,
-                modality="eit",
-                source="eitprocessing.BreathDetection",
-            )
+            return breath_intervals_to_breath_events(data["breath_intervals"])
 
         detections = detector(data, **kwargs)
         return coerce_breath_events(detections, modality="eit", source="eitprocessing")
@@ -890,7 +1359,7 @@ class EITProcessingAdapter:
                     value=float(respiratory_rate_hz),
                     modality="eit",
                     unit="Hz",
-                    method="eitprocessing.RateDetection",
+                    method="m3resp.eit.processing.detect_rates",
                 )
             )
 
@@ -902,7 +1371,7 @@ class EITProcessingAdapter:
                     value=float(heart_rate_hz),
                     modality="eit",
                     unit="Hz",
-                    method="eitprocessing.RateDetection",
+                    method="m3resp.eit.processing.detect_rates",
                 )
             )
         return parameters
@@ -913,21 +1382,24 @@ class EITProcessingAdapter:
         *,
         stored_breaths: Iterable[Any] | None = None,
     ) -> list[IntervalData]:
-        """Convert per-breath TIV, EELI and pixel TIV into ``IntervalData``.
+        """Convert per-breath TIV, EELI, pixel TIV and pixel EELI into ``IntervalData``.
 
         Args:
             preprocessed: Preprocessing output with optional ``continuous_tiv``,
-                ``eeli`` and ``pixel_tiv`` results and their ``breath_intervals``.
-                Each result must have one value per detected breath, in the
-                same order. Units are taken from each result.
+                ``eeli``, ``pixel_tiv`` and ``pixel_eeli`` results and their
+                ``breath_intervals``. Each result must have one value per
+                detected breath, in the same order. The results are m3resp
+                ``IntervalData``, or eitprocessing results with ``values``
+                (pixel results with one row-column grid per breath). Units
+                are taken from each result.
             stored_breaths: Existing breaths to reuse when modality and exact
                 start and end times match. ``None`` uses newly converted breaths.
 
         Returns:
-            list[IntervalData]: Available results in TIV, EELI, pixel-TIV
-                order, sharing their breath objects. Pixel TIV values are
-                ``PixelMap`` objects with row-column grids. An empty list is
-                returned when all three results are absent.
+            list[IntervalData]: Available results in TIV, EELI, pixel-TIV,
+                pixel-EELI order, sharing their breath objects. Pixel values
+                are ``PixelMap`` objects with row-column grids. An empty list
+                is returned when all four results are absent.
 
         Raises:
             ValueError: If results lack ``breath_intervals``, value and breath
@@ -940,6 +1412,7 @@ class EITProcessingAdapter:
                 ("continuous_tiv", "eitprocessing.TIV", False),
                 ("eeli", "eitprocessing.EELI", False),
                 ("pixel_tiv", "eitprocessing.TIV", True),
+                ("pixel_eeli", "eitprocessing.EELI", True),
             )
             if preprocessed.get(key) is not None
         ]
@@ -956,10 +1429,27 @@ class EITProcessingAdapter:
         )
 
         results: list[IntervalData] = []
-        for sparse, method, as_pixel_maps in per_breath:
+        for result, method, as_pixel_maps in per_breath:
+            if isinstance(result, IntervalData):
+                # Results of m3resp: the values stay, the breaths are the
+                # stored ones.
+                if len(result) != len(breaths):
+                    raise ValueError(
+                        f"Got {len(result)} per-breath values but {len(breaths)} "
+                        "breaths; the breaths must be the ones the values were "
+                        "computed over."
+                    )
+                results.append(
+                    dataclasses.replace(
+                        result,
+                        intervals=list(breaths),
+                        metadata=dict(result.metadata),
+                    )
+                )
+                continue
             results.append(
                 sparse_data_to_interval_data(
-                    sparse,
+                    result,
                     breaths,
                     modality="eit",
                     method=method,

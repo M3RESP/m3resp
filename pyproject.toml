@@ -28,6 +28,7 @@ dependencies = [
   "pandas",
   "pydantic>=2",
   "PyYAML",
+  "scikit-image>=0.25.2",
   "scipy",
 ]
 dynamic = ["version"]
@@ -129,5 +130,6 @@ module = [
   "matplotlib.*",
   "plotly.*",
   "resurfemg.*",
+  "skimage.*",
 ]
 ignore_missing_imports = true

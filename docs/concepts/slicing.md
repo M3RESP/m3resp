@@ -24,7 +24,11 @@ The step names show this: `*.slice_recording` slices a recording, and `*.slice_s
 - Ways 1 to 4 keep the samples from `start` up to the sample before `end`.
 - Ways 1 to 3 keep all samples from `start` to the end of the recording if you leave out `end`. `eit.slice_signal` always needs `end`.
 - Way 5 takes the number of the first image and the number of images.
-- `slice_eit` uses `eitprocessing` (`Sequence.select_by_index`). `eit.slice_signal` uses `eitprocessing` for its data and M3Resp for a `Signal`. The other ways are part of M3Resp.
+- `slice_eit` cuts the native images, waveforms, device marks and breaths with M3Resp, then rebuilds the `eitprocessing` Sequence used by the remaining processing steps. `eit.slice_signal` cuts a native `Signal` with M3Resp; it also accepts `eitprocessing` objects for existing workflows.
+
+For a recording slice, device marks at the first kept image are included and marks at the final kept image are excluded. Complete device breaths can end at the final kept image. Interval bounds follow eitprocessing 1.8.7: a boundary of exactly 0 s uses the corresponding outer interval boundary. A single-frame slice at time 0 s therefore keeps all device breaths.
+
+In time mode, `eit.slice_signal` also accepts `start_inclusive` and `end_inclusive`, both False by default. An exact start is included with either start flag. When the start falls between samples, `start_inclusive=True` keeps the preceding sample. `end_inclusive=True` keeps the first sample at or after the end time. The helper `m3resp.processing.slicing.slice_by_time` exposes the same flags and permits empty selections with `allow_empty=True`.
 
 ## Slice ventilator data
 
@@ -95,7 +99,8 @@ Slice the global impedance for a breath detection window, and keep the recording
 |---|---|
 | The session methods `slice_emg`, `slice_eit` and `slice_ventilator` | `src/m3resp/core/session.py` |
 | The slice of one recording | `src/m3resp/modalities/emg.py`, `eit.py`, `ventilator.py` (`sample_window`, `frame_window`, `keep_samples`, `keep_frames`), and `TimeWindow` in `modalities/time_window.py` |
-| The `eitprocessing` call that slices EIT data | `src/m3resp/adapters/eitprocessing_adapter/__init__.py` (`EITProcessingAdapter.slice_sequence`) |
+| Native EIT images, waveforms, device marks and breaths | `src/m3resp/eit/processing/slicing.py` (`slice_file_data`) |
+| Rebuild the Sequence from sliced native data | `src/m3resp/adapters/eitprocessing_adapter/_slicing.py` |
 | The slice of one signal | `src/m3resp/processing/slicing.py` (`slice_by_index`, `slice_by_time`) |
 | The workflow steps | `src/m3resp/workflows/steps/emg/slicing.py`, `eit/slicing.py`, `ventilator/slicing.py` |
 | Start times | `src/m3resp/synchronization/start_times.py` |

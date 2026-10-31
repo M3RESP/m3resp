@@ -13,7 +13,7 @@ To select the filter, set `filter_mode`:
 | `"bandpass"` | A Butterworth band-pass filter from `highpass_hz` (default 0.05 Hz) to `lowpass_hz` (default 1.0 Hz). |
 | `"none"` | No filter. |
 
-`filter_order` sets the order of the low-pass and band-pass filters (default 4).
+`filter_order` sets the order of the low-pass and band-pass filters (default 4, from 1 to 10).
 
 ```python
 session.preprocess_eit(filter_mode="bandpass", highpass_hz=0.05, lowpass_hz=1.0)
@@ -40,8 +40,9 @@ Set a result to `False` to skip it:
 | `compute_continuous_tiv` | The tidal impedance variation (TIV) of each breath |
 | `compute_eeli` | The end-expiratory lung impedance (EELI) of each breath |
 | `compute_pixel_tiv` | A TIV map per breath, with one value per pixel |
+| `compute_pixel_eeli` | An EELI map per breath, with one value per pixel. Off by default: set it to `True`. |
 
-TIV, EELI and pixel TIV need the breaths. If you set `compute_breath_intervals=False`, also set the three TIV and EELI settings to `False`.
+TIV, EELI, pixel TIV and pixel EELI need the breaths. If you set `compute_breath_intervals=False`, also set the TIV and EELI settings to `False`.
 
 ## Keep more than one result
 

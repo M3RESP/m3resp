@@ -82,19 +82,39 @@ def test_every_declared_alternative_is_a_real_registered_step():
             )
 
 
+#: EIT steps that run on m3resp code only.
+_M3RESP_ONLY_EIT_STEPS = (
+    "eit.slice_signal",
+    "eit.detect_rates",
+    "eit.detect_breaths",
+    "eit.normalize_breaths",
+    "eit.continuous_tiv",
+    "eit.eeli",
+    "eit.pixel_breaths",
+    "eit.pixel_tiv",
+    "eit.pixel_eeli",
+    "eit.roi_tiv_lungspace",
+    "eit.roi_amplitude_lungspace",
+    "eit.roi_watershed",
+    "eit.roi_filter_by_size",
+    "eit.geometric_mask",
+)
+
+
 def test_eit_and_emg_steps_declare_their_optional_package_accurately():
-    """Every ``eit.*`` step is genuinely ``eitprocessing``-backed, so all 16
-    declare it. ``emg.*`` is a real mix: preprocessing/quality steps wrap
-    ``resurfemg``, but several "features"/detection steps
-    (`emg.amplitude`, `emg.peak_indices`, ...) call native
-    `m3resp.processing.*` primitives and correctly declare none - so this
-    only checks that a *declared* package is the real name, not that every
-    emg step declares one."""
+    """Native signal slicing and the rate and breath detection are available
+    on their own. Other EIT steps read or build a Sequence and declare
+    eitprocessing; EMG steps that call their upstream package declare
+    resurfemg.
+    """
 
     for description in describe_steps():
         prefix = description.name.split(".", 1)[0]
         if prefix == "eit":
-            assert description.optional_packages == ("eitprocessing",), description.name
+            expected = (
+                () if description.name in _M3RESP_ONLY_EIT_STEPS else ("eitprocessing",)
+            )
+            assert description.optional_packages == expected, description.name
         elif prefix == "emg" and description.optional_packages:
             assert description.optional_packages == ("resurfemg",), description.name
 

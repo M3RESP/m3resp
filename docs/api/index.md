@@ -77,6 +77,7 @@ These objects and functions hold breaths, events and values per breath, and put 
    m3resp.PixelMap
    m3resp.PixelMask
    m3resp.PixelMaskCollection
+   m3resp.PixelBreaths
    m3resp.pixel_breath_events
    m3resp.LinkedBreath
    m3resp.coerce_event
@@ -139,6 +140,70 @@ These functions load one recording without a session.
    m3resp.io.load_emg
 ```
 
+## Read EIT files
+
+These functions read one EIT file of a Draeger, Sentec or Timpel device. Each returns an `EITFileData` with the images, the waveforms, the marks of the device and, for Timpel, the breaths found by the device. `read_eit_file` picks the reader from the device maker, and `join_eit_files` joins the data of files recorded one after the other.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   m3resp.eit.io.read_eit_file
+   m3resp.eit.io.read_draeger
+   m3resp.eit.io.read_sentec
+   m3resp.eit.io.read_timpel
+   m3resp.eit.io.EITFileData
+   m3resp.modalities.eit.EITRecording
+   m3resp.eit.io.join_eit_files
+```
+
+## EIT calculations
+
+`global_impedance` sums the pixels of each EIT image into the global impedance waveform. `regional_impedance` and `functional_impedance` sum the pixels inside a mask. Each of these three functions returns a `Signal`. `detect_rates` finds the breathing rate and the heart rate of the EIT images, in Hz, from their frequency spectra. `find_breaths` finds the breaths of an impedance waveform and returns them as `BreathEvent`s. `RateDetectionSettings` and `BreathDetectionSettings` hold the settings of these two functions. `mdn_filter` removes the heart signal from EIT images or a waveform with the MDN (multiple digital notch) filter and returns a `Signal`; `mdn_frequency_bands` gives the frequency bands that it removes. `tidal_impedance_variation` and `end_expiratory_lung_impedance` give the TIV and the EELI of each breath of an impedance waveform, as an `IntervalData`; the breaths are `BreathEvent`s of any modality, on the time axis of the waveform. `TIV_METHODS` lists the three TIV methods. `find_pixel_breaths` finds the breaths of each pixel of EIT images from the global breaths and returns a `PixelBreaths`. `pixel_tidal_impedance_variation` and `pixel_end_expiratory_lung_impedance` give one `PixelMap` of TIV or EELI per breath, with the times of the global breaths or of the breaths of each pixel. `minute_image` gives the mean pixel TIV over the breaths inside a time window.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   m3resp.eit.processing.global_impedance
+   m3resp.eit.processing.regional_impedance
+   m3resp.eit.processing.functional_impedance
+   m3resp.eit.processing.detect_rates
+   m3resp.eit.processing.RateDetectionSettings
+   m3resp.eit.processing.find_breaths
+   m3resp.eit.processing.BreathDetectionSettings
+   m3resp.eit.processing.mdn_filter
+   m3resp.eit.processing.mdn_frequency_bands
+   m3resp.eit.processing.tidal_impedance_variation
+   m3resp.eit.processing.end_expiratory_lung_impedance
+   m3resp.eit.processing.find_pixel_breaths
+   m3resp.eit.processing.pixel_tidal_impedance_variation
+   m3resp.eit.processing.pixel_end_expiratory_lung_impedance
+   m3resp.eit.processing.minute_image
+   m3resp.eit.processing.slicing.slice_file_data
+   m3resp.processing.slicing.slice_by_index
+   m3resp.processing.slicing.slice_by_time
+   m3resp.processing.slicing.time_slice_indices
+```
+
+## EIT regions of interest
+
+These functions return a `PixelMask` with 1 for the pixels of a region and NaN for the other pixels. `geometric_mask` gives a fixed part of the image: the ventral or dorsal half, the anatomical right or left half, one of four layers or one of four quadrants (`GEOMETRIC_REGIONS` lists the 12 names). `tiv_lungspace`, `amplitude_lungspace` and `watershed_lungspace` find the functional lung space from the global breaths: the pixels with a large mean TIV, the pixels with a large mean amplitude, or both together with the watershed method. `filter_mask_by_size` keeps the groups of connected pixels of a mask that have a minimum number of pixels. See {doc}`../concepts/pixel-maps`.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   m3resp.eit.roi.geometric_mask
+   m3resp.eit.roi.tiv_lungspace
+   m3resp.eit.roi.amplitude_lungspace
+   m3resp.eit.roi.watershed_lungspace
+   m3resp.eit.roi.filter_mask_by_size
+```
+
 ## Plots
 
 These functions make figures with Matplotlib.
@@ -149,8 +214,45 @@ These functions make figures with Matplotlib.
    :nosignatures:
 
    m3resp.visualization.plot_eit_processing_summary
+   m3resp.visualization.plot_rate_detection
    m3resp.visualization.plot_session_overview
    m3resp.visualization.plot_synchronization_comparison
+```
+
+## Pixel map pictures
+
+`plot_pixel_map` draws a `PixelMap` or a `PixelMask` with Matplotlib, in the style of its kind, with a colour bar. `add_region_labels` writes the region numbers on a map of kind `"integer"`. `pixel_map_style` gives the style of a kind: the colours, the rule for the ends of the colour scale and the colour bar. `scale_limits` and `pixel_colors` give the ends of the colour scale and the colour of each pixel without Matplotlib. See {doc}`../concepts/pixel-maps`.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   m3resp.visualization.pixel_maps.plot_pixel_map
+   m3resp.visualization.pixel_maps.add_region_labels
+   m3resp.visualization.pixel_map_style.PixelMapStyle
+   m3resp.visualization.pixel_map_style.pixel_map_style
+   m3resp.visualization.pixel_map_style.style_of
+   m3resp.visualization.pixel_map_style.scale_limits
+   m3resp.visualization.pixel_map_style.pixel_colors
+```
+
+## Plot data for the GUI
+
+These functions give EIT results as dictionaries of numbers, text, lists and None, which `json.dumps` writes as they are. A NaN pixel is None. Each picture comes with its style.
+
+```{eval-rst}
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   m3resp.visualization.plot_data.pixel_map_plot_data
+   m3resp.visualization.plot_data.pixel_mask_plot_data
+   m3resp.visualization.plot_data.eit_image_plot_data
+   m3resp.visualization.plot_data.eit_images_plot_data
+   m3resp.visualization.plot_data.lungspace_plot_data
+   m3resp.visualization.plot_data.rate_spectrum_plot_data
+   m3resp.visualization.plot_data.region_label_positions
 ```
 
 ## Synthetic data

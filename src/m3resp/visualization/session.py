@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 
 from m3resp.core.session import M3Session
+from m3resp.data.event_data import IntervalData
 from m3resp.data.events import BreathEvent
 from m3resp.synchronization.alignment import align_events_by_modality_offset
-from m3resp.synchronization.start_times import shared_clock_shifts
+from m3resp.synchronization.start_times import on_clock_of, shared_clock_shifts
 from m3resp.visualization import plotly_figures
 from m3resp.visualization.plotly_figures import EventOverlay, LinePanel
 
@@ -160,25 +162,32 @@ def plot_eit_processing_summary(
     )
     if signal is None:
         raise ValueError("No EIT global impedance signal found in processed EIT data.")
+    # An eitprocessing waveform has a label; an m3resp Signal has a name.
+    signal_label = getattr(signal, "label", None) or signal.name
 
+    tiv = _breath_values(processed.get("continuous_tiv"), "extremum_time", session)
+    eeli = _breath_values(processed.get("eeli"), "end_time", session)
+    # One PixelMap of TIV per breath (IntervalData of eit.pixel_tiv).
     pixel_tiv = processed.get("pixel_tiv")
     mean_pixel_tiv = None
     if pixel_tiv is not None and len(pixel_tiv.values):
-        mean_pixel_tiv = np.nanmean(np.stack(pixel_tiv.values), axis=0)
+        mean_pixel_tiv = np.nanmean(
+            np.stack([np.asarray(m, dtype=float) for m in pixel_tiv.values]), axis=0
+        )
 
     if backend == "plotly":
         color, label = _event_style("eit")
         panel = LinePanel(
             "EIT global impedance",
-            signal.label,
+            signal_label,
             np.asarray(signal.time, dtype=float),
             np.asarray(signal.values, dtype=float),
             [EventOverlay(session.events.get("eit_breaths", []), color, label)],
         )
         return plotly_figures.eit_summary_figure(
             panel,
-            processed.get("continuous_tiv"),
-            processed.get("eeli"),
+            tiv,
+            eeli,
             mean_pixel_tiv,
             max_points=max_points,
         )
@@ -195,7 +204,7 @@ def plot_eit_processing_summary(
     ax_signal, ax_tiv, ax_eeli, ax_map = axes.ravel()
 
     ax_signal.plot(signal.time, signal.values, linewidth=1)
-    ax_signal.set(title="EIT global impedance", xlabel="Time (s)", ylabel=signal.label)
+    ax_signal.set(title="EIT global impedance", xlabel="Time (s)", ylabel=signal_label)
     ax_signal.grid(True, alpha=0.25)
     _plot_events(
         [ax_signal],
@@ -205,8 +214,8 @@ def plot_eit_processing_summary(
     )
     _deduplicate_legends([ax_signal])
 
-    _plot_sparse(ax_tiv, processed.get("continuous_tiv"), "Continuous TIV", "TIV")
-    _plot_sparse(ax_eeli, processed.get("eeli"), "EELI", "EELI")
+    _plot_sparse(ax_tiv, tiv, "Continuous TIV", "TIV")
+    _plot_sparse(ax_eeli, eeli, "EELI", "EELI")
 
     if mean_pixel_tiv is not None:
         image = ax_map.imshow(mean_pixel_tiv, cmap="viridis")
@@ -673,6 +682,45 @@ def _plot_events(
                     linewidth=1,
                     label=label,
                 )
+
+
+@dataclass(frozen=True)
+class _BreathValues:
+    """Times (s) and values of a per-breath result, for the TIV and EELI panels."""
+
+    time: np.ndarray
+    values: np.ndarray
+
+    def __len__(self) -> int:
+        return len(self.values)
+
+
+def _breath_values(result: Any, point: str, session: M3Session) -> Any:
+    """Return a per-breath result as times and values for a figure.
+
+    Args:
+        result (Any): An ``IntervalData`` of breaths, an object with ``time``
+            and ``values``, or None.
+        point (str): For an ``IntervalData``, the breath time of each value:
+            ``"extremum_time"`` for TIV, ``"end_time"`` for EELI. A breath
+            with no time at that point gives NaN.
+        session (M3Session): Session with the start time of each recording.
+            Breaths of another modality are moved to the EIT clock with
+            these start times.
+
+    Returns:
+        Any: A ``_BreathValues`` for an ``IntervalData``, with times on the
+            EIT clock; any other result as it is.
+    """
+
+    if not isinstance(result, IntervalData):
+        return result
+    breaths = on_clock_of(session, result.intervals, "eit")
+    times = [getattr(breath, point, None) for breath in breaths]
+    return _BreathValues(
+        time=np.array([np.nan if t is None else t for t in times], dtype=float),
+        values=np.asarray(result.values, dtype=float),
+    )
 
 
 def _plot_sparse(ax: Any, sparse: Any, title: str, ylabel: str) -> None:

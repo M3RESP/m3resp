@@ -15,9 +15,10 @@ from __future__ import annotations
 
 from .filtering import butterworth_filter, mdn_filter
 from .loading import load, load_custom
-from .pixel import _ALLOWED_PIXEL_BREATH_PHASE_MODES, pixel_breaths, pixel_tiv
+from .pixel import pixel_breaths, pixel_eeli, pixel_tiv
 from .rates import detect_rates
 from .roi import (
+    geometric_mask,
     roi_amplitude_lungspace,
     roi_filter_by_size,
     roi_tiv_lungspace,
@@ -33,18 +34,19 @@ from .signals import (
 from .slicing import slice_recording, slice_signal
 
 __all__ = [
-    "_ALLOWED_PIXEL_BREATH_PHASE_MODES",
     "butterworth_filter",
     "continuous_tiv",
     "detect_breaths",
     "detect_rates",
     "eeli",
+    "geometric_mask",
     "global_impedance",
     "load",
     "load_custom",
     "mdn_filter",
     "normalize_breaths",
     "pixel_breaths",
+    "pixel_eeli",
     "pixel_tiv",
     "roi_amplitude_lungspace",
     "roi_filter_by_size",
