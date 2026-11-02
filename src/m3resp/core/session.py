@@ -1230,11 +1230,15 @@ class M3Session:
         else:
             data = data or self._require_raw("emg").data
             event_key = "emg_breaths"
-
+        defaults = (
+            {"distance_seconds": 0.5}
+            if "distance_seconds" not in kwargs and kwargs.get("detector") is None
+            else {}
+        )
         events = self.emg_adapter.detect_breaths(
             data,
             **kwargs,
-            **{"distance_seconds": 0.5} if "distance_seconds" not in kwargs else {},
+            **defaults,
         )
         self.add_events(event_key, events)
         recorded = dict(kwargs)
