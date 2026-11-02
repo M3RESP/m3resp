@@ -344,8 +344,8 @@ def _load_adicht(
         channel_indexes = [i for i, fs in enumerate(fs_sel) if fs == max_fs]
 
     data_df, sampling_frequency = adi_data.extract_data(
-        channel_idxs=channel_indexes,
-        record_idx=record_index,
+        channel_index=channel_indexes,
+        record_index=record_index,
         resample_channels=resample_channels,
     )
     metadata = {
@@ -356,7 +356,8 @@ def _load_adicht(
         "record_id": record_index,
     }
 
-    return {"array": data_df.to_numpy(), "dataframe": data_df, "metadata": metadata}
+    # channel-major (n_channels, n_samples), like the other loaders
+    return {"array": data_df.to_numpy().T, "dataframe": data_df, "metadata": metadata}
 
 
 def _load_npy(file_path: str) -> dict[str, Any]:
