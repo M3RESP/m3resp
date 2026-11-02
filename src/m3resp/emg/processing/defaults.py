@@ -1204,6 +1204,7 @@ def _postprocess_default(
             "`preprocess_emg()`."
         )
         raise UnsupportedWorkflowError(msg)
+    kwargs.setdefault("ecg_peak_indices", processed_emg.get("ecg_peak_indices"))
     context: _PostprocessingContext = _build_context(
         envelope=processed_emg["envelope"],
         fs=processed_emg["fs"],
