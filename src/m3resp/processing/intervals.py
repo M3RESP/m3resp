@@ -166,7 +166,9 @@ def onoff_from_baseline_crossings(
         if len(delta_samples) < 1:
             peak_starts[peak_number] = 0
             crossings_after = crossings[crossings > peak_index]
-            peak_ends[peak_number] = int(crossings_after[0])
+            peak_ends[peak_number] = (
+                int(crossings_after[0]) if len(crossings_after) > 0 else len(signal) - 1
+            )
         else:
             crossing_index = np.argmin(delta_samples)
             peak_starts[peak_number] = int(crossings[crossing_index])
