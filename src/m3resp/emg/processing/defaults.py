@@ -274,6 +274,8 @@ def _preprocess_default(
                 removal is disabled)
             - "envelope": the computed envelope of the EMG signal (or None if
                 envelope computation is disabled)
+            - "ecg_peak_indices": the sample indices of the ECG R peaks found
+                for ECG removal (or None if ECG removal is disabled)
             - "filter": a dictionary containing the filter parameters used for
                 preprocessing
 
@@ -407,6 +409,7 @@ def _preprocess_default(
         filtered = notch(values=filtered, base_frequency=notch_base_frequency)
 
     clean = filtered
+    ecg_peak_indexes = None
     if remove_ecg:
         ecg_channel = kwargs.pop(
             "ecg_channel",
@@ -447,6 +450,7 @@ def _preprocess_default(
         "filtered": filtered,
         "clean": clean,
         "envelope": envelope,
+        "ecg_peak_indices": ecg_peak_indexes,
         "filter": {
             "high_pass_hz": high_pass_hz,
             "low_pass_hz": low_pass_hz,

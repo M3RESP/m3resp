@@ -287,6 +287,56 @@ def test_default_preprocess_updates_emg_recording_with_fake_signal():
     assert session.emg.envelope is processed["envelope"]
 
 
+def _session_with_ecg_channel():
+    """A session whose recording has an EMG channel and an ECG channel with
+    an R peak every 0.8 s."""
+
+    np = pytest.importorskip("numpy")
+
+    fs = 1000.0
+    n_samples = 10_000
+    rng = np.random.default_rng(0)
+    emg = rng.normal(0.0, 1.0, n_samples)
+    ecg = rng.normal(0.0, 0.05, n_samples)
+    ecg[400::800] += 20.0
+    return M3Session(
+        emg_adapter=ReSurfEMG(
+            loader=lambda *args, **kwargs: {
+                "array": np.asarray([emg, ecg]),
+                "dataframe": {"kind": "fake-dataframe"},
+                "metadata": {"fs": fs, "labels": ["EMG", "ECG"], "units": ["uV"]},
+            }
+        )
+    )
+
+
+def test_preprocess_emg_stores_ecg_peaks_as_events():
+    """The ECG peaks found during preprocessing are stored as events."""
+
+    session = _session_with_ecg_channel()
+    session.load_emg("subject.Poly5")
+    processed = session.preprocess_emg(channel=0)
+
+    peaks = session.events["ecg_peaks"]
+    assert len(peaks) == len(processed["ecg_peak_indices"]) > 0
+    assert [peak.sample_index for peak in peaks] == list(processed["ecg_peak_indices"])
+    assert all(peak.name == "ecg_peak" and peak.modality == "emg" for peak in peaks)
+    assert peaks[0].time == pytest.approx(peaks[0].sample_index / 1000.0)
+
+
+def test_preprocess_emg_variant_stores_ecg_peaks_under_variant_name():
+    """A named variant keeps its ECG peaks apart; without ECG removal there
+    are none."""
+
+    session = _session_with_ecg_channel()
+    session.load_emg("subject.Poly5")
+    session.preprocess_emg(channel=0, variant="gated")
+    session.preprocess_emg(channel=0, remove_ecg=False)
+
+    assert session.events["ecg_peaks:gated"]
+    assert "ecg_peaks" not in session.events
+
+
 class TestEMGChannelChoice:
     """When no channel is given, the EMG channel is picked from the channel
     names. A channel named ECG is never analysed as breathing EMG, and when

@@ -371,6 +371,17 @@ def test_preprocess_without_ecg_removal_keeps_filtered_signal(recording):
     """With `remove_ecg=False` the clean signal equals the filtered one."""
     result = defaults._preprocess_default(recording, channel=0, remove_ecg=False)
     np.testing.assert_array_equal(result["clean"], result["filtered"])
+    assert result["ecg_peak_indices"] is None
+
+
+def test_preprocess_returns_the_ecg_peaks_used_for_removal(recording):
+    """The ECG peaks found for ECG removal are in the result."""
+    result = defaults._preprocess_default(recording, channel=0)
+    expected = defaults.detect_ecg_peaks(
+        np.asarray(recording["array"][1], dtype=float),
+        sample_frequency=recording["metadata"]["fs"],
+    )
+    np.testing.assert_array_equal(result["ecg_peak_indices"], expected)
 
 
 def test_preprocess_can_skip_envelope(recording):

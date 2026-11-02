@@ -26,7 +26,8 @@ from m3resp.data.collections import (
     QualityReport,
     SignalCollection,
 )
-from m3resp.data.events import BreathEvent, reuse_matching_breaths
+
+from m3resp.data.events import BreathEvent, Event, reuse_matching_breaths
 from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
 from m3resp.data.processing import ProcessingHistory
@@ -467,6 +468,10 @@ class M3Session:
         mirrors it onto `session.processed["emg"]` only when `name` is
         `"default"`.
 
+        When the result has ``"ecg_peak_indices"``, the ECG R peaks are also
+        stored as events under `session.events["ecg_peaks"]`, or
+        `session.events["ecg_peaks:<name>"]` for a named variant.
+
         Args:
             variant (str | None): Name to store this result under. None
                 stores it as ``"default"``.
@@ -479,8 +484,9 @@ class M3Session:
         Returns:
             Any: The preprocessing result. The default step gives a
                 dictionary that includes the ``"filtered"`` and
-                ``"envelope"`` signals, the ``"channel"`` used and the
-                sampling rate ``"fs"`` in Hz.
+                ``"envelope"`` signals, the ``"channel"`` used, the
+                sampling rate ``"fs"`` in Hz and the ``"ecg_peak_indices"``
+                found for ECG removal.
         """
 
         recording = self._require_raw("emg")
@@ -502,6 +508,26 @@ class M3Session:
             self.emg.fs = result.get("fs")
         for signal in self.emg_adapter.to_signals(result):
             self.signals.add(signal)
+        ecg_peak_indices = (
+            result.get("ecg_peak_indices") if isinstance(result, dict) else None
+        )
+        if ecg_peak_indices is not None:
+            fs = float(result["fs"])
+            event_key = "ecg_peaks" if variant is None else f"ecg_peaks:{variant}"
+            self.add_events(
+                event_key,
+                [
+                    Event(
+                        name="ecg_peak",
+                        modality="emg",
+                        time=float(index) / fs,
+                        sample_index=int(index),
+                        signal_name="filtered",
+                        sample_frequency=fs,
+                    )
+                    for index in ecg_peak_indices
+                ],
+            )
         self.processed_variants["emg"][name] = result
         if name == "default":
             self.processed["emg"] = result
