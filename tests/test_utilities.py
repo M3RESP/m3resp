@@ -1,5 +1,4 @@
-"""Small argument helpers in `m3resp.core.utilities` and
-`m3resp.processing.validation`.
+"""Small argument helpers in `m3resp.processing.validation`.
 
 `_validate_incompatible_kwargs` exists in both modules with the same code, so
 its tests run against both copies.
