@@ -270,7 +270,7 @@ def _preprocess_default(
             - "fs": the sampling frequency of the EMG signal
             - "raw_channel": the raw EMG signal for the selected channel
             - "filtered": the band-pass filtered EMG signal
-            - "clean": the ECG-cleaned EMG signal (or the filtered signal if ECG
+            - "ecg_cleaned": the ECG-cleaned EMG signal (or the filtered signal if ECG
                 removal is disabled)
             - "envelope": the computed envelope of the EMG signal (or None if
                 envelope computation is disabled)
@@ -408,7 +408,6 @@ def _preprocess_default(
     if notch_base_frequency is not None and not notch_before_bandpass:
         filtered = notch(values=filtered, base_frequency=notch_base_frequency)
 
-    clean = filtered
     ecg_peak_indexes = None
     if remove_ecg:
         ecg_channel = kwargs.pop(
@@ -418,14 +417,14 @@ def _preprocess_default(
         ecg_signal = (
             np.asarray(array[ecg_channel[0]], dtype=float)
             if ecg_channel is not None
-            else clean
+            else filtered
         )
         ecg_peak_indexes = detect_ecg_peaks(ecg_signal, sample_frequency=fs)
         if ecg_removal_method == "gating":
-            clean = gate_ecg(clean, ecg_peak_indexes, fill_method=fill_method)
+            ecg_cleaned = gate_ecg(filtered, ecg_peak_indexes, fill_method=fill_method)
         elif ecg_removal_method == "wavelet":
-            clean, *_ = wavelet_denoise_ecg(
-                clean, ecg_peak_indexes, sample_frequency=fs
+            ecg_cleaned, *_ = wavelet_denoise_ecg(
+                filtered, ecg_peak_indexes, sample_frequency=fs
             )
         else:
             msg = (
@@ -436,7 +435,7 @@ def _preprocess_default(
     envelope = None
     if compute_envelope:
         envelope = emg_envelope(
-            clean,
+            ecg_cleaned if remove_ecg else filtered,
             sample_frequency=fs,
             window_seconds=envelope_window_seconds,
             method=envelope_method,
@@ -448,7 +447,7 @@ def _preprocess_default(
         "fs": fs,
         "raw_channel": raw,
         "filtered": filtered,
-        "clean": clean,
+        "ecg_cleaned": ecg_cleaned if remove_ecg else None,
         "envelope": envelope,
         "ecg_peak_indices": ecg_peak_indexes,
         "filter": {
