@@ -74,7 +74,15 @@ class EMGPreset(Preset):
         session.detect_emg_breaths(
             baseline=baseline, **self._kwargs_for(config, "detect_breaths")
         )
-        session.postprocess_emg(**self._kwargs_for(config, "postprocess"))
+        # Postprocessing recomputes its own baseline: give it the baseline
+        # settings breath detection used, unless config["postprocess"] sets them.
+        postprocess_kwargs = {
+            f"baseline_{name}": float(value)
+            for name, value in self._kwargs_for(config, "baseline").items()
+            if name in _BASELINE_DEFAULTS
+        }
+        postprocess_kwargs.update(self._kwargs_for(config, "postprocess"))
+        session.postprocess_emg(**postprocess_kwargs)
         return session
 
     @staticmethod
