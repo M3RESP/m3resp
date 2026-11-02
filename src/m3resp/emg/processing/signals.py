@@ -1,4 +1,4 @@
-"""Standalone signal-shaping helpers used by the ReSurfEMGAdapter and by
+"""Standalone signal-shaping helpers used by the ReSurfEMG and by
 EMG pipeline steps that need the same ventilator-channel/event-index shaping.
 """
 

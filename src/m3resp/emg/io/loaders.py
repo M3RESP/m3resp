@@ -99,7 +99,7 @@ def _load_biopac_txt(path: str) -> dict[str, Any]:
     ``N channels`` line, then two lines per channel (label, unit), a ``CHn``
     column header, a per-channel sample-count row, and finally the samples.
     Returns the same ``(array, dataframe, metadata)``-shaped dict as
-    :meth:`ReSurfEMGAdapter.load`, with ``array`` channel-major
+    :meth:`ReSurfEMG.load`, with ``array`` channel-major
     ``(n_channels, n_samples)`` and ``metadata["fs"]`` populated.
     """
     with Path.open(Path(path), encoding="utf-8", errors="replace") as handle:

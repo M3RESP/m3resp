@@ -1,11 +1,12 @@
 """Milestone 2.7 - EMG regression tests (plan_stage2.md Sec 25).
 
-`ReSurfEMGAdapter` is a thin wrapper (Stage 1): it does not reimplement
-`resurfemg`'s algorithms, it calls them directly. These tests pin that
-down - on synthetic data (no private/clinical recordings needed, per
-plan_stage2.md Sec 26), the adapter's default preprocessing/detection paths
+`ReSurfEMG` reimplements the `resurfemg` algorithms in M3Resp's own codebase,
+so that the EMG workflow can be run without calling the `resurfemg` library directly.
+
+These tests pin that down - on synthetic data (no private/clinical recordings needed, per
+plan_stage2.md Sec 26), the native implementation's default preprocessing/detection paths
 must reproduce calling the same `resurfemg` functions directly, to a
-documented tolerance. Any future change that makes the adapter transform
+documented tolerance. Any future change that makes the implementation transform
 the data before/after calling `resurfemg` (rounding, unit conversion, a
 different default parameter, ...) will show up here as a regression.
 

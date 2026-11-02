@@ -69,7 +69,7 @@ def _select_ecg_source(
     reads={"session": "session", "processed_emg": "processed_emg"},
     writes=("ecg_peak_indices", "ecg_peak_events", "ecg_peak_count_result"),
     summary="Detect ECG peak sample indices in an EMG/ECG channel.",
-    description="Detect ECG (R-wave-like) peaks in a raw channel or a processed_emg key, via ReSurfEMGAdapter.detect_ecg_peaks. Prerequisite for emg.ecg_gating/emg.ecg_wavelet_denoising.",
+    description="Detect ECG (R-wave-like) peaks in a raw channel or a processed_emg key, via ReSurfEMG.detect_ecg_peaks. Prerequisite for emg.ecg_gating/emg.ecg_wavelet_denoising.",
     category="preprocessing",
     modality="emg",
     optional_packages=_RESURFEMG,

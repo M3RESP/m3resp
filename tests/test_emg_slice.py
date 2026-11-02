@@ -7,7 +7,6 @@ import pytest
 
 from m3resp import M3Session
 from m3resp.emg import ReSurfEMG
-from m3resp.adapters import ReSurfEMGAdapter
 from m3resp.adapters.ventilator_adapter import VentilatorAdapter
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.workflows.steps.emg.slicing import slice_recording
@@ -91,7 +90,7 @@ def test_ventilator_data_at_its_own_rate_is_cut_at_the_same_times():
         "metadata": {"fs": ventilator_fs, "labels": ["Paw", "Flow", "Volume"]},
     }
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(loader=lambda *args, **kwargs: _recording()),
+        emg_adapter=ReSurfEMG(loader=lambda *args, **kwargs: _recording()),
         ventilator_adapter=VentilatorAdapter(loader=lambda *args, **kwargs: payload),
     )
     session.load_emg("study.txt")
@@ -109,7 +108,7 @@ def test_ventilator_data_at_its_own_rate_is_cut_at_the_same_times():
 def test_emg_data_held_as_a_list_stays_a_list():
     """EMG data held as nested lists is sliced and stays a list."""
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(
+        emg_adapter=ReSurfEMG(
             loader=lambda *args, **kwargs: {
                 "array": _recording()["array"].tolist(),
                 "metadata": {"fs": FS},
@@ -161,7 +160,7 @@ def test_steps_after_the_slice_step_read_the_cut_recording(tmp_path):
 
     (tmp_path / "study.txt").write_text("")
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(loader=lambda *args, **kwargs: _recording())
+        emg_adapter=ReSurfEMG(loader=lambda *args, **kwargs: _recording())
     )
     spec = {
         "name": "cut",

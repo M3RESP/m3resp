@@ -19,7 +19,7 @@ from ._shared import _RESURFEMG, _SESSION_ARTIFACT
     reads={"session": "session"},
     writes=("ventilator_raw",),
     summary="Load a ventilator recording into the session.",
-    description="Load a ventilator recording file through ReSurfEMGAdapter.",
+    description="Load a ventilator recording file through ReSurfEMG.",
     category="loading",
     modality="ventilator",
     optional_packages=_RESURFEMG,

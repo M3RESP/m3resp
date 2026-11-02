@@ -36,7 +36,7 @@ if TYPE_CHECKING:
         "ecg_gate_mask_result",
     ),
     summary="Remove ECG peaks from EMG by gating (zero/interpolate/replace).",
-    description="Remove ECG peaks from an EMG channel by gating each detected peak (zero/interpolate/replace), via ReSurfEMGAdapter.gate_ecg.",  # noqa: E501
+    description="Remove ECG peaks from an EMG channel by gating each detected peak (zero/interpolate/replace), via ReSurfEMG.gate_ecg.",  # noqa: E501
     category="preprocessing",
     modality="emg",
     optional_packages=_RESURFEMG,

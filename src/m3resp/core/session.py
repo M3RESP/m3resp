@@ -147,7 +147,7 @@ class M3Session:
             eit_adapter: EIT loading and processing methods. ``None`` uses
                 ``EITProcessingAdapter``.
             emg_adapter: EMG loading and processing methods. ``None`` uses
-                ``ReSurfEMGAdapter``.
+                ``ReSurfEMG``.
             metadata: Recording description as ``SessionMetadata`` or a
                 dictionary. ``None`` creates empty metadata.
             allow_overwrite: Allow preprocessing calls to replace a result
@@ -472,7 +472,7 @@ class M3Session:
                 stores it as ``"default"``.
             overwrite (bool): Replace a result already stored under the same
                 name.
-            **kwargs (Any): Passed on to `ReSurfEMGAdapter.preprocess`.
+            **kwargs (Any): Passed on to `ReSurfEMG.preprocess`.
                 ``preprocess=`` replaces the whole step with a function of
                 your own.
 
@@ -1190,7 +1190,7 @@ class M3Session:
                 result with this name, stored under
                 `session.events["emg_breaths:<name>"]`. See
                 `detect_eit_breaths`.
-            **kwargs (Any): Passed on to `ReSurfEMGAdapter.detect_breaths`
+            **kwargs (Any): Passed on to `ReSurfEMG.detect_breaths`
                 (for example ``baseline=``). ``detector=`` replaces the
                 detection with a function of your own.
 
@@ -1303,7 +1303,7 @@ class M3Session:
         postprocessing are stored in `session.events["ventilator_breaths"]`.
 
         Args:
-            **kwargs (Any): Passed on to `ReSurfEMGAdapter.postprocess`, for
+            **kwargs (Any): Passed on to `ReSurfEMG.postprocess`, for
                 example ``ventilator``, ``ventilator_fs`` (Hz) and
                 ``ventilator_breath_width_seconds``.
 

@@ -1,4 +1,4 @@
-"""Quality-assessment methods of `ReSurfEMGAdapter`.
+"""Quality-assessment methods of `ReSurfEMG`.
 
 ---------------------------------------------------------------------------
 Provenance

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from m3resp.core.session import M3Session
     from m3resp.data.quality import Severity
 
-#: Steps that call resurfemg directly or through ReSurfEMGAdapter declare this.
+#: Steps that call resurfemg directly or through ReSurfEMG declare this.
 _RESURFEMG = ("resurfemg",)
 
 _SESSION_ARTIFACT = StepArtifact(

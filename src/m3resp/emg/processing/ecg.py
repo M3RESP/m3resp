@@ -1,4 +1,4 @@
-"""ECG-artifact-handling methods of `ReSurfEMGAdapter`.
+"""ECG-artifact-handling methods of `ReSurfEMG`.
 
 ---------------------------------------------------------------------------
 Provenance
