@@ -207,7 +207,7 @@ def detect_ventilator_breath_peaks(
     prominence: float | None = None,
     threshold_refined: float | None = None,
     prominence_refined: float | None = None,
-    distance_samples: float | None = None,
+    distance_samples: int | None = None,
     **kwargs,
 ) -> np.ndarray:
     """Identify breaths in ventilator volume data.
@@ -232,7 +232,7 @@ def detect_ventilator_breath_peaks(
             detection. Defaults to None.
         prominence_refined (int | None, optional): Refined prominence for peak
             detection. Defaults to None.
-        distance_samples (float | None, optional): Minimum interpeak distance in samples.
+        distance_samples (int | None, optional): Minimum interpeak distance in samples.
         kwargs (Any): ReSurfEMG backwards-compatible alternative keyword arguments for
             `threshold_refined` and `prominence_refined`:
             - `threshold_new` (int | None, optional): Refined threshold for peak
@@ -259,6 +259,14 @@ def detect_ventilator_breath_peaks(
         prominence=prominence,
         width=width_samples,
     )
+    if len(first_pass) == 0:
+        warnings.warn(
+            "No ventilator breath peaks detected in the specified window. "
+            "Returning an empty array.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return np.array([], dtype=int)
     if distance_samples is not None:
         first_pass = merge_close_peaks(
             first_pass, volume_slice, min_distance_samples=distance_samples
