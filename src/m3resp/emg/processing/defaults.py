@@ -270,7 +270,7 @@ def _preprocess_default(
             - "fs": the sampling frequency of the EMG signal
             - "raw_channel": the raw EMG signal for the selected channel
             - "filtered": the band-pass filtered EMG signal
-            - "ecg_cleaned": the ECG-cleaned EMG signal (or the filtered signal if ECG
+            - "ecg_cleaned": the ECG-cleaned EMG signal (or None if ECG
                 removal is disabled)
             - "envelope": the computed envelope of the EMG signal (or None if
                 envelope computation is disabled)
