@@ -511,9 +511,13 @@ class M3Session:
         ecg_peak_indices = (
             result.get("ecg_peak_indices") if isinstance(result, dict) else None
         )
-        if ecg_peak_indices is not None:
+        event_key = "ecg_peaks" if variant is None else f"ecg_peaks:{variant}"
+        if ecg_peak_indices is None:
+            # A new preprocessing result without ECG removal: earlier peaks
+            # no longer describe it.
+            self.events.pop(event_key, None)
+        else:
             fs = float(result["fs"])
-            event_key = "ecg_peaks" if variant is None else f"ecg_peaks:{variant}"
             self.add_events(
                 event_key,
                 [
