@@ -330,7 +330,12 @@ def _load_adicht(
     adi_metadata = adi_data.generate_metadata()
     if channel_indexes is None:
         channel_indexes = list(adi_data.channel_map.keys())
-    fs_sel = [adi_metadata[idx]["fs"][0] for idx in channel_indexes]
+    resample = resample_channels or {}
+    # Rate of each channel after resampling, in the requested record.
+    fs_sel = [
+        resample.get(idx, adi_metadata[idx]["fs"][record_index])
+        for idx in channel_indexes
+    ]
     if len(set(fs_sel)) > 1:
         msg = (
             "Multiple sampling rates detected, which cannot be parsed into "
@@ -341,8 +346,9 @@ def _load_adicht(
         warnings.warn(msg, UserWarning, stacklevel=2)
 
         max_fs = max(fs_sel)
-        channel_indexes = [i for i, fs in enumerate(fs_sel) if fs == max_fs]
-
+        channel_indexes = [
+            idx for idx, fs in zip(channel_indexes, fs_sel, strict=True) if fs == max_fs
+        ]
     data_df, sampling_frequency = adi_data.extract_data(
         channel_index=channel_indexes,
         record_index=record_index,
