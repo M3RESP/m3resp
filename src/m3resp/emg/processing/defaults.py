@@ -415,7 +415,10 @@ def _preprocess_default(
             _choose_ecg_channel(channel_labels) if channel_labels else None,
         )
         ecg_signal = (
-            np.asarray(array[ecg_channel[0]], dtype=float)
+            np.asarray(
+                array[ecg_channel[0] if isinstance(ecg_channel, list) else ecg_channel],
+                dtype=float,
+            )
             if ecg_channel is not None
             else filtered
         )
