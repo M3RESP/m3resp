@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from m3resp.adapters.ventilator_adapter import (
     SUGGESTED_LOWPASS_HZ,
     VentilatorAdapter,
@@ -230,12 +229,13 @@ class TestLoad:
     def test_falls_back_to_the_resurfemg_loader(self, monkeypatch):
         # No injected loader: ventilator files share the sEMG's formats, so
         # loading delegates rather than reimplementing readers.
-        from m3resp.adapters import resurfemg_adapter
+        from m3resp.adapters.resurfemg_adapter import _core as resurfemg_core
 
+        # Stub the file reader so no file has to exist on disk.
         payload = _payload()
         monkeypatch.setattr(
-            resurfemg_adapter.ReSurfEMGAdapter,
-            "load",
-            lambda self, path, **kwargs: payload,
+            resurfemg_core,
+            "_load_biopac_txt",
+            lambda path: payload,
         )
         assert VentilatorAdapter().load("v.txt") is payload

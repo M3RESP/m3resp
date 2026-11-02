@@ -1,7 +1,7 @@
 """Regression coverage for the granular `emg.*` postprocessing steps.
 
 Confirms the per-function `emg.*` workflow steps (src/m3resp/workflows/steps/emg/)
-are a faithful factoring of `ReSurfEMGAdapter._postprocess_default`, not a
+are a faithful factoring of `ReSurfEMG.postprocess_default`, not a
 behavioral rewrite, by running both against the same committed sample data
 and comparing numeric output.
 """

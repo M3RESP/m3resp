@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from m3resp import M3Session
-from m3resp.adapters import ReSurfEMGAdapter
+from m3resp.emg import ReSurfEMG
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.synchronization.start_times import shared_clock_shift
 from m3resp.workflows.steps.ventilator.loading import load
@@ -30,9 +30,7 @@ def _recording() -> dict:
 
 def _session() -> M3Session:
     # Every load reads the file again, as the real loader does.
-    return M3Session(
-        emg_adapter=ReSurfEMGAdapter(loader=lambda *args, **kwargs: _recording())
-    )
+    return M3Session(emg_adapter=ReSurfEMG(loader=lambda *args, **kwargs: _recording()))
 
 
 def _standalone_session() -> M3Session:

@@ -13,7 +13,8 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
+from m3resp.adapters import EITProcessingAdapter
+from m3resp.emg import ReSurfEMG
 from m3resp.adapters.eitprocessing_adapter import sparse_data_to_interval_data
 from m3resp.core.exceptions import UnsupportedWorkflowError
 from m3resp.data import (
@@ -245,9 +246,9 @@ class TestSparseDataToIntervalData:
             )
 
 
-class TestReSurfEMGAdapterConversions:
+class TestReSurfEMGConversions:
     def test_to_signals_converts_raw_filtered_and_envelope(self):
-        adapter = ReSurfEMGAdapter()
+        adapter = ReSurfEMG()
         processed_emg = {
             "fs": 100.0,
             "channel": 0,
@@ -267,7 +268,7 @@ class TestReSurfEMGAdapterConversions:
         assert all(s.sample_frequency == 100.0 for s in signals)
 
     def test_to_parameters_converts_feature_values_scalar_and_array(self):
-        adapter = ReSurfEMGAdapter()
+        adapter = ReSurfEMG()
         postprocessed = {
             "computed": {
                 "features": {
@@ -289,15 +290,18 @@ class TestReSurfEMGAdapterConversions:
         }
         assert not by_name["time_to_peak"].is_scalar
 
-    def test_to_parameters_splits_respiratory_rate_into_median_and_per_breath(self):
+    def test_postprocessing_default_splits_respiratory_rate_into_median_and_per_breath(
+        self,
+    ):
         """The respiratory rate arrives as (median rate, rate of each breath).
         The two parts have different shapes, so they become two results."""
 
-        adapter = ReSurfEMGAdapter()
+        adapter = ReSurfEMG()
         postprocessed = {
             "computed": {
                 "features": {
-                    "respiratory_rate": (12.0, np.array([11.5, 12.0, np.nan])),
+                    "respiratory_rate": 12.0,
+                    "respiratory_rate_breath_to_breath": np.array([11.5, 12.0, np.nan]),
                 }
             }
         }
@@ -319,10 +323,10 @@ class TestReSurfEMGAdapterConversions:
         # NaN marks an outlier breath and must be kept, not dropped.
         np.testing.assert_array_equal(per_breath.value, [11.5, 12.0, np.nan])
         assert per_breath.unit == "breaths/min"
-        assert per_breath.method == "resurfemg.respiratory_rate"
+        assert per_breath.method == "resurfemg.respiratory_rate_breath_to_breath"
 
     def test_to_quality_flags_converts_results_and_skipped_functions(self):
-        adapter = ReSurfEMGAdapter()
+        adapter = ReSurfEMG()
         postprocessed = {
             "computed": {
                 "quality_assessment": {
