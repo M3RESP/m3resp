@@ -19,6 +19,7 @@ from m3resp.data import (
     Signal,
     TimeSeries,
 )
+
 from m3resp.data.events import BreathEvent
 
 

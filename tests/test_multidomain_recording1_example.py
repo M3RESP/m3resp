@@ -32,7 +32,7 @@ EXPECTED_BREATH_TIMES_S = [
 
 @pytest.mark.skipif(not os.path.isfile(DATA), reason="session recordings not on disk")
 def test_recording1_a2_gives_the_multidomain_numbers():
-    pytest.importorskip("resurfemg")
+
     with open(SPEC, encoding="utf-8") as handle:
         spec = yaml.safe_load(handle)
     spec.pop("outputs", None)  # do not write result files from a test

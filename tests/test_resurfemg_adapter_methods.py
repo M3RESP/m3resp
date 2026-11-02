@@ -1,4 +1,4 @@
-"""Stage 2 ReSurfEMG gap migration, Phase 8 (plan/stage2/
+"""Stage 2 ReSurfEMGAdapter gap migration, Phase 8 (plan/stage2/
 2_resurfemg_gap_migration_implementation_plan.md) - dedicated tests for the
 Phase 1 `ReSurfEMGAdapter` methods (ECG, baseline, and quality operations):
 `OptionalDependencyError` behavior when `resurfemg` can't be imported, and

@@ -30,20 +30,22 @@ def _select_ecg_source(
     `ecg_channel` (a raw channel-major index) takes priority over `source`
     (a key into `processed_emg`, e.g. "raw_channel"/"filtered"/"envelope").
     """
-
     if ecg_channel is not None:
         recording = session.emg
         if recording is None or recording.raw is None:
-            raise ValueError("emg.ecg_detect_peaks needs a loaded EMG recording.")
+            msg = "emg.ecg_detect_peaks needs a loaded EMG recording."
+            raise ValueError(msg)
         raw = np.asarray(recording.raw)
         if not (0 <= ecg_channel < raw.shape[0]):
-            raise ValueError(
+            msg = (
                 f"ecg_channel {ecg_channel!r} is out of range; the loaded "
                 f"recording has channels 0..{raw.shape[0] - 1}."
             )
+            raise ValueError(msg)
         raw_fs = (recording.metadata or {}).get("fs")
         if raw_fs is None:
-            raise ValueError("emg.ecg_detect_peaks needs recording.metadata['fs'].")
+            msg = "emg.ecg_detect_peaks needs recording.metadata['fs']."
+            raise ValueError(msg)
         return raw[ecg_channel], float(raw_fs), f"raw_channel[{ecg_channel}]"
 
     if source not in processed_emg:
@@ -52,10 +54,11 @@ def _select_ecg_source(
             for key, value in processed_emg.items()
             if isinstance(value, np.ndarray) or hasattr(value, "__len__")
         )
-        raise ValueError(
+        msg = (
             f"emg.ecg_detect_peaks source {source!r} is not present in "
             f"processed_emg; available keys: {available}."
         )
+        raise ValueError(msg)
     array = np.asarray(processed_emg[source], dtype=float)
     fs = float(processed_emg["fs"])
     return array, fs, source
@@ -66,7 +69,7 @@ def _select_ecg_source(
     reads={"session": "session", "processed_emg": "processed_emg"},
     writes=("ecg_peak_indices", "ecg_peak_events", "ecg_peak_count_result"),
     summary="Detect ECG peak sample indices in an EMG/ECG channel.",
-    description="Detect ECG (R-wave-like) peaks in a raw channel or a processed_emg key, via ReSurfEMGAdapter.detect_ecg_peaks. Prerequisite for emg.ecg_gating/emg.ecg_wavelet_denoising.",
+    description="Detect ECG (R-wave-like) peaks in a raw channel or a processed_emg key, via ReSurfEMG.detect_ecg_peaks. Prerequisite for emg.ecg_gating/emg.ecg_wavelet_denoising.",
     category="preprocessing",
     modality="emg",
     optional_packages=_RESURFEMG,
@@ -174,7 +177,7 @@ def ecg_detect_peaks(
         peak_fraction=peak_fraction,
         peak_width_samples=peak_width_samples,
         peak_distance_samples=peak_distance_samples,
-        bandpass_filter=bandpass_filter,
+        apply_bandpass_filter=bandpass_filter,
     )
 
     detection_parameters = {
@@ -184,7 +187,7 @@ def ecg_detect_peaks(
         "requested_peak_distance_seconds": peak_distance_seconds,
         "effective_peak_width_samples": peak_width_samples,
         "effective_peak_distance_samples": peak_distance_samples,
-        "bandpass_filter": bandpass_filter,
+        "apply_bandpass_filter": bandpass_filter,
     }
     events = [
         Event(

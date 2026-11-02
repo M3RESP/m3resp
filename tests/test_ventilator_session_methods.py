@@ -11,13 +11,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from m3resp.adapters import ReSurfEMGAdapter
+from m3resp.emg import ReSurfEMG
 from m3resp.adapters.ventilator_adapter import SUGGESTED_LOWPASS_HZ
 from m3resp.core.exceptions import (
     MissingModalityDataError,
     VariantAlreadyExistsError,
 )
 from m3resp.core.session import M3Session
+
 
 FS = 100.0
 N = 1000
@@ -38,7 +39,7 @@ def _payload() -> dict:
 
 def _loaded_session() -> M3Session:
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: _payload()),
+        emg_adapter=ReSurfEMG(loader=lambda path, **kwargs: _payload()),
     )
     session.load_ventilator("subject.txt")
     return session
@@ -78,7 +79,7 @@ class TestPreprocessVentilator:
         """
 
         session = M3Session(
-            emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: _payload()),
+            emg_adapter=ReSurfEMG(loader=lambda path, **kwargs: _payload()),
         )
         session.load_ventilator("subject.txt", name="mdn")
         result = session.preprocess_ventilator(name="mdn", lowpass_hz=5.0)

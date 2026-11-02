@@ -41,13 +41,15 @@ Full attribution notice: see top-level NOTICE.md.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pandas as pd
 
 from m3resp.core.exceptions import OptionalDependencyError
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 PaddingType = Literal[
     "constant",
@@ -86,7 +88,6 @@ def moving_average(
     Returns:
         np.ndarray: The moving average of the input data.
     """
-
     data = np.asarray(values)
     window_size = _normalize_odd_window_size(window_size)
     if window_size > len(data):
@@ -115,8 +116,8 @@ def running_smoother(values: np.ndarray) -> np.ndarray:
 
     Returns:
         np.ndarray: Smoothed, rectified data.
-    """
 
+    """
     data = np.asarray(values)
     n_samples = len(data) // 10
     new_values = np.convolve(abs(data), np.ones(n_samples), "valid") / n_samples
@@ -144,7 +145,6 @@ def rolling_rms(
     Returns:
         np.ndarray: The rolling RMS envelope.
     """
-
     squared = pd.Series(np.power(values, 2))
     return np.asarray(
         np.sqrt(
@@ -168,7 +168,6 @@ def naive_rolling_rms(values: np.ndarray, *, window_length: int) -> np.ndarray:
         np.ndarray: The rolling RMS envelope. Without padding it is
             `window_length` samples shorter than `values`.
     """
-
     cumulative = np.cumsum(np.abs(values) ** 2)
     return np.sqrt(
         (cumulative[window_length:] - cumulative[:-window_length]) / window_length
@@ -195,7 +194,6 @@ def rolling_arv(
     Returns:
         np.ndarray: The rolling ARV envelope.
     """
-
     absolute = pd.Series(np.abs(values))
     return np.asarray(
         absolute.rolling(
@@ -230,7 +228,6 @@ def rolling_median_absolute(
     Returns:
         np.ndarray: The rolling median absolute value envelope.
     """
-
     absolute = pd.Series(np.abs(values))
     return np.asarray(
         absolute.rolling(
@@ -277,10 +274,10 @@ def rolling_envelope(
     Returns:
         np.ndarray: The rolling envelope computed using the specified method.
     """
-
     normalized = str(method).lower()
     if normalized not in ENVELOPE_METHODS:
-        raise ValueError(f"method must be one of {ENVELOPE_METHODS}; got {method!r}.")
+        msg = f"method must be one of {ENVELOPE_METHODS}; got {method!r}."
+        raise ValueError(msg)
     compute = {
         "rms": rolling_rms,
         "arv": rolling_arv,
@@ -317,28 +314,32 @@ def rolling_rms_ci(
         tuple[np.ndarray, np.ndarray]: The lower and upper bounds of the confidence
             interval.
     """
-
     stats = _scipy_stats()
     squared = pd.Series(np.power(values, 2))
-    mean_square = (
+    mean_square = np.asarray(
         squared.rolling(
             window=window_length,
             min_periods=min_periods,
             center=center,
         )
         .mean()
-        .values
+        .to_numpy(dtype=float)
     )
-    sem = (
+    sem = np.asarray(
         squared.rolling(
             window=window_length,
             min_periods=min_periods,
             center=center,
         )
         .sem()
-        .values
+        .to_numpy(dtype=float)
     )
-    ci = stats.t.interval(1 - alpha, window_length - 1, mean_square, sem)
+    ci = stats.t.interval(
+        1 - alpha,
+        window_length - 1,
+        loc=mean_square,
+        scale=sem,
+    )
     return np.sqrt(ci[0]), np.sqrt(ci[1])
 
 
@@ -365,19 +366,18 @@ def rolling_arv_ci(
         tuple[np.ndarray, np.ndarray]: The lower and upper bounds of the confidence
             interval.
     """
-
     stats = _scipy_stats()
     absolute = pd.Series(np.abs(values))
-    arv = (
+    arv = np.asarray(
         absolute.rolling(
             window=window_length,
             min_periods=min_periods,
             center=center,
         )
         .mean()
-        .values
+        .to_numpy(dtype=float)
     )
-    sem = (
+    sem = np.asarray(
         pd.Series(values)
         .rolling(
             window=window_length,
@@ -385,16 +385,19 @@ def rolling_arv_ci(
             center=center,
         )
         .sem()
-        .values
+        .to_numpy(dtype=float)
     )
-    return stats.t.interval(1 - alpha, window_length - 1, arv, sem)
+    lower, upper = stats.t.interval(1 - alpha, window_length - 1, loc=arv, scale=sem)
+    return np.asarray(lower, dtype=float), np.asarray(upper, dtype=float)
 
 
 def _normalize_odd_window_size(window_size: int) -> int:
     if not isinstance(window_size, int):
-        raise TypeError("window_size must be an int")
+        msg = "window_size must be an int"
+        raise TypeError(msg)
     if window_size < 1:
-        raise ValueError("window_size must be positive")
+        msg = "window_size must be positive"
+        raise ValueError(msg)
     return window_size + 1 if window_size % 2 == 0 else window_size
 
 
@@ -402,8 +405,39 @@ def _scipy_stats():
     try:
         from scipy import stats
     except ImportError as exc:
-        raise OptionalDependencyError(
+        msg = (
             "Rolling confidence intervals require SciPy. Install `scipy` to "
             "use `m3resp.processing.windows` confidence interval helpers."
-        ) from exc
+        )
+        raise OptionalDependencyError(msg) from exc
     return stats
+
+
+def compute_derivative(
+    array: np.ndarray, fs: float, window_length_samples: int | None = None
+) -> np.ndarray:
+    """Calculate the first derivative of a signal.
+
+    If window_length_samples is given, the signal is smoothed before derivative
+    calculation.
+
+    Args:
+        array (numpy.ndarray): Signal to calculate the derivative over.
+        fs (int): Sampling rate.
+        window_length_samples (int, optional): Centralised averaging window
+            length in samples.
+
+    Returns:
+        numpy.ndarray: The 1st derivative of the signal, length len(signal)-1.
+    """
+    if window_length_samples is not None:
+        array_moving_average = (
+            pd.Series(array)
+            .rolling(window=window_length_samples, center=True)
+            .mean()
+            .to_numpy(dtype=float)
+        )
+        derivative = np.diff(array_moving_average) * fs
+    else:
+        derivative = np.diff(array) * fs
+    return derivative

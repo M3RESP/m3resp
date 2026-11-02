@@ -17,9 +17,11 @@ import os
 import numpy as np
 import pytest
 
-from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter, ventilator_signals
+from m3resp.emg.processing.signals import ventilator_signals
+from m3resp.emg import ReSurfEMG
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.core.session import M3Session
+
 
 FS = 100.0
 N = 500
@@ -49,7 +51,7 @@ def _session(
     from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
 
     return M3Session(
-        emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: payloads[str(path)]),
+        emg_adapter=ReSurfEMG(loader=lambda path, **kwargs: payloads[str(path)]),
         eit_adapter=(
             EITProcessingAdapter(
                 loader=lambda path, vendor=None, **kwargs: eit_sequence
@@ -103,7 +105,7 @@ class TestPositionalProducersNowResolveByName:
         # Postprocessing used to pass columns 0/1/2 itself, which overrode the
         # labels. The same recording with its columns shuffled (and labelled)
         # must now give the same ventilator breaths and Poccs.
-        pytest.importorskip("resurfemg")
+        # #pytest.importorskip("resurfemg")
         data = os.path.join(os.path.dirname(__file__), "data")
         session = M3Session()
         session.load_emg(

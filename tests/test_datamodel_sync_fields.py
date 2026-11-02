@@ -5,7 +5,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
+from m3resp.adapters import EITProcessingAdapter
+from m3resp.emg import ReSurfEMG
 from m3resp.core.session import M3Session
 from m3resp.data.signals import Signal
 from m3resp.datamodel import DataModelRecorder, DataModelStore
@@ -24,7 +25,7 @@ def _payload() -> dict:
 def _session() -> tuple[M3Session, DataModelStore]:
     session = M3Session(
         eit_adapter=EITProcessingAdapter(loader=lambda path, **kwargs: {"path": path}),
-        emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: _payload()),
+        emg_adapter=ReSurfEMG(loader=lambda path, **kwargs: _payload()),
     )
     store = DataModelStore()
     session.datamodel = DataModelRecorder(session, store)

@@ -20,13 +20,13 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.adapters.resurfemg_adapter._defaults import (
-    default_low_pass_hz,
-    notch_max_frequency_hz,
-)
 from m3resp.core.session import M3Session
 from m3resp.data import Signal
 from m3resp.data.signals import ProcessingState
+from m3resp.emg.processing.defaults import (
+    default_low_pass_hz,
+    notch_max_frequency_hz,
+)
 from m3resp.processing.windows import ENVELOPE_METHODS
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 
@@ -160,7 +160,7 @@ def select_channel(session: M3Session, *, channel: int | None = None) -> dict[st
     return {
         "processed_emg": processed_emg,
         "_provenance": _upstream_metadata(
-            source_function="m3resp.adapters.resurfemg_adapter.select_emg_channel",
+            source_function="m3resp.emg.select_emg_channel",
             operation="emg.select_channel",
             parameters={
                 "requested_channel": channel,
@@ -696,7 +696,6 @@ def preprocess(
         ValueError: If envelope settings are given; they belong to
             ``emg.envelope``.
     """
-
     envelope_settings = sorted(set(_ENVELOPE_SETTINGS) & kwargs.keys())
     if envelope_settings:
         raise ValueError(
@@ -714,6 +713,7 @@ def preprocess(
         notch_quality_factor=notch_quality_factor,
         notch_before_bandpass=notch_before_bandpass,
         compute_envelope=False,
+        remove_ecg=False,
         **kwargs,
     )
     return {"processed_emg": processed_emg}

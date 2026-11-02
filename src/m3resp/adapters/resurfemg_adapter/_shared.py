@@ -5,9 +5,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 from importlib import import_module
 from pathlib import Path
+
+# from turtle import pd
 from typing import Any
 
 import numpy as np
+import pandas as pd
 
 from m3resp.core.exceptions import OptionalDependencyError, UnresolvedChannelError
 

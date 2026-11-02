@@ -1,3 +1,6 @@
+"""EMG loading, the ReSurfEMG adapter's custom-callable hooks, breath detection,
+channel choice and EMG plots."""
+
 from __future__ import annotations
 
 import os
@@ -9,8 +12,9 @@ from typing import Any
 import pytest
 
 from m3resp import BreathEvent, M3Session
-from m3resp.adapters import ReSurfEMGAdapter
+from m3resp.emg import ReSurfEMG
 from m3resp.core.exceptions import UnresolvedChannelError
+from m3resp.emg import ReSurfEMG
 from m3resp.io import load_emg
 from m3resp.modalities.emg import load as load_emg_recording
 from m3resp.visualization import (
@@ -28,10 +32,10 @@ def fake_emg_recording() -> dict[str, Any]:
 
 
 def test_load_emg_sets_preferred_and_legacy_session_slots():
+    """Loading EMG fills `session.emg` and `session.raw['emg']` with the same
+    recording."""
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(
-            loader=lambda *args, **kwargs: fake_emg_recording()
-        )
+        emg_adapter=ReSurfEMG(loader=lambda *args, **kwargs: fake_emg_recording())
     )
 
     returned = session.load_emg("subject.Poly5")
@@ -44,7 +48,8 @@ def test_load_emg_sets_preferred_and_legacy_session_slots():
 
 
 def test_top_level_and_modality_load_helpers_return_recordings():
-    adapter = ReSurfEMGAdapter(loader=lambda *args, **kwargs: fake_emg_recording())
+    """`load_emg` and `load_emg_recording` both return an EMG recording."""
+    adapter = ReSurfEMG(loader=lambda *args, **kwargs: fake_emg_recording())
 
     top_level = load_emg("subject.Poly5", adapter=adapter)
     modality_level = load_emg_recording("subject.Poly5", adapter=adapter)
@@ -54,7 +59,8 @@ def test_top_level_and_modality_load_helpers_return_recordings():
 
 
 def test_custom_emg_detector_normalization_still_works():
-    adapter = ReSurfEMGAdapter()
+    """A custom detector's (start, end, extremum) tuples become EMG `BreathEvent`s."""
+    adapter = ReSurfEMG()
 
     events = adapter.detect_breaths(
         {"processed": True},
@@ -75,7 +81,8 @@ def test_custom_emg_detector_normalization_still_works():
 class TestDetectionBaseline:
     """A breath is a rise above the local quiet level, which drifts through a
     recording. The detection threshold is taken from the envelope above the
-    baseline, so the baseline has to be computed first."""
+    baseline, so the baseline has to be computed first.
+    """
 
     @staticmethod
     def _drifting_envelope():
@@ -94,33 +101,36 @@ class TestDetectionBaseline:
         }, drift
 
     def test_detection_without_a_baseline_warns(self):
-        pytest.importorskip("resurfemg")
+        """Breath detection without a baseline warns that none was defined."""
+
         processed, _ = self._drifting_envelope()
 
         with pytest.warns(UserWarning, match="baseline not defined"):
-            ReSurfEMGAdapter().detect_breaths(processed, min_breath_width_seconds=0.5)
+            ReSurfEMG().detect_breaths(processed, min_breath_width_seconds=0.5)
 
     def test_a_baseline_recovers_breaths_the_drift_would_hide(self):
-        pytest.importorskip("resurfemg")
+        """A baseline that follows the drift finds more breaths than none."""
+
         processed, drift = self._drifting_envelope()
 
         with pytest.warns(UserWarning, match="baseline not defined"):
-            without = ReSurfEMGAdapter().detect_breaths(
+            without = ReSurfEMG().detect_breaths(
                 processed, min_breath_width_seconds=0.5
             )
-        with_baseline = ReSurfEMGAdapter().detect_breaths(
+        with_baseline = ReSurfEMG().detect_breaths(
             processed, min_breath_width_seconds=0.5, baseline=drift
         )
 
         assert len(with_baseline) > len(without)
 
     def test_passing_a_baseline_does_not_warn(self):
-        pytest.importorskip("resurfemg")
+        """Breath detection with a baseline raises no UserWarning."""
+
         processed, drift = self._drifting_envelope()
 
         with warnings.catch_warnings():
             warnings.simplefilter("error", UserWarning)
-            ReSurfEMGAdapter().detect_breaths(
+            ReSurfEMG().detect_breaths(
                 processed, min_breath_width_seconds=0.5, baseline=drift
             )
 
@@ -128,9 +138,9 @@ class TestDetectionBaseline:
 def test_default_detection_finds_fast_breathing():
     """At 22 breaths/min each burst is under a second wide. The default
     minimum breath width (0.5 s) must still find every breath; the old 1.0 s
-    default found none."""
+    default found none.
+    """
 
-    pytest.importorskip("resurfemg")
     np = pytest.importorskip("numpy")
 
     fs = 100.0
@@ -140,7 +150,7 @@ def test_default_detection_finds_fast_breathing():
     # Each burst takes the first 35 % of the breath: about 0.95 s.
     envelope = np.where(phase < 0.35, np.sin(np.pi * phase / 0.35), 0.0)
 
-    events = ReSurfEMGAdapter().detect_breaths(
+    events = ReSurfEMG().detect_breaths(
         {"envelope": envelope, "fs": fs, "channel": "EMGdi"},
         baseline=np.zeros_like(envelope),
     )
@@ -151,18 +161,19 @@ def test_default_detection_finds_fast_breathing():
 class TestDetectedBreathBoundaries:
     """ReSurfEMG detects breath peaks only; onset and offset are a separate
     measurement (baseline crossing or slope extrapolation), never a window
-    around the peak. Detection must not invent them."""
+    around the peak. Detection must not invent them.
+    """
 
     @staticmethod
     def _detect():
-        pytest.importorskip("resurfemg")
+
         np = pytest.importorskip("numpy")
 
         fs = 100.0
         time = np.arange(0, 20, 1 / fs)
         envelope = np.maximum(np.sin(2 * np.pi * 0.25 * time), 0.0)
 
-        return ReSurfEMGAdapter().detect_breaths(
+        return ReSurfEMG().detect_breaths(
             {
                 "envelope": envelope,
                 "fs": fs,
@@ -172,6 +183,7 @@ class TestDetectedBreathBoundaries:
         )
 
     def test_detection_reports_the_peak_and_no_breath_extent(self):
+        """Detected breaths are zero-length events placed at the peak."""
         events = self._detect()
 
         assert len(events) > 0
@@ -182,12 +194,14 @@ class TestDetectedBreathBoundaries:
             assert event.duration == 0.0
 
     def test_unmeasured_boundaries_are_marked_as_such(self):
+        """Detected breaths flag `boundaries_measured=False` in their metadata."""
         for event in self._detect():
             assert event.metadata["boundaries_measured"] is False
 
 
 def test_custom_emg_preprocess_callable_still_works():
-    adapter = ReSurfEMGAdapter()
+    """`preprocess=` replaces default preprocessing and receives the extra kwargs."""
+    adapter = ReSurfEMG()
 
     processed = adapter.preprocess(
         {"recording": True},
@@ -199,7 +213,8 @@ def test_custom_emg_preprocess_callable_still_works():
 
 
 def test_custom_emg_compute_callable_still_works():
-    adapter = ReSurfEMGAdapter()
+    """`compute=` receives the signal, the events and the extra kwargs."""
+    adapter = ReSurfEMG()
     events = [BreathEvent("emg", 0.0, 1.0, extremum_time=0.5)]
 
     features = adapter.compute_features(
@@ -221,7 +236,8 @@ def test_custom_emg_compute_callable_still_works():
 
 
 def test_custom_emg_postprocess_callable_still_works():
-    adapter = ReSurfEMGAdapter()
+    """`postprocess=` replaces default postprocessing and receives events and kwargs."""
+    adapter = ReSurfEMG()
     events = [BreathEvent("emg", 0.0, 1.0, extremum_time=0.5)]
 
     result = adapter.postprocess(
@@ -243,14 +259,16 @@ def test_custom_emg_postprocess_callable_still_works():
 
 
 def test_default_preprocess_updates_emg_recording_with_fake_signal():
-    pytest.importorskip("resurfemg")
+    """Default preprocessing keeps the signal length and stores results on
+    `session.emg`."""
+
     np = pytest.importorskip("numpy")
 
     fs = 1000.0
     time = np.arange(5000, dtype=float) / fs
     fake_signal = np.sin(2 * np.pi * 100 * time)
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(
+        emg_adapter=ReSurfEMG(
             loader=lambda *args, **kwargs: {
                 "array": np.asarray([fake_signal]),
                 "dataframe": {"kind": "fake-dataframe"},
@@ -269,22 +287,73 @@ def test_default_preprocess_updates_emg_recording_with_fake_signal():
     assert session.emg.envelope is processed["envelope"]
 
 
+def _session_with_ecg_channel():
+    """A session whose recording has an EMG channel and an ECG channel with
+    an R peak every 0.8 s."""
+
+    np = pytest.importorskip("numpy")
+
+    fs = 1000.0
+    n_samples = 10_000
+    rng = np.random.default_rng(0)
+    emg = rng.normal(0.0, 1.0, n_samples)
+    ecg = rng.normal(0.0, 0.05, n_samples)
+    ecg[400::800] += 20.0
+    return M3Session(
+        emg_adapter=ReSurfEMG(
+            loader=lambda *args, **kwargs: {
+                "array": np.asarray([emg, ecg]),
+                "dataframe": {"kind": "fake-dataframe"},
+                "metadata": {"fs": fs, "labels": ["EMG", "ECG"], "units": ["uV"]},
+            }
+        )
+    )
+
+
+def test_preprocess_emg_stores_ecg_peaks_as_events():
+    """The ECG peaks found during preprocessing are stored as events."""
+
+    session = _session_with_ecg_channel()
+    session.load_emg("subject.Poly5")
+    processed = session.preprocess_emg(channel=0)
+
+    peaks = session.events["ecg_peaks"]
+    assert len(peaks) == len(processed["ecg_peak_indices"]) > 0
+    assert [peak.sample_index for peak in peaks] == list(processed["ecg_peak_indices"])
+    assert all(peak.name == "ecg_peak" and peak.modality == "emg" for peak in peaks)
+    assert peaks[0].time == pytest.approx(peaks[0].sample_index / 1000.0)
+
+
+def test_preprocess_emg_variant_stores_ecg_peaks_under_variant_name():
+    """A named variant keeps its ECG peaks apart; without ECG removal there
+    are none."""
+
+    session = _session_with_ecg_channel()
+    session.load_emg("subject.Poly5")
+    session.preprocess_emg(channel=0, variant="gated")
+    session.preprocess_emg(channel=0, remove_ecg=False)
+
+    assert session.events["ecg_peaks:gated"]
+    assert "ecg_peaks" not in session.events
+
+
 class TestEMGChannelChoice:
     """When no channel is given, the EMG channel is picked from the channel
     names. A channel named ECG is never analysed as breathing EMG, and when
     the names do not tell which channel is the breathing muscle, the user is
-    asked instead of channel 0 being used silently."""
+    asked instead of channel 0 being used silently.
+    """
 
     @staticmethod
     def _session(labels):
-        pytest.importorskip("resurfemg")
+
         np = pytest.importorskip("numpy")
 
         fs = 1000.0
         time = np.arange(5000, dtype=float) / fs
         array = np.asarray([np.sin(2 * np.pi * 100 * time) * (i + 1) for i in range(2)])
         session = M3Session(
-            emg_adapter=ReSurfEMGAdapter(
+            emg_adapter=ReSurfEMG(
                 loader=lambda *args, **kwargs: {
                     "array": array,
                     "dataframe": None,
@@ -296,6 +365,7 @@ class TestEMGChannelChoice:
         return session
 
     def test_the_ecg_channel_is_skipped(self):
+        """With an ECG and an EMG channel, the EMG channel is preprocessed."""
         session = self._session(["ECG", "EMGdi"])
 
         processed = session.preprocess_emg()
@@ -303,6 +373,7 @@ class TestEMGChannelChoice:
         assert processed["channel"] == 1
 
     def test_unclear_channel_names_ask_for_a_channel(self):
+        """Ambiguous channel names raise `UnresolvedChannelError` listing them."""
         session = self._session(["emg_0", "emg_1"])
 
         with pytest.raises(
@@ -311,6 +382,7 @@ class TestEMGChannelChoice:
             session.preprocess_emg()
 
     def test_a_given_channel_is_always_used(self):
+        """An explicit `channel=` is used even when names are ambiguous."""
         session = self._session(["emg_0", "emg_1"])
 
         processed = session.preprocess_emg(channel=0)
@@ -319,6 +391,7 @@ class TestEMGChannelChoice:
 
 
 def test_emg_overview_y_axis_labels_include_amplitude_and_units():
+    """Overview plot y-labels show 'EMG amplitude' with the channel unit."""
     plt = pytest.importorskip("matplotlib.pyplot")
     session = M3Session()
     session.processed["emg"] = {
@@ -343,6 +416,7 @@ def test_emg_overview_y_axis_labels_include_amplitude_and_units():
 
 
 def test_emg_overview_uses_the_preprocessed_channel_label_and_unit():
+    """The overview plot uses the label and unit of the preprocessed channel."""
     plt = pytest.importorskip("matplotlib.pyplot")
     session = M3Session()
     session.processed["emg"] = {
@@ -365,6 +439,7 @@ def test_emg_overview_uses_the_preprocessed_channel_label_and_unit():
 
 
 def test_emg_overview_rejects_a_channel_that_was_not_preprocessed():
+    """Asking the overview for a channel that was not preprocessed raises ValueError."""
     pytest.importorskip("matplotlib.pyplot")
     session = M3Session()
     session.processed["emg"] = {
@@ -379,6 +454,7 @@ def test_emg_overview_rejects_a_channel_that_was_not_preprocessed():
 
 
 def test_synchronization_comparison_shifts_signal_time_by_alignment_offset():
+    """The 'after' panel shifts the EMG time axis by the alignment offset."""
     plt = pytest.importorskip("matplotlib.pyplot")
     session = M3Session()
     session.processed["emg"] = {
@@ -413,6 +489,7 @@ def test_synchronization_comparison_shifts_signal_time_by_alignment_offset():
 
 
 def test_synchronization_comparison_uses_raw_eit_signal_when_filtered_exists():
+    """The sync comparison plots raw EIT impedance even when a filtered one exists."""
     plt = pytest.importorskip("matplotlib.pyplot")
     session = M3Session()
     session.raw["eit"] = SimpleNamespace(
@@ -454,6 +531,7 @@ def test_synchronization_comparison_uses_raw_eit_signal_when_filtered_exists():
 
 
 def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
+    """The sync comparison plots the stored raw-synchronization snapshots."""
     plt = pytest.importorskip("matplotlib.pyplot")
     session = M3Session()
     session.processed["raw_synchronization"] = {
@@ -565,7 +643,7 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
 
 
 def test_emg_real_data_workflow_uses_committed_poly5_sample():
-    pytest.importorskip("resurfemg")
+    """Load, preprocess, detect and postprocess the committed synthetic Poly5 sample."""
 
     repo_root = Path(__file__).resolve().parents[1]
     emg_path = os.path.join(
@@ -624,10 +702,10 @@ def test_emg_real_data_workflow_uses_committed_poly5_sample():
 
 
 def test_emg_preset_runs_end_to_end_and_reports_respiratory_rate():
-    """`session.run_preset("emg")` on a made-up recording breathing at
-    12 breaths/min. This once crashed while saving the respiratory rate."""
+    """`session.run_pipeline("emg")` on a made-up recording breathing at
+    12 breaths/min. This once crashed while saving the respiratory rate.
+    """
 
-    pytest.importorskip("resurfemg")
     np = pytest.importorskip("numpy")
 
     fs = 2048.0
@@ -641,7 +719,7 @@ def test_emg_preset_runs_end_to_end_and_reports_respiratory_rate():
         0.0, 50.0, time.size
     )
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(
+        emg_adapter=ReSurfEMG(
             loader=lambda *args, **kwargs: {
                 "array": np.asarray([emg_uv]),
                 "dataframe": None,
@@ -659,20 +737,3 @@ def test_emg_preset_runs_end_to_end_and_reports_respiratory_rate():
     assert rates["respiratory_rate"].value == pytest.approx(12.0, abs=1.0)
     per_breath = rates["respiratory_rate_breath_to_breath"].value
     assert len(per_breath) == len(session.events["emg_breaths"]) - 1
-
-
-def test_run_postprocessing_function_exposes_resurfemg_functions():
-    pytest.importorskip("resurfemg")
-    np = pytest.importorskip("numpy")
-
-    adapter = ReSurfEMGAdapter()
-    baseline = adapter.run_postprocessing_function(
-        "baseline",
-        "moving_baseline",
-        np.asarray([0.0, 1.0, 0.0]),
-        3,
-        1,
-    )
-
-    assert len(baseline) == 3
-    assert "quality_assessment" in adapter.available_postprocessing()

@@ -26,7 +26,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-pytest.importorskip("resurfemg")
+
 neurokit2 = pytest.importorskip("neurokit2")
 
 _MATCH_TOLERANCE_SECONDS = 0.05

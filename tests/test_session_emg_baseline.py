@@ -9,7 +9,7 @@ import pytest
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.core.session import M3Session
 
-pytest.importorskip("resurfemg")
+
 np = pytest.importorskip("numpy")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

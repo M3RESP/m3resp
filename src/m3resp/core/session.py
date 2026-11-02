@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
-from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
 from m3resp.adapters.ventilator_adapter import (
     VentilatorAdapter,
     infer_ventilator_duration,
@@ -28,10 +26,12 @@ from m3resp.data.collections import (
     QualityReport,
     SignalCollection,
 )
-from m3resp.data.events import BreathEvent, reuse_matching_breaths
+
+from m3resp.data.events import BreathEvent, Event, reuse_matching_breaths
 from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
 from m3resp.data.processing import ProcessingHistory
+from m3resp.emg import ReSurfEMG
 from m3resp.export.session_export import export_session_summary
 from m3resp.modalities.eit import (
     EITLoaderChoice,
@@ -87,6 +87,11 @@ from m3resp.synchronization.sync_methods import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
+    from m3resp.data.events import BreathEvent
+    from m3resp.data.linked_breath import LinkedBreath
+    from m3resp.data.parameters import ParameterResult
     from m3resp.datamodel.recorder import DataModelRecorder
 
 ALIGNMENT_EVENT_LISTS = {
@@ -132,7 +137,7 @@ class M3Session:
     def __init__(
         self,
         eit_adapter: EITProcessingAdapter | None = None,
-        emg_adapter: ReSurfEMGAdapter | None = None,
+        emg_adapter: ReSurfEMG | None = None,
         metadata: SessionMetadata | dict[str, Any] | None = None,
         allow_overwrite: bool = False,
         ventilator_adapter: Any | None = None,
@@ -143,7 +148,7 @@ class M3Session:
             eit_adapter: EIT loading and processing methods. ``None`` uses
                 ``EITProcessingAdapter``.
             emg_adapter: EMG loading and processing methods. ``None`` uses
-                ``ReSurfEMGAdapter``.
+                ``ReSurfEMG``.
             metadata: Recording description as ``SessionMetadata`` or a
                 dictionary. ``None`` creates empty metadata.
             allow_overwrite: Allow preprocessing calls to replace a result
@@ -154,7 +159,7 @@ class M3Session:
         """
 
         self.eit_adapter = eit_adapter or EITProcessingAdapter()
-        self.emg_adapter = emg_adapter or ReSurfEMGAdapter()
+        self.emg_adapter = emg_adapter or ReSurfEMG()
         # Ventilator processing is native (`VentilatorAdapter` wraps no upstream
         # library), but *loading* borrows whichever adapter owns the file the
         # ventilator channels arrived in: the sEMG's multi-channel export, or
@@ -463,20 +468,25 @@ class M3Session:
         mirrors it onto `session.processed["emg"]` only when `name` is
         `"default"`.
 
+        When the result has ``"ecg_peak_indices"``, the ECG R peaks are also
+        stored as events under `session.events["ecg_peaks"]`, or
+        `session.events["ecg_peaks:<name>"]` for a named variant.
+
         Args:
             variant (str | None): Name to store this result under. None
                 stores it as ``"default"``.
             overwrite (bool): Replace a result already stored under the same
                 name.
-            **kwargs (Any): Passed on to `ReSurfEMGAdapter.preprocess`.
+            **kwargs (Any): Passed on to `ReSurfEMG.preprocess`.
                 ``preprocess=`` replaces the whole step with a function of
                 your own.
 
         Returns:
             Any: The preprocessing result. The default step gives a
                 dictionary that includes the ``"filtered"`` and
-                ``"envelope"`` signals, the ``"channel"`` used and the
-                sampling rate ``"fs"`` in Hz.
+                ``"envelope"`` signals, the ``"channel"`` used, the
+                sampling rate ``"fs"`` in Hz and the ``"ecg_peak_indices"``
+                found for ECG removal.
         """
 
         recording = self._require_raw("emg")
@@ -498,6 +508,30 @@ class M3Session:
             self.emg.fs = result.get("fs")
         for signal in self.emg_adapter.to_signals(result):
             self.signals.add(signal)
+        ecg_peak_indices = (
+            result.get("ecg_peak_indices") if isinstance(result, dict) else None
+        )
+        event_key = "ecg_peaks" if variant is None else f"ecg_peaks:{variant}"
+        if ecg_peak_indices is None:
+            # A new preprocessing result without ECG removal: earlier peaks
+            # no longer describe it.
+            self.events.pop(event_key, None)
+        else:
+            fs = float(result["fs"])
+            self.add_events(
+                event_key,
+                [
+                    Event(
+                        name="ecg_peak",
+                        modality="emg",
+                        time=float(index) / fs,
+                        sample_index=int(index),
+                        signal_name="filtered",
+                        sample_frequency=fs,
+                    )
+                    for index in ecg_peak_indices
+                ],
+            )
         self.processed_variants["emg"][name] = result
         if name == "default":
             self.processed["emg"] = result
@@ -1186,7 +1220,7 @@ class M3Session:
                 result with this name, stored under
                 `session.events["emg_breaths:<name>"]`. See
                 `detect_eit_breaths`.
-            **kwargs (Any): Passed on to `ReSurfEMGAdapter.detect_breaths`
+            **kwargs (Any): Passed on to `ReSurfEMG.detect_breaths`
                 (for example ``baseline=``). ``detector=`` replaces the
                 detection with a function of your own.
 
@@ -1200,9 +1234,18 @@ class M3Session:
         else:
             data = data or self._require_raw("emg").data
             event_key = "emg_breaths"
-        events = self.emg_adapter.detect_breaths(data, **kwargs)
+        defaults = (
+            {"distance_seconds": 0.5}
+            if "distance_seconds" not in kwargs and kwargs.get("detector") is None
+            else {}
+        )
+        events = self.emg_adapter.detect_breaths(
+            data,
+            **kwargs,
+            **defaults,
+        )
         self.add_events(event_key, events)
-        recorded = dict(kwargs)
+        recorded = {**kwargs, **defaults}
         if "baseline" in recorded:
             # The baseline is a full-length array; record that one was used,
             # not its samples.
@@ -1268,7 +1311,6 @@ class M3Session:
         Returns:
             list[Any]: The stored events.
         """
-
         self.events[name] = list(events)
         return self.events[name]
 
@@ -1283,7 +1325,6 @@ class M3Session:
         Returns:
             Any: The stored events, or `default`.
         """
-
         return self.events.get(name, default)
 
     def postprocess_emg(self, **kwargs: Any) -> Any:
@@ -1294,7 +1335,7 @@ class M3Session:
         postprocessing are stored in `session.events["ventilator_breaths"]`.
 
         Args:
-            **kwargs (Any): Passed on to `ReSurfEMGAdapter.postprocess`, for
+            **kwargs (Any): Passed on to `ReSurfEMG.postprocess`, for
                 example ``ventilator``, ``ventilator_fs`` (Hz) and
                 ``ventilator_breath_width_seconds``.
 
@@ -1304,7 +1345,6 @@ class M3Session:
                 the settings used (``"settings"``). Also stored in
                 `session.parameters["emg_postprocessing"]`.
         """
-
         data = self.processed.get("emg") or self._require_raw("emg").data
         events = self.events.get("emg_breaths")
         self.parameters["emg_postprocessing"] = self.emg_adapter.postprocess(

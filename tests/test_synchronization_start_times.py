@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from m3resp.adapters import ReSurfEMGAdapter
+from m3resp.emg import ReSurfEMG
 from m3resp.core.session import M3Session
 from m3resp.data.events import BreathEvent
 from m3resp.modalities.eit import EITRecording
@@ -50,7 +50,7 @@ def _session_with_ventilator(
         "metadata": {"fs": fs, "labels": ["pressure", "flow", "volume"]},
     }
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: payload)
+        emg_adapter=ReSurfEMG(loader=lambda path, **kwargs: payload)
     )
     session.load_ventilator("vent.txt", **load_kwargs)
     return session

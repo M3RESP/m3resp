@@ -7,9 +7,9 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.adapters.resurfemg_adapter import peak_indices_from_events
 from m3resp.core.session import M3Session
 from m3resp.data import Signal
+from m3resp.emg.processing import peak_indices_from_events
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 
 from ._shared import (
@@ -40,7 +40,7 @@ _LOAD_OUTPUTS = (
     reads={"session": "session"},
     writes=_LOAD_WRITES,
     summary="Load an EMG recording into the session.",
-    description="Load an EMG recording file through ReSurfEMGAdapter and expose its raw channels as native Signals.",
+    description="Load an EMG recording file through ReSurfEMG and expose its raw channels as native Signals.",
     category="loading",
     modality="emg",
     optional_packages=_RESURFEMG,
@@ -153,7 +153,7 @@ def _loaded_recording_outputs(
     optional_reads=("baseline",),
     writes=("emg_breath_events",),
     summary="Detect EMG breaths from the envelope.",
-    description="Detect EMG breaths from the processed envelope via ReSurfEMGAdapter.detect_breaths. Accepts arbitrary adapter keyword arguments beyond 'variant'.",
+    description="Detect EMG breaths from the processed envelope via ReSurfEMG.detect_breaths. Accepts arbitrary adapter keyword arguments beyond 'variant'.",
     category="detection",
     modality="emg",
     optional_packages=_RESURFEMG,
