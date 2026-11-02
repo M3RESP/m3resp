@@ -537,7 +537,7 @@ def evaluate_bell_curve_error(
         )
         fitted_parameters[peak_number, :] = popt
 
-    valid_peak = percentage_bell_error <= bell_threshold
+    valid_peak = (percentage_bell_error <= bell_threshold) & np.isfinite(bell_error)
 
     return (
         np.asarray(valid_peak),
