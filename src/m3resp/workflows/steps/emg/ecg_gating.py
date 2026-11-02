@@ -193,7 +193,6 @@ def ecg_gating(
     }
 
     _store_processed_emg(session, processed_emg_after_ecg)
-    _store_processed_emg(session, processed_emg_after_ecg)
 
     label, unit = _processed_channel_label_and_unit(processed_emg)
     time = np.arange(len(gated), dtype=float) / fs
