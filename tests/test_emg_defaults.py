@@ -356,7 +356,8 @@ def test_preprocess_returns_expected_fields(recording):
         "fs",
         "raw_channel",
         "filtered",
-        "clean",
+        "ecg_cleaned",
+        "ecg_peak_indices",
         "envelope",
         "filter",
     ):

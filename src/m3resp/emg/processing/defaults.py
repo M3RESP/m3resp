@@ -311,6 +311,10 @@ def _preprocess_default(
         (default: True)
     - ``ecg_removal_method``: method for ECG removal, either "gating" or "wavelet"
         (default: "gating")
+    - ``ecg_channel``: index of the ECG reference channel (default: a channel
+        labelled ECG/EKG, else the filtered EMG itself)
+    - ``ecg_peak_indices``: R-peak sample indices to remove; skips ECG peak
+        detection (default: None)
     - ``ecg_gate_fill_method``: method for filling gated ECG segments:
         - 0: fill with zeros
         - 1: fill with linear interpolation (default)
@@ -408,33 +412,52 @@ def _preprocess_default(
     if notch_base_frequency is not None and not notch_before_bandpass:
         filtered = notch(values=filtered, base_frequency=notch_base_frequency)
 
+    supplied_ecg_peak_indices = kwargs.pop("ecg_peak_indices", None)
+    ecg_channel = kwargs.pop(
+        "ecg_channel",
+        _choose_ecg_channel(channel_labels) if channel_labels else None,
+    )
+    if kwargs:
+        msg = f"Unknown EMG preprocessing options: {sorted(kwargs)}."
+        raise TypeError(msg)
+
     ecg_peak_indexes = None
     if remove_ecg:
-        ecg_channel = kwargs.pop(
-            "ecg_channel",
-            _choose_ecg_channel(channel_labels) if channel_labels else None,
-        )
-        ecg_signal = (
-            np.asarray(
-                array[ecg_channel[0] if isinstance(ecg_channel, list) else ecg_channel],
-                dtype=float,
-            )
-            if ecg_channel is not None
-            else filtered
-        )
-        ecg_peak_indexes = detect_ecg_peaks(ecg_signal, sample_frequency=fs)
-        if ecg_removal_method == "gating":
-            ecg_cleaned = gate_ecg(filtered, ecg_peak_indexes, fill_method=fill_method)
-        elif ecg_removal_method == "wavelet":
-            ecg_cleaned, *_ = wavelet_denoise_ecg(
-                filtered, ecg_peak_indexes, sample_frequency=fs
-            )
-        else:
+
+        def _remove_ecg() -> tuple[np.ndarray, np.ndarray]:
+            if supplied_ecg_peak_indices is not None:
+                # Gate the supplied R-peak positions instead of detecting them.
+                ecg_peak_indexes = np.asarray(supplied_ecg_peak_indices, dtype=int)
+            else:
+                ecg_signal = (
+                    np.asarray(
+                        array[
+                            ecg_channel[0]
+                            if isinstance(ecg_channel, list)
+                            else ecg_channel
+                        ],
+                        dtype=float,
+                    )
+                    if ecg_channel is not None
+                    else filtered
+                )
+                ecg_peak_indexes = detect_ecg_peaks(ecg_signal, sample_frequency=fs)
+            if ecg_removal_method == "gating":
+                return gate_ecg(
+                    filtered, ecg_peak_indexes, fill_method=fill_method
+                ), ecg_peak_indexes
+            if ecg_removal_method == "wavelet":
+                return wavelet_denoise_ecg(
+                    filtered, ecg_peak_indexes, sample_frequency=fs
+                )[0], ecg_peak_indexes
             msg = (
                 f"Unknown ECG removal method '{ecg_removal_method}'; "
                 "choose 'gating' or 'wavelet'."
             )
             raise ValueError(msg)
+            return []
+
+        ecg_cleaned, ecg_peak_indexes = _remove_ecg()
     envelope = None
     if compute_envelope:
         envelope = emg_envelope(
