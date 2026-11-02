@@ -1241,13 +1241,11 @@ class M3Session:
             **defaults,
         )
         self.add_events(event_key, events)
-        recorded = dict(kwargs)
+        recorded = {**kwargs, **defaults}
         if "baseline" in recorded:
             # The baseline is a full-length array; record that one was used,
             # not its samples.
             recorded["baseline"] = recorded["baseline"] is not None
-        if "distance_seconds" not in recorded:
-            recorded["distance_seconds"] = 0.5
         self._record("detect_emg_breaths", "emg", variant=variant, **recorded)
         return self.events[event_key]
 
