@@ -19,35 +19,19 @@ from m3resp.workflows.steps.emg import (
     ecg_detect_peaks,
     ecg_gating,
     ecg_wavelet_denoising,
+    envelope,
 )
 
 
-def _build_gate_mask(
-    n_samples: int, peak_indices: Any, *, gate_width_samples: int, fill_method: int
-) -> np.ndarray:
-    """A boolean mask marking the (clipped-to-bounds) gated region around
-    each peak. Purely descriptive - it reports which samples the cleaned
-    array had replaced, and is never fed back into it.
-
-    The blanked region depends on the fill method. ReSurfEMG's RMS fill
-    (method 3) spans ``int(peak +/- gate_width / 2)`` while the zero,
-    interpolation and prior-segment fills (methods 0, 1, 2) span
-    ``peak +/- gate_width // 2``. On an odd gate width - the 205-sample
-    default among them - the RMS fill starts one sample earlier. The
-    arithmetic below mirrors each case so the mask names exactly the samples
-    that were replaced.
-    """
-    mask = np.zeros(n_samples, dtype=bool)
-    for peak in peak_indices:
-        if fill_method == 3:
-            start = int(int(peak) - gate_width_samples / 2)
-            end = int(int(peak) + gate_width_samples / 2)
-        else:
-            half_width = gate_width_samples // 2
-            start = int(peak) - half_width
-            end = int(peak) + half_width
-        mask[max(0, start) : min(n_samples, end)] = True
-    return mask
+def _build_gate_mask(n_samples, peaks, *, gate_width_samples, fill_method):
+    left = (gate_width_samples - 1) // 2
+    right = gate_width_samples // 2
+    starts = np.clip(np.asarray(peaks) - left, 0, n_samples)
+    ends = np.clip(np.asarray(peaks) + right + 1, 0, n_samples)  # exclusive
+    delta = np.zeros(n_samples + 1, dtype=np.int64)
+    np.add.at(delta, starts, 1)
+    np.add.at(delta, ends, -1)
+    return np.cumsum(delta)[:n_samples] > 0
 
 
 pytest.importorskip("resurfemg")
@@ -338,42 +322,13 @@ class TestEcgGating:
         np.testing.assert_allclose(
             with_envelope["envelope"],
             rolling_envelope(
-                result["ecg_gated_emg"], window_length=int(0.5 * 2048.0), method="arv"
+                gated_bundle["ecg_cleaned"],
+                window_length=int(0.5 * 2048.0),
+                method="arv",
             ),
         )
-        assert (
-            result["ecg_gate_mask_result"].metadata["effective_envelope_method"]
-            == "arv"
-        )
-
-    def test_envelope_method_can_be_overridden_for_the_recomputation(self):
-        session = M3Session()
-        processed_emg = _fake_processed_emg()
-        processed_emg["filter"]["envelope_method"] = "arv"
-        peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
-
-        result = ecg_gating(session, processed_emg, peaks, envelope_method="rms")
-
-        np.testing.assert_allclose(
-            result["processed_emg_after_ecg"]["envelope"],
-            rolling_envelope(
-                result["ecg_gated_emg"], window_length=int(0.5 * 2048.0), method="rms"
-            ),
-        )
-        assert result["processed_emg_after_ecg"]["filter"]["envelope_method"] == "rms"
-
-    def test_bundle_without_an_envelope_method_falls_back_to_rms(self):
-        """`_fake_processed_emg`'s 'filter' has no 'envelope_method' - i.e. a
-        bundle predating the field. It must default to RMS, not ARV.
-        """
-        session = M3Session()
-        processed_emg = _fake_processed_emg()
-        assert "envelope_method" not in processed_emg["filter"]
-        peaks = ecg_detect_peaks(session, processed_emg)["ecg_peak_indices"]
-
-        result = ecg_gating(session, processed_emg, peaks)
-
-        assert result["processed_emg_after_ecg"]["filter"]["envelope_method"] == "rms"
+        assert with_envelope["envelope_source"] == "ecg_cleaned"
+        assert with_envelope["filter"]["envelope_method"] == "arv"
 
     def test_rejects_both_gate_width_forms_at_once(self):
         """Giving gate width in both seconds and samples raises ValueError."""

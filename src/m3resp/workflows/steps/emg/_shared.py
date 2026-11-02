@@ -91,6 +91,7 @@ def _store_processed_emg(session: M3Session, processed_emg: dict[str, Any]) -> N
     trace fields of `session.emg` (mirrors what `M3Session.preprocess_emg`
     does).
     """
+
     session.processed["emg"] = processed_emg
     if session.emg is not None:
         session.emg.filtered = processed_emg.get("filtered")

@@ -119,6 +119,12 @@ def to_signals(processed_emg: dict[str, Any]) -> list[Signal]:
     return signals
 
 
+_FEATURE_UNITS: dict[str, str] = {
+    "respiratory_rate": "breaths/min",
+    "respiratory_rate_breath_to_breath": "breaths/min",
+}
+
+
 def to_parameters(postprocessed: dict[str, Any]) -> list[ParameterResult]:
     """Convert computed EMG features into `ParameterResult` objects."""
     features = _computed_category(postprocessed, "features")
@@ -127,6 +133,7 @@ def to_parameters(postprocessed: dict[str, Any]) -> list[ParameterResult]:
             name=name,
             value=_as_parameter_value(value),
             modality="emg",
+            unit=_FEATURE_UNITS.get(name),
             method=f"resurfemg.{name}",
             metadata={
                 "source_method": f"resurfemg.{name}",

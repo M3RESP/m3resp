@@ -21,7 +21,6 @@ from m3resp.adapters import EITProcessingAdapter
 from m3resp.emg import ReSurfEMG
 from m3resp.core.exceptions import VariantAlreadyExistsError
 from m3resp.data import BreathEvent, ParameterResult, QualityFlag, Signal
-from known_divergences import MISSING_TEST_DATA_FILE
 
 
 def _fake_eit_preprocessed() -> dict[str, Any]:
