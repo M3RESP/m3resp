@@ -34,7 +34,6 @@ def _build_gate_mask(n_samples, peaks, *, gate_width_samples, fill_method):
     return np.cumsum(delta)[:n_samples] > 0
 
 
-pytest.importorskip("resurfemg")
 np = pytest.importorskip("numpy")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

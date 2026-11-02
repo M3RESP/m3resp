@@ -94,7 +94,6 @@ class TestFullExampleEndToEnd:
 
     def test_full_emg_example_workflow_runs_end_to_end(self, tmp_path):
         """The full example EMG workflow runs end to end on the sample data."""
-        pytest.importorskip("resurfemg")
 
         repo_root = Path(__file__).resolve().parents[1]
         emg_fixture = os.path.join(

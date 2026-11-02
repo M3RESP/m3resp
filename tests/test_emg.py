@@ -102,7 +102,7 @@ class TestDetectionBaseline:
 
     def test_detection_without_a_baseline_warns(self):
         """Breath detection without a baseline warns that none was defined."""
-        pytest.importorskip("resurfemg")
+
         processed, _ = self._drifting_envelope()
 
         with pytest.warns(UserWarning, match="baseline not defined"):
@@ -110,7 +110,7 @@ class TestDetectionBaseline:
 
     def test_a_baseline_recovers_breaths_the_drift_would_hide(self):
         """A baseline that follows the drift finds more breaths than none."""
-        pytest.importorskip("resurfemg")
+
         processed, drift = self._drifting_envelope()
 
         with pytest.warns(UserWarning, match="baseline not defined"):
@@ -125,7 +125,7 @@ class TestDetectionBaseline:
 
     def test_passing_a_baseline_does_not_warn(self):
         """Breath detection with a baseline raises no UserWarning."""
-        pytest.importorskip("resurfemg")
+
         processed, drift = self._drifting_envelope()
 
         with warnings.catch_warnings():
@@ -140,7 +140,7 @@ def test_default_detection_finds_fast_breathing():
     minimum breath width (0.5 s) must still find every breath; the old 1.0 s
     default found none.
     """
-    pytest.importorskip("resurfemg")
+
     np = pytest.importorskip("numpy")
 
     fs = 100.0
@@ -166,7 +166,7 @@ class TestDetectedBreathBoundaries:
 
     @staticmethod
     def _detect():
-        pytest.importorskip("resurfemg")
+
         np = pytest.importorskip("numpy")
 
         fs = 100.0
@@ -261,7 +261,7 @@ def test_custom_emg_postprocess_callable_still_works():
 def test_default_preprocess_updates_emg_recording_with_fake_signal():
     """Default preprocessing keeps the signal length and stores results on
     `session.emg`."""
-    pytest.importorskip("resurfemg")
+
     np = pytest.importorskip("numpy")
 
     fs = 1000.0
@@ -296,7 +296,7 @@ class TestEMGChannelChoice:
 
     @staticmethod
     def _session(labels):
-        pytest.importorskip("resurfemg")
+
         np = pytest.importorskip("numpy")
 
         fs = 1000.0
@@ -594,7 +594,6 @@ def test_synchronization_comparison_uses_raw_sync_snapshots_when_available():
 
 def test_emg_real_data_workflow_uses_committed_poly5_sample():
     """Load, preprocess, detect and postprocess the committed synthetic Poly5 sample."""
-    pytest.importorskip("resurfemg")
 
     repo_root = Path(__file__).resolve().parents[1]
     emg_path = os.path.join(
@@ -656,7 +655,7 @@ def test_emg_preset_runs_end_to_end_and_reports_respiratory_rate():
     """`session.run_pipeline("emg")` on a made-up recording breathing at
     12 breaths/min. This once crashed while saving the respiratory rate.
     """
-    pytest.importorskip("resurfemg")
+
     np = pytest.importorskip("numpy")
 
     fs = 2048.0

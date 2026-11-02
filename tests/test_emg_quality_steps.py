@@ -28,7 +28,7 @@ from m3resp.workflows.steps.ventilator import (
     pocc_quality,
 )
 
-pytest.importorskip("resurfemg")
+
 np = pytest.importorskip("numpy")
 
 

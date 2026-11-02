@@ -14,7 +14,7 @@ import pytest
 from m3resp.core.session import M3Session
 from m3resp.workflows.steps.emg import ecg_detect_peaks, ecg_wavelet_denoising
 
-pytest.importorskip("resurfemg")
+
 np = pytest.importorskip("numpy")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

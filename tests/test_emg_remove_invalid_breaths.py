@@ -187,7 +187,7 @@ def _example_emg_spec() -> dict[str, Any]:
 
 def test_runs_at_the_end_of_the_example_emg_workflow():
     """The step runs at the end of the example EMG workflow."""
-    pytest.importorskip("resurfemg")
+
     spec = _example_emg_spec()
     spec["steps"].append(
         {
@@ -218,7 +218,6 @@ def test_changes_nothing_that_other_steps_read():
     number breaths by their position in 'peak_indices'. As long as this
     holds, it does not matter where the step sits in a workflow."""
 
-    pytest.importorskip("resurfemg")
     result = run_workflow(_example_emg_spec(), session=M3Session())
     session = result.session
     inputs = {

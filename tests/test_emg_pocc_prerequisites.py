@@ -13,7 +13,7 @@ from m3resp.data import ParameterResult
 from m3resp.data.events import BreathEvent
 from m3resp.workflows import run_workflow
 
-pytest.importorskip("resurfemg")
+
 np = pytest.importorskip("numpy")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

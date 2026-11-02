@@ -22,7 +22,6 @@ import pytest
 
 from m3resp.emg import ReSurfEMG
 
-pytest.importorskip("resurfemg")
 
 from known_divergences import *
 

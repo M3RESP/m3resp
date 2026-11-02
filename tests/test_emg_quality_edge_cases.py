@@ -22,7 +22,7 @@ from m3resp.workflows.steps.emg import (
     snr_pseudo,
 )
 
-pytest.importorskip("resurfemg")
+
 np = pytest.importorskip("numpy")
 
 

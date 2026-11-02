@@ -18,7 +18,7 @@ from m3resp.workflows.steps.emg import (
     select_channel,
 )
 
-pytest.importorskip("resurfemg")
+
 np = pytest.importorskip("numpy")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

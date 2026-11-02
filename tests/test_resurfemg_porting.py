@@ -93,14 +93,14 @@ class TestDetectionBaseline:
         }, drift
 
     def test_detection_without_a_baseline_warns(self):
-        pytest.importorskip("resurfemg")
+
         processed, _ = self._drifting_envelope()
 
         with pytest.warns(UserWarning, match="baseline not defined"):
             ReSurfEMG().detect_breaths(processed, min_breath_width_seconds=0.5)
 
     def test_a_baseline_recovers_breaths_the_drift_would_hide(self):
-        pytest.importorskip("resurfemg")
+
         processed, drift = self._drifting_envelope()
 
         with pytest.warns(UserWarning, match="baseline not defined"):
@@ -114,7 +114,7 @@ class TestDetectionBaseline:
         assert len(with_baseline) > len(without)
 
     def test_passing_a_baseline_does_not_warn(self):
-        pytest.importorskip("resurfemg")
+
         processed, drift = self._drifting_envelope()
 
         with warnings.catch_warnings():
@@ -132,7 +132,7 @@ class TestDetectedBreathBoundaries:
 
     @staticmethod
     def _detect():
-        pytest.importorskip("resurfemg")
+
         np = pytest.importorskip("numpy")
 
         fs = 100.0
@@ -220,7 +220,7 @@ def test_custom_emg_postprocess_callable_still_works():
 
 
 def test_default_preprocess_updates_emg_recording_with_fake_signal():
-    pytest.importorskip("resurfemg")
+
     np = pytest.importorskip("numpy")
 
     fs = 1000.0
@@ -577,7 +577,7 @@ def test_emg_real_data_pipeline_uses_committed_poly5_sample():
 
 
 # def test_run_postprocessing_function_exposes_resurfemg_functions():
-#     pytest.importorskip("resurfemg")
+#     #pytest.importorskip("resurfemg")
 #     np = pytest.importorskip("numpy")
 
 #     adapter = ReSurfEMG()

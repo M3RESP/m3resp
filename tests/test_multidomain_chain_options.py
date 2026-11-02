@@ -79,7 +79,7 @@ class TestMergeClosePeaks:
 class TestNotchBeforeBandpass:
     @staticmethod
     def _preprocess(**kwargs):
-        pytest.importorskip("resurfemg")
+
         from m3resp.emg import ReSurfEMG
 
         time = np.arange(int(4 * FS)) / FS
@@ -125,7 +125,7 @@ class TestNotchBeforeBandpass:
 
 
 def test_wavelet_step_removes_the_envelope_of_the_uncleaned_signal():
-    pytest.importorskip("resurfemg")
+
     from m3resp.workflows.steps.emg.ecg_wavelet import ecg_wavelet_denoising
 
     session = M3Session()

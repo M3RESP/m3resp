@@ -121,7 +121,7 @@ def test_pair_valley_peak_valley_returns_adjacent_triplets():
 
 def test_resurfemg_emg_and_ventilator_peak_primitives_match_upstream():
     _add_sibling_checkout_to_path("ReSurfEMG")
-    pytest.importorskip("resurfemg")
+
     from resurfemg.postprocessing.event_detection import (
         detect_emg_breaths,
         detect_ventilator_breath,
@@ -175,7 +175,7 @@ def test_resurfemg_emg_and_ventilator_peak_primitives_match_upstream():
 
 def test_resurfemg_interval_and_linking_primitives_match_upstream():
     _add_sibling_checkout_to_path("ReSurfEMG")
-    pytest.importorskip("resurfemg")
+
     from resurfemg.postprocessing.event_detection import (
         find_linked_peaks,
         onoffpeak_baseline_crossing,
