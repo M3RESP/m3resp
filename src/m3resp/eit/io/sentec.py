@@ -31,7 +31,6 @@ Portions of this module are derived from eitprocessing.
 Modified for M3RESP:
     - `load_from_single_path` is `read_sentec`. It returns an `EITFileData`
       with the images as a `Signal`.
-    - The path is read with `os.path`.
     - Docstrings and comments are reworded.
     - Bug fix: each image is stored at its place after `first_frame`
       (`index - first_frame`). The image store has room for `max_frames`
@@ -53,6 +52,7 @@ import mmap
 import os
 import warnings
 from enum import IntEnum
+from pathlib import Path
 
 import numpy as np
 from numpy.typing import NDArray
@@ -104,7 +104,7 @@ def read_sentec(
         RuntimeWarning: If the given sample frequency differs from the value
             in the file, or fewer than ``max_frames`` frames are read.
     """
-    path = os.fspath(path)
+    path = Path(path)
     time: list[float] = []
     index = 0
     with (
@@ -177,7 +177,7 @@ def read_sentec(
     )
     return EITFileData(
         vendor=VENDOR,
-        path=path,
+        path=str(path),
         sample_frequency=float(sample_frequency),
         pixel_impedance=pixel_signal,
     )

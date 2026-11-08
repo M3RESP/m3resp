@@ -118,7 +118,7 @@ PHASE_CORRECTION_MODES: Final = ("negative amplitude", "phase shift", "none", No
 MAX_XCORR_LAG: Final = 1
 #: Largest part of the breaths of a pixel that can be left out.
 ALLOW_FRACTION_BREATHS_SKIPPED: Final = 0.25
-#: Name of the result, as in eitprocessing.
+#: Name of the result.
 NAME: Final = "pixel_breaths"
 METHOD: Final = "m3resp.eit.processing.find_pixel_breaths"
 
@@ -161,9 +161,7 @@ def find_pixel_breaths(
         name (str): Name of the result.
         sign_breaths (Sequence[BreathEvent] | None): The breaths for the
             mean TIV that gives the sign of each pixel. None uses
-            ``breaths``. eitprocessing uses the breaths of the global
-            impedance found with the default settings of the breath
-            detection.
+            ``breaths``.
 
     Returns:
         PixelBreaths: The given global breaths, and the start, end of

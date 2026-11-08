@@ -12,9 +12,8 @@ from m3resp.data.signals import Signal
 class EITFileData:
     """The data of one EIT file, as read by a vendor reader.
 
-    The keys of ``signals``, ``events`` and ``intervals`` are the labels
-    eitprocessing 1.8.7 gives the same data, for example
-    ``"global_impedance_(raw)"``, ``"airway pressure"`` or
+    The keys of ``signals``, ``events`` and ``intervals`` are labels such
+    as ``"global_impedance_(raw)"``, ``"airway pressure"`` or
     ``"events_(draeger)"``.
 
     Attributes:

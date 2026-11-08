@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import warnings
 from collections.abc import Sequence
 from functools import reduce
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -21,8 +21,8 @@ def eit_file_paths(path: Any) -> list[str]:
     if isinstance(path, list | tuple):
         if not path:
             raise ValueError("Give at least one EIT file to load.")
-        return [os.fspath(item) for item in path]
-    return [os.fspath(path)]
+        return [str(Path(item)) for item in path]
+    return [str(Path(path))]
 
 
 def join_eit_sequences(

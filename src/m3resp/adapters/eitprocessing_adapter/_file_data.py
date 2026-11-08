@@ -148,7 +148,7 @@ def sequence_to_file_data(sequence: Any) -> EITFileData | None:
 
     return EITFileData(
         vendor=vendor,
-        path=os.fspath(path),
+        path=str(Path(path)),
         sample_frequency=raw.sample_frequency,
         pixel_impedance=pixel_impedance,
         signals=signals,
@@ -270,7 +270,7 @@ def file_data_to_sequence(
     pixels = file_data.pixel_impedance
     eit_data = EITData(
         vendor=Vendor(vendor),
-        path=Path(os.fspath(file_data.path)),
+        path=Path(file_data.path),
         sample_frequency=file_data.sample_frequency,
         nframes=pixels.n_samples,
         time=pixels.time,

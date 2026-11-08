@@ -248,7 +248,7 @@ def _frequency_bands(
 
 
 def _check_rates(respiratory_rate: float, heart_rate: float) -> None:
-    """Check the two rates, in the order and with the messages of eitprocessing.
+    """Check the respiratory rate and the heart rate.
 
     Raises:
         ValueError: If a rate is 0 or below, or if the breathing rate is

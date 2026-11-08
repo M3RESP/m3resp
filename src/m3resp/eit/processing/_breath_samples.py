@@ -27,8 +27,7 @@ from m3resp.eit.io.join import GAP_TOLERANCE_FRAMES
 #: Index used for a breath time that has no sample.
 NO_SAMPLE: Final = -1
 
-#: Categories of data that TIV and EELI accept: impedance and the impedance
-#: categories of eitprocessing.
+#: Categories of data that TIV and EELI accept.
 IMPEDANCE_CATEGORIES: Final = frozenset(
     ("impedance", "absolute impedance", "relative impedance", "impedance difference")
 )

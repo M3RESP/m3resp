@@ -36,6 +36,7 @@ from __future__ import annotations
 import errno
 import os
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from m3resp.eit.io.draeger import read_draeger
@@ -86,9 +87,9 @@ def read_eit_file(
     """
     reader = _reader_for(vendor)
     first_frame = _check_first_frame(first_frame)
-    path = os.fspath(path)
-    if not os.path.exists(path):
-        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), path)
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), str(path))
     return reader(
         path,
         sample_frequency=sample_frequency,

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -286,7 +285,7 @@ def keep_frames(recording: EITRecording, start_index: int, end_index: int) -> No
         )
     original = EITFileData(
         vendor=vendor,
-        path=os.fspath(recording.paths[0]),
+        path=str(recording.paths[0]),
         sample_frequency=recording.sample_frequency,
         pixel_impedance=recording.pixel_impedance,
         signals=recording.signals,

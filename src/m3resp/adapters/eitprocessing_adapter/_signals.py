@@ -23,7 +23,7 @@ label and name from ``Signal.name``, the category and unit from
 from __future__ import annotations
 
 import copy
-import os
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -125,9 +125,9 @@ def eit_data_fields(obj: Any) -> dict[str, Any]:
     if hasattr(obj, "path"):
         path = obj.path
         fields["path"] = (
-            [os.fspath(p) for p in path]
+            [str(Path(p)) for p in path]
             if isinstance(path, list | tuple)
-            else os.fspath(path)
+            else str(Path(path))
         )
     return fields
 

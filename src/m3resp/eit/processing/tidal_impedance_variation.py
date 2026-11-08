@@ -89,10 +89,10 @@ from m3resp.eit.processing._breath_samples import (
 
 #: The TIV methods.
 TIV_METHODS: Final = ("inspiratory", "expiratory", "mean")
-#: Name of the result, as in eitprocessing.
+#: Name of the result.
 NAME: Final = "continuous_tivs"
 METHOD: Final = "m3resp.eit.processing.tidal_impedance_variation"
-#: Name of the pixel result, as in eitprocessing.
+#: Name of the pixel result.
 PIXEL_NAME: Final = "pixel_tivs"
 PIXEL_METHOD: Final = "m3resp.eit.processing.pixel_tidal_impedance_variation"
 

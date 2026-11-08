@@ -71,7 +71,7 @@ from m3resp.eit.processing._breath_samples import (
     values_at,
 )
 
-#: Name of the result, as in eitprocessing.
+#: Name of the result.
 NAME: Final = "continuous_eelis"
 METHOD: Final = "m3resp.eit.processing.end_expiratory_lung_impedance"
 #: Name of the pixel result.

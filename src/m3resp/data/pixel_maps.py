@@ -93,11 +93,11 @@ Full attribution notice: see top-level NOTICE.md.
 from __future__ import annotations
 
 import dataclasses
-import os
 import sys
 import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import InitVar, dataclass, field, replace
+from pathlib import Path
 from types import CodeType, FrameType
 from typing import Any, Literal, overload
 
@@ -1020,8 +1020,8 @@ def _is_number(value: Any) -> bool:
 
 
 #: Folder of the m3resp package; warnings point to the first line outside it.
-_PACKAGE_FOLDER = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_DATACLASSES_FILE = os.path.abspath(dataclasses.__file__)
+_PACKAGE_FOLDER = Path(__file__).resolve().parent.parent
+_DATACLASSES_FILE = Path(dataclasses.__file__).resolve()
 
 
 def _warn(message: str) -> None:
@@ -1051,10 +1051,8 @@ def _is_package_code(code: CodeType) -> bool:
     if filename == "<string>":
         # The __init__ that dataclasses writes for each class.
         return code.co_name == "__init__"
-    filename = os.path.abspath(filename)
-    return filename == _DATACLASSES_FILE or filename.startswith(
-        _PACKAGE_FOLDER + os.sep
-    )
+    path = Path(filename).resolve()
+    return path == _DATACLASSES_FILE or path.is_relative_to(_PACKAGE_FOLDER)
 
 
 def _divide(numerator: Any, denominator: Any) -> np.ndarray:

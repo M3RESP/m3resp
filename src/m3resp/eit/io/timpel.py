@@ -57,6 +57,7 @@ from __future__ import annotations
 
 import os
 import warnings
+from pathlib import Path
 
 import numpy as np
 from numpy.typing import NDArray
@@ -113,7 +114,7 @@ def read_timpel(
         RuntimeWarning: If fewer than ``max_frames`` frames are left after
             ``first_frame``.
     """
-    path = os.fspath(path)
+    path = Path(path)
     if not sample_frequency:
         sample_frequency = TIMPEL_SAMPLE_FREQUENCY
 
@@ -271,7 +272,7 @@ def read_timpel(
 
     return EITFileData(
         vendor=VENDOR,
-        path=path,
+        path=str(path),
         sample_frequency=float(frequency),
         pixel_impedance=pixel_signal,
         signals=signals,
@@ -336,7 +337,7 @@ def _make_breaths(
     two minima have more than one maximum between them, the lower of the
     first two maxima is removed.
 
-    Known issue, copied from eitprocessing 1.8.7: ``peak_values`` comes
+    Known issue: ``peak_values`` comes
     from all maxima, but ``peak_indices`` was first cut at the edges. When
     maxima are cut at the start, the two lists are out of step, so the
     wrong one of two close maxima can be removed.

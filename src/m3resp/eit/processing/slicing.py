@@ -69,8 +69,7 @@ def interval_indices(data: IntervalData, start: float, end: float) -> list[int]:
     both window ends included. When ``metadata["default_partial_inclusion"]``
     is True, every interval that overlaps the window is kept. A bound of
     exactly 0 s is replaced by the start of the first interval (for
-    ``start``) or the end of the last interval (for ``end``), as in
-    eitprocessing 1.8.7.
+    ``start``) or the end of the last interval (for ``end``).
 
     Args:
         data (IntervalData): Device intervals, for example Timpel breaths.
@@ -121,8 +120,7 @@ def slice_intervals(data: IntervalData, start: float, end: float) -> IntervalDat
 
     Returns:
         IntervalData: A copy with the kept intervals and their values. Its
-            ``metadata["default_partial_inclusion"]`` is False, as in
-            eitprocessing 1.8.7.
+            ``metadata["default_partial_inclusion"]`` is False.
     """
 
     indices = interval_indices(data, start, end)
@@ -152,9 +150,8 @@ def slice_file_data(data: EITFileData, start: int, end: int) -> EITFileData:
     are kept from the time of the first kept frame up to the time of the
     last kept frame; a mark at that last time is left out. A complete
     device breath may end at the last kept frame. For device intervals, a
-    bound of exactly 0 s uses the outer interval bound, as in
-    eitprocessing 1.8.7. Values and times are copied; times keep their
-    original values.
+    bound of exactly 0 s uses the outer interval bound. Values and times
+    are copied; times keep their original values.
 
     Args:
         data (EITFileData): The recording: images, waveforms, marks and

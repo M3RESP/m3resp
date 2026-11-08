@@ -80,8 +80,8 @@ from __future__ import annotations
 
 import functools
 import json
-import os
 from dataclasses import asdict, dataclass, replace
+from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
@@ -106,9 +106,7 @@ SCALE_RULES = ("linear", "from_zero", "centered", "whole_numbers", "mask")
 ScaleRule = Literal["linear", "from_zero", "centered", "whole_numbers", "mask"]
 Color = tuple[float, float, float, float]
 
-_COLOR_FILE = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "pixel_map_colors.json"
-)
+_COLOR_FILE = Path(__file__).resolve().parent / "pixel_map_colors.json"
 
 
 @dataclass(frozen=True)

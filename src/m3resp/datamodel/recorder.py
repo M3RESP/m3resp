@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import math
-import os
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
@@ -791,7 +790,7 @@ class DataModelRecorder:
                 file_format="other",
                 file_role="parameter",
                 checksum_sha256=_sha256_file(path),
-                file_size_bytes=os.path.getsize(path),
+                file_size_bytes=Path(path).stat().st_size,
             )
         )
         run = self.store.processing_runs[processing_run_id]

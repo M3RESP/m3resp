@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -15,4 +14,4 @@ def resolve_optional_path(base: str | Path, value: Any) -> Path | None:
     path = Path(value).expanduser()
     if path.is_absolute():
         return path
-    return Path(os.path.join(Path(base), path)).resolve()
+    return (Path(base) / path).resolve()

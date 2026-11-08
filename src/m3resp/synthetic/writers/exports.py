@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import csv
 import json
-import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -30,11 +30,11 @@ def _resolve_run_output_dir(
         return output_root
 
     timestamp = datetime.now().astimezone().strftime(export_config.timestamp_format)
-    candidate = os.path.join(output_root, timestamp)
+    candidate = str(Path(output_root) / timestamp)
     suffix = int(DEFAULT_ONE)
-    while os.path.exists(candidate):
+    while Path(candidate).exists():
         formatted_suffix = f"{suffix:0{export_config.timestamp_suffix_width}d}"
-        candidate = os.path.join(output_root, f"{timestamp}_{formatted_suffix}")
+        candidate = str(Path(output_root) / f"{timestamp}_{formatted_suffix}")
         suffix += int(DEFAULT_ONE)
     return candidate
 
@@ -47,8 +47,8 @@ def _write_record_exports(
     labels: list[str],
     export_config: ExportConfig,
 ) -> dict[str, str]:
-    npy_path = os.path.join(output_dir, f"{basename}.npy")
-    csv_path = os.path.join(output_dir, f"{basename}.csv")
+    npy_path = str(Path(output_dir) / f"{basename}.npy")
+    csv_path = str(Path(output_dir) / f"{basename}.csv")
     np.save(npy_path, array)
     _write_timeseries_csv(csv_path, time, array, labels, export_config)
     return {"npy": npy_path, "csv": csv_path}
@@ -91,10 +91,7 @@ def _write_native_resurfemg_output(
 ) -> str | None:
     writer = getattr(synth, "write_synthetic_recording", None)
 
-    native_path = os.path.join(
-        output_dir,
-        f"{basename}{export_config.native_extension}",
-    )
+    native_path = str(Path(output_dir) / f"{basename}{export_config.native_extension}")
     if writer is None:
         _write_poly5_file(
             path=native_path,

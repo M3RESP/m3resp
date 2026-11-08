@@ -38,7 +38,6 @@ Modified for M3RESP:
       `EventData`. The dictionary keys are the eitprocessing labels.
     - An event marker is an `Event` with the text as `label` and the number
       in `EventData.values`.
-    - The path is read with `os.path`.
     - Docstrings and comments are reworded.
 
 The original copyright and license notices are retained per Apache-2.0 §4.
@@ -53,6 +52,7 @@ import mmap
 import os
 import sys
 import warnings
+from pathlib import Path
 from typing import Any, NamedTuple
 from warnings import catch_warnings
 
@@ -116,8 +116,8 @@ def read_draeger(
             ``first_frame``, a frame has a timing error, or the given sample
             frequency differs from the estimate.
     """
-    path = os.fspath(path)
-    file_size = os.path.getsize(path)
+    path = Path(path)
+    file_size = path.stat().st_size
 
     frame_size: int
     medibus_fields: list[_MedibusField]
@@ -248,7 +248,7 @@ def read_draeger(
 
     return EITFileData(
         vendor=VENDOR,
-        path=path,
+        path=str(path),
         sample_frequency=sample_frequency,
         pixel_impedance=pixel_signal,
         signals=signals,
