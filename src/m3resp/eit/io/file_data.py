@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from m3resp.data.event_data import EventData, IntervalData
 from m3resp.data.signals import Signal
@@ -19,7 +20,8 @@ class EITFileData:
     Attributes:
         vendor (str): The device maker: ``"draeger"``, ``"sentec"`` or
             ``"timpel"``.
-        path (str): The file that was read.
+        paths (tuple[Path, ...]): The files that were read, in recording
+            order: one file, or several after a join.
         sample_frequency (float): Frames per second, in Hz.
         pixel_impedance (Signal): The EIT images, with values of shape
             (frames, rows, columns) and time in seconds.
@@ -34,7 +36,7 @@ class EITFileData:
     """
 
     vendor: str
-    path: str
+    paths: tuple[Path, ...]
     sample_frequency: float
     pixel_impedance: Signal
     signals: dict[str, Signal] = field(default_factory=dict)

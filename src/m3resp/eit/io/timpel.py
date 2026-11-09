@@ -115,8 +115,7 @@ def read_timpel(
             ``first_frame``.
     """
     path = Path(path)
-    if not sample_frequency:
-        sample_frequency = TIMPEL_SAMPLE_FREQUENCY
+    sample_frequency = float(sample_frequency or TIMPEL_SAMPLE_FREQUENCY)
 
     try:
         # Bug fix (see Provenance): ndmin=2 keeps 0 or 1 lines as a table.
@@ -174,14 +173,10 @@ def read_timpel(
 
     pixel_impedance = np.where(pixel_impedance == _NAN_VALUE, np.nan, pixel_impedance)
 
-    # The waveforms keep the value as given: the default is the whole number
-    # 50, as in eitprocessing. The images hold it as a float, as eitprocessing
-    # EITData does.
-    frequency = sample_frequency
     pixel_signal = Signal(
         values=pixel_impedance,
         time=time,
-        sample_frequency=float(frequency),
+        sample_frequency=sample_frequency,
         name="raw",
         modality="eit",
         category="impedance",
@@ -194,7 +189,7 @@ def read_timpel(
         "global_impedance_(raw)": Signal(
             values=global_impedance,
             time=time,
-            sample_frequency=frequency,
+            sample_frequency=sample_frequency,
             unit="a.u.",
             name="Global impedance",
             metadata={"description": "Global impedance calculated from raw EIT data"},
@@ -206,7 +201,7 @@ def read_timpel(
         "airway_pressure_(timpel)": _waveform(
             data[:, 1024],
             time,
-            frequency,
+            sample_frequency,
             unit="cmH2O",
             name="Airway pressure",
             category="pressure",
@@ -215,7 +210,7 @@ def read_timpel(
         "flow_(timpel)": _waveform(
             data[:, 1025],
             time,
-            frequency,
+            sample_frequency,
             unit="L/s",
             name="Flow",
             category="flow",
@@ -224,7 +219,7 @@ def read_timpel(
         "volume_(timpel)": _waveform(
             data[:, 1026],
             time,
-            frequency,
+            sample_frequency,
             unit="L",
             name="Volume",
             category="volume",
@@ -272,8 +267,8 @@ def read_timpel(
 
     return EITFileData(
         vendor=VENDOR,
-        path=str(path),
-        sample_frequency=float(frequency),
+        paths=(path,),
+        sample_frequency=sample_frequency,
         pixel_impedance=pixel_signal,
         signals=signals,
         events=events,

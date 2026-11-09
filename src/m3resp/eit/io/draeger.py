@@ -248,7 +248,7 @@ def read_draeger(
 
     return EITFileData(
         vendor=VENDOR,
-        path=str(path),
+        paths=(path,),
         sample_frequency=sample_frequency,
         pixel_impedance=pixel_signal,
         signals=signals,

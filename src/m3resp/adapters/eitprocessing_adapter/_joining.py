@@ -38,7 +38,7 @@ def join_eit_sequences(
         sequences: One eitprocessing Sequence per file, in recording order.
         paths: The file of each Sequence, for messages.
         check_order: Check the order of the files and warn about a pause.
-            False when `m3resp.eit.io.join_eit_files` has checked the same
+            False when `m3resp.eit.io.join_eit_file_data` has checked the same
             files already.
 
     Returns:

@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import itertools
 import warnings
 from collections.abc import Sequence
 from typing import Any
@@ -60,17 +61,17 @@ from m3resp.eit.io.file_data import EITFileData
 GAP_TOLERANCE_FRAMES = 0.5
 
 
-def join_eit_files(files: Sequence[EITFileData], paths: Sequence[str]) -> EITFileData:
+def join_eit_file_data(files: Sequence[EITFileData]) -> EITFileData:
     """Join the data of EIT files recorded one after the other, in the given order.
 
     Args:
         files (Sequence[EITFileData]): The data of each file, in recording
             order.
-        paths (Sequence[str]): The file of each item, for messages.
 
     Returns:
         EITFileData: All frames, waveforms, marks and breaths in one
-            recording. ``path`` is the path of the first file.
+            recording. ``paths`` lists the files of all items, in recording
+            order.
 
     Raises:
         ValueError: If no file is given, a file starts before the one before
@@ -81,27 +82,26 @@ def join_eit_files(files: Sequence[EITFileData], paths: Sequence[str]) -> EITFil
     """
     if not files:
         raise ValueError("Give at least one EIT file to join.")
-    check_file_order(files, paths)
+    check_file_order(files)
     joined = files[0]
-    for after, after_path in zip(files[1:], paths[1:], strict=True):
+    for after in files[1:]:
         problem = _difference(joined, after)
         if problem is not None:
             raise ValueError(
                 "These EIT files cannot be joined into one recording: they "
                 f"differ in device, image size or sampling rate ({problem}; "
-                f"file {after_path!r})."
+                f"file {_first_path(after)!r})."
             )
         joined = _join_two(joined, after)
     return joined
 
 
-def check_file_order(files: Sequence[EITFileData], paths: Sequence[str]) -> None:
+def check_file_order(files: Sequence[EITFileData]) -> None:
     """Check that each file starts after the one before it ends.
 
     Args:
         files (Sequence[EITFileData]): The data of each file, in recording
             order.
-        paths (Sequence[str]): The file of each item, for messages.
 
     Raises:
         ValueError: If a file starts at or before the end of the file before
@@ -111,11 +111,8 @@ def check_file_order(files: Sequence[EITFileData], paths: Sequence[str]) -> None
         UserWarning: If the pause between two files is longer than half a
             frame interval.
     """
-    for (before, before_path), (after, after_path) in zip(
-        zip(files, paths, strict=True),
-        zip(files[1:], paths[1:], strict=True),
-        strict=False,
-    ):
+    for before, after in itertools.pairwise(files):
+        before_path, after_path = _last_path(before), _first_path(after)
         before_time = np.asarray(before.pixel_impedance.time, dtype=float)
         after_time = np.asarray(after.pixel_impedance.time, dtype=float)
         before_end = float(before_time[-1])
@@ -138,6 +135,18 @@ def check_file_order(files: Sequence[EITFileData], paths: Sequence[str]) -> None
                 UserWarning,
                 stacklevel=3,
             )
+
+
+def _first_path(data: EITFileData) -> str:
+    """The first file of ``data``, as text for messages."""
+
+    return str(data.paths[0]) if data.paths else ""
+
+
+def _last_path(data: EITFileData) -> str:
+    """The last file of ``data``, as text for messages."""
+
+    return str(data.paths[-1]) if data.paths else ""
 
 
 def _difference(first: EITFileData, second: EITFileData) -> str | None:
@@ -175,6 +184,7 @@ def _join_two(first: EITFileData, second: EITFileData) -> EITFileData:
 
     return dataclasses.replace(
         first,
+        paths=(*first.paths, *second.paths),
         pixel_impedance=_join_signals(first.pixel_impedance, second.pixel_impedance),
         signals={
             key: _join_signals(signal, second.signals[key])

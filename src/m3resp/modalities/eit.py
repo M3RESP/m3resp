@@ -285,7 +285,7 @@ def keep_frames(recording: EITRecording, start_index: int, end_index: int) -> No
         )
     original = EITFileData(
         vendor=vendor,
-        path=str(recording.paths[0]),
+        paths=recording.paths,
         sample_frequency=recording.sample_frequency,
         pixel_impedance=recording.pixel_impedance,
         signals=recording.signals,

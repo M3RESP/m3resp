@@ -8,7 +8,7 @@
 
 The steps after `eit.load` still read an eitprocessing `Sequence`. `m3resp.adapters.eitprocessing_adapter.file_data_to_sequence` builds it from the reader result, field by field, so the `eit` extra still installs eitprocessing. The provenance record of `eit.load` names `m3resp.eit.io.read_eit_file`.
 
-A recording loaded with `M3Session().load_eit` holds the m3resp data next to the `Sequence`: `EITRecording.pixel_impedance`, `signals`, `events`, `intervals` and `sample_frequency`. `m3resp.eit.io.join_eit_files` joins files recorded one after the other. A custom loader may return an `EITFileData`.
+A recording loaded with `M3Session().load_eit` holds the m3resp data next to the `Sequence`: `EITRecording.pixel_impedance`, `signals`, `events`, `intervals` and `sample_frequency`. `m3resp.eit.io.join_eit_file_data` joins the data of files recorded one after the other; `EITFileData.paths` lists the files in recording order, also after a join or a cut. A custom loader may return an `EITFileData`.
 
 ### The EIT steps pass Signals
 
@@ -144,6 +144,10 @@ Changes that a user can see:
 - Timpel: with no frame left after `first_frame`, the reader gives a ValueError about `first_frame`. With one frame left, it reads that frame. eitprocessing 1.8.7 stops with an IndexError in both cases.
 - Timpel: when the device minima give fewer than two breath starts, the list of device breaths is empty. eitprocessing 1.8.7 stops with a ValueError.
 - `vendor="simulated"` gives the "No loading method" error of an unknown vendor. eitprocessing 1.8.7 stops with a KeyError.
+
+### Changed: Timpel sample frequency
+
+- Timpel: the images and the waveforms have the same sample frequency, a float (50.0 Hz by default). eitprocessing 1.8.7 gives the images 50.0 and the waveforms the whole number 50.
 
 ### Fixed: equal signals with NaN values
 

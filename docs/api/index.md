@@ -142,7 +142,7 @@ These functions load one recording without a session.
 
 ## Read EIT files
 
-These functions read one EIT file of a Draeger, Sentec or Timpel device. Each returns an `EITFileData` with the images, the waveforms, the marks of the device and, for Timpel, the breaths found by the device. `read_eit_file` picks the reader from the device maker, and `join_eit_files` joins the data of files recorded one after the other.
+These functions read one EIT file of a Draeger, Sentec or Timpel device. Each returns an `EITFileData` with the images, the waveforms, the marks of the device and, for Timpel, the breaths found by the device. `read_eit_file` picks the reader from the device maker, and `join_eit_file_data` joins the data of files recorded one after the other.
 
 ```{eval-rst}
 .. autosummary::
@@ -155,7 +155,7 @@ These functions read one EIT file of a Draeger, Sentec or Timpel device. Each re
    m3resp.eit.io.read_timpel
    m3resp.eit.io.EITFileData
    m3resp.modalities.eit.EITRecording
-   m3resp.eit.io.join_eit_files
+   m3resp.eit.io.join_eit_file_data
 ```
 
 ## EIT calculations

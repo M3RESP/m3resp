@@ -37,9 +37,22 @@ def _upstream_load(path, **kwargs):
     return loading.load_eit_data(path, **kwargs)
 
 
+def _with_float_sample_frequencies(sequence):
+    """Return ``sequence`` with the waveform sample frequencies as floats.
+
+    eitprocessing 1.8.7 gives the Timpel waveforms the whole number 50, and its
+    `==` compares the type. m3resp gives every Timpel signal 50.0.
+    """
+
+    for data in sequence.continuous_data.values():
+        data.sample_frequency = float(data.sample_frequency)
+    return sequence
+
+
 def _assert_same_sequence(ours, theirs) -> None:
     """Equal by eitprocessing's own `==`, and in the fields it does not compare."""
 
+    theirs = _with_float_sample_frequencies(theirs)
     assert ours == theirs
     assert ours.description == theirs.description
     if theirs.label.startswith("Sequence_"):

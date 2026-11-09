@@ -229,7 +229,7 @@ def test_native_waveforms_are_read_without_accessing_a_sequence(kind):
     pixels = Signal(values=np.zeros((N, 2, 2)), time=time, sample_frequency=FS)
     native = EITFileData(
         vendor="draeger",
-        path="recording.bin",
+        paths=(Path("recording.bin"),),
         sample_frequency=FS,
         pixel_impedance=pixels,
         signals=signals,

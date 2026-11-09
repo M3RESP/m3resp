@@ -15,7 +15,7 @@ from m3resp.adapters.eitprocessing_adapter import (
     sequence_to_file_data,
 )
 from m3resp.core.session import M3Session
-from m3resp.eit.io import EITFileData, join_eit_files, read_eit_file
+from m3resp.eit.io import EITFileData, join_eit_file_data, read_eit_file
 
 pytest.importorskip("eitprocessing")
 
@@ -87,7 +87,7 @@ class TestLoad:
         expected = read_eit_file(TEST_FILES[vendor], vendor)
         loaded = EITFileData(
             vendor=vendor,
-            path=TEST_FILES[vendor],
+            paths=(Path(TEST_FILES[vendor]),),
             sample_frequency=recording.sample_frequency,
             pixel_impedance=recording.pixel_impedance,
             signals=recording.signals,
@@ -104,7 +104,7 @@ class TestLoad:
 
         native = EITFileData(
             vendor=vendor,
-            path=TEST_FILES[vendor],
+            paths=(Path(TEST_FILES[vendor]),),
             sample_frequency=recording.sample_frequency,
             pixel_impedance=recording.pixel_impedance,
             signals=recording.signals,
@@ -128,7 +128,7 @@ class TestJoin:
         whole = read_eit_file(TEST_FILES["draeger"], "draeger")
         native = EITFileData(
             vendor="draeger",
-            path=files[0],
+            paths=tuple(Path(file) for file in files),
             sample_frequency=recording.sample_frequency,
             pixel_impedance=recording.pixel_impedance,
             signals=recording.signals,
@@ -160,14 +160,14 @@ class TestJoin:
         sentec = read_eit_file(TEST_FILES["sentec"], "sentec")
         later = EITFileData(
             vendor=sentec.vendor,
-            path=sentec.path,
+            paths=sentec.paths,
             sample_frequency=sentec.sample_frequency,
             pixel_impedance=sentec.pixel_impedance,
         )
         later.pixel_impedance.time = later.pixel_impedance.time + 1e6
 
         with pytest.raises(ValueError, match="cannot be joined.*vendor 'draeger'"):
-            join_eit_files([draeger, later], ["a.bin", "b.zri"])
+            join_eit_file_data([draeger, later])
 
     def test_files_out_of_order_are_refused(self, tmp_path):
         files = [
@@ -177,16 +177,27 @@ class TestJoin:
         data = [read_eit_file(path, "draeger") for path in files]
 
         with pytest.raises(ValueError, match="List the files in recording order"):
-            join_eit_files(list(reversed(data)), list(reversed(files)))
+            join_eit_file_data(list(reversed(data)))
+
+    def test_joined_data_lists_the_paths_of_all_files(self, tmp_path):
+        files = [
+            _write_draeger_frames(tmp_path / "part_1.bin", 0, 600),
+            _write_draeger_frames(tmp_path / "part_2.bin", 600, 1200),
+        ]
+        data = [read_eit_file(path, "draeger") for path in files]
+
+        joined = join_eit_file_data(data)
+
+        assert joined.paths == tuple(Path(file) for file in files)
 
     def test_one_file_is_returned_as_it_is(self):
         data = read_eit_file(TEST_FILES["timpel"], "timpel")
 
-        assert join_eit_files([data], [TEST_FILES["timpel"]]) is data
+        assert join_eit_file_data([data]) is data
 
     def test_no_file_is_refused(self):
         with pytest.raises(ValueError, match="at least one EIT file"):
-            join_eit_files([], [])
+            join_eit_file_data([])
 
 
 class TestSequenceToFileData:

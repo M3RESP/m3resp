@@ -46,7 +46,7 @@ import numpy as np
 from m3resp.data.categories import normalize_category
 from m3resp.data.event_data import IntervalData
 from m3resp.data.parameters import ParameterResult
-from m3resp.data.pixel_maps import PixelMap, PixelMask
+from m3resp.data.pixel_maps import PixelMap, PixelMask, masked_metadata
 from m3resp.data.quality import QualityFlag
 from m3resp.data.signals import Signal
 
@@ -342,9 +342,14 @@ class PixelMaskCollection:
 
         results: dict[str, Any] = {}
         for mask in self.items:
+            metadata = (
+                masked_metadata(data.metadata, mask.name)
+                if isinstance(data, Signal)
+                else dict(data.metadata)
+            )
             fields = {
                 "values": mask.apply(np.asarray(data.values)),
-                "metadata": dict(data.metadata),
+                "metadata": metadata,
                 **changes,
             }
             if name_format is not None:

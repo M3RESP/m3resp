@@ -10,6 +10,13 @@ The regional impedance is the same sum over the pixels of a region only: each
 pixel is first multiplied by its value in a ``PixelMask``. The functional
 impedance is the regional impedance of the functional (ventilated) lung space.
 
+The usual order of the steps is: filter the images, make a mask, then apply the
+mask to the images (``PixelMask.apply``) and use the masked images in the next
+steps. ``regional_impedance`` and ``functional_impedance`` apply the mask and
+sum the pixels in one call. ``PixelMask.apply`` lists the mask under
+``metadata["masks"]`` of the result. ``global_impedance`` raises an error for
+such images, because their sum covers only the region of the mask.
+
 ---------------------------------------------------------------------------
 Provenance
 ----------
@@ -31,6 +38,7 @@ Modified for M3RESP:
       this function in `method`.
     - `regional_impedance` and `functional_impedance` join
       `PixelMask.apply` and the sum in one function.
+    - `global_impedance` raises an error for masked images.
     - Docstrings are reworded.
 
 The original copyright and license notices are retained per Apache-2.0 §4.
@@ -41,7 +49,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from m3resp.data.pixel_maps import PixelMask
+from m3resp.data.pixel_maps import MASKS_KEY, PixelMask
 from m3resp.data.signals import Signal
 
 
@@ -64,9 +72,16 @@ def global_impedance(
 
     Raises:
         ValueError: If the values of ``pixel_impedance`` do not have three
-            axes.
+            axes, or if the images are masked (``metadata["masks"]``).
     """
 
+    masks = pixel_impedance.metadata.get(MASKS_KEY)
+    if masks:
+        raise ValueError(
+            f"global_impedance: the images {pixel_impedance.name!r} are masked "
+            f"with {masks}, so their sum is a regional impedance. Use "
+            "regional_impedance(images, mask) on the images before masking."
+        )
     return _summed(
         pixel_impedance,
         np.asarray(pixel_impedance.values),

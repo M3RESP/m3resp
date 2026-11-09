@@ -125,6 +125,26 @@ PIXEL_MAP_KINDS = (
 #: Kinds whose values are normally 0 or more; a negative value gives a warning.
 _NON_NEGATIVE_KINDS = frozenset({"amplitude", "perfusion", "pendelluft"})
 
+#: Metadata key of a masked ``Signal``: the names of the masks applied to it,
+#: in the order they were applied.
+MASKS_KEY = "masks"
+
+
+def masked_metadata(metadata: dict[str, Any], mask_name: str) -> dict[str, Any]:
+    """Return a copy of ``metadata`` with ``mask_name`` added to the masks.
+
+    Args:
+        metadata (dict[str, Any]): The metadata of the images before masking.
+        mask_name (str): The name of the mask that is applied.
+
+    Returns:
+        dict[str, Any]: A copy, with ``mask_name`` at the end of the list
+            under ``"masks"``.
+    """
+
+    return {**metadata, MASKS_KEY: [*metadata.get(MASKS_KEY, []), mask_name]}
+
+
 NormalizeMode = Literal["zero-based", "symmetric", "maximum", "reference"]
 
 
@@ -841,7 +861,8 @@ class PixelMask:
         Returns:
             numpy.ndarray | Signal | PixelMap: The same kind as ``data``, with
                 the masked pixels. A ``Signal`` or ``PixelMap`` is a copy with
-                the same other fields and a copy of the metadata.
+                the same other fields and a copy of the metadata. The metadata
+                of a ``Signal`` lists the name of this mask under ``"masks"``.
 
         Raises:
             ValueError: If the last two axes of the data differ in size from
@@ -854,7 +875,7 @@ class PixelMask:
             return replace(
                 data,
                 values=self._multiply(np.asarray(data.values)),
-                metadata=dict(data.metadata),
+                metadata=masked_metadata(data.metadata, self.name),
             )
         if isinstance(data, PixelMap):
             return data.with_values(self._multiply(data.values))

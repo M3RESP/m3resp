@@ -24,7 +24,7 @@ import m3resp.workflows.steps  # noqa: F401 - registers the built-in steps
 from m3resp import M3Session
 from m3resp.data import PixelMap, PixelMask, Signal
 from m3resp.eit.io import read_eit_file
-from m3resp.eit.processing import regional_impedance
+from m3resp.eit.processing import global_impedance, regional_impedance
 from m3resp.workflows.registry import describe_step, get_step
 
 FS = 20.0
@@ -314,9 +314,32 @@ class TestPixelMaskApply:
             "draeger",
             FS,
         )
-        assert masked.metadata == signal.metadata
-        assert masked.metadata is not signal.metadata
+        assert masked.metadata == {"note": 1, "masks": ["m"]}
+        assert signal.metadata == {"note": 1}
         np.testing.assert_array_equal(signal.values, PIXELS)
+
+    def test_a_second_mask_is_added_to_the_list(self):
+        signal = Signal(values=PIXELS, time=np.arange(PIXELS.shape[0]) / FS)
+        other = PixelMask(name="right", values=[[1.0, 1.0], [1.0, 1.0]])
+
+        masked = other.apply(self.MASK.apply(signal))
+
+        assert masked.metadata["masks"] == ["m", "right"]
+
+    def test_global_impedance_refuses_masked_images(self):
+        signal = Signal(
+            values=PIXELS, time=np.arange(PIXELS.shape[0]) / FS, name="images"
+        )
+
+        with pytest.raises(ValueError, match=r"masked with \['m'\].*regional"):
+            global_impedance(self.MASK.apply(signal))
+
+    def test_global_impedance_of_unmasked_images_is_the_sum(self):
+        signal = Signal(values=PIXELS, time=np.arange(PIXELS.shape[0]) / FS)
+
+        result = global_impedance(signal)
+
+        np.testing.assert_array_equal(result.values, np.nansum(PIXELS, axis=(1, 2)))
 
     def test_pixel_map(self):
         pixel_map = PixelMap(name="tiv", values=[[2.0, 2.0], [2.0, 2.0]], unit="AU")

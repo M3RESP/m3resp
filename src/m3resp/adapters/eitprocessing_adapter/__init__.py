@@ -27,7 +27,7 @@ from m3resp.data.events import (
     coerce_breath_events,
     reuse_matching_breaths,
 )
-from m3resp.eit.io import EITFileData, join_eit_files, read_eit_file
+from m3resp.eit.io import EITFileData, join_eit_file_data, read_eit_file
 from m3resp.eit.processing import (
     BreathDetectionSettings,
     RateDetectionSettings,
@@ -296,7 +296,7 @@ class EITProcessingAdapter:
         Each file is read by the m3resp reader of its vendor
         (`m3resp.eit.io.read_eit_file`). Several files are read as one
         recording: the m3resp data of the files is joined in the given order
-        (`m3resp.eit.io.join_eit_files`). The eitprocessing Sequence of each
+        (`m3resp.eit.io.join_eit_file_data`). The eitprocessing Sequence of each
         file is built with `file_data_to_sequence`, and the Sequences are
         joined with `join_eit_sequences`, so the Sequence is the one
         eitprocessing's ``load_eit_data`` gives.
@@ -359,7 +359,7 @@ class EITProcessingAdapter:
                 "(session.slice_eit)."
             )
         files = [read_eit_file(single_path, vendor, **kwargs) for single_path in paths]
-        native = join_eit_files(files, paths)
+        native = join_eit_file_data(files)
         sequences = [
             file_data_to_sequence(file_data, **sequence_options) for file_data in files
         ]

@@ -177,7 +177,7 @@ def read_sentec(
     )
     return EITFileData(
         vendor=VENDOR,
-        path=str(path),
+        paths=(path,),
         sample_frequency=float(sample_frequency),
         pixel_impedance=pixel_signal,
     )

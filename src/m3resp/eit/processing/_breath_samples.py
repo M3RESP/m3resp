@@ -191,7 +191,7 @@ def nearest_samples(
             sides of the gap. A sample is the median step between the sample
             times. A gap is a step
             longer than ``1 + GAP_TOLERANCE_FRAMES`` samples, as for
-            ``join_eit_files``. A time exactly halfway between two samples
+            ``join_eit_file_data``. A time exactly halfway between two samples
             gets the later sample.
     """
 

@@ -779,6 +779,7 @@ def test_apply_on_a_signal_keeps_its_fields():
     masked = collection.apply(signal, name_format="{mask_name} pixels")["left"]
 
     assert masked.name == "left pixels"
+    assert masked.metadata["masks"] == ["left"]
     assert masked.sample_frequency == 10.0
     np.testing.assert_array_equal(masked.time, signal.time)
     assert np.isnan(masked.values[:, :, 1]).all()

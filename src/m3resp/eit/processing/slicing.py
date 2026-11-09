@@ -160,7 +160,7 @@ def slice_file_data(data: EITFileData, start: int, end: int) -> EITFileData:
         end (int): Index after the last frame to keep.
 
     Returns:
-        EITFileData: The cut recording, with the same vendor, path, frames
+        EITFileData: The cut recording, with the same vendor, paths, frames
             per second and keys.
 
     Raises:

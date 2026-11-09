@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -108,7 +109,7 @@ def _device_data():
     time = np.arange(7.0)
     return EITFileData(
         vendor="timpel",
-        path="recording.txt",
+        paths=(Path("recording.txt"),),
         sample_frequency=1.0,
         pixel_impedance=Signal(
             time=time, values=np.ones((7, 2, 2)), source="timpel", sample_frequency=1.0
@@ -196,7 +197,7 @@ def test_rebuilt_sequence_equals_upstream_index_slice(
 
     _, data = recording
     session = M3Session()
-    session.load_eit(data.path, vendor=data.vendor)
+    session.load_eit(data.paths[0], vendor=data.vendor)
     expected = session.eit.data.select_by_index(start, end)
 
     def upstream_slicing_was_called(*args, **kwargs):
@@ -223,7 +224,7 @@ def test_session_device_marks_and_breaths_match_reader_golden(recording):
 
     dataset, data = recording
     session = M3Session()
-    session.load_eit(data.path, vendor=data.vendor)
+    session.load_eit(data.paths[0], vendor=data.vendor)
     with np.load(os.path.join(GOLDEN, dataset, "reader.npz")) as golden:
         for key, marks in session.eit.events.items():
             np.testing.assert_array_equal(
@@ -255,7 +256,7 @@ def test_workflow_raw_signals_record_the_vendor_source(recording):
 
     _, data = recording
     session = M3Session()
-    session.load_eit(data.path, vendor=data.vendor)
+    session.load_eit(data.paths[0], vendor=data.vendor)
     outputs = _loaded_recording_outputs(session)
     assert outputs["raw_eit"].source == data.vendor
     assert outputs["raw_global_impedance"].source == data.vendor
@@ -334,7 +335,7 @@ def test_repeated_recording_slices_match_upstream(recording):
 
     _, data = recording
     session = M3Session()
-    session.load_eit(data.path, vendor=data.vendor)
+    session.load_eit(data.paths[0], vendor=data.vendor)
     expected = session.eit.data.select_by_index(10, 400).select_by_index(5, 100)
     keep_frames(session.eit, 10, 400)
     keep_frames(session.eit, 5, 100)

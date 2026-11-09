@@ -56,7 +56,11 @@ def sequence_to_file_data(sequence: Any) -> EITFileData | None:
 
     vendor = str(getattr(raw.vendor, "value", raw.vendor))
     path = getattr(raw, "path", "")
-    path = path[0] if isinstance(path, list | tuple) else path
+    paths = (
+        tuple(Path(item) for item in path)
+        if isinstance(path, list | tuple)
+        else (Path(path),)
+    )
     pixel_impedance = Signal(
         values=raw.pixel_impedance,
         time=raw.time,
@@ -148,7 +152,7 @@ def sequence_to_file_data(sequence: Any) -> EITFileData | None:
 
     return EITFileData(
         vendor=vendor,
-        path=str(Path(path)),
+        paths=paths,
         sample_frequency=raw.sample_frequency,
         pixel_impedance=pixel_impedance,
         signals=signals,
@@ -270,7 +274,7 @@ def file_data_to_sequence(
     pixels = file_data.pixel_impedance
     eit_data = EITData(
         vendor=Vendor(vendor),
-        path=Path(file_data.path),
+        path=file_data.paths[0] if len(file_data.paths) == 1 else list(file_data.paths),
         sample_frequency=file_data.sample_frequency,
         nframes=pixels.n_samples,
         time=pixels.time,
