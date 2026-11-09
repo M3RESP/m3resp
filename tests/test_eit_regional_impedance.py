@@ -334,6 +334,14 @@ class TestPixelMaskApply:
         with pytest.raises(ValueError, match=r"masked with \['m'\].*regional"):
             global_impedance(self.MASK.apply(signal))
 
+    def test_regional_impedance_is_named_after_the_mask(self):
+        signal = Signal(values=PIXELS, time=np.arange(PIXELS.shape[0]) / FS)
+        ventral = PixelMask(name="ventral", values=[[1.0, 1.0], [np.nan, np.nan]])
+
+        assert regional_impedance(signal, ventral).name == "ventral_impedance"
+        assert regional_impedance(signal, ventral, name="top").name == "top"
+        assert regional_impedance(signal, ventral).channel == "regional_impedance"
+
     def test_global_impedance_of_unmasked_images_is_the_sum(self):
         signal = Signal(values=PIXELS, time=np.arange(PIXELS.shape[0]) / FS)
 

@@ -28,15 +28,15 @@ from m3resp.eit.io.file_data import EITFileData
 from m3resp.processing.slicing import slice_by_index, time_slice_indices
 
 
-def slice_events(data: EventData, start: float, end: float) -> EventData:
-    """Keep the device marks from ``start`` up to the mark before ``end``.
+def slice_events(data: EventData, start_time: float, end_time: float) -> EventData:
+    """Keep the device marks from ``start_time`` up to the mark before ``end_time``.
 
     Args:
         data (EventData): Device marks, with times in seconds in
             increasing order.
-        start (float): First time to keep, in seconds. A mark at this
+        start_time (float): First time to keep, in seconds. A mark at this
             time is kept.
-        end (float): End of the window, in seconds. A mark at this time is
+        end_time (float): End of the window, in seconds. A mark at this time is
             left out.
 
     Returns:
@@ -50,7 +50,9 @@ def slice_events(data: EventData, start: float, end: float) -> EventData:
     """
 
     first, last = time_slice_indices(
-        np.array([event.time for event in data.events]), start=start, end=end
+        np.array([event.time for event in data.events]),
+        start_time=start_time,
+        end_time=end_time,
     )
     return replace(
         data,
@@ -62,50 +64,56 @@ def slice_events(data: EventData, start: float, end: float) -> EventData:
     )
 
 
-def interval_indices(data: IntervalData, start: float, end: float) -> list[int]:
+def interval_indices(
+    data: IntervalData, start_time: float, end_time: float
+) -> list[int]:
     """Return the indices of the device intervals inside a time window.
 
     An interval is kept when its start and its end lie in the window,
     both window ends included. When ``metadata["default_partial_inclusion"]``
     is True, every interval that overlaps the window is kept. A bound of
     exactly 0 s is replaced by the start of the first interval (for
-    ``start``) or the end of the last interval (for ``end``).
+    ``start_time``) or the end of the last interval (for ``end_time``).
 
     Args:
         data (IntervalData): Device intervals, for example Timpel breaths.
-        start (float): Start of the window, in seconds.
-        end (float): End of the window, in seconds.
+        start_time (float): Start of the window, in seconds.
+        end_time (float): End of the window, in seconds.
 
     Returns:
         list[int]: The indices of the kept intervals, in increasing order.
     """
 
-    start, end = _interval_bounds(data, start, end)
+    start_time, end_time = _interval_bounds(data, start_time, end_time)
     partial = data.metadata.get("default_partial_inclusion", False)
     if partial:
         return [
             i
             for i, item in enumerate(data.intervals)
-            if item.start_time < end and item.end_time > start
+            if item.start_time < end_time and item.end_time > start_time
         ]
     return [
         i
         for i, item in enumerate(data.intervals)
-        if item.start_time >= start and item.end_time <= end
+        if item.start_time >= start_time and item.end_time <= end_time
     ]
 
 
 def _interval_bounds(
-    data: IntervalData, start: float, end: float
+    data: IntervalData, start_time: float, end_time: float
 ) -> tuple[float, float]:
     """A zero bound uses the corresponding outer interval bound, as upstream."""
 
     if not data.intervals:
-        return start, end
-    return start or data.intervals[0].start_time, end or data.intervals[-1].end_time
+        return start_time, end_time
+    return start_time or data.intervals[0].start_time, end_time or data.intervals[
+        -1
+    ].end_time
 
 
-def slice_intervals(data: IntervalData, start: float, end: float) -> IntervalData:
+def slice_intervals(
+    data: IntervalData, start_time: float, end_time: float
+) -> IntervalData:
     """Keep the device intervals inside a time window.
 
     The intervals are chosen by ``interval_indices``. A complete breath
@@ -115,21 +123,21 @@ def slice_intervals(data: IntervalData, start: float, end: float) -> IntervalDat
 
     Args:
         data (IntervalData): Device intervals, for example Timpel breaths.
-        start (float): Start of the window, in seconds.
-        end (float): End of the window, in seconds.
+        start_time (float): Start of the window, in seconds.
+        end_time (float): End of the window, in seconds.
 
     Returns:
         IntervalData: A copy with the kept intervals and their values. Its
             ``metadata["default_partial_inclusion"]`` is False.
     """
 
-    indices = interval_indices(data, start, end)
-    start, end = _interval_bounds(data, start, end)
+    indices = interval_indices(data, start_time, end_time)
+    start_time, end_time = _interval_bounds(data, start_time, end_time)
     items = [
         replace(
             copy.deepcopy(data.intervals[i]),
-            start_time=max(data.intervals[i].start_time, start),
-            end_time=min(data.intervals[i].end_time, end),
+            start_time=max(data.intervals[i].start_time, start_time),
+            end_time=min(data.intervals[i].end_time, end_time),
         )
         for i in indices
     ]
@@ -143,8 +151,8 @@ def slice_intervals(data: IntervalData, start: float, end: float) -> IntervalDat
     return replace(data, intervals=items, values=values, metadata=metadata)
 
 
-def slice_file_data(data: EITFileData, start: int, end: int) -> EITFileData:
-    """Keep frames ``start`` up to the frame before ``end`` of one recording.
+def slice_file_data(data: EITFileData, start_index: int, end_index: int) -> EITFileData:
+    """Keep frames ``start_index`` up to the frame before ``end_index``.
 
     The waveforms are cut at the same frames as the images. Device marks
     are kept from the time of the first kept frame up to the time of the
@@ -156,8 +164,8 @@ def slice_file_data(data: EITFileData, start: int, end: int) -> EITFileData:
     Args:
         data (EITFileData): The recording: images, waveforms, marks and
             device breaths.
-        start (int): Index of the first frame to keep.
-        end (int): Index after the last frame to keep.
+        start_index (int): Index of the first frame to keep.
+        end_index (int): Index after the last frame to keep.
 
     Returns:
         EITFileData: The cut recording, with the same vendor, paths, frames
@@ -169,7 +177,9 @@ def slice_file_data(data: EITFileData, start: int, end: int) -> EITFileData:
             not in increasing order.
     """
 
-    pixels = slice_by_index(data.pixel_impedance, start=start, end=end)
+    pixels = slice_by_index(
+        data.pixel_impedance, start_index=start_index, end_index=end_index
+    )
     for key, signal in data.signals.items():
         if len(signal) != len(data.pixel_impedance):
             raise ValueError(
@@ -181,7 +191,7 @@ def slice_file_data(data: EITFileData, start: int, end: int) -> EITFileData:
         data,
         pixel_impedance=pixels,
         signals={
-            key: slice_by_index(value, start=start, end=end)
+            key: slice_by_index(value, start_index=start_index, end_index=end_index)
             for key, value in data.signals.items()
         },
         events={

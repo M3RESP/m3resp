@@ -89,8 +89,8 @@ def slice_signal(
         return {
             "result": slice_by_time(
                 signal,
-                start=start,
-                end=end,
+                start_time=start,
+                end_time=end,
                 start_inclusive=start_inclusive,
                 end_inclusive=end_inclusive,
             )

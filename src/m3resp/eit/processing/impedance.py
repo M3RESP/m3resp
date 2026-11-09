@@ -95,7 +95,7 @@ def regional_impedance(
     pixel_impedance: Signal,
     mask: PixelMask,
     *,
-    name: str = "regional_impedance",
+    name: str | None = None,
     channel: str = "regional_impedance",
 ) -> Signal:
     """Return the regional impedance: the sum of the pixels inside a mask.
@@ -109,7 +109,8 @@ def regional_impedance(
             rows, columns) and time in seconds.
         mask (PixelMask): The region, with the shape (rows, columns) of the
             images.
-        name (str): The name of the result.
+        name (str | None): The name of the result. None gives
+            ``"{mask.name}_impedance"``, for example ``"ventral_impedance"``.
         channel (str): The channel of the result.
 
     Returns:
@@ -128,7 +129,7 @@ def regional_impedance(
     return _summed(
         pixel_impedance,
         mask.apply(values),
-        name=name,
+        name=name if name is not None else f"{mask.name}_impedance",
         channel=channel,
         function="regional_impedance",
     )

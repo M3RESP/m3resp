@@ -34,28 +34,30 @@ from m3resp.data.timeseries import TimeSeries
 def time_slice_indices(
     time: np.ndarray,
     *,
-    start: float | None = None,
-    end: float | None = None,
+    start_time: float | None = None,
+    end_time: float | None = None,
     start_inclusive: bool = False,
     end_inclusive: bool = False,
 ) -> tuple[int, int]:
     """Return the first sample and the sample after the last one in a window.
 
     The rules are those of eitprocessing 1.8.7 (``select_by_time``). A
-    sample exactly at ``start`` is always kept. When ``start`` falls between
-    two samples, ``start_inclusive=True`` keeps the sample before it and
-    False starts at the sample after it. ``end_inclusive=True`` also keeps
-    the first sample at or after ``end``; False stops before that sample.
+    sample exactly at ``start_time`` is always kept. When ``start_time``
+    falls between two samples, ``start_inclusive=True`` keeps the sample
+    before it and False starts at the sample after it.
+    ``end_inclusive=True`` also keeps the first sample at or after
+    ``end_time``; False stops before that sample.
 
     Args:
         time (numpy.ndarray): Sample times in seconds, in increasing order.
-        start (float | None): Start of the window, in seconds. None starts
-            at the first sample.
-        end (float | None): End of the window, in seconds. None ends at the
-            last sample.
-        start_inclusive (bool): Keep the sample before a ``start`` that
+        start_time (float | None): Start of the window, in seconds. None
+            starts at the first sample.
+        end_time (float | None): End of the window, in seconds. None ends at
+            the last sample.
+        start_inclusive (bool): Keep the sample before a ``start_time`` that
             falls between samples.
-        end_inclusive (bool): Keep the first sample at or after ``end``.
+        end_inclusive (bool): Keep the first sample at or after
+            ``end_time``.
 
     Returns:
         tuple[int, int]: The index of the first kept sample and the index
@@ -68,29 +70,31 @@ def time_slice_indices(
 
     time = np.asarray(time)
     if time.ndim != 1 or not np.all(np.isfinite(time)) or np.any(time[1:] < time[:-1]):
-        raise ValueError(
-            "Slicing by time needs a sorted, finite, one-dimensional time axis."
-        )
-    if any(value is not None and not np.isfinite(value) for value in (start, end)):
-        raise ValueError("Slicing bounds must be finite times in seconds.")
+        raise ValueError("Slicing bounds must be finite times in seconds or None.")
+    if any(
+        value is not None and not np.isfinite(value) for value in (start_time, end_time)
+    ):
+        raise ValueError("Slicing bounds must be finite times in seconds or None.")
     if not len(time):
         return 0, 0
-    if start is None or start < time[0]:
+    if start_time is None or start_time < time[0]:
         first = 0
     elif start_inclusive:
-        first = bisect.bisect_right(time, start) - 1
+        first = bisect.bisect_right(time, start_time) - 1
     else:
-        first = bisect.bisect_left(time, start)
+        first = bisect.bisect_left(time, start_time)
     last = (
-        len(time) if end is None else bisect.bisect_left(time, end) + int(end_inclusive)
+        len(time)
+        if end_time is None
+        else bisect.bisect_left(time, end_time) + int(end_inclusive)
     )
     return first, last
 
 
 def slice_by_index(
-    data: Any, *, start: int, end: int, allow_empty: bool = False
+    data: Any, *, start_index: int, end_index: int, allow_empty: bool = False
 ) -> Any:
-    """Keep samples `start` up to (not including) `end` of a signal.
+    """Keep samples `start_index` up to (not including) `end_index` of a signal.
 
     Works on m3resp's own `Signal`/`TimeSeries` and on eitprocessing data
     (`EITData`, `ContinuousData`, `Sequence`), which cut themselves.
@@ -99,21 +103,23 @@ def slice_by_index(
     """
 
     if isinstance(data, TimeSeries):
-        return _slice_time_series(data, slice(start, end), allow_empty=allow_empty)
-    return data[slice(start, end)]
+        return _slice_time_series(
+            data, slice(start_index, end_index), allow_empty=allow_empty
+        )
+    return data[slice(start_index, end_index)]
 
 
 def slice_by_time(
     data: Any,
     *,
-    start: float | None,
-    end: float | None,
+    start_time: float | None,
+    end_time: float | None,
     start_inclusive: bool = False,
     end_inclusive: bool = False,
     allow_empty: bool = False,
 ) -> Any:
-    """Keep the samples from the first one at or after `start` up to (not
-    including) the first one at or after `end`.
+    """Keep the samples from the first one at or after `start_time` up to (not
+    including) the first one at or after `end_time`.
 
     Times are in seconds on the signal's own clock. The boundary flags
     follow ``time_slice_indices``. ``allow_empty=True`` returns an empty
@@ -123,8 +129,8 @@ def slice_by_time(
     if isinstance(data, TimeSeries):
         start_index, end_index = time_slice_indices(
             data.time,
-            start=start,
-            end=end,
+            start_time=start_time,
+            end_time=end_time,
             start_inclusive=start_inclusive,
             end_inclusive=end_inclusive,
         )
@@ -133,12 +139,12 @@ def slice_by_time(
         )
     if start_inclusive or end_inclusive:
         return data.select_by_time(
-            start_time=start,
-            end_time=end,
+            start_time=start_time,
+            end_time=end_time,
             start_inclusive=start_inclusive,
             end_inclusive=end_inclusive,
         )
-    return data.t[slice(start, end)]
+    return data.t[slice(start_time, end_time)]
 
 
 def slice_signal_by_mode(
@@ -151,9 +157,9 @@ def slice_signal_by_mode(
     """Slice a signal by sample index or time selector."""
 
     if slicing_mode == "index":
-        return slice_by_index(data, start=int(start), end=int(end))
+        return slice_by_index(data, start_index=int(start), end_index=int(end))
     if slicing_mode == "time":
-        return slice_by_time(data, start=float(start), end=float(end))
+        return slice_by_time(data, start_time=float(start), end_time=float(end))
     raise ValueError("slicing_mode must be 'index' or 'time'.")
 
 

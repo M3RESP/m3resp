@@ -40,8 +40,8 @@ def test_native_time_slices_match_all_golden_windows_and_flags(recording):
             last_time = pixels.time[np.searchsorted(pixels.time, pixels.time[0] + end)]
             selected = slice_by_time(
                 pixels,
-                start=first_time,
-                end=last_time,
+                start_time=first_time,
+                end_time=last_time,
                 start_inclusive=flags[0] == "1",
                 end_inclusive=flags[1] == "1",
                 allow_empty=True,
@@ -85,7 +85,11 @@ def test_between_sample_bounds_match_eitprocessing(start_flag, end_flag):
         11.3, 14.2, start_inclusive=start_flag, end_inclusive=end_flag
     )
     first, last = time_slice_indices(
-        time, start=11.3, end=14.2, start_inclusive=start_flag, end_inclusive=end_flag
+        time,
+        start_time=11.3,
+        end_time=14.2,
+        start_inclusive=start_flag,
+        end_inclusive=end_flag,
     )
     np.testing.assert_array_equal(time[first:last], expected.time)
 

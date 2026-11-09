@@ -59,7 +59,9 @@ def sequence_from_sliced_data(
         signal = (
             sliced.pixel_impedance
             if key == "raw"
-            else slice_by_index(eit_data_to_signal(value), start=start, end=end)
+            else slice_by_index(
+                eit_data_to_signal(value), start_index=start, end_index=end
+            )
         )
         images.add(
             type(value)(
@@ -85,8 +87,8 @@ def sequence_from_sliced_data(
                     processing_state="raw",
                     category=value.category,
                 ),
-                start=start,
-                end=end,
+                start_index=start,
+                end_index=end,
             )
         continuous.add(
             type(value)(
@@ -112,7 +114,7 @@ def sequence_from_sliced_data(
             sparse.add(copy.deepcopy(value))
             continue
         marks = sliced.events[key]
-        i, j = time_slice_indices(value.time, start=first, end=last)
+        i, j = time_slice_indices(value.time, start_time=first, end_time=last)
         sparse.add(
             type(value)(
                 label=value.label,
