@@ -148,6 +148,8 @@ The watershed method works in four parts:
 3. The local maxima of the mean amplitude are the centres of the watershed regions. Each pixel belongs to the region of the maximum that it reaches by moving to higher values. Pixels with a NaN mean amplitude belong to no region.
 4. The lung space is the union of the regions whose maximum lies inside the TIV mask, multiplied by the amplitude mask.
 
+Warning: the treatment of pixels with a NaN mean amplitude in part 3 is unfinished and can change. `eitprocessing` 1.8.7 gives these pixels to the watershed, and m3resp leaves them out. Near these pixels the regions differ, and at a low `threshold_fraction` the mask can differ too. `watershed_lungspace` and `eit.roi_watershed` give a `UserWarning` when a pixel has a NaN mean amplitude. See [eitprocessing issue 483](https://github.com/EIT-ALIVE/eitprocessing/issues/483).
+
 A pixel with a low TIV because of pendelluft (air that moves between lung regions during the breath) can still be in the watershed lung space, because its amplitude is large and its region has a maximum in the TIV mask.
 
 There are two TIV masks. `tiv_lungspace` and `eit.roi_tiv_lungspace` use all breaths. The TIV mask inside the watershed method (the capture `"functional tiv mask"`) uses the breaths with both TIV and amplitude, so without the first and the last breath. For the same data and threshold, the two masks can differ by some pixels.

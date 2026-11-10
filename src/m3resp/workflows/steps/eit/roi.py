@@ -432,7 +432,9 @@ def roi_amplitude_lungspace(
         "amplitude of each pixel over the breaths that have both, watershed "
         "regions around the local maxima of the mean amplitude, and the "
         "regions whose maximum lies inside the TIV mask. Pixels with a low "
-        "TIV because of pendelluft can still be included."
+        "TIV because of pendelluft can still be included. The treatment of "
+        "pixels with no mean amplitude is unfinished and can change; the "
+        "step gives a warning when the data has such pixels."
     ),
     category="roi",
     modality="eit",

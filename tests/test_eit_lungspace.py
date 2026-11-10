@@ -651,6 +651,44 @@ def test_pixels_without_amplitude_belong_to_no_region(dataset: str) -> None:
     assert np.isnan(mask.values[no_amplitude]).all()
 
 
+@pytest.mark.parametrize(
+    ("dataset", "kind", "count"),
+    [
+        ("draeger_synthetic_20Hz", "filtered", 2),
+        ("sentec_healthy_volunteer_1b", "raw", 434),
+        (TIMPEL, "raw", 629),
+    ],
+)
+def test_watershed_warns_for_pixels_without_mean_amplitude(
+    dataset: str, kind: str, count: int
+) -> None:
+    """The treatment of these pixels is unfinished (eitprocessing issue 483)."""
+
+    data = _file_data(dataset, kind)
+    with pytest.warns(UserWarning) as caught:
+        watershed_lungspace(*data, _breaths(data))
+
+    messages = [str(w.message) for w in caught if "no mean amplitude" in str(w.message)]
+    expected = (
+        f"watershed_lungspace: {count} pixel(s) have no mean amplitude. The "
+        "treatment of these pixels is unfinished and can change: m3resp leaves "
+        "them out of the watershed regions, eitprocessing 1.8.7 does not. Near "
+        "these pixels the regions can differ from eitprocessing, and at a low "
+        "threshold_fraction the mask can differ too. See "
+        "https://github.com/EIT-ALIVE/eitprocessing/issues/483."
+    )
+    assert messages == [expected]
+
+
+def test_watershed_gives_no_nan_warning_when_every_pixel_has_an_amplitude() -> None:
+    data = _file_data("draeger_synthetic_20Hz", "raw")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        watershed_lungspace(*data, _breaths(data))
+
+    assert not [w for w in caught if "no mean amplitude" in str(w.message)]
+
+
 @pytest.mark.parametrize("dataset", DATASETS)
 def test_included_watershed_regions_hold_the_included_regions_only(
     dataset: str,

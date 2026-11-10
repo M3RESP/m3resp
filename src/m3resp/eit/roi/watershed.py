@@ -24,6 +24,13 @@ space from the amplitude alone can include too many pixels.
 The TIV mask of step 2 uses the breaths of step 1 only, so it can differ from
 the mask of :func:`~m3resp.eit.roi.tiv_lungspace`, which uses all breaths.
 
+The treatment of pixels with a NaN mean amplitude in step 3 is unfinished and
+can change. eitprocessing 1.8.7 gives these pixels to the watershed, and
+m3resp leaves them out. Near these pixels the regions differ, and at a low
+``threshold_fraction`` the mask can differ too. ``watershed_lungspace`` gives
+a ``UserWarning`` when a pixel has a NaN mean amplitude. See
+https://github.com/EIT-ALIVE/eitprocessing/issues/483.
+
 ---------------------------------------------------------------------------
 Provenance
 ----------
@@ -77,6 +84,7 @@ Full attribution notice: see top-level NOTICE.md.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from typing import Any
 
@@ -145,7 +153,9 @@ def watershed_lungspace(
 
     Warns:
         UserWarning: If the mean amplitude of a pixel over the shared
-            breaths is negative.
+            breaths is negative, or if a pixel has a NaN mean amplitude (the
+            treatment of these pixels is unfinished; see the module
+            docstring).
         RuntimeWarning: The warnings of the pixel breath search.
     """
 
@@ -210,6 +220,18 @@ def watershed_lungspace(
     # with a mean amplitude. Neighbouring maxima get one number; these
     # numbers mark the regions.
     has_amplitude = ~np.isnan(mean_amplitude.values)
+    if not np.all(has_amplitude):
+        warnings.warn(
+            f"watershed_lungspace: {int(np.sum(~has_amplitude))} pixel(s) have "
+            "no mean amplitude. The treatment of these pixels is unfinished "
+            "and can change: m3resp leaves them out of the watershed regions, "
+            "eitprocessing 1.8.7 does not. Near these pixels the regions can "
+            "differ from eitprocessing, and at a low threshold_fraction the "
+            "mask can differ too. See "
+            "https://github.com/EIT-ALIVE/eitprocessing/issues/483.",
+            UserWarning,
+            stacklevel=2,
+        )
     image = mean_amplitude.to_non_nan_array()
     local_peaks = feature.peak_local_max(
         image, exclude_border=False, labels=has_amplitude.astype(int)
