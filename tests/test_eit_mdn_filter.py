@@ -314,6 +314,24 @@ def test_wrong_rates_are_refused_as_by_eitprocessing(settings: dict) -> None:
         mdn_frequency_bands(**settings)
 
 
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"respiratory_rate": float("nan"), "heart_rate": 1.2},
+        {"respiratory_rate": 0.25, "heart_rate": float("nan")},
+        {"respiratory_rate": 0.25, "heart_rate": float("inf")},
+        {"respiratory_rate": float("-inf"), "heart_rate": 1.2},
+    ],
+)
+def test_a_rate_that_is_not_a_finite_number_is_refused(settings: dict) -> None:
+    signal = _synthetic((3, 3))
+
+    with pytest.raises(ValueError, match="must be a finite number"):
+        mdn_filter(signal, **settings)
+    with pytest.raises(ValueError, match="must be a finite number"):
+        mdn_frequency_bands(**settings)
+
+
 def test_a_too_low_sample_frequency_is_refused_as_by_eitprocessing() -> None:
     signal = _synthetic((3, 3), fs=7.0)
 

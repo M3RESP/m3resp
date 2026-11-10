@@ -174,11 +174,11 @@ class M3Session:
 
     def __init__(
         self,
+        *,
         emg_adapter: ReSurfEMGAdapter | None = None,
         metadata: SessionMetadata | dict[str, Any] | None = None,
         allow_overwrite: bool = False,
         ventilator_adapter: Any | None = None,
-        *,
         eit_loader: EITLoader | None = None,
     ):
         """Create a session for recordings, processing results and their history.

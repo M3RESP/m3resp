@@ -18,6 +18,7 @@ Loading:
 - `EITRecording` holds the m3resp data only: `paths`, `vendor`, `sample_frequency`, `pixel_impedance`, `signals`, `events`, `intervals` and `raw_global_impedance`. The fields `data`, `raw` and `global_impedance` are removed. `EITRecording.from_file_data` and `to_file_data` change between an `EITRecording` and an `EITFileData`.
 - The loader name `"eitprocessing"` of `session.load_eit`, `m3resp.io.load_eit` and `eit.load` is now `"vendor"`.
 - A custom EIT loader is given as `M3Session(eit_loader=...)`, or as `eit_loader=` of `run_workflow` and `run_spec`. It returns an `EITFileData`. Any other value gives a `TypeError`. The argument `eit_adapter` of `M3Session`, `run_workflow` and `run_spec` is removed.
+- All arguments of `M3Session` are keyword arguments, for example `M3Session(metadata=..., allow_overwrite=True)`.
 - `eit.load` has no `loader_options` setting. Its options are `sample_frequency`, `first_frame` and `max_frames`. `eit.load_custom` keeps `loader_options`.
 - The output `eit_sequence` of `eit.load`, `eit.load_custom` and `eit.slice_recording`, the artifact type `eit_sequence`, the `eit_sequence` inputs of the filter and impedance steps and the key `session.processed["eit"]["sequence"]` are removed.
 - `ventilator_payload_from_sequence` is now `ventilator_payload_from_eit`. It takes an `EITRecording` or an `EITFileData`.

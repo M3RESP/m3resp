@@ -103,7 +103,9 @@ def breaths_to_interval_data(
     )
 
 
-def pixel_sign_breaths(signal: Signal, detector: Any) -> list[BreathEvent] | None:
+def pixel_sign_breaths(
+    signal: Signal, detector: BreathDetectionSettings
+) -> list[BreathEvent] | None:
     """Return the breaths that give the sign of each pixel in the pixel breath search.
 
     eitprocessing 1.8.7 finds these breaths on the waveform with the default
@@ -114,9 +116,8 @@ def pixel_sign_breaths(signal: Signal, detector: Any) -> list[BreathEvent] | Non
 
     Args:
         signal (Signal): The waveform the global breaths were found in.
-        detector (Any): The settings of the global breaths
-            (``BreathDetectionSettings``), or an eitprocessing
-            ``BreathDetection``.
+        detector (BreathDetectionSettings): The settings of the global
+            breaths.
 
     Returns:
         list[BreathEvent] | None: The breaths of ``signal`` found with the

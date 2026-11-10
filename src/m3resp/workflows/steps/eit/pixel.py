@@ -27,10 +27,7 @@ from m3resp.eit.processing import (
     pixel_end_expiratory_lung_impedance,
     pixel_tidal_impedance_variation,
 )
-from m3resp.eit.processing.breath_inputs import (
-    given_breath_events,
-    pixel_sign_breaths,
-)
+from m3resp.eit.processing.breath_inputs import given_breath_events
 from m3resp.eit.processing.eeli import PIXEL_METHOD as PIXEL_EELI_FUNCTION
 from m3resp.eit.processing.pixel_breath import METHOD as PIXEL_BREATH_FUNCTION
 from m3resp.eit.processing.pixel_breath import (
@@ -54,6 +51,7 @@ from ._shared import (
     _as_signal,
     _breaths_used_by,
     _per_breath_values,
+    _sign_breaths_used_by,
     _step_provenance,
     _use_stored_eit_breaths,
 )
@@ -225,7 +223,7 @@ def _pixel_breath_timing(
         global_breaths = _eit_breaths(breaths, action=action)
     elif breath_detector is not None:
         global_breaths = _breaths_used_by(breath_detector, waveform, session)
-        sign_breaths = pixel_sign_breaths(waveform, breath_detector)
+        sign_breaths = _sign_breaths_used_by(breath_detector, waveform, session)
     else:
         raise ValueError(
             f"{action} needs the breaths: connect 'pixel_breaths', 'breaths', "
@@ -765,7 +763,7 @@ def pixel_breaths(
         global_breaths = _use_stored_eit_breaths(
             find_breaths(waveform, settings), session
         )
-        sign_breaths = pixel_sign_breaths(waveform, settings)
+        sign_breaths = _sign_breaths_used_by(settings, waveform, session)
     else:
         global_breaths = _eit_breaths(breaths, action="eit.pixel_breaths")
     result = find_pixel_breaths(

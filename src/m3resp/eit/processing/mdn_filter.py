@@ -121,10 +121,10 @@ def mdn_filter(
             more samples is NaN at every sample.
 
     Raises:
-        ValueError: If a rate is 0 or below, if the breathing rate is equal
-            to or higher than the heart rate, if ``sample_frequency`` is
-            missing or 0, or if a band edge is at or above half the sample
-            frequency (from SciPy).
+        ValueError: If a rate is NaN, infinite, or 0 or below, if the
+            breathing rate is equal to or higher than the heart rate, if
+            ``sample_frequency`` is missing or 0, or if a band edge is at or
+            above half the sample frequency (from SciPy).
 
     Warns:
         UserWarning: When the breathing rate is above 85 per minute or the
@@ -211,8 +211,8 @@ def mdn_frequency_bands(
             noise frequency limit plus the notch distance.
 
     Raises:
-        ValueError: If a rate is 0 or below, or if the breathing rate is
-            equal to or higher than the heart rate.
+        ValueError: If a rate is NaN, infinite, or 0 or below, or if the
+            breathing rate is equal to or higher than the heart rate.
 
     Warns:
         UserWarning: When the breathing rate is above 85 per minute or the
@@ -251,13 +251,19 @@ def _check_rates(respiratory_rate: float, heart_rate: float) -> None:
     """Check the respiratory rate and the heart rate.
 
     Raises:
-        ValueError: If a rate is 0 or below, or if the breathing rate is
-            equal to or higher than the heart rate.
+        ValueError: If a rate is NaN, infinite, or 0 or below, or if the
+            breathing rate is equal to or higher than the heart rate.
 
     Warns:
         UserWarning: When a rate is above its upper limit.
     """
 
+    for rate_name, rate in (
+        ("breathing rate", respiratory_rate),
+        ("heart rate", heart_rate),
+    ):
+        if not math.isfinite(rate):
+            raise ValueError(f"The {rate_name} ({rate!r} Hz) must be a finite number.")
     if respiratory_rate > UPPER_RESPIRATORY_RATE_LIMIT:
         warnings.warn(
             f"The breathing rate ({respiratory_rate:.2f} Hz) is higher than "

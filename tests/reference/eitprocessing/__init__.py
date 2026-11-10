@@ -261,9 +261,8 @@ class EITProcessingAdapter:
 
         if self._loader is None:
             raise UnsupportedWorkflowError(
-                "No custom EIT loader is set. Create the session with "
-                "M3Session(eit_adapter=EITProcessingAdapter(loader=my_loader)), "
-                "or pass that adapter as run_workflow(..., eit_adapter=...). "
+                "No custom EIT loader is set. Create the adapter with "
+                "EITProcessingAdapter(loader=my_loader). "
                 "Use 'eit.load' with a vendor for Draeger, Sentec or Timpel files."
             )
         return self._loader(path, vendor=None, **kwargs)

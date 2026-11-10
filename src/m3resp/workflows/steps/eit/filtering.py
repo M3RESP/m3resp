@@ -7,7 +7,6 @@ MDN filter below. The MDN filter is ``m3resp.eit.processing.mdn_filter``.
 from __future__ import annotations
 
 import dataclasses
-import math
 from typing import Any, get_args
 
 from m3resp.core.session import M3Session
@@ -174,14 +173,6 @@ def mdn_filter(
             at or above half the frames per second.
     """
 
-    for rate_name, rate in (
-        ("respiratory_rate_hz", respiratory_rate_hz),
-        ("heart_rate_hz", heart_rate_hz),
-    ):
-        if not math.isfinite(rate) or rate <= 0:
-            raise ValueError(
-                f"{rate_name} must be a finite, positive value in Hz, got {rate!r}."
-            )
     captures: dict[str, Any] = {}
     filtered_eit_signal = mdn_filter_images(
         _as_signal(signal, name="signal", step="eit.mdn_filter"),

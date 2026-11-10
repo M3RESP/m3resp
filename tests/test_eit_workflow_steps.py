@@ -283,7 +283,7 @@ def test_mdn_filter_step_matches_declared_writes():
 
 @pytest.mark.parametrize("rate", [0.0, -0.1, float("inf"), float("nan")])
 def test_mdn_filter_step_refuses_a_rate_that_is_not_above_zero(rate):
-    with pytest.raises(ValueError, match="finite, positive"):
+    with pytest.raises(ValueError, match="rate"):
         mdn_filter(
             _images(400, fs=20.0),
             respiratory_rate_hz=rate,

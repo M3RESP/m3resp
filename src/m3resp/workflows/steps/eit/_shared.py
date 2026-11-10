@@ -96,6 +96,38 @@ def _breaths_used_by(
     return breaths
 
 
+#: The default breath detection settings, the detector of the sign breaths of
+#: the pixel breath search.
+_DEFAULT_DETECTION = BreathDetectionSettings()
+
+
+def _sign_breaths_used_by(
+    breath_detector: BreathDetectionSettings, signal: Signal, session: M3Session
+) -> list[BreathEvent] | None:
+    """Return the breaths that give the sign of each pixel in the pixel breath search.
+
+    These are the breaths of ``signal`` found with the default settings
+    (see ``m3resp.eit.processing.breath_inputs.pixel_sign_breaths``).
+    Detection runs once per signal object in each session.
+
+    Args:
+        breath_detector (BreathDetectionSettings): The settings of the
+            global breaths.
+        signal (Signal): The waveform the global breaths were found in.
+        session (M3Session): Session that remembers detected breaths.
+
+    Returns:
+        list[BreathEvent] | None: The breaths of ``signal`` found with the
+            default settings. None when ``breath_detector`` holds the
+            default settings, because the global breaths are then the same
+            breaths.
+    """
+
+    if breath_detector == _DEFAULT_DETECTION:
+        return None
+    return _breaths_used_by(_DEFAULT_DETECTION, signal, session)
+
+
 def _use_stored_eit_breaths(
     breaths: list[BreathEvent], session: M3Session
 ) -> list[BreathEvent]:
