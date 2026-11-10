@@ -194,23 +194,22 @@ def read_fluxmed(path: str) -> dict[str, Any]:
 
 
 def read_eit_airway_pressure(path: str, channel: str) -> dict[str, Any]:
-    """Airway pressure recorded in a Draeger EIT file, read with eitprocessing.
+    """Airway pressure recorded in a Draeger EIT file, read with m3resp.
 
     Returns:
         dict: ``sample_frequency`` (Hz), ``values`` (cmH2O) and
         ``first_frame_time`` (the file's own time of its first frame, s).
     """
 
-    from eitprocessing.datahandling.loading import load_eit_data
+    from m3resp.eit.io import read_eit_file
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        sequence = load_eit_data(path, vendor="draeger")
-    pressure = sequence.continuous_data[channel]
+        file_data = read_eit_file(path, "draeger")
     return {
-        "sample_frequency": float(sequence.eit_data["raw"].sample_frequency),
-        "values": np.asarray(pressure.values, dtype=float),
-        "first_frame_time": float(sequence.eit_data["raw"].time[0]),
+        "sample_frequency": float(file_data.sample_frequency),
+        "values": np.asarray(file_data.signals[channel].values, dtype=float),
+        "first_frame_time": float(file_data.pixel_impedance.time[0]),
     }
 
 

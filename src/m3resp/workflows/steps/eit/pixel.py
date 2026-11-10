@@ -16,11 +16,6 @@ from typing import Any, Literal
 
 import numpy as np
 
-from m3resp.adapters.eitprocessing_adapter import (
-    as_signal,
-    given_breath_events,
-    pixel_sign_breaths,
-)
 from m3resp.core.session import M3Session
 from m3resp.data import BreathEvent, IntervalData, PixelBreaths, Signal
 from m3resp.data.pixel_breaths import PIXEL_BREATH_POINTS
@@ -31,6 +26,10 @@ from m3resp.eit.processing import (
     find_pixel_breaths,
     pixel_end_expiratory_lung_impedance,
     pixel_tidal_impedance_variation,
+)
+from m3resp.eit.processing.breath_inputs import (
+    given_breath_events,
+    pixel_sign_breaths,
 )
 from m3resp.eit.processing.eeli import PIXEL_METHOD as PIXEL_EELI_FUNCTION
 from m3resp.eit.processing.pixel_breath import METHOD as PIXEL_BREATH_FUNCTION
@@ -52,9 +51,10 @@ from m3resp.workflows.registry import (
 
 from ._shared import (
     _SESSION_ARTIFACT,
+    _as_signal,
     _breaths_used_by,
     _per_breath_values,
-    _upstream_metadata,
+    _step_provenance,
     _use_stored_eit_breaths,
 )
 
@@ -149,16 +149,16 @@ def _eit_breaths(breaths: Any, *, action: str) -> list[BreathEvent]:
     """Return given global breaths for the pixel breath search, EIT breaths only.
 
     Args:
-        breaths (Any): A list of ``BreathEvent``s, an m3resp ``IntervalData``
-            of them, or an eitprocessing ``IntervalData`` of ``Breath``s.
+        breaths (Any): A list of ``BreathEvent``s, or an ``IntervalData`` of
+            them.
         action (str): Step name, for the message.
 
     Returns:
         list[BreathEvent]: The breaths in input order.
 
     Raises:
-        TypeError: If an item of a list or of an m3resp ``IntervalData`` is
-            not a ``BreathEvent``.
+        TypeError: If ``breaths`` is not a list or an ``IntervalData``, or
+            if one of its items is not a ``BreathEvent``.
         ValueError: If a breath has another modality than EIT.
     """
 
@@ -204,7 +204,8 @@ def _pixel_breath_timing(
             breaths found with the default settings, as in eitprocessing.
 
     Raises:
-        TypeError: If ``pixel_breaths`` is not a ``PixelBreaths``.
+        TypeError: If ``pixel_breaths`` is not a ``PixelBreaths``, or if an
+            input of images or of a waveform is not a ``Signal``.
         ValueError: If no breaths are given and ``breath_detector`` is None,
             or the given breaths are not EIT breaths.
     """
@@ -218,12 +219,12 @@ def _pixel_breath_timing(
                 "time grids."
             )
         return pixel_breaths
-    waveform = as_signal(signal)
+    waveform = _as_signal(signal, name="signal", step=action)
     sign_breaths = None
     if breaths is not None:
         global_breaths = _eit_breaths(breaths, action=action)
     elif breath_detector is not None:
-        global_breaths = _breaths_used_by(breath_detector, signal, session)
+        global_breaths = _breaths_used_by(breath_detector, waveform, session)
         sign_breaths = pixel_sign_breaths(waveform, breath_detector)
     else:
         raise ValueError(
@@ -255,8 +256,7 @@ def _pixel_values(
             IntervalData]): ``pixel_tidal_impedance_variation`` or
             ``pixel_end_expiratory_lung_impedance`` with its settings, taking
             the images and the breaths.
-        eit_data (Any): The EIT images (``Signal`` or eitprocessing
-            ``EITData``).
+        eit_data (Any): The EIT images, a ``Signal``.
         signal (Any): The impedance waveform of the global breaths.
         timing (str): ``"continuous"`` or ``"pixel"``.
         timing_name (str): Name of the timing parameter, for the messages.
@@ -274,6 +274,7 @@ def _pixel_values(
             ``pixel_breaths`` unused.
 
     Raises:
+        TypeError: If ``eit_data`` or ``signal`` is not a ``Signal``.
         ValueError: If ``timing`` is unknown, or the breaths are missing.
     """
 
@@ -282,7 +283,7 @@ def _pixel_values(
             f"{action} '{timing_name}' must be one of "
             f"{', '.join(map(repr, _PIXEL_TIMINGS))}; got {timing!r}."
         )
-    pixels = as_signal(eit_data)
+    pixels = _as_signal(eit_data, name="eit_data", step=action)
     if timing == "pixel":
         return calculate(
             pixels,
@@ -433,14 +434,14 @@ def pixel_tiv(
     maps whose pixels are all missing.
 
     Args:
-        eit_data (Any): EIT images to measure, as a ``Signal`` (or an
-            eitprocessing ``EITData``), with time, row and column axes.
+        eit_data (Any): EIT images to measure, as a ``Signal``, with time,
+            row and column axes.
         signal (Any): Global or regional waveform of the global breaths.
         session (M3Session): Session that stores the per-breath maps and
             history.
         breath_detector (Any): Settings of the breath detection on
-            ``signal`` (``BreathDetectionSettings``), or an eitprocessing
-            ``BreathDetection``. Used when no breaths are given.
+            ``signal`` (``BreathDetectionSettings``). Used when no breaths
+            are given.
         breaths (Any): Global breaths (a list of ``BreathEvent``s or an
             ``IntervalData`` of breaths). ``'continuous'`` timing: breaths of
             any modality, moved to the EIT clock with the start times of the
@@ -464,13 +465,14 @@ def pixel_tiv(
             pixels.
 
     Raises:
-        TypeError: If ``pixel_breaths`` is not a ``PixelBreaths``.
+        TypeError: If ``pixel_breaths`` is not a ``PixelBreaths``, or if an
+            input of images or of a waveform is not a ``Signal``.
         ValueError: If ``tiv_timing`` is unknown, no breaths are given and
             ``breath_detector`` is None, or the ``'pixel'`` timing gets
             breaths of another modality than EIT.
     """
 
-    provenance = _upstream_metadata(
+    provenance = _step_provenance(
         source_package="m3resp",
         source_function=PIXEL_TIV_FUNCTION,
         implementation=PIXEL_TIV_FUNCTION,
@@ -553,14 +555,14 @@ def pixel_eeli(
     recorded in the session's history.
 
     Args:
-        eit_data (Any): EIT images to measure, as a ``Signal`` (or an
-            eitprocessing ``EITData``), with time, row and column axes.
+        eit_data (Any): EIT images to measure, as a ``Signal``, with time,
+            row and column axes.
         signal (Any): Global or regional waveform of the global breaths.
         session (M3Session): Session that stores the per-breath maps and
             history.
         breath_detector (Any): Settings of the breath detection on
-            ``signal`` (``BreathDetectionSettings``), or an eitprocessing
-            ``BreathDetection``. Used when no breaths are given.
+            ``signal`` (``BreathDetectionSettings``). Used when no breaths
+            are given.
         breaths (Any): Global breaths, as for ``eit.pixel_tiv``.
         pixel_breaths (PixelBreaths | None): The breaths of each pixel from
             ``eit.pixel_breaths``, used by the ``'pixel'`` timing only. In a
@@ -579,13 +581,14 @@ def pixel_eeli(
             pixels.
 
     Raises:
-        TypeError: If ``pixel_breaths`` is not a ``PixelBreaths``.
+        TypeError: If ``pixel_breaths`` is not a ``PixelBreaths``, or if an
+            input of images or of a waveform is not a ``Signal``.
         ValueError: If ``eeli_timing`` is unknown, no breaths are given and
             ``breath_detector`` is None, or the ``'pixel'`` timing gets
             breaths of another modality than EIT.
     """
 
-    provenance = _upstream_metadata(
+    provenance = _step_provenance(
         source_package="m3resp",
         source_function=PIXEL_EELI_FUNCTION,
         implementation=PIXEL_EELI_FUNCTION,
@@ -722,9 +725,10 @@ def pixel_breaths(
     global breath.
 
     Args:
-        eit_data (Any): EIT images as a ``Signal`` (or an eitprocessing
-            ``EITData``), with time, row and column axes.
-        timing_data (Any): Global or regional waveform of the global breaths.
+        eit_data (Any): EIT images as a ``Signal``, with time, row and
+            column axes.
+        timing_data (Any): Global or regional waveform of the global breaths,
+            a ``Signal``.
         session (M3Session): Session that stores the per-breath timing grids
             and history.
         breaths (Any): Global EIT breaths (a list of ``BreathEvent``s or an
@@ -748,12 +752,13 @@ def pixel_breaths(
             times in seconds on the input's clock. Missing timings are NaN.
 
     Raises:
-        TypeError: If a given breath is not a ``BreathEvent``.
+        TypeError: If ``eit_data`` or ``timing_data`` is not a ``Signal``,
+            or a given breath is not a ``BreathEvent``.
         ValueError: If the phase correction mode is unknown, or a given
             breath has another modality than EIT.
     """
 
-    waveform = as_signal(timing_data)
+    waveform = _as_signal(timing_data, name="timing_data", step="eit.pixel_breaths")
     sign_breaths = None
     if breaths is None:
         settings = BreathDetectionSettings(minimum_duration=minimum_duration_seconds)
@@ -764,7 +769,7 @@ def pixel_breaths(
     else:
         global_breaths = _eit_breaths(breaths, action="eit.pixel_breaths")
     result = find_pixel_breaths(
-        as_signal(eit_data),
+        _as_signal(eit_data, name="eit_data", step="eit.pixel_breaths"),
         waveform,
         global_breaths,
         phase_correction_mode=phase_correction_mode,
@@ -772,7 +777,7 @@ def pixel_breaths(
         sign_breaths=sign_breaths,
     )
 
-    provenance = _upstream_metadata(
+    provenance = _step_provenance(
         source_package="m3resp",
         source_function=PIXEL_BREATH_FUNCTION,
         implementation=PIXEL_BREATH_FUNCTION,

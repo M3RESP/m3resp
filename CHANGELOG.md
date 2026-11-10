@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+### EIT needs no extra package
+
+`pip install m3resp` reads, processes and plots EIT data. No file in `src/m3resp` imports eitprocessing, and every `eit.*` step has the status `"available"` in the base install. `tests/test_eit_without_eitprocessing.py` checks this with eitprocessing hidden.
+
+Install options:
+
+- `matplotlib>=3.9` is a main dependency, for the EIT figures.
+- `eit` installs `plotly`, for the interactive EIT figures.
+- `all` installs `resurfemg`, `ipywidgets` and `plotly`.
+- The new `reference` option installs `eitprocessing==1.8.7` from PyPI, for the comparison tests. These tests have the pytest marker `reference` and skip without eitprocessing. The CI job "Comparison with eitprocessing" runs them.
+
+Loading:
+
+- `EITRecording` holds the m3resp data only: `paths`, `vendor`, `sample_frequency`, `pixel_impedance`, `signals`, `events`, `intervals` and `raw_global_impedance`. The fields `data`, `raw` and `global_impedance` are removed. `EITRecording.from_file_data` and `to_file_data` change between an `EITRecording` and an `EITFileData`.
+- The loader name `"eitprocessing"` of `session.load_eit`, `m3resp.io.load_eit` and `eit.load` is now `"vendor"`.
+- A custom EIT loader is given as `M3Session(eit_loader=...)`, or as `eit_loader=` of `run_workflow` and `run_spec`. It returns an `EITFileData`. Any other value gives a `TypeError`. The argument `eit_adapter` of `M3Session`, `run_workflow` and `run_spec` is removed.
+- `eit.load` has no `loader_options` setting. Its options are `sample_frequency`, `first_frame` and `max_frames`. `eit.load_custom` keeps `loader_options`.
+- The output `eit_sequence` of `eit.load`, `eit.load_custom` and `eit.slice_recording`, the artifact type `eit_sequence`, the `eit_sequence` inputs of the filter and impedance steps and the key `session.processed["eit"]["sequence"]` are removed.
+- `ventilator_payload_from_sequence` is now `ventilator_payload_from_eit`. It takes an `EITRecording` or an `EITFileData`.
+
+Steps and session:
+
+- The EIT steps take m3resp objects only. `eit.regional_impedance` and `eit.functional_impedance` take an m3resp `PixelMask` or a 2D grid; `eit.slice_signal`, `slice_by_index` and `slice_by_time` take a `Signal` or `TimeSeries`. Other types give a `TypeError` or an `UnsupportedWorkflowError`.
+- The step outputs have no `metadata["eitprocessing_fields"]`. The filtered images of `eit.mdn_filter` and `eit.butterworth_filter` keep their `label` in `metadata["label"]`.
+- `session.preprocess_eit()` calls the new `m3resp.eit.processing.preprocess_eit_recording`, with the same settings and defaults. The values are the same as before. In `session.processed["eit"]`, `raw_eit`, `filtered_eit`, `raw_global_impedance` and `filtered_global_impedance` are `Signal`s. The breaths name the stored waveform in `signal_name`, for example `"Global impedance (mdn_filtered)"`.
+- Breaths of a custom `detector=` without a source get the source `"custom_detector"`.
+- `m3resp.eit.processing` also exports `preprocess_eit_recording`, `butterworth_filter_images`, `MAX_EIT_BUTTERWORTH_ORDER`, `breath_intervals_to_breath_events` and `breaths_to_interval_data`.
+- `EITProcessingAdapter` and the code that builds eitprocessing objects moved to `tests/reference/eitprocessing/`. `m3resp.adapters` has `ReSurfEMGAdapter` and `VentilatorAdapter`.
+
 ### m3resp reads the EIT files
 
 `eit.load` reads Draeger `.bin`, Sentec `.zri` and Timpel `.txt` files with the readers in `m3resp.eit.io` (`read_eit_file`, `read_draeger`, `read_sentec`, `read_timpel`). Each reader returns an `EITFileData`: the images and the waveforms as `Signal`s, the device marks (breath minima and maxima, event markers, QRS complexes) as `EventData`, and the Timpel device breaths as `BreathEvent`s. The readers are copied from eitprocessing 1.8.7 and give the same values. The tests compare them with the saved eitprocessing results in `tests/regression/golden/eit/` and with eitprocessing itself.

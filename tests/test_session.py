@@ -2,16 +2,15 @@ import os
 from pathlib import Path
 
 import pytest
+from eit_file_data_cases import stand_in_eit_loader
 
 from m3resp import BreathEvent, M3Session
-from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
+from m3resp.adapters import ReSurfEMGAdapter
 
 
 def test_session_loads_modalities_with_injected_adapters():
     session = M3Session(
-        eit_adapter=EITProcessingAdapter(
-            loader=lambda path, vendor=None, **kwargs: {"path": path, "vendor": vendor}
-        ),
+        eit_loader=stand_in_eit_loader,
         emg_adapter=ReSurfEMGAdapter(
             loader=lambda path, **kwargs: {"path": path, "kind": "emg"}
         ),
@@ -27,7 +26,7 @@ def test_session_loads_modalities_with_injected_adapters():
 
 def test_detection_alignment_and_export(tmp_path):
     session = M3Session(
-        eit_adapter=EITProcessingAdapter(loader=lambda *args, **kwargs: {"eit": True}),
+        eit_loader=stand_in_eit_loader,
         emg_adapter=ReSurfEMGAdapter(loader=lambda *args, **kwargs: {"emg": True}),
     )
     session.load_eit("subject.eit", vendor="sentec")

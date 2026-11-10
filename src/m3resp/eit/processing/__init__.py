@@ -12,12 +12,24 @@ TIV and the EELI of each breath of an impedance waveform, and
 give one map of TIV or EELI values per breath for the pixels of EIT images.
 ``find_pixel_breaths`` finds the breaths of each pixel from the global
 breaths. ``minute_image`` gives the mean pixel TIV over the breaths in a time
-window.
+window. ``butterworth_filter_images`` filters each pixel of EIT images with a
+Butterworth filter. ``breath_intervals_to_breath_events`` and
+``breaths_to_interval_data`` change EIT breaths between a list of
+``BreathEvent`` objects and an ``IntervalData``. ``preprocess_eit_recording`` runs
+these calculations in one call on a loaded recording.
 """
 
 from m3resp.eit.processing.breath_detection import (
     BreathDetectionSettings,
     find_breaths,
+)
+from m3resp.eit.processing.breath_inputs import (
+    breath_intervals_to_breath_events,
+    breaths_to_interval_data,
+)
+from m3resp.eit.processing.butterworth import (
+    MAX_EIT_BUTTERWORTH_ORDER,
+    butterworth_filter_images,
 )
 from m3resp.eit.processing.eeli import (
     end_expiratory_lung_impedance,
@@ -31,6 +43,7 @@ from m3resp.eit.processing.impedance import (
 from m3resp.eit.processing.mdn_filter import mdn_filter, mdn_frequency_bands
 from m3resp.eit.processing.minute_image import minute_image
 from m3resp.eit.processing.pixel_breath import find_pixel_breaths
+from m3resp.eit.processing.preprocess import preprocess_eit_recording
 from m3resp.eit.processing.rate_detection import (
     RateDetectionSettings,
     detect_rates,
@@ -42,9 +55,13 @@ from m3resp.eit.processing.tidal_impedance_variation import (
 )
 
 __all__ = [
+    "MAX_EIT_BUTTERWORTH_ORDER",
     "TIV_METHODS",
     "BreathDetectionSettings",
     "RateDetectionSettings",
+    "breath_intervals_to_breath_events",
+    "breaths_to_interval_data",
+    "butterworth_filter_images",
     "detect_rates",
     "end_expiratory_lung_impedance",
     "find_breaths",
@@ -56,6 +73,7 @@ __all__ = [
     "minute_image",
     "pixel_end_expiratory_lung_impedance",
     "pixel_tidal_impedance_variation",
+    "preprocess_eit_recording",
     "regional_impedance",
     "tidal_impedance_variation",
 ]

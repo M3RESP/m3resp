@@ -2,12 +2,13 @@
 
 Run once per install in `.github/workflows/tests.yml`'s ``optional-deps``
 matrix job, each in its own fresh virtualenv/extras combination (``""``,
-``eit``, ``emg``, ``all``) - unlike `tests/test_optional_dependency_absence.py`,
-which simulates "package absent" in-process via `sys.modules[name] = None`
-inside a single environment that actually has both packages installed, this
-script checks the real, as-installed package set.
+``eit``, ``emg``, ``all``, ``reference``). It checks the installed package
+set: eitprocessing only with ``reference``, resurfemg with ``emg`` and
+``all``, and the capability state of every step. Every EIT step is
+"available" in every install. `tests/test_optional_dependency_absence.py`
+checks the same states in one environment with ``sys.modules[name] = None``.
 
-Usage: ``python scripts/check_optional_dependency_isolation.py eit|emg|all|base``
+Usage: ``python scripts/check_optional_dependency_isolation.py base|eit|emg|all|reference``
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "extra",
-        choices=["base", "eit", "emg", "all"],
+        choices=["base", "eit", "emg", "all", "reference"],
         help="Which optional-dependency extra this environment was installed with.",
     )
     args = parser.parse_args()
@@ -33,7 +34,7 @@ def main() -> int:
     eitprocessing_installed = importlib.util.find_spec("eitprocessing") is not None
     resurfemg_installed = importlib.util.find_spec("resurfemg") is not None
 
-    expected_eitprocessing = args.extra in ("eit", "all")
+    expected_eitprocessing = args.extra == "reference"
     expected_resurfemg = args.extra in ("emg", "all")
     if eitprocessing_installed != expected_eitprocessing:
         print(
@@ -75,18 +76,16 @@ def main() -> int:
                 f"expected={expected_state!r} (optional_packages={description.optional_packages!r})"
             )
 
+    # The EIT steps run on m3resp code, so they are available in every install.
+    failures.extend(
+        f"{description.name}: state={description.capability!r}, expected 'available'"
+        for description in descriptions
+        if description.name.startswith("eit.") and description.capability != "available"
+    )
+
     # Sanity check that the matrix leg actually varies what it claims to:
-    # for the "eit"/"emg"/"all" legs, at least one step in that modality
-    # must genuinely require the just-installed package, or this script
-    # would pass vacuously (e.g. if every eit.* step became native).
-    if args.extra in ("eit", "all") and not any(
-        "eitprocessing" in d.optional_packages for d in descriptions
-    ):
-        print(
-            "No step declares eitprocessing as an optional package - test would be vacuous",
-            file=sys.stderr,
-        )
-        return 1
+    # for the "emg"/"all" legs, at least one EMG step must require the
+    # just-installed package, or this script would pass vacuously.
     if args.extra in ("emg", "all") and not any(
         "resurfemg" in d.optional_packages for d in descriptions
     ):

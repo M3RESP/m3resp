@@ -7,14 +7,15 @@ import os
 
 import numpy as np
 import pytest
-
-from m3resp.adapters.eitprocessing_adapter import (
+from reference.eitprocessing import (
     EITPROCESSING_FIELDS,
     continuous_data_to_signal,
     eit_data_to_signal,
     signal_to_continuous_data,
     signal_to_eit_data,
 )
+from reference.eitprocessing._file_data import recording_to_sequence
+
 from m3resp.core.session import M3Session
 from m3resp.data import Signal
 from m3resp.eit.io import read_eit_file
@@ -63,14 +64,15 @@ def _chain(dataset: str) -> dict:
         ],
     }
     result = run_workflow(spec, session=M3Session())
-    sequence = result.value("eit_sequence")
-    filtered = sequence.eit_data["mdn_filtered"]
+    sequence = recording_to_sequence(result.session.eit)
+    filtered = signal_to_eit_data(result.value("filtered_eit"))
     return {
         "result": result,
         "eit_data": [sequence.eit_data["raw"], filtered],
         "continuous_data": [
             filtered.get_summed_impedance(),
             *sequence.continuous_data.values(),
+            signal_to_continuous_data(result.value("global_impedance")),
         ],
     }
 
@@ -127,22 +129,6 @@ def test_continuous_data_round_trip(chains, dataset):
         back = signal_to_continuous_data(signal)
 
         _assert_same_continuous_data(back, original)
-
-
-@pytest.mark.parametrize("dataset", DATASETS)
-def test_step_outputs_give_the_eitprocessing_objects_of_the_sequence(chains, dataset):
-    result = chains[dataset]["result"]
-    sequence = result.value("eit_sequence")
-
-    raw = signal_to_eit_data(result.value("raw_eit"))
-    filtered = signal_to_eit_data(result.value("filtered_eit"))
-    summed = signal_to_continuous_data(result.value("global_impedance"))
-
-    _assert_same_eit_data(raw, sequence.eit_data["raw"])
-    _assert_same_eit_data(filtered, sequence.eit_data["mdn_filtered"])
-    _assert_same_continuous_data(
-        summed, sequence.eit_data["mdn_filtered"].get_summed_impedance()
-    )
 
 
 def test_unlocked_data_stays_unlocked_and_signal_arrays_stay_writable():

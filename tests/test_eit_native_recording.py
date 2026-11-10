@@ -1,4 +1,4 @@
-"""The m3resp fields of a loaded `EITRecording` hold the same data as its Sequence."""
+"""A loaded `EITRecording` holds the data that eitprocessing reads from the same files."""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-
-from m3resp.adapters import EITProcessingAdapter
-from m3resp.adapters.eitprocessing_adapter import (
+from reference.eitprocessing import (
+    EITProcessingAdapter,
     file_data_to_sequence,
     sequence_to_file_data,
 )
+
 from m3resp.core.session import M3Session
 from m3resp.eit.io import EITFileData, join_eit_file_data, read_eit_file
 
@@ -97,21 +97,14 @@ class TestLoad:
         _assert_same_file_data(loaded, expected)
 
     @pytest.mark.parametrize("vendor", sorted(TEST_FILES))
-    def test_native_fields_hold_the_data_of_the_sequence(self, vendor):
+    def test_native_fields_hold_the_data_of_the_eitprocessing_sequence(self, vendor):
         session = M3Session()
         session.load_eit(TEST_FILES[vendor], vendor=vendor)
-        recording = session.eit
 
-        native = EITFileData(
-            vendor=vendor,
-            paths=(Path(TEST_FILES[vendor]),),
-            sample_frequency=recording.sample_frequency,
-            pixel_impedance=recording.pixel_impedance,
-            signals=recording.signals,
-            events=recording.events,
-            intervals=recording.intervals,
+        sequence = EITProcessingAdapter().load_with_eitprocessing(
+            TEST_FILES[vendor], vendor=vendor
         )
-        _assert_native_matches_sequence(native, recording.data)
+        _assert_native_matches_sequence(session.eit.to_file_data(), sequence)
 
 
 class TestJoin:
@@ -126,16 +119,11 @@ class TestJoin:
 
         recording = session.eit
         whole = read_eit_file(TEST_FILES["draeger"], "draeger")
-        native = EITFileData(
-            vendor="draeger",
-            paths=tuple(Path(file) for file in files),
-            sample_frequency=recording.sample_frequency,
-            pixel_impedance=recording.pixel_impedance,
-            signals=recording.signals,
-            events=recording.events,
-            intervals=recording.intervals,
+        sequence = EITProcessingAdapter().load_with_eitprocessing(
+            files, vendor="draeger"
         )
-        _assert_native_matches_sequence(native, recording.data)
+        _assert_native_matches_sequence(recording.to_file_data(), sequence)
+        assert recording.paths == tuple(Path(file) for file in files)
         np.testing.assert_array_equal(
             recording.pixel_impedance.values, whole.pixel_impedance.values
         )
@@ -216,45 +204,36 @@ class TestSequenceToFileData:
 
 
 class TestCustomLoader:
-    def test_loader_may_return_eit_file_data(self):
+    def test_loader_returns_eit_file_data(self):
         read = read_eit_file(TEST_FILES["timpel"], "timpel")
-        session = M3Session(
-            eit_adapter=EITProcessingAdapter(loader=lambda path, **kwargs: read)
-        )
+        session = M3Session(eit_loader=lambda path, **kwargs: read)
 
         session.load_eit("anything.txt", loader="custom")
 
         recording = session.eit
         assert recording.vendor == "timpel"
         assert recording.pixel_impedance is read.pixel_impedance
-        _assert_native_matches_sequence(read, recording.data)
+        _assert_same_file_data(recording.to_file_data(), read)
 
-    def test_loader_result_without_eit_data_leaves_the_fields_empty(self):
-        session = M3Session(
-            eit_adapter=EITProcessingAdapter(loader=lambda path, **kwargs: {"p": path})
-        )
+    def test_a_loader_result_of_another_type_is_refused(self):
+        session = M3Session(eit_loader=lambda path, **kwargs: {"p": path})
 
-        session.load_eit("anything.bin", loader="custom")
-
-        recording = session.eit
-        assert recording.pixel_impedance is None
-        assert recording.signals == recording.events == recording.intervals == {}
+        with pytest.raises(TypeError, match="EITFileData, got dict"):
+            session.load_eit("anything.bin", loader="custom")
 
 
-def test_cut_recording_keeps_the_native_fields_in_step():
+def test_cut_recording_holds_the_frames_of_the_eitprocessing_cut():
     session = M3Session()
     session.load_eit(TEST_FILES["draeger"], vendor="draeger")
     keys = list(session.eit.signals)
 
-    session.slice_eit(10.0, 20.0)
+    summary = session.slice_eit(10.0, 20.0)
 
+    start = summary["removed_frames_start"]
+    expected = EITProcessingAdapter().load_with_eitprocessing(
+        TEST_FILES["draeger"], vendor="draeger"
+    )
+    expected = expected.select_by_index(start, start + summary["kept_frames"])
     recording = session.eit
     assert list(recording.signals) == keys
-    np.testing.assert_array_equal(
-        recording.pixel_impedance.values, recording.raw.pixel_impedance
-    )
-    np.testing.assert_array_equal(recording.pixel_impedance.time, recording.raw.time)
-    for key, signal in recording.signals.items():
-        np.testing.assert_array_equal(
-            signal.values, recording.data.continuous_data[key].values
-        )
+    _assert_native_matches_sequence(recording.to_file_data(), expected)

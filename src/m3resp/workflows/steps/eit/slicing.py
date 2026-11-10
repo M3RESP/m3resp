@@ -14,7 +14,7 @@ from m3resp.workflows.registry import (
     register_step,
 )
 
-from ._shared import _EITPROCESSING, _SESSION_ARTIFACT
+from ._shared import _SESSION_ARTIFACT
 from .loading import _LOAD_OUTPUTS, _LOAD_WRITES, _loaded_recording_outputs
 
 
@@ -32,7 +32,7 @@ from .loading import _LOAD_OUTPUTS, _LOAD_WRITES, _loaded_recording_outputs
             name="signal",
             artifact_type=ANY_ARTIFACT_TYPE,
             default_context_key="raw_eit",
-            description="EIT signal to cut: an m3resp Signal or eitprocessing data.",
+            description="EIT signal to cut, an m3resp Signal.",
         ),
     ),
     parameters=(
@@ -85,6 +85,30 @@ def slice_signal(
     start_inclusive: bool = False,
     end_inclusive: bool = False,
 ) -> dict[str, Any]:
+    """Cut one EIT signal to a window.
+
+    Args:
+        signal (Any): The signal, an m3resp ``Signal``.
+        start (float): Start of the window: a sample index, or a time in
+            seconds on the clock of the signal.
+        end (float): End of the window, not included, in the same form as
+            ``start``.
+        mode (Literal["index", "time"]): Whether ``start`` and ``end`` are
+            sample indices or seconds.
+        start_inclusive (bool): In time mode, keep the sample before a start
+            that falls between samples.
+        end_inclusive (bool): In time mode, keep the first sample at or
+            after the end time.
+
+    Returns:
+        dict[str, Any]: ``result``, the cut copy of ``signal``.
+
+    Raises:
+        TypeError: If ``signal`` is not a ``Signal``.
+        ValueError: If a boundary flag is set in index mode, or if the
+            window keeps no samples.
+    """
+
     if mode == "time":
         return {
             "result": slice_by_time(
@@ -108,10 +132,9 @@ def slice_signal(
     writes=("eit_slice", *_LOAD_WRITES),
     replaces=_LOAD_WRITES,
     summary="Keep only a time window of the loaded EIT recording.",
-    description="Keep a time window of the native EIT images, waveforms, device marks and breaths, and rebuild the eitprocessing Sequence. A ventilator recording from the same EIT file is cut at the same frames. The outputs have the same names as eit.load (raw_eit, eit_sequence, ...), and the cut raw Signals replace the full ones in session.signals. Run before preprocessing.",
+    description="Keep a time window of the EIT images, waveforms, device marks and breaths. A ventilator recording from the same EIT file is cut at the same frames. The outputs have the same names as eit.load (raw_eit, raw_global_impedance, ...), and the cut raw Signals replace the full ones in session.signals. Run before preprocessing.",
     category="preprocessing",
     modality="eit",
-    optional_packages=_EITPROCESSING,
     session_reads=("session.raw.eit",),
     session_writes=(
         "session.raw.eit",
@@ -159,8 +182,7 @@ def slice_recording(
         dict[str, Any]: ``eit_slice`` (the kept window, see
             `M3Session.slice_eit`) and the cut recording under the names
             `eit.load` uses: ``raw_eit``, ``raw_global_impedance``,
-            ``eit_sequence``, ``raw_global_impedance_signal`` and
-            ``raw_pixel_impedance_signal``.
+            ``raw_global_impedance_signal`` and ``raw_pixel_impedance_signal``.
     """
 
     summary = session.slice_eit(start_seconds, end_seconds)

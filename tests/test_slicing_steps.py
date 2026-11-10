@@ -68,7 +68,7 @@ class TestSliceSignalOnAnM3respSignal:
             ),
         )
         assert step_capability_state("eit.slice_signal") == "available"
-        assert step_capability_state("eit.load") == "missing_optional_dependency"
+        assert step_capability_state("eit.load") == "available"
         assert len(slice_signal(_signal(), start=10, end=20)["result"]) == 10
 
     def test_index_mode_cuts_values_and_time_together(self):

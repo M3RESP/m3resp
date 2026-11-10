@@ -14,14 +14,9 @@ from typing import Any
 import numpy as np
 import pytest
 
-pytest.importorskip("eitprocessing")
-
-from eitprocessing.datahandling.continuousdata import ContinuousData
-from eitprocessing.datahandling.datacollection import DataCollection
-from eitprocessing.datahandling.eitdata import EITData, Vendor
-
 import m3resp.workflows.steps  # noqa: F401 - registers the built-in steps
 from m3resp import M3Session
+from m3resp.core.exceptions import UnsupportedWorkflowError
 from m3resp.data import PixelMap, PixelMask, Signal
 from m3resp.eit.io import read_eit_file
 from m3resp.eit.processing import global_impedance, regional_impedance
@@ -45,36 +40,31 @@ PIXELS = np.array(
 )
 
 
-def _eit_data() -> EITData:
-    return EITData(
-        path="synthetic.bin",
-        nframes=PIXELS.shape[0],
+def _eit_data() -> Signal:
+    return Signal(
+        values=PIXELS.copy(),
         time=np.arange(PIXELS.shape[0]) / FS,
         sample_frequency=FS,
-        vendor=Vendor.DRAEGER,
-        label="filtered",
-        pixel_impedance=PIXELS.copy(),
+        name="filtered",
+        modality="eit",
+        category="impedance",
+        channel="pixel_impedance",
+        source="draeger",
     )
-
-
-def _sequence() -> SimpleNamespace:
-    return SimpleNamespace(continuous_data=DataCollection(ContinuousData))
 
 
 def test_regional_impedance_sums_the_pixels_inside_the_mask():
     session = M3Session()
-    sequence = _sequence()
     # Top-left pixel fully, bottom-left pixel at half weight, the rest left out.
     mask = PixelMask(name="left_half", values=[[1.0, np.nan], [0.5, np.nan]])
 
     result = get_step("eit.regional_impedance").func(
-        _eit_data(), mask=mask, eit_sequence=sequence, session=session
+        _eit_data(), mask=mask, session=session
     )
 
     expected = PIXELS[:, 0, 0] + 0.5 * PIXELS[:, 1, 0]
     np.testing.assert_allclose(result["regional_impedance"].values, expected)
     np.testing.assert_allclose(result["regional_impedance"].time, np.arange(3) / FS)
-    assert "regional_impedance" in sequence.continuous_data
 
     native = result["regional_impedance_signal"]
     np.testing.assert_allclose(native.values, expected)
@@ -87,7 +77,6 @@ def test_regional_impedance_sums_the_pixels_inside_the_mask():
 
 def test_functional_impedance_keeps_weight_zero_apart_from_nan():
     session = M3Session()
-    sequence = _sequence()
     # NaN: outside the lung space. 0: inside, adds nothing to the sum.
     mask = PixelMask(
         name="tiv_lungspace_mask",
@@ -96,12 +85,11 @@ def test_functional_impedance_keeps_weight_zero_apart_from_nan():
     )
 
     result = get_step("eit.functional_impedance").func(
-        _eit_data(), mask=mask, eit_sequence=sequence, session=session
+        _eit_data(), mask=mask, session=session
     )
 
     expected = PIXELS[:, 0, 0] + PIXELS[:, 1, 0]
     np.testing.assert_allclose(result["functional_impedance"].values, expected)
-    assert "functional_impedance" in sequence.continuous_data
     assert result["functional_impedance_signal"].channel == "functional_impedance"
     assert session.provenance[-1].action == "eit.functional_impedance"
 
@@ -128,50 +116,49 @@ def test_mask_with_the_wrong_shape_is_refused():
     mask = PixelMask(name="too_small", values=[[1.0]])
 
     with pytest.raises(ValueError, match="shape"):
-        get_step("eit.regional_impedance").func(
-            _eit_data(), mask=mask, eit_sequence=_sequence(), session=session
-        )
+        get_step("eit.regional_impedance").func(_eit_data(), mask=mask, session=session)
 
 
-def test_upstream_mask_and_plain_grid_are_read_as_eitprocessing_reads_them():
-    from eitprocessing.roi import PixelMask as UpstreamPixelMask
+def test_plain_grid_is_read_as_eitprocessing_reads_it():
+    """A 0 in a plain grid becomes NaN, with a warning, as in eitprocessing."""
 
-    session = M3Session()
-    upstream = UpstreamPixelMask([[1.0, 0.0], [0.5, np.nan]], keep_zeros=True)
-
-    from_upstream = get_step("eit.regional_impedance").func(
-        _eit_data(), mask=upstream, eit_sequence=_sequence(), session=session
-    )
     with pytest.warns(UserWarning, match="0 values"):
         from_grid = get_step("eit.regional_impedance").func(
             _eit_data(),
             mask=[[1.0, 0.0], [0.5, np.nan]],
-            eit_sequence=_sequence(),
-            session=session,
+            session=M3Session(),
         )
 
     expected = PIXELS[:, 0, 0] + 0.5 * PIXELS[:, 1, 0]
-    np.testing.assert_array_equal(from_upstream["regional_impedance"].values, expected)
     np.testing.assert_array_equal(from_grid["regional_impedance"].values, expected)
+    assert from_grid["regional_impedance"].metadata["parameters"] == {"mask": None}
 
 
-def test_a_mask_of_another_type_is_refused():
-    from m3resp.core.exceptions import UnsupportedWorkflowError
-
-    with pytest.raises(UnsupportedWorkflowError, match="got str"):
+@pytest.mark.parametrize(
+    ("mask", "type_name"),
+    [("lungs", "str"), (SimpleNamespace(mask=np.ones((2, 2))), "SimpleNamespace")],
+)
+def test_a_mask_of_another_type_is_refused(mask, type_name):
+    with pytest.raises(UnsupportedWorkflowError, match=f"got {type_name}"):
         get_step("eit.regional_impedance").func(
-            _eit_data(), mask="lungs", eit_sequence=_sequence(), session=M3Session()
+            _eit_data(), mask=mask, session=M3Session()
         )
 
 
-def test_text_mask_values_are_refused():
-    from m3resp.core.exceptions import UnsupportedWorkflowError
+@pytest.mark.parametrize("step", ["eit.regional_impedance", "eit.functional_impedance"])
+def test_images_that_are_not_a_signal_are_refused(step):
+    images = SimpleNamespace(pixel_impedance=PIXELS.copy(), time=np.arange(3) / FS)
+    mask = PixelMask(name="all", values=np.ones((2, 2)))
 
+    with pytest.raises(TypeError, match="'signal' must be an m3resp Signal"):
+        get_step(step).func(images, mask=mask, session=M3Session())
+
+
+def test_text_mask_values_are_refused():
     with pytest.raises(UnsupportedWorkflowError, match="without changing"):
         get_step("eit.regional_impedance").func(
             _eit_data(),
             mask=[["1", "0"], ["0", "1"]],
-            eit_sequence=_sequence(),
             session=M3Session(),
         )
 
@@ -184,7 +171,6 @@ def test_plain_boolean_mask_is_read_without_a_zero_conversion_warning():
         result = get_step("eit.regional_impedance").func(
             _eit_data(),
             mask=[[True, False], [False, True]],
-            eit_sequence=_sequence(),
             session=M3Session(),
         )
 
@@ -212,9 +198,9 @@ def _golden_inputs(dataset: str) -> tuple[Any, dict[str, np.ndarray]]:
 
 @pytest.mark.parametrize("dataset", DATASETS)
 def test_masks_and_sums_equal_eitprocessing_on_the_golden_masks(dataset):
+    pytest.importorskip("eitprocessing")
     from eitprocessing.roi import PixelMask as UpstreamPixelMask
-
-    from m3resp.adapters.eitprocessing_adapter import signal_to_eit_data
+    from reference.eitprocessing import signal_to_eit_data
 
     pixels, masks = _golden_inputs(dataset)
     eit_data = signal_to_eit_data(pixels)
@@ -239,39 +225,29 @@ def test_masks_and_sums_equal_eitprocessing_on_the_golden_masks(dataset):
 
 
 @pytest.mark.parametrize("dataset", DATASETS)
-def test_step_waveform_on_the_sequence_equals_eitprocessing(dataset):
+def test_step_waveform_equals_eitprocessing(dataset):
+    pytest.importorskip("eitprocessing")
     from eitprocessing.roi import PixelMask as UpstreamPixelMask
-
-    from m3resp.adapters.eitprocessing_adapter import signal_to_eit_data
+    from reference.eitprocessing import signal_to_eit_data
 
     pixels, masks = _golden_inputs(dataset)
     grid = masks["tiv_lungspace/mask"]
-    sequence = _sequence()
 
     result = get_step("eit.functional_impedance").func(
         pixels,
         mask=PixelMask(name="tiv_lungspace_mask", values=grid),
-        eit_sequence=sequence,
         session=M3Session(),
     )
 
     expected = (
         UpstreamPixelMask(grid)
         .apply(signal_to_eit_data(pixels))
-        .get_summed_impedance(
-            return_label="functional_impedance",
-            name="Functional impedance",
-            description="Impedance summed over the pixels of a mask.",
-        )
+        .get_summed_impedance(return_label="functional_impedance")
     )
-    stored = sequence.continuous_data["functional_impedance"]
-    assert stored == expected
-    for field in ("label", "name", "description", "unit", "category", "parameters"):
-        assert getattr(stored, field) == getattr(expected, field), field
-    assert stored.locked == expected.locked
     np.testing.assert_array_equal(
         result["functional_impedance"].values, expected.values
     )
+    np.testing.assert_array_equal(result["functional_impedance"].time, expected.time)
     assert result["functional_impedance"].method == (
         "m3resp.eit.processing.regional_impedance"
     )

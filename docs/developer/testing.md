@@ -37,6 +37,7 @@ To make mypy pass, change the code. Keep the mypy settings as they are.
 ```text
 tests/
 ├── test_*.py              tests per module or feature: session, adapters, data model, export, workflows, ...
+├── reference/eitprocessing/  code that builds eitprocessing objects for the comparison tests
 ├── regression/            comparison tests with eitprocessing and resurfemg
 │   └── real_data/         tests on recorded data, not part of the normal test run
 ├── snapshots/
@@ -50,12 +51,14 @@ The tests in `tests/regression/` compare M3Resp with the original packages. Each
 
 | Test file | Compares |
 |---|---|
-| `test_eit_equivalence.py`, `test_eit_gap_migration_equivalence.py` | `EITProcessingAdapter` with `eitprocessing` |
+| `test_eit_equivalence.py`, `test_eit_gap_migration_equivalence.py` | The M3Resp EIT code with `eitprocessing` 1.8.7 |
 | `test_emg_equivalence.py` | `ReSurfEMGAdapter` with `resurfemg` |
 | `test_processing_filter_equivalence.py`, `test_processing_metric_equivalence.py`, `test_processing_peak_interval_equivalence.py`, `test_processing_quality_equivalence.py`, `test_processing_window_equivalence.py` | The copies in `m3resp.processing` with their originals |
 | `test_ecg_peak_detection_ground_truth.py` | The ECG peak detection with the R peaks of a simulated ECG signal, found by `neurokit2` |
 
 If one of these tests fails, the M3Resp result differs from the original result. Look at the M3Resp function first, before you change the test. See {doc}`adapters`.
+
+The EIT comparison tests need `eitprocessing`, which only the `reference` option installs. `tests/conftest.py` gives the marker `reference` to each test that imports `eitprocessing` or `tests/reference/`. Without `eitprocessing`, these tests skip. To run only them, install `.[dev,reference]` and run `pytest -m reference`. The CI job "Comparison with eitprocessing" does this on Python 3.12.
 
 ## Tests on recorded data
 
@@ -85,7 +88,7 @@ uv run pytest -m real_data
 
 The tests make three kinds of check:
 
-- Same as the original packages: each M3Resp step gives exactly the result of `eitprocessing` or `resurfemg`, called directly on the same data.
+- Same as the original packages: each M3Resp step gives exactly the result of `eitprocessing` or `resurfemg`, called directly on the same data. The three EIT tests of this kind skip without `eitprocessing`. The other tests need `resurfemg` only.
 - Same as the last time: each number equals the stored value in `reference_values.json`. Counts and sample numbers must be exactly equal. Other numbers can have a relative difference of at most 1e-9.
 - Physiology: the heart rate of the EIT against the ECG in the EMG, the breathing rates and breath starts against the flow, and the EMG filter chains with a notch filter against each other while the EIT is on.
 
@@ -95,7 +98,9 @@ If you change the code to change the results, write the new reference values wit
 
 `tests/test_optional_dependency_absence.py` checks that you can import `m3resp`, list the steps and check a workflow file without `eitprocessing` and `resurfemg`. The test hides the two packages in a Python environment that has them.
 
-The job `optional-deps` in `.github/workflows/tests.yml` installs M3Resp four times in new environments: with no extras, and with `.[eit]`, `.[emg]` and `.[all]`. Each time, it runs `python -m m3resp steps` and `scripts/check_optional_dependency_isolation.py`. The script checks that the installed packages match the extra, and that each step shows the right status: `"available"` or `"missing_optional_dependency"`.
+`tests/test_eit_without_eitprocessing.py` hides `eitprocessing` and checks that M3Resp reads, processes and plots EIT data without it: it loads and preprocesses the EIT test files, runs the EIT full and multimodal full example workflows and saves the EIT figures. It also checks that every `eit.*` step is `"available"` and that no file in `src/m3resp` imports `eitprocessing`.
+
+The job `optional-deps` in `.github/workflows/tests.yml` installs M3Resp five times in new environments: with no extras, and with `.[eit]`, `.[emg]`, `.[all]` and `.[reference]`. Each time, it runs `python -m m3resp steps` and `scripts/check_optional_dependency_isolation.py`. The script checks that the installed packages match the extra, and that each step shows the right status: `"available"` or `"missing_optional_dependency"`.
 
 ## Snapshots of the example workflows
 

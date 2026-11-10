@@ -56,29 +56,9 @@ def test_every_eit_step_declares_some_metadata_and_is_json_safe():
         json.dumps(description.as_dict())
 
 
-#: EIT steps that run on m3resp code only.
-_M3RESP_ONLY_STEPS = (
-    "eit.slice_signal",
-    "eit.detect_rates",
-    "eit.detect_breaths",
-    "eit.normalize_breaths",
-    "eit.continuous_tiv",
-    "eit.eeli",
-    "eit.pixel_breaths",
-    "eit.pixel_tiv",
-    "eit.pixel_eeli",
-    "eit.roi_tiv_lungspace",
-    "eit.roi_amplitude_lungspace",
-    "eit.roi_watershed",
-    "eit.roi_filter_by_size",
-    "eit.geometric_mask",
-)
-
-
-def test_eit_steps_declare_the_packages_they_use():
+def test_eit_steps_need_no_optional_package():
     for name in _EIT_STEP_NAMES:
-        expected = () if name in _M3RESP_ONLY_STEPS else ("eitprocessing",)
-        assert describe_step(name).optional_packages == expected, name
+        assert describe_step(name).optional_packages == (), name
 
 
 def test_eit_load_vendor_choices_match_adapter_error_message():

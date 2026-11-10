@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import os
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -47,21 +46,10 @@ def images() -> dict[str, Signal]:
     }
 
 
-def _sequence() -> SimpleNamespace:
-    """An eitprocessing image collection, as the ``Sequence`` of a session."""
-
-    from eitprocessing.datahandling.datacollection import DataCollection
-    from eitprocessing.datahandling.eitdata import EITData
-
-    return SimpleNamespace(eit_data=DataCollection(EITData))
-
-
-def _run_step(signal: Signal, **settings) -> tuple[dict, SimpleNamespace]:
-    sequence = _sequence()
-    output = get_step("eit.butterworth_filter").func(
-        signal, eit_sequence=sequence, session=M3Session(), **settings
+def _run_step(signal: Signal, **settings) -> dict:
+    return get_step("eit.butterworth_filter").func(
+        signal, session=M3Session(), **settings
     )
-    return output, sequence
 
 
 def _upstream(signal: Signal, mode: str, order: int) -> tuple[np.ndarray, dict]:
@@ -94,9 +82,7 @@ def test_the_step_gives_the_images_and_captures_of_eitprocessing(
     signal = images[dataset]
     expected, expected_captures = _upstream(signal, mode, order)
 
-    output, sequence = _run_step(
-        signal, mode=mode, order=order, label="filtered", **CUTOFFS
-    )
+    output = _run_step(signal, mode=mode, order=order, label="filtered", **CUTOFFS)
 
     filtered = output["filtered_eit"]
     np.testing.assert_array_equal(filtered.values, expected)
@@ -106,15 +92,12 @@ def test_the_step_gives_the_images_and_captures_of_eitprocessing(
         assert captures[key] == expected_captures[key], key
     assert captures["unfiltered_data"] is signal
     assert captures["filtered_data"] is filtered
-    np.testing.assert_array_equal(
-        sequence.eit_data["filtered"].pixel_impedance, expected
-    )
 
 
 def test_the_result_describes_the_filter(images: dict) -> None:
     signal = images["sentec_healthy_volunteer_1b"]
 
-    output, sequence = _run_step(signal, mode="bandpass", label="band", **CUTOFFS)
+    output = _run_step(signal, mode="bandpass", label="band", **CUTOFFS)
 
     filtered = output["filtered_eit"]
     assert filtered is output["filtered_eit_signal"]
@@ -127,10 +110,6 @@ def test_the_result_describes_the_filter(images: dict) -> None:
     assert _infer_filter_mode(filtered) == "bandpass"
     np.testing.assert_array_equal(filtered.time, signal.time)
     assert filtered.time is not signal.time
-    stored = sequence.eit_data["band"]
-    assert stored.label == "band"
-    assert stored.name == "Bandpass-filtered EIT data"
-    assert stored.description == "EIT data filtered with a bandpass Butterworth filter."
 
 
 def test_pixels_without_any_value_stay_without_value(images: dict) -> None:
@@ -138,7 +117,7 @@ def test_pixels_without_any_value_stay_without_value(images: dict) -> None:
     unmeasured = np.isnan(signal.values).all(axis=0)
     assert unmeasured.sum() == 501
 
-    output, _ = _run_step(signal)
+    output = _run_step(signal)
 
     filtered = output["filtered_eit"].values
     assert np.isnan(filtered[:, unmeasured]).all()
@@ -189,28 +168,20 @@ def test_the_order_parameter_has_the_limits_1_and_10() -> None:
 def test_preprocess_gives_the_eitprocessing_images_and_signal_captures(
     mode: str,
 ) -> None:
-    import copy
-
     from eitprocessing.filters.butterworth_filters import ButterworthFilter
 
     session = M3Session()
     entry = MANIFEST["inputs"]["draeger_synthetic_20Hz"]
     session.load_eit(os.path.join(REPO_ROOT, entry["file"]), entry["vendor"])
-    sequence = copy.deepcopy(session.eit.data)
-    raw = sequence.eit_data["raw"]
-    expected = copy.deepcopy(raw)
-    expected.label = f"{mode}_filtered"
-    expected.name = f"{mode.title()}-filtered EIT data"
-    expected.description = f"EIT data filtered with a {mode} Butterworth filter."
-    expected.pixel_impedance = ButterworthFilter(
+    raw = session.eit.pixel_impedance
+    expected = ButterworthFilter(
         filter_type=mode,
         cutoff_frequency=1.0 if mode == "lowpass" else (0.05, 1.0),
         order=4,
         sample_frequency=raw.sample_frequency,
-    ).apply(raw.pixel_impedance, axis=0)
+    ).apply(raw.values, axis=0)
 
-    result = session.eit_adapter.preprocess(
-        sequence,
+    result = session.preprocess_eit(
         filter_mode=mode,
         compute_continuous_tiv=False,
         compute_eeli=False,
@@ -218,17 +189,14 @@ def test_preprocess_gives_the_eitprocessing_images_and_signal_captures(
     )
 
     filtered = result["filtered_eit"]
-    assert filtered == expected
-    for field in ("label", "name", "description", "path", "vendor"):
-        assert getattr(filtered, field) == getattr(expected, field), field
-    assert sequence.eit_data[f"{mode}_filtered"] is filtered
+    np.testing.assert_array_equal(filtered.values, expected)
+    np.testing.assert_array_equal(filtered.time, raw.time)
+    assert filtered.name == f"{mode.title()}-filtered EIT data"
+    assert filtered.metadata["label"] == f"{mode}_filtered"
     assert result["filter_mode"] == mode
+    assert result["filtered_global_impedance"].name == (
+        f"Global impedance ({mode}_filtered)"
+    )
     captures = result["filter_captures"]
-    assert isinstance(captures["unfiltered_data"], Signal)
-    assert isinstance(captures["filtered_data"], Signal)
-    np.testing.assert_array_equal(
-        captures["filtered_data"].values, expected.pixel_impedance
-    )
-    np.testing.assert_array_equal(
-        captures["unfiltered_data"].values, raw.pixel_impedance
-    )
+    assert captures["filtered_data"] is filtered
+    assert captures["unfiltered_data"] is raw

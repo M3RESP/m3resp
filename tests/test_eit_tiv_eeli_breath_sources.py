@@ -17,7 +17,6 @@ import numpy as np
 import pytest
 
 import m3resp.workflows.steps  # noqa: F401 - registers the steps
-from m3resp.adapters.eitprocessing_adapter import as_signal, breaths_to_interval_data
 from m3resp.core.exceptions import UnsynchronizedDataWarning
 from m3resp.core.session import M3Session
 from m3resp.data import BreathEvent, IntervalData, Signal
@@ -28,6 +27,7 @@ from m3resp.eit.processing import (
     find_breaths,
     global_impedance,
 )
+from m3resp.eit.processing.breath_inputs import breaths_to_interval_data
 from m3resp.synchronization.start_times import on_clock_of, shared_clock_shift
 from m3resp.synchronization.sync_methods import clock_key
 from m3resp.workflows import run_workflow
@@ -69,7 +69,7 @@ def _synchronize(session: M3Session, start_times: dict[str, float]) -> None:
 
 def test_eit_breaths_through_the_input_give_the_values_of_the_detector() -> None:
     session = _eit_session()
-    waveform = as_signal(session.eit.global_impedance)
+    waveform = session.eit.raw_global_impedance
     settings = BreathDetectionSettings()
     breaths = breaths_to_interval_data(find_breaths(waveform, settings))
 
@@ -113,44 +113,29 @@ def test_given_breaths_are_refused_when_they_are_not_breath_events() -> None:
     session = _eit_session()
     with pytest.raises(TypeError, match="needs BreathEvent objects"):
         eeli(
-            as_signal(session.eit.global_impedance),
+            session.eit.raw_global_impedance,
             session=session,
             breaths=[(0.0, 1.0)],
         )
 
 
-def test_eitprocessing_breaths_through_the_input_give_the_values_of_the_detector() -> (
-    None
-):
+def test_eitprocessing_breaths_through_the_input_are_refused() -> None:
     pytest.importorskip("eitprocessing")
     from eitprocessing.features.breath_detection import BreathDetection
-
-    from m3resp.adapters.eitprocessing_adapter import (
-        EITProcessingAdapter,
-        as_continuous_data,
-    )
+    from reference.eitprocessing import as_continuous_data
 
     session = _eit_session()
-    waveform = as_signal(session.eit.global_impedance)
-    native_breaths = BreathDetection().find_breaths(as_continuous_data(waveform))
-    expected = eeli(
-        waveform, session=session, breath_detector=BreathDetectionSettings()
-    )
+    waveform = session.eit.raw_global_impedance
+    upstream_breaths = BreathDetection().find_breaths(as_continuous_data(waveform))
 
-    step_result = eeli(waveform, session=session, breaths=native_breaths)
-    adapter_result = EITProcessingAdapter().compute_eeli(
-        waveform, breaths=native_breaths
-    )
-
-    expected_values = expected["eeli_result"].values
-    np.testing.assert_array_equal(step_result["eeli_result"].values, expected_values)
-    np.testing.assert_array_equal(adapter_result.values, expected_values)
+    with pytest.raises(TypeError, match=r"got eitprocessing\..*IntervalData"):
+        eeli(waveform, session=session, breaths=upstream_breaths)
 
 
 def test_a_step_with_no_breaths_and_no_detector_is_refused() -> None:
     session = _eit_session()
     with pytest.raises(ValueError, match="needs the breaths"):
-        eeli(as_signal(session.eit.global_impedance), session=session)
+        eeli(session.eit.raw_global_impedance, session=session)
 
 
 # Breaths of another modality
@@ -167,7 +152,7 @@ def _other_breaths() -> list[BreathEvent]:
 def test_breaths_of_another_modality_are_moved_to_the_eit_clock() -> None:
     session = _eit_session()
     _synchronize(session, {"eit": 0.0, "ventilator": 3.0, "emg": -2.0})
-    waveform = as_signal(session.eit.global_impedance)
+    waveform = session.eit.raw_global_impedance
     first_time = float(waveform.time[0])  # the time of day of the first frame
     breaths = _other_breaths()
     times = [(b.start_time, b.extremum_time, b.end_time) for b in breaths]
@@ -200,7 +185,7 @@ def test_breaths_of_another_modality_are_moved_to_the_eit_clock() -> None:
 
 def test_unsynchronized_breaths_of_another_modality_give_a_warning() -> None:
     session = _eit_session()
-    waveform = as_signal(session.eit.global_impedance)
+    waveform = session.eit.raw_global_impedance
     first_time = float(waveform.time[0])
     breaths = _other_breaths()[:2]
 
@@ -219,7 +204,7 @@ def test_breaths_of_another_modality_outside_the_eit_data_give_nan() -> None:
 
     with pytest.warns(UserWarning, match="2 of 2 breaths lie partly outside"):
         result = eeli(
-            as_signal(session.eit.global_impedance), session=session, breaths=breaths
+            session.eit.raw_global_impedance, session=session, breaths=breaths
         )
 
     assert np.isnan(result["eeli_result"].values).all()
@@ -228,7 +213,7 @@ def test_breaths_of_another_modality_outside_the_eit_data_give_nan() -> None:
 def test_on_clock_of_moves_each_modality_by_its_start_time() -> None:
     session = _eit_session()
     _synchronize(session, {"eit": 0.0, "ventilator": 3.0})
-    first_time = float(as_signal(session.eit.global_impedance).time[0])
+    first_time = float(session.eit.raw_global_impedance.time[0])
     # "vent" is another spelling of the ventilator modality.
     ventilator = BreathEvent("vent", 1.0, 3.0, extremum_time=2.0)
     eit = BreathEvent("eit", first_time + 1.0, first_time + 2.0)
@@ -253,7 +238,7 @@ def test_the_eeli_figure_shows_breaths_of_another_modality_on_the_eit_clock(
 
     session = _eit_session()
     _synchronize(session, {"eit": 0.0, "ventilator": 3.0})
-    waveform = as_signal(session.eit.global_impedance)
+    waveform = session.eit.raw_global_impedance
     breaths = [
         *_other_breaths()[:2],
         BreathEvent("ventilator", 1.0e5, 1.0e5 + 2.0, extremum_time=1.0e5 + 1.0),

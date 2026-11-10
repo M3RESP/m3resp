@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from eit_file_data_cases import small_eit_file_data
 
-from m3resp.adapters import EITProcessingAdapter
 from m3resp.core.exceptions import UnknownStepError, WorkflowSpecError
 from m3resp.core.session import M3Session
 from m3resp.data import BreathEvent
@@ -275,103 +275,32 @@ def test_emg_postprocessing_registers_one_step_per_function():
 
 
 # --------------------------------------------------------------------------- #
-# ROTARC workflow — fake eitprocessing primitives                             #
+# ROTARC workflow — fixed rates, filter and breaths                           #
 # --------------------------------------------------------------------------- #
-
-
-class FakeCollection(dict):
-    def add(self, value: Any, overwrite: bool = False) -> None:
-        self[getattr(value, "label", "x")] = value
-
-
-class FakeBreath:
-    def __init__(self, start: float, end: float):
-        self.start_time = start
-        self.end_time = end
-        self.middle_time = (start + end) / 2
-
-
-class FakeIntervals:
-    def __init__(self, pairs: list[tuple[float, float]]):
-        self.intervals = pairs
-        self.values = [FakeBreath(start, end) for start, end in pairs]
-
-
-class FakeSignal:
-    def __init__(
-        self,
-        label: str = "raw",
-        *,
-        values: Any = None,
-        time: Any = None,
-    ):
-        import numpy as np
-
-        self.label = label
-        self.values = np.array([0.0, 1.0, 2.0]) if values is None else values
-        self.time = np.array([0.0, 0.5, 1.0]) if time is None else time
-        self.pixel_impedance = np.zeros((len(self.time), 1, 1))
-        self.sample_frequency = 2.0
-        self.vendor = "draeger"
-        self.unit = None
-
-    def __getitem__(self, _slice: Any) -> FakeSignal:
-        return FakeSignal(self.label + "_sliced", values=self.values, time=self.time)
-
-    def get_summed_impedance(self, *args: Any, **kwargs: Any) -> FakeSignal:
-        return FakeSignal(
-            "global_impedance_(filtered)", values=self.values, time=self.time
-        )
-
-
-class FakeSequence:
-    def __init__(self) -> None:
-        self.eit_data = FakeCollection(raw=FakeSignal("raw"))
-        self.continuous_data = FakeCollection()
 
 
 BREATH_PAIRS = [(0.0, 1.0), (1.0, 2.5), (2.5, 3.2), (3.2, 4.6)]
 
 
 @pytest.fixture
-def fake_eitprocessing(monkeypatch):
-    """Patch the detectors and the upstream classes the EIT steps call."""
+def fixed_eit_detections(monkeypatch):
+    """Give the rate detection, the MDN filter and the breath search of the
+    EIT steps fixed results, so three frames are enough for the workflow."""
 
-    pytest.importorskip("eitprocessing")
-    import eitprocessing.features.breath_detection as bd
-    import eitprocessing.features.rate_detection as rd
-
-    class FakeRateDetection:
-        def __init__(self, subject_type: str, **kwargs: Any) -> None:
-            self.subject_type = subject_type
-
-        def apply(self, signal: Any, **kwargs: Any) -> tuple[float, float]:
-            return 0.25, 1.5
-
-    class FakeBreathDetection:
-        def __init__(self, minimum_duration: float = 0.0, **kwargs: Any) -> None:
-            self.minimum_duration = minimum_duration
-
-        def find_breaths(self, signal: Any, **kwargs: Any) -> FakeIntervals:
-            return FakeIntervals(BREATH_PAIRS)
-
-    monkeypatch.setattr(rd, "RateDetection", FakeRateDetection)
-    monkeypatch.setattr(bd, "BreathDetection", FakeBreathDetection)
-
-    # The rate and breath detection and the MDN filter run on m3resp code.
     import dataclasses
 
-    import m3resp.adapters.eitprocessing_adapter as eit_adapter_module
+    import m3resp.workflows.steps.eit.filtering as eit_filter_steps
+    import m3resp.workflows.steps.eit.rates as eit_rate_steps
     import m3resp.workflows.steps.eit.signals as eit_signal_steps
 
     monkeypatch.setattr(
-        eit_adapter_module, "detect_rates_of", lambda *args, **kwargs: (0.25, 1.5)
+        eit_rate_steps, "detect_rates_of", lambda *args, **kwargs: (0.25, 1.5)
     )
     monkeypatch.setattr(
-        eit_adapter_module,
-        "mdn_filter",
+        eit_filter_steps,
+        "mdn_filter_images",
         lambda signal, **kwargs: dataclasses.replace(
-            signal, metadata=dict(signal.metadata)
+            signal, name=kwargs["name"], metadata=dict(signal.metadata)
         ),
     )
     monkeypatch.setattr(
@@ -386,7 +315,9 @@ def fake_eitprocessing(monkeypatch):
 
 def _fake_eit_session() -> M3Session:
     return M3Session(
-        eit_adapter=EITProcessingAdapter(loader=lambda *a, **k: FakeSequence())
+        eit_loader=lambda path, **kwargs: small_eit_file_data(
+            path, "draeger", n_frames=3, sample_frequency=2.0
+        )
     )
 
 
@@ -441,7 +372,7 @@ _ROTARC_SPEC: dict[str, Any] = {
 }
 
 
-def test_rotarc_workflow_runs_through_engine(fake_eitprocessing):
+def test_rotarc_workflow_runs_through_engine(fixed_eit_detections):
     result = run_workflow(_ROTARC_SPEC, session=_fake_eit_session())
 
     expected_cv, expected_mean, _expected_std, expected_n = _expected_cv()

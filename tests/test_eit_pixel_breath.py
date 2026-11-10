@@ -129,8 +129,7 @@ def _upstream(
     pytest.importorskip("eitprocessing")
     from eitprocessing.features.breath_detection import BreathDetection
     from eitprocessing.features.pixel_breath import PixelBreath
-
-    from m3resp.adapters.eitprocessing_adapter._signals import (
+    from reference.eitprocessing._signals import (
         as_continuous_data,
         as_eit_data,
     )

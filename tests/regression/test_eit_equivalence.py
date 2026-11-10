@@ -26,8 +26,7 @@ from typing import Any
 
 import numpy as np
 import pytest
-
-from m3resp.adapters import EITProcessingAdapter
+from reference.eitprocessing import EITProcessingAdapter
 
 pytest.importorskip("eitprocessing")
 

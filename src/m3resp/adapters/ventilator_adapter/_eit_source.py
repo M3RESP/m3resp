@@ -1,9 +1,8 @@
-"""Read ventilator waveforms from native EIT recordings and reader results.
+"""Read ventilator waveforms from EIT recordings.
 
 Draeger stores ventilator channels in its Medibus fields and Timpel in text
 columns next to the EIT images. The channel keys of EITRecording.signals or
-EITFileData.signals identify their vendor labels. Custom loaders may also
-return an eitprocessing Sequence with continuous_data.
+EITFileData.signals are their vendor labels.
 
 Channel labels are resolved to airway_pressure, flow, volume and the
 additional pressure-pod channels. The result has one channel per row and
@@ -17,6 +16,7 @@ from typing import Any
 import numpy as np
 
 from m3resp.core.exceptions import UnsupportedWorkflowError
+from m3resp.data.signals import Signal
 from m3resp.eit.io.file_data import EITFileData
 from m3resp.modalities.eit import EITRecording
 
@@ -39,36 +39,27 @@ EIT_ORIGIN = "eit"
 SENTINEL_CUTOFF = -1e30
 
 
-def _continuous_data_items(sequence: Any) -> list[tuple[str, Any]]:
-    """Vendor labels and waveforms from native data or a custom Sequence."""
+def _eit_waveforms(recording: Any) -> list[tuple[str, Signal]]:
+    """Return the vendor labels and waveforms of an EIT recording."""
 
-    if isinstance(sequence, (EITRecording, EITFileData)):
-        if isinstance(sequence, EITFileData) or sequence.pixel_impedance is not None:
-            return list(sequence.signals.items())
-        sequence = sequence.data
-    collection = getattr(sequence, "continuous_data", None)
-    if collection is None:
+    if not isinstance(recording, (EITRecording, EITFileData)):
         raise TypeError(
             "Loading ventilator data from an EIT recording expects an "
-            "EITRecording, EITFileData or eitprocessing Sequence, got "
-            f"{type(sequence).__name__}."
+            f"EITRecording or EITFileData, got {type(recording).__name__}."
         )
-    try:
-        return list(collection.items())
-    except AttributeError:  # pragma: no cover - defensive
-        return [(getattr(value, "label", ""), value) for value in collection]
+    return list(recording.signals.items())
 
 
-def _sequence_channel_specs(
-    sequence: Any, requested: Any = tuple(CHANNEL_CATEGORIES)
-) -> tuple[list[ChannelSpec], list[str], list[Any]]:
-    """Resolve a sequence's ventilator channels via the shared alias registry.
+def _eit_channel_specs(
+    recording: Any, requested: Any = tuple(CHANNEL_CATEGORIES)
+) -> tuple[list[ChannelSpec], list[str], list[Signal]]:
+    """Find the ventilator channels of an EIT recording by their vendor labels.
 
-    Returns the specs alongside the sequence's labels and `ContinuousData`
-    objects, indexed the same way, so callers can pair a spec with its data.
+    Returns the specs with the labels and waveforms of the recording, in the
+    same order, so each spec can be paired with its waveform.
     """
 
-    items = _continuous_data_items(sequence)
+    items = _eit_waveforms(recording)
     labels = [label for label, _ in items]
     values = [data for _, data in items]
     specs = resolve_channels(
@@ -76,18 +67,18 @@ def _sequence_channel_specs(
         requested=requested,
         origin=EIT_ORIGIN,
         units=[getattr(data, "unit", None) for data in values],
-        # An EIT sequence names every channel it carries, so there is no
+        # An EIT recording names every channel it holds, so there is no
         # column layout to fall back to: a channel is either named or absent.
         fallback_positions=False,
     )
     return specs, labels, values
 
 
-def available_ventilator_channels(sequence: Any) -> dict[str, str]:
-    """List ventilator channel keys and vendor labels in an EIT sequence.
+def available_ventilator_channels(recording: Any) -> dict[str, str]:
+    """List ventilator channel keys and vendor labels in an EIT recording.
 
     Args:
-        sequence (Any): EITRecording, EITFileData or an eitprocessing Sequence.
+        recording (Any): An EITRecording or EITFileData.
 
     Returns:
         dict[str, str]: Resolvable channel key to vendor label. Multiple airway
@@ -98,10 +89,10 @@ def available_ventilator_channels(sequence: Any) -> dict[str, str]:
             channels containing only missing measurements.
 
     Raises:
-        TypeError: If the input has no EIT waveforms.
+        TypeError: If ``recording`` is not an EITRecording or EITFileData.
     """
 
-    specs, _, _ = _sequence_channel_specs(sequence)
+    specs, _, _ = _eit_channel_specs(recording)
     return {spec.key: spec.label for spec in specs if spec.label is not None}
 
 
@@ -126,13 +117,13 @@ def _sample_frequency(channels: list[Any], fs: float | None) -> float:
     )
 
 
-def ventilator_payload_from_sequence(
-    sequence: Any,
+def ventilator_payload_from_eit(
+    recording: Any,
     *,
     channels: tuple[str, ...] | list[str] = DEFAULT_EIT_CHANNELS,
     fs: float | None = None,
 ) -> dict[str, Any]:
-    """Pack native EIT waveforms or a custom Sequence into a ventilator payload.
+    """Pack the ventilator waveforms of an EIT recording into a ventilator payload.
 
     Returns the ``{"array", "metadata"}`` shape the ventilator path already
     consumes: ``array`` has one row per requested channel, in the requested
@@ -162,8 +153,8 @@ def ventilator_payload_from_sequence(
             f"{sorted(CHANNEL_CATEGORIES)}."
         )
 
-    specs, _, values_by_index = _sequence_channel_specs(sequence, requested)
-    available = available_ventilator_channels(sequence)
+    specs, _, values_by_index = _eit_channel_specs(recording, requested)
+    available = available_ventilator_channels(recording)
 
     missing = [name for name in requested if name not in {s.channel for s in specs}]
     if missing:

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
 from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter
 from m3resp.adapters.ventilator_adapter import (
     VentilatorAdapter,
@@ -18,7 +18,11 @@ from m3resp.adapters.ventilator_adapter import (
     normalize_ventilator_breath,
     primary_channel,
 )
-from m3resp.core.exceptions import MissingModalityDataError, VariantAlreadyExistsError
+from m3resp.core.exceptions import (
+    MissingModalityDataError,
+    UnsupportedWorkflowError,
+    VariantAlreadyExistsError,
+)
 from m3resp.core.metadata import SessionMetadata
 from m3resp.core.provenance import ProvenanceRecord, record
 from m3resp.data.collections import (
@@ -28,12 +32,19 @@ from m3resp.data.collections import (
     QualityReport,
     SignalCollection,
 )
-from m3resp.data.events import BreathEvent, reuse_matching_breaths
+from m3resp.data.events import BreathEvent, coerce_breath_events, reuse_matching_breaths
 from m3resp.data.linked_breath import LinkedBreath
 from m3resp.data.parameters import ParameterResult
 from m3resp.data.processing import ProcessingHistory
+from m3resp.data.quality import QualityFlag
+from m3resp.eit.processing.breath_inputs import breath_intervals_to_breath_events
+from m3resp.eit.processing.preprocess import (
+    PER_BREATH_KEYS,
+    preprocess_eit_recording,
+)
 from m3resp.export.session_export import export_session_summary
 from m3resp.modalities.eit import (
+    EITLoader,
     EITLoaderChoice,
     EITRecording,
     frame_window,
@@ -120,6 +131,38 @@ def set_ventilator_raw(raw: dict[str, Any], recording: Any) -> None:
     raw["vent"] = recording
 
 
+def _eit_breaths_of(data: Any, **kwargs: Any) -> list[BreathEvent]:
+    """Return the EIT breaths of processed EIT data as ``BreathEvent``s.
+
+    Args:
+        data (Any): The result of ``preprocess_eit``, or the raw recording.
+        **kwargs (Any): ``detector=``, a function called as
+            ``detector(data, **other_kwargs)`` that returns the breaths; the
+            other keyword arguments go to it.
+
+    Returns:
+        list[BreathEvent]: The breaths, modality ``"eit"``. Breaths of a
+            ``detector`` without a source get the source ``"custom_detector"``.
+
+    Raises:
+        UnsupportedWorkflowError: If there is no ``detector`` and ``data``
+            has no ``breath_intervals``.
+    """
+
+    detector = kwargs.pop("detector", None)
+    if detector is not None:
+        return coerce_breath_events(
+            detector(data, **kwargs), modality="eit", source="custom_detector"
+        )
+    if not isinstance(data, dict) or "breath_intervals" not in data:
+        raise UnsupportedWorkflowError(
+            "Default EIT breath detection expects processed EIT data from "
+            "`preprocess_eit()`. Pass `detector=callable` to normalize "
+            "custom detections."
+        )
+    return breath_intervals_to_breath_events(data["breath_intervals"])
+
+
 def _eit_event_key(variant: str | None) -> str:
     """Return ``eit_breaths`` or ``eit_breaths:<variant>`` for a named variant."""
 
@@ -131,17 +174,16 @@ class M3Session:
 
     def __init__(
         self,
-        eit_adapter: EITProcessingAdapter | None = None,
         emg_adapter: ReSurfEMGAdapter | None = None,
         metadata: SessionMetadata | dict[str, Any] | None = None,
         allow_overwrite: bool = False,
         ventilator_adapter: Any | None = None,
+        *,
+        eit_loader: EITLoader | None = None,
     ):
         """Create a session for recordings, processing results and their history.
 
         Args:
-            eit_adapter: EIT loading and processing methods. ``None`` uses
-                ``EITProcessingAdapter``.
             emg_adapter: EMG loading and processing methods. ``None`` uses
                 ``ReSurfEMGAdapter``.
             metadata: Recording description as ``SessionMetadata`` or a
@@ -151,9 +193,13 @@ class M3Session:
             ventilator_adapter: Ventilator loading and processing methods.
                 ``None`` creates an adapter using this session's EIT and EMG
                 loaders for files that contain ventilator channels.
+            eit_loader: A custom EIT loader for files that the vendor readers
+                cannot read. It is called as ``eit_loader(path, vendor=...,
+                **options)`` and returns an ``m3resp.eit.io.EITFileData``.
+                ``load_eit`` and ``eit.load_custom`` use it.
         """
 
-        self.eit_adapter = eit_adapter or EITProcessingAdapter()
+        self.eit_loader = eit_loader
         self.emg_adapter = emg_adapter or ReSurfEMGAdapter()
         # Ventilator processing is native (`VentilatorAdapter` wraps no upstream
         # library), but *loading* borrows whichever adapter owns the file the
@@ -165,7 +211,7 @@ class M3Session:
         self.ventilator_adapter = ventilator_adapter or VentilatorAdapter(
             loader=lambda path, **kwargs: self.emg_adapter.load(path, **kwargs),
             eit_loader=lambda path, **kwargs: load_eit_recording(
-                path, adapter=self.eit_adapter, **kwargs
+                path, custom_loader=self.eit_loader, **kwargs
             ),
         )
 
@@ -231,7 +277,7 @@ class M3Session:
         *,
         loader: EITLoaderChoice = "auto",
         **kwargs: Any,
-    ) -> Any:
+    ) -> EITRecording:
         """Load EIT data and store it under `raw["eit"]`.
 
         A newly loaded recording has not been synchronized yet: any EIT start
@@ -246,21 +292,23 @@ class M3Session:
                 ``slice_eit`` after loading several files.
             vendor (str | None): The EIT device maker, passed to
                 the M3Resp reader (for example ``"draeger"``).
-            loader (str): ``"eitprocessing"`` reads a Draeger, Sentec or
-                Timpel file and needs ``vendor``; ``"custom"`` uses the loader
-                given to `session.eit_adapter` (``EITProcessingAdapter(
-                loader=...)``); ``"auto"`` uses that custom loader when there
-                is one, else eitprocessing.
-            **kwargs (Any): Passed on to the EIT file reader.
+            loader (str): ``"vendor"`` reads a Draeger, Sentec or Timpel file
+                with the m3resp reader of ``vendor``; ``"custom"`` uses
+                ``session.eit_loader`` (``M3Session(eit_loader=...)``);
+                ``"auto"`` uses that custom loader when there is one, else
+                the vendor reader.
+            **kwargs (Any): Passed on to the EIT file reader:
+                ``sample_frequency`` (Hz), ``first_frame`` and ``max_frames``,
+                or the options of the custom loader.
 
         Returns:
-            Any: The loaded `eitprocessing` Sequence (`session.eit.data`).
+            EITRecording: The loaded recording (`session.eit`).
         """
 
         recording = load_eit_recording(
             path,
             vendor=vendor,
-            adapter=self.eit_adapter,
+            custom_loader=self.eit_loader,
             loader=loader,
             **kwargs,
         )
@@ -275,7 +323,7 @@ class M3Session:
         self._record(
             "load_eit", "eit", path=recorded_path, vendor=vendor, loader=loader
         )
-        return recording.data
+        return recording
 
     def load_emg(self, path: str | Path, **kwargs: Any) -> Any:
         """Load EMG data and store it under `raw["emg"]`.
@@ -396,20 +444,22 @@ class M3Session:
 
         Results are stored in ``session.processed_variants['eit']`` under the
         variant name, or ``'default'`` when omitted. The default result is
-        also stored in ``session.processed['eit']``. Upstream preprocessing
-        adds signals, rate parameters, values per breath and quality flags
-        to the session's collections. Per-breath results reuse breaths
-        stored under the matching variant's event key.
+        also stored in ``session.processed['eit']``. The preprocessing
+        (``m3resp.eit.processing.preprocess.preprocess_eit_recording``) adds
+        the global impedance waveforms, the rates, the values per breath and
+        quality flags to the session's collections. Per-breath results reuse
+        breaths stored under the matching variant's event key.
 
         Args:
             variant (str | None): Name to store this result under. None
                 stores it as ``"default"``.
             overwrite (bool): Replace a result already stored under the same
                 name. ``session.allow_overwrite`` also permits replacement.
-            **kwargs (Any): Passed on to `EITProcessingAdapter.preprocess`
-                (for example ``filter_mode``). ``preprocess=`` replaces the
-                whole step with a function of your own; its output is stored
-                directly in the processed-result dictionaries.
+            **kwargs (Any): Passed on to ``preprocess_eit_recording`` (for
+                example ``filter_mode``). ``preprocess=`` replaces the
+                whole step with a function of your own: it is called as
+                ``preprocess(session.eit, **kwargs)``, and its output is
+                stored directly in the processed-result dictionaries.
 
         Returns:
             Any: The preprocessing result, also stored in
@@ -433,16 +483,14 @@ class M3Session:
             )
         preprocess = kwargs.pop("preprocess", None)
         if preprocess is None:
-            result = self.eit_adapter.preprocess(recording.data, **kwargs)
+            result = preprocess_eit_recording(recording, **kwargs)
             self._extend_typed_collections_from_eit(
                 result, event_key=_eit_event_key(variant)
             )
         else:
-            # A custom `preprocess` callable's output shape is not guaranteed
-            # to match what `EITProcessingAdapter.to_signals/to_parameters/
-            # to_quality_flags` expect, so the typed collections are only
-            # populated on the default adapter path.
-            result = preprocess(recording.data, **kwargs)
+            # The output of a custom `preprocess` function can have any form,
+            # so it goes to the processed results only.
+            result = preprocess(recording, **kwargs)
         self.processed_variants["eit"][name] = result
         if name == "default":
             self.processed["eit"] = result
@@ -771,10 +819,9 @@ class M3Session:
         part runs from the first frame at or after `start_seconds` up to,
         but not including, the first frame at or after `end_seconds`.
 
-        m3resp cuts the native images, waveforms, device marks and breaths
-        together, then rebuilds the eitprocessing Sequence. A ventilator
-        recording from the same EIT file is cut at those frames too, so it stays lined
-        up with the EIT. EIT frame times keep their original values; the EIT
+        m3resp cuts the images, waveforms, device marks and breaths
+        together. A ventilator recording from the same EIT file is cut at
+        those frames too, so it stays lined up with the EIT. EIT frame times keep their original values; the EIT
         start time in `session.start_times` moves later by the part cut off
         the front, so the EIT stays lined up with the other recordings.
 
@@ -796,13 +843,6 @@ class M3Session:
         recording = self.eit
         if recording is None:
             raise MissingModalityDataError("slice_eit needs a loaded EIT recording.")
-        if recording.pixel_impedance is None:
-            raise MissingModalityDataError(
-                "slice_eit needs the raw EIT images of the recording, with their "
-                "times. The loaded data has none: a custom loader must return "
-                "an EITFileData, or a Sequence with the images under "
-                "eit_data['raw']."
-            )
         if self.processed_variants["eit"]:
             raise ValueError(
                 "slice_eit must run before preprocess_eit: the EIT has already "
@@ -978,9 +1018,12 @@ class M3Session:
                 stored under ``session.events['eit_breaths:<name>']``.
                 ``None`` uses the default processed result, falling back to
                 the raw recording, and stores events under ``'eit_breaths'``.
-            **kwargs (Any): Passed on to `EITProcessingAdapter.detect_breaths`.
-                ``detector=`` replaces the detection with a function of your
-                own.
+            **kwargs (Any): ``detector=`` replaces the detection with a
+                function of your own: it is called as ``detector(data,
+                **other_kwargs)`` with the processed result (or the raw
+                recording) and returns breaths in a form of
+                ``coerce_breath_events``. Without ``detector``, the breaths
+                are the ``breath_intervals`` of the processed result.
 
         Returns:
             list[BreathEvent]: Detected breaths in detector order, also stored
@@ -990,6 +1033,8 @@ class M3Session:
             MissingModalityDataError: If the named preprocessing variant is
                 unavailable, or default processed EIT data and a raw recording
                 are both unavailable.
+            UnsupportedWorkflowError: If there is no ``detector`` and the
+                data has no ``breath_intervals`` (no ``preprocess_eit`` run).
         """
 
         if variant is not None:
@@ -1000,9 +1045,9 @@ class M3Session:
                     f"preprocess_eit(variant={variant!r}, ...) first."
                 )
         else:
-            data = self.processed.get("eit") or self._require_raw("eit").data
+            data = self.processed.get("eit") or self._require_raw("eit")
         event_key = _eit_event_key(variant)
-        events = self.eit_adapter.detect_breaths(data, **kwargs)
+        events = _eit_breaths_of(data, **kwargs)
         # The same breaths may already be stored with TIV/EELI values; store
         # those breath objects, so each value points to its stored breath.
         events = reuse_matching_breaths(
@@ -1704,16 +1749,52 @@ class M3Session:
         ``event_key``.
         """
 
-        for signal in self.eit_adapter.to_signals(preprocessed):
-            self.signals.add(signal)
-        for parameter in self.eit_adapter.to_parameters(preprocessed):
-            self.parameter_results.add(parameter)
-        for interval_data in self.eit_adapter.to_interval_data(
-            preprocessed, stored_breaths=self.get_events(event_key, None)
+        raw_waveform = preprocessed.get("raw_global_impedance")
+        filtered_waveform = preprocessed.get("filtered_global_impedance")
+        for signal in (raw_waveform, filtered_waveform):
+            if signal is not None:
+                self.signals.add(signal)
+        for name in ("respiratory_rate", "heart_rate"):
+            rate = preprocessed.get(f"{name}_hz")
+            if rate is not None:
+                self.parameter_results.add(
+                    ParameterResult(
+                        name=name,
+                        value=float(rate),
+                        modality="eit",
+                        unit="Hz",
+                        method="m3resp.eit.processing.detect_rates",
+                    )
+                )
+        results = [
+            preprocessed[key]
+            for key in PER_BREATH_KEYS
+            if preprocessed.get(key) is not None
+        ]
+        if results:
+            breaths = reuse_matching_breaths(
+                breath_intervals_to_breath_events(preprocessed["breath_intervals"]),
+                self.get_events(event_key, None),
+            )
+            for result in results:
+                self.interval_data.add(
+                    dataclasses.replace(
+                        result, intervals=list(breaths), metadata=dict(result.metadata)
+                    )
+                )
+        # Whether the rates and the breaths, which later steps need, were found.
+        for name, key in (
+            ("respiratory_rate_detected", "respiratory_rate_hz"),
+            ("breath_intervals_detected", "breath_intervals"),
         ):
-            self.interval_data.add(interval_data)
-        for flag in self.eit_adapter.to_quality_flags(preprocessed):
-            self.quality.add(flag)
+            self.quality.add(
+                QualityFlag(
+                    name=name,
+                    passed=preprocessed.get(key) is not None,
+                    severity="warning",
+                    modality="eit",
+                )
+            )
 
     def _record(
         self,

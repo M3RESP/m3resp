@@ -6,21 +6,21 @@ MDN filter below. The MDN filter is ``m3resp.eit.processing.mdn_filter``.
 
 from __future__ import annotations
 
+import dataclasses
+import math
 from typing import Any, get_args
 
-from m3resp.adapters.eitprocessing_adapter import (
-    MAX_EIT_BUTTERWORTH_ORDER,
-    add_to_collection,
-    as_signal,
-    butterworth_filter_images,
-    signal_to_eit_data,
-)
 from m3resp.core.session import M3Session
+from m3resp.eit.processing.butterworth import (
+    MAX_EIT_BUTTERWORTH_ORDER,
+    butterworth_filter_images,
+)
 from m3resp.eit.processing.mdn_filter import (
     NOISE_FREQUENCY_LIMIT,
     NOTCH_DISTANCE,
     ORDER,
 )
+from m3resp.eit.processing.mdn_filter import mdn_filter as mdn_filter_images
 from m3resp.processing.filters import ButterworthFilterType
 from m3resp.workflows.registry import (
     StepArtifact,
@@ -29,9 +29,9 @@ from m3resp.workflows.registry import (
 )
 
 from ._shared import (
-    _EITPROCESSING,
     _SESSION_ARTIFACT,
-    _upstream_metadata,
+    _as_signal,
+    _step_provenance,
 )
 
 
@@ -41,7 +41,6 @@ from ._shared import (
         "signal": None,
         "respiratory_rate_hz": "respiratory_rate_hz",
         "heart_rate_hz": "heart_rate_hz",
-        "eit_sequence": "eit_sequence",
         "session": "session",
     },
     writes=("filtered_eit", "filter_captures", "filtered_eit_signal"),
@@ -54,7 +53,6 @@ from ._shared import (
     ),
     category="preprocessing",
     modality="eit",
-    optional_packages=_EITPROCESSING,
     session_writes=("session.signals",),
     input_artifacts=(
         StepArtifact(
@@ -73,14 +71,6 @@ from ._shared import (
             artifact_type="scalar_metric",
             unit="Hz",
             description="Heart rate to remove, with its harmonics.",
-        ),
-        StepArtifact(
-            name="eit_sequence",
-            artifact_type="eit_sequence",
-            default_context_key="eit_sequence",
-            description="Sequence the filtered signal is added onto.",
-            public=False,
-            compatibility_only=True,
         ),
         _SESSION_ARTIFACT,
     ),
@@ -116,7 +106,7 @@ from ._shared import (
             name="label",
             value_type="string",
             default="filtered",
-            description="Label assigned to the filtered signal.",
+            description="Short name of the filtered images, in their name and in the name of their global impedance.",
         ),
     ),
     output_artifacts=(
@@ -147,7 +137,6 @@ def mdn_filter(
     *,
     respiratory_rate_hz: float,
     heart_rate_hz: float,
-    eit_sequence: Any,
     session: M3Session,
     noise_frequency_limit_hz: float = NOISE_FREQUENCY_LIMIT,
     notch_distance_hz: float = NOTCH_DISTANCE,
@@ -156,15 +145,14 @@ def mdn_filter(
 ) -> dict[str, Any]:
     """Remove the heart signal from EIT images with the MDN filter.
 
-    The filter is ``m3resp.eit.processing.mdn_filter``.
+    The filter is ``m3resp.eit.processing.mdn_filter``. The filtered images
+    are named ``"MDN-filtered EIT data (<label>)"`` and keep ``label`` in
+    ``metadata["label"]``.
 
     Args:
-        signal (Any): EIT images as a ``Signal`` (or an eitprocessing
-            ``EITData``), time in seconds.
+        signal (Any): EIT images as a ``Signal``, time in seconds.
         respiratory_rate_hz (float): Breathing rate, in Hz.
         heart_rate_hz (float): Heart rate to remove, in Hz.
-        eit_sequence (Any): Sequence that receives the filtered
-            eitprocessing ``EITData``.
         session (M3Session): Session that receives the filtered Signal.
         noise_frequency_limit_hz (float): Low-pass edge in Hz. Defaults to
             220 per minute.
@@ -172,7 +160,7 @@ def mdn_filter(
             Hz. Defaults to 10 per minute.
         order (int): Butterworth order of each filter, 1 to 10. Defaults to
             10.
-        label (str): Label of the filtered data.
+        label (str): Short name of the filtered images.
 
     Returns:
         dict[str, Any]: ``filtered_eit`` and ``filtered_eit_signal``, the
@@ -180,26 +168,34 @@ def mdn_filter(
             results of the filter.
 
     Raises:
+        TypeError: If ``signal`` is not a ``Signal``.
         ValueError: If a rate is not a finite number above 0, if the
             breathing rate is not below the heart rate, or if a band edge is
             at or above half the frames per second.
     """
 
-    result = session.eit_adapter.apply_mdn(
-        signal,
-        respiratory_rate_hz=respiratory_rate_hz,
-        heart_rate_hz=heart_rate_hz,
-        noise_frequency_limit_hz=noise_frequency_limit_hz,
-        notch_distance_hz=notch_distance_hz,
+    for rate_name, rate in (
+        ("respiratory_rate_hz", respiratory_rate_hz),
+        ("heart_rate_hz", heart_rate_hz),
+    ):
+        if not math.isfinite(rate) or rate <= 0:
+            raise ValueError(
+                f"{rate_name} must be a finite, positive value in Hz, got {rate!r}."
+            )
+    captures: dict[str, Any] = {}
+    filtered_eit_signal = mdn_filter_images(
+        _as_signal(signal, name="signal", step="eit.mdn_filter"),
+        respiratory_rate=respiratory_rate_hz,
+        heart_rate=heart_rate_hz,
+        noise_frequency_limit=noise_frequency_limit_hz,
+        notch_distance=notch_distance_hz,
         order=order,
-        label=label,
         name=f"MDN-filtered EIT data ({label})",
-        description="EIT data filtered with MDN heart-rate noise removal.",
+        captures=captures,
     )
-    filtered_eit_signal = result["filtered_eit"]
-    add_to_collection(eit_sequence.eit_data, signal_to_eit_data(filtered_eit_signal))
+    filtered_eit_signal.metadata["label"] = label
 
-    metadata = _upstream_metadata(
+    metadata = _step_provenance(
         source_package="m3resp",
         source_function="m3resp.eit.processing.mdn_filter",
         implementation="m3resp.eit.processing.mdn_filter",
@@ -218,7 +214,7 @@ def mdn_filter(
 
     return {
         "filtered_eit": filtered_eit_signal,
-        "filter_captures": result["filter_captures"],
+        "filter_captures": captures,
         "filtered_eit_signal": filtered_eit_signal,
         "_provenance": metadata,
     }
@@ -226,13 +222,12 @@ def mdn_filter(
 
 @register_step(
     "eit.butterworth_filter",
-    reads={"signal": None, "eit_sequence": "eit_sequence", "session": "session"},
+    reads={"signal": None, "session": "session"},
     writes=("filtered_eit", "filter_captures", "filtered_eit_signal"),
     summary="Apply a Butterworth filter to EIT pixel data.",
     description="Apply a lowpass, highpass, bandpass or bandstop Butterworth filter to EIT pixel impedance (m3resp.processing.filters.butterworth_filter), as an alternative to eit.mdn_filter.",
     category="preprocessing",
     modality="eit",
-    optional_packages=_EITPROCESSING,
     alternatives=("eit.mdn_filter",),
     session_writes=("session.signals",),
     input_artifacts=(
@@ -240,13 +235,6 @@ def mdn_filter(
             name="signal",
             artifact_type="eit_pixel_signal",
             description="EIT images (pixel impedance) to filter.",
-        ),
-        StepArtifact(
-            name="eit_sequence",
-            artifact_type="eit_sequence",
-            description="Sequence the filtered signal is added onto.",
-            public=False,
-            compatibility_only=True,
         ),
         _SESSION_ARTIFACT,
     ),
@@ -290,7 +278,7 @@ def mdn_filter(
             name="label",
             value_type="string",
             default="filtered",
-            description="Label assigned to the filtered signal.",
+            description="Short name of the filtered images, in the name of their global impedance.",
         ),
     ),
     output_artifacts=(
@@ -320,7 +308,6 @@ def mdn_filter(
 def butterworth_filter(
     signal: Any,
     *,
-    eit_sequence: Any,
     session: M3Session,
     mode: ButterworthFilterType = "lowpass",
     lowpass_hz: float = 1.0,
@@ -331,13 +318,12 @@ def butterworth_filter(
     """Apply a zero-phase Butterworth filter to EIT pixel signals.
 
     The filter is ``m3resp.processing.filters.butterworth_filter``, run on each
-    pixel along time.
+    pixel along time. The filtered images keep ``label`` in
+    ``metadata["label"]``.
 
     Args:
-        signal (Any): EIT images as a ``Signal`` (or an eitprocessing
-            ``EITData``), with the frames per second in Hz and time along the
-            first axis.
-        eit_sequence (Any): Sequence receiving the filtered EIT data.
+        signal (Any): EIT images as a ``Signal``, with the frames per second
+            in Hz and time along the first axis.
         session (M3Session): Session receiving the filtered Signal and provenance.
         mode (ButterworthFilterType): "lowpass", "highpass", "bandpass", or
             "bandstop". Defaults to "lowpass".
@@ -347,7 +333,8 @@ def butterworth_filter(
             highpass, bandpass and bandstop modes. Both band cutoffs must be
             positive, ordered and below half the sampling rate.
         order (int): Butterworth order, 1 to 10. Defaults to 4.
-        label (str): Label for the filtered copy. Defaults to "filtered".
+        label (str): Short name of the filtered images. Defaults to
+            "filtered".
 
     Returns:
         dict[str, Any]: ``filtered_eit`` and ``filtered_eit_signal``, the same
@@ -358,6 +345,7 @@ def butterworth_filter(
             samples stay missing.
 
     Raises:
+        TypeError: If ``signal`` is not a ``Signal``.
         ValueError: If a pixel has gaps among otherwise present samples, if
             the order is outside 1 to 10, or if the other filter parameters
             are invalid.
@@ -367,16 +355,19 @@ def butterworth_filter(
     # two-sided ones.
     single_sided = {"lowpass": lowpass_hz, "highpass": highpass_hz}
     filtered_eit_signal, captures = butterworth_filter_images(
-        as_signal(signal),
+        _as_signal(signal, name="signal", step="eit.butterworth_filter"),
         mode=mode,
         cutoff_frequency=single_sided.get(mode, (highpass_hz, lowpass_hz)),
         order=order,
-        label=label,
         operation="eit.butterworth_filter",
     )
-    add_to_collection(eit_sequence.eit_data, signal_to_eit_data(filtered_eit_signal))
+    filtered_eit_signal = dataclasses.replace(
+        filtered_eit_signal,
+        metadata={**filtered_eit_signal.metadata, "label": label},
+    )
+    captures["filtered_data"] = filtered_eit_signal
 
-    metadata = _upstream_metadata(
+    metadata = _step_provenance(
         source_package="m3resp",
         source_function="m3resp.processing.filters.butterworth_filter",
         implementation="m3resp.processing.filters",

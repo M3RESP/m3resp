@@ -1,13 +1,5 @@
-"""Phase 7 (plan/stage2/1_eit_gap_migration_implementation_plan.md) - workflow
-contract tests for the Stage 2 EIT gap migration steps.
-
-These tests do not need the optional `eitprocessing` dependency: every
-migrated/added `eit.*` step calls `session.eit_adapter.<method>()` rather than
-importing `eitprocessing` itself, so a fake adapter is enough to prove the
-granular steps work standalone (Phase 1's "no operation is implemented twice"
-/ Phase 2-4's "granular steps use injected adapter methods" acceptance
-criteria). The one exception - running the full example end to end - needs
-the real package and skips cleanly without it.
+"""Workflow tests of the EIT steps: their outputs, the declared writes and
+the step inputs. The steps run m3resp code only, on small m3resp Signals.
 """
 
 from __future__ import annotations
@@ -21,11 +13,6 @@ from typing import Any
 import numpy as np
 import pytest
 
-from m3resp.adapters.eitprocessing_adapter import (
-    EITPROCESSING_FIELDS,
-    as_signal,
-    eitprocessing_fields,
-)
 from m3resp.core.exceptions import WorkflowSpecError
 from m3resp.core.session import M3Session
 from m3resp.data import (
@@ -87,148 +74,85 @@ def test_every_migrated_step_is_registered_and_listed():
         assert steps[name], f"{name} has an empty summary"
 
 
-# -- fakes: shaped like the real eitprocessing/upstream objects, but with no
-# import of eitprocessing anywhere in this module ---------------------------
+def _images(frames: int, *, rows: int = 2, columns: int = 2, fs: float = 1.0) -> Signal:
+    """EIT images with every pixel 1.0, ``fs`` frames per second from 0 s."""
+
+    return Signal(
+        values=np.ones((frames, rows, columns)),
+        time=np.arange(frames) / fs,
+        sample_frequency=fs,
+        name="raw",
+        modality="eit",
+        category="impedance",
+        channel="pixel_impedance",
+        processing_state="raw",
+        source="draeger",
+    )
 
 
-class _FakeCollection(dict):
-    def add(self, value: Any, overwrite: bool = False) -> None:
-        if not overwrite and getattr(value, "label", None) in self:
-            raise KeyError(value.label)
-        self[getattr(value, "label", None)] = value
+@pytest.fixture
+def fixed_breaths(monkeypatch) -> dict[str, Any]:
+    """Make the breath search of the TIV and EELI steps give fixed breaths.
+
+    The breaths are ``(i, i + 0.5, i + 1)`` s for ``i`` below ``count``; set
+    ``state["count"]`` before the step runs. ``state["calls"]`` counts the
+    searches.
+    """
+
+    state: dict[str, Any] = {"count": 0, "calls": 0}
+
+    def find(signal, settings):
+        state["calls"] += 1
+        return [
+            BreathEvent("eit", float(i), float(i + 1), extremum_time=i + 0.5)
+            for i in range(state["count"])
+        ]
+
+    monkeypatch.setattr("m3resp.workflows.steps.eit._shared.find_breaths", find)
+    return state
 
 
-class _FakeContinuousData:
-    def __init__(self, label: str, values: Any, time: Any):
-        self.label = label
-        self.name = label
-        self.values = np.asarray(values, dtype=float)
-        self.time = np.asarray(time, dtype=float)
-        self.sample_frequency = 1.0
-        self.unit = "a.u."
+@pytest.fixture
+def fake_reader(monkeypatch) -> dict[str, Any]:
+    """Replace the vendor reader of ``eit.load`` with one that reads no file.
 
+    Returns:
+        dict[str, Any]: The keyword arguments of the last read.
+    """
 
-class _FakeEITData:
-    def __init__(self, pixel_impedance: Any, time: Any, label: str = "raw"):
-        self.label = label
-        self.name = label
-        self.pixel_impedance = np.asarray(pixel_impedance, dtype=float)
-        self.time = np.asarray(time, dtype=float)
-        self.sample_frequency = 1.0
-        self.unit = "a.u."
-        self.vendor = "draeger"
+    from m3resp.eit.io import EITFileData
 
-    def get_summed_impedance(self, return_label: str | None = None, **_: Any):
-        return _FakeContinuousData(
-            return_label or f"summed_{self.label}",
-            self.pixel_impedance.sum(axis=(1, 2)),
-            self.time,
+    calls: dict[str, Any] = {}
+
+    def read(path, vendor, **kwargs):
+        calls.clear()
+        calls.update(kwargs)
+        time = np.arange(6, dtype=float)
+        return EITFileData(
+            vendor=vendor,
+            paths=(Path(path),),
+            sample_frequency=1.0,
+            pixel_impedance=Signal(
+                values=np.ones((6, 2, 2)),
+                time=time,
+                sample_frequency=1.0,
+                name="raw",
+                modality="eit",
+                category="impedance",
+                channel="pixel_impedance",
+                processing_state="raw",
+                source=vendor,
+            ),
         )
 
-
-class _FakeSequence:
-    def __init__(self, raw: _FakeEITData):
-        self.eit_data = _FakeCollection(raw=raw)
-        self.continuous_data = _FakeCollection()
-        self.sparse_data = _FakeCollection()
-        self.interval_data = _FakeCollection()
+    monkeypatch.setattr("m3resp.modalities.eit.read_eit_file", read)
+    return calls
 
 
-class _FakeBreath:
-    def __init__(self, start: float, middle: float, end: float):
-        self.start_time = start
-        self.middle_time = middle
-        self.end_time = end
-
-
-class _FakeBreathDetector:
-    """Finds `count` one-second breaths, like eitprocessing's BreathDetection
-    returns them (an object whose `values` are the breaths)."""
-
-    def __init__(self, count: int):
-        self.count = count
-        self.calls = 0
-
-    def find_breaths(self, signal: Any) -> Any:
-        self.calls += 1
-        return SimpleNamespace(
-            values=[
-                _FakeBreath(float(i), i + 0.5, float(i + 1)) for i in range(self.count)
-            ]
-        )
-
-
-class _FakeAdapter:
-    """Duck-types every `EITProcessingAdapter` method the migrated EIT steps
-    call - no `eitprocessing` import anywhere in this class."""
-
-    def __init__(self) -> None:
-        self._sequence: _FakeSequence | None = None
-
-    def load(self, path: str, vendor: str | None = None, **kwargs: Any) -> Any:
-        self.load_kwargs = dict(kwargs)
-        pixel_impedance = np.ones((6, 2, 2))
-        raw = _FakeEITData(pixel_impedance, time=np.arange(6, dtype=float))
-        self._sequence = _FakeSequence(raw)
-        return self._sequence
-
-    def load_with_eitprocessing(
-        self, path: str, vendor: str | None = None, **kwargs: Any
-    ) -> Any:
-        return self.load(path, vendor=vendor, **kwargs)
-
-    def get_raw_eit(self, sequence: Any, label: str = "raw") -> Any:
-        return sequence.eit_data[label]
-
-    def get_global_impedance(self, sequence: Any, label: str = "raw") -> Any:
-        return sequence.eit_data[label].get_summed_impedance(
-            return_label=f"global_impedance_({label})"
-        )
-
-    def detect_rates(self, signal: Any, **kwargs: Any) -> dict[str, Any]:
-        return {
-            "respiratory_rate_hz": 0.3,
-            "heart_rate_hz": 1.2,
-            "rate_detector": "fake-rate-detector",
-            "rate_captures": {},
-        }
-
-    def apply_mdn(
-        self,
-        signal: Any,
-        *,
-        respiratory_rate_hz: float,
-        heart_rate_hz: float,
-        label: str = "filtered",
-        name: str | None = None,
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        images = as_signal(signal)
-        filtered = Signal(
-            values=images.values,
-            time=images.time,
-            sample_frequency=images.sample_frequency,
-            name=name or images.name,
-            metadata={
-                EITPROCESSING_FIELDS: {**eitprocessing_fields(images), "label": label}
-            },
-            modality="eit",
-            category="impedance",
-            channel="pixel_impedance",
-            source="draeger",
-            processing_state="intermediate",
-        )
-        return {"filtered_eit": filtered, "filter_captures": {}}
-
-
-def _session_with_fake_adapter() -> M3Session:
+def test_load_step_works_without_eitprocessing_and_matches_declared_writes(
+    fake_reader,
+):
     session = M3Session()
-    session.eit_adapter = _FakeAdapter()  # type: ignore[assignment]
-    return session
-
-
-def test_load_step_works_without_eitprocessing_and_matches_declared_writes():
-    session = _session_with_fake_adapter()
 
     result = load(session, file_path="fake.bin", vendor="draeger")
 
@@ -249,10 +173,10 @@ def test_load_step_works_without_eitprocessing_and_matches_declared_writes():
     }
 
 
-def test_load_step_forwards_the_declared_reading_parameters():
-    """sample_frequency/first_frame/max_frames are real parameters, not bag keys."""
+def test_load_step_forwards_the_declared_reading_parameters(fake_reader):
+    """sample_frequency, first_frame and max_frames reach the vendor reader."""
 
-    session = _session_with_fake_adapter()
+    session = M3Session()
 
     load(
         session,
@@ -263,43 +187,41 @@ def test_load_step_forwards_the_declared_reading_parameters():
         max_frames=100,
     )
 
-    forwarded = session.eit_adapter.load_kwargs
+    forwarded = fake_reader
     assert forwarded["sample_frequency"] == 20.0
     assert forwarded["first_frame"] == 5
     assert forwarded["max_frames"] == 100
 
 
-def test_load_step_omits_unset_reading_parameters():
+def test_load_step_omits_unset_reading_parameters(fake_reader):
     """Unset means 'let the vendor loader decide', not 'pass None'."""
 
-    session = _session_with_fake_adapter()
+    session = M3Session()
 
     load(session, file_path="fake.bin", vendor="draeger")
 
-    forwarded = session.eit_adapter.load_kwargs
+    forwarded = fake_reader
     assert "sample_frequency" not in forwarded
     assert "max_frames" not in forwarded
     assert forwarded["first_frame"] == 0
 
 
-def test_load_step_rejects_reading_parameters_hidden_in_loader_options():
-    session = _session_with_fake_adapter()
+def _fixed_rates(monkeypatch, respiratory_rate_hz: float, heart_rate_hz: float) -> None:
+    """Make ``eit.detect_rates`` find the given rates."""
 
-    with pytest.raises(ValueError, match="must be set directly"):
-        load(
-            session,
-            file_path="fake.bin",
-            vendor="draeger",
-            first_frame=0,
-            loader_options={"first_frame": 99},
-        )
+    monkeypatch.setattr(
+        "m3resp.workflows.steps.eit.rates.detect_rates_of",
+        lambda *args, **kwargs: (respiratory_rate_hz, heart_rate_hz),
+    )
 
 
-def test_detect_rates_step_works_without_eitprocessing_and_matches_declared_writes():
-    session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((4, 1, 1)), time=np.arange(4, dtype=float))
+def test_detect_rates_step_works_without_eitprocessing_and_matches_declared_writes(
+    monkeypatch,
+):
+    _fixed_rates(monkeypatch, 0.3, 1.2)
+    session = M3Session()
 
-    result = detect_rates(raw, session=session, subject_type="adult")
+    result = detect_rates(_images(4, rows=1, columns=1), session=session)
 
     assert set(get_step("eit.detect_rates").writes) <= set(result)
     assert result["respiratory_rate_hz"] == pytest.approx(0.3)
@@ -307,59 +229,43 @@ def test_detect_rates_step_works_without_eitprocessing_and_matches_declared_writ
     assert {"respiratory_rate", "heart_rate"} <= names
 
 
-def _detect_rates_with(rate_name, rate):
-    """Run `eit.detect_rates` against a detector returning one bad rate."""
-
-    session = _session_with_fake_adapter()
-    rates = {
-        "respiratory_rate_hz": 0.3,
-        "heart_rate_hz": 1.0,
-        "rate_detector": None,
-        "rate_captures": {},
-    }
-    rates[rate_name] = rate
-    session.eit_adapter.detect_rates = lambda *a, **k: rates  # type: ignore[method-assign]
-    raw = _FakeEITData(np.ones((4, 1, 1)), time=np.arange(4, dtype=float))
-    return detect_rates(raw, session=session)
-
-
 @pytest.mark.parametrize("rate_name", ["respiratory_rate_hz", "heart_rate_hz"])
-def test_detect_rates_reports_a_missing_rate_as_such(rate_name):
-    """NaN means no rate could be estimated, which is the only failure
-    eitprocessing's own detector can produce. It is reported in those terms
-    rather than lumped in with an implausible value."""
+def test_detect_rates_reports_a_missing_rate_as_such(rate_name, monkeypatch):
+    """NaN means no rate could be estimated; the message says so."""
+
+    rates = {"respiratory_rate_hz": 0.3, "heart_rate_hz": 1.0, rate_name: float("nan")}
+    _fixed_rates(monkeypatch, rates["respiratory_rate_hz"], rates["heart_rate_hz"])
 
     with pytest.raises(ValueError, match="could not estimate"):
-        _detect_rates_with(rate_name, float("nan"))
+        detect_rates(_images(4, rows=1, columns=1), session=M3Session())
 
 
 @pytest.mark.parametrize(
-    ("rate_name", "rate"),
+    "step",
     [
-        ("respiratory_rate_hz", -0.1),
-        ("heart_rate_hz", 0.0),
-        ("heart_rate_hz", float("inf")),
+        lambda signal, session: detect_rates(signal, session=session),
+        lambda signal, session: mdn_filter(
+            signal, respiratory_rate_hz=0.3, heart_rate_hz=1.2, session=session
+        ),
+        lambda signal, session: butterworth_filter(signal, session=session),
     ],
+    ids=["eit.detect_rates", "eit.mdn_filter", "eit.butterworth_filter"],
 )
-def test_detect_rates_rejects_an_implausible_rate(rate_name, rate):
-    """Zero, negative and infinite rates cannot come from eitprocessing, but a
-    substituted detector is under no such constraint."""
+def test_image_steps_refuse_images_that_are_not_a_signal(step):
+    images = SimpleNamespace(pixel_impedance=np.ones((4, 2, 2)), time=np.arange(4.0))
 
-    with pytest.raises(ValueError, match="implausible"):
-        _detect_rates_with(rate_name, rate)
+    with pytest.raises(TypeError, match="'signal' must be an m3resp Signal"):
+        step(images, M3Session())
 
 
 def test_mdn_filter_step_matches_declared_writes():
-    pytest.importorskip("eitprocessing")
-    session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((4, 2, 2)), time=np.arange(4, dtype=float))
-    sequence = _FakeSequence(raw)
+    session = M3Session()
+    raw = _images(400, fs=20.0)
 
     result = mdn_filter(
         raw,
         respiratory_rate_hz=0.3,
         heart_rate_hz=1.2,
-        eit_sequence=sequence,
         session=session,
         label="mdn_filtered",
     )
@@ -367,32 +273,40 @@ def test_mdn_filter_step_matches_declared_writes():
     assert set(get_step("eit.mdn_filter").writes) <= set(result)
     assert result["filtered_eit_signal"].channel == "pixel_impedance"
     assert result["filtered_eit"] is result["filtered_eit_signal"]
-    np.testing.assert_array_equal(
-        sequence.eit_data["mdn_filtered"].pixel_impedance,
-        result["filtered_eit"].values,
-    )
     assert result["filtered_eit"].metadata["operation"] == "eit.mdn_filter"
     assert result["filtered_eit"].metadata["source_package"] == "m3resp"
+    assert result["filtered_eit"].metadata["label"] == "mdn_filtered"
+    assert result["filtered_eit"].name == "MDN-filtered EIT data (mdn_filtered)"
+    assert "eitprocessing_fields" not in result["filtered_eit"].metadata
     assert _infer_filter_mode(result["filtered_eit"]) == "mdn"
 
 
+@pytest.mark.parametrize("rate", [0.0, -0.1, float("inf"), float("nan")])
+def test_mdn_filter_step_refuses_a_rate_that_is_not_above_zero(rate):
+    with pytest.raises(ValueError, match="finite, positive"):
+        mdn_filter(
+            _images(400, fs=20.0),
+            respiratory_rate_hz=rate,
+            heart_rate_hz=1.2,
+            session=M3Session(),
+        )
+
+
 @pytest.mark.parametrize(
-    ("metadata", "label", "mode"),
+    ("metadata", "mode"),
     [
-        ({"operation": "eit.mdn_filter"}, None, "mdn"),
+        ({"operation": "eit.mdn_filter"}, "mdn"),
         (
             {"operation": "eit.butterworth_filter", "parameters": {"mode": "bandstop"}},
-            None,
             "bandstop",
         ),
-        ({}, "lowpass_filtered", "lowpass"),
-        ({}, None, "none"),
+        ({}, "none"),
     ],
 )
 def test_the_filter_mode_of_a_workflow_comes_from_the_filtered_images(
-    metadata: dict, label: str | None, mode: str
+    metadata: dict, mode: str
 ):
-    filtered = SimpleNamespace(metadata=metadata, label=label)
+    filtered = SimpleNamespace(metadata=metadata)
 
     assert _infer_filter_mode(filtered) == mode
     assert _infer_filter_mode(None) == "none"
@@ -400,15 +314,11 @@ def test_the_filter_mode_of_a_workflow_comes_from_the_filtered_images(
 
 @pytest.mark.parametrize("mode", ["lowpass", "highpass", "bandpass", "bandstop"])
 def test_butterworth_filter_step_supports_every_mode_and_matches_declared_writes(mode):
-    pytest.importorskip("eitprocessing")
-    session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((40, 2, 2)), time=np.arange(40, dtype=float))
-    raw.sample_frequency = 20.0
-    sequence = _FakeSequence(raw)
+    session = M3Session()
+    raw = _images(40, fs=20.0)
 
     result = butterworth_filter(
         raw,
-        eit_sequence=sequence,
         session=session,
         mode=mode,
         lowpass_hz=1.0,
@@ -420,45 +330,43 @@ def test_butterworth_filter_step_supports_every_mode_and_matches_declared_writes
     assert result["filtered_eit_signal"].channel == "pixel_impedance"
     assert session.signals.for_modality("eit")
     assert result["filtered_eit"] is result["filtered_eit_signal"]
-    np.testing.assert_array_equal(
-        sequence.eit_data["filtered"].pixel_impedance, result["filtered_eit"].values
-    )
 
 
 def test_butterworth_filter_step_accepts_an_already_filtered_signal():
     """The signal to filter is bound explicitly, not pinned to raw_eit."""
 
-    pytest.importorskip("eitprocessing")
-    session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((40, 2, 2)), time=np.arange(40, dtype=float))
-    raw.sample_frequency = 20.0
-    sequence = _FakeSequence(raw)
+    session = M3Session()
+    raw = _images(40, fs=20.0)
 
-    once = butterworth_filter(
-        raw, eit_sequence=sequence, session=session, label="pass_one"
-    )
-    twice = butterworth_filter(
-        once["filtered_eit"], eit_sequence=sequence, session=session, label="pass_two"
-    )
+    once = butterworth_filter(raw, session=session, label="pass_one")
+    twice = butterworth_filter(once["filtered_eit"], session=session, label="pass_two")
 
-    assert twice["filtered_eit"].metadata["eitprocessing_fields"]["label"] == "pass_two"
-    assert sequence.eit_data["pass_two"].label == "pass_two"
+    assert twice["filtered_eit"].metadata["label"] == "pass_two"
+    assert twice["filter_captures"]["filtered_data"] is twice["filtered_eit"]
     assert get_step("eit.butterworth_filter").reads["signal"] is None
 
 
-def _waveform(values: list[float]) -> _FakeContinuousData:
+def _waveform(values: list[float]) -> Signal:
     """A global impedance waveform, one sample per second from 0 s."""
 
-    return _FakeContinuousData(
-        "global_impedance", values, np.arange(len(values), dtype=float)
+    return Signal(
+        values=np.asarray(values, dtype=float),
+        time=np.arange(len(values), dtype=float),
+        sample_frequency=1.0,
+        name="global_impedance",
+        unit="a.u.",
+        modality="eit",
+        category="impedance",
+        channel="global_impedance",
     )
 
 
-def test_eeli_step_stores_one_value_per_breath():
-    session = _session_with_fake_adapter()
+def test_eeli_step_stores_one_value_per_breath(fixed_breaths):
+    fixed_breaths["count"] = 3
+    session = M3Session()
     waveform = _waveform([10.0, 11.0, 12.0, 13.0])
 
-    result = eeli(waveform, breath_detector=_FakeBreathDetector(3), session=session)
+    result = eeli(waveform, breath_detector=BreathDetectionSettings(), session=session)
 
     assert set(get_step("eit.eeli").writes) == set(result) - {"_provenance"}
     eeli_result = result["eeli_result"]
@@ -474,10 +382,11 @@ def test_eeli_step_stores_one_value_per_breath():
     assert len(session.parameter_results) == 0
 
 
-def test_continuous_tiv_step_uses_the_chosen_method():
-    session = _session_with_fake_adapter()
+def test_continuous_tiv_step_uses_the_chosen_method(fixed_breaths):
+    fixed_breaths["count"] = 2  # breaths (0, 0.5, 1) and (1, 1.5, 2)
+    session = M3Session()
     waveform = _waveform([1.0, 3.0, 2.0, 6.0, 4.0])
-    detector = _FakeBreathDetector(2)  # breaths (0, 0.5, 1) and (1, 1.5, 2)
+    detector = BreathDetectionSettings()
 
     inspiratory = continuous_tiv(waveform, breath_detector=detector, session=session)[
         "continuous_tiv_result"
@@ -497,12 +406,15 @@ def test_continuous_tiv_step_uses_the_chosen_method():
     assert inspiratory.intervals[0] is expiratory.intervals[0]
 
 
-def test_eeli_step_gives_nan_for_breaths_outside_the_data():
-    session = _session_with_fake_adapter()
+def test_eeli_step_gives_nan_for_breaths_outside_the_data(fixed_breaths):
+    fixed_breaths["count"] = 4
+    session = M3Session()
     waveform = _waveform([10.0, 11.0, 12.0, 13.0])
 
     with pytest.warns(UserWarning, match="1 of 4 breaths lie partly outside"):
-        result = eeli(waveform, breath_detector=_FakeBreathDetector(4), session=session)
+        result = eeli(
+            waveform, breath_detector=BreathDetectionSettings(), session=session
+        )
 
     np.testing.assert_array_equal(
         result["eeli_result"].values, [11.0, 12.0, 13.0, np.nan]
@@ -870,15 +782,18 @@ def test_pixel_breaths_step_takes_the_sign_from_the_default_breaths():
     )
 
 
-def test_steps_on_the_same_breaths_share_one_detection_and_the_same_breaths():
+def test_steps_on_the_same_breaths_share_one_detection_and_the_same_breaths(
+    fixed_breaths,
+):
     """EELI and pixel TIV over the same detector and signal find the breaths
     once and store the very same breath objects; a breath already stored in
     session.events is reused, so values can be traced to it."""
 
-    session = _session_with_fake_adapter()
-    raw = _FakeEITData(np.ones((3, 2, 2)), time=np.arange(3, dtype=float))
+    fixed_breaths["count"] = 2
+    session = M3Session()
+    raw = _images(3)
     waveform = _waveform([10.0, 11.0, 12.0])
-    detector = _FakeBreathDetector(2)
+    detector = BreathDetectionSettings()
     stored_first_breath = BreathEvent("eit", 0.0, 1.0, extremum_time=0.5)
     session.add_events("eit_breaths", [stored_first_breath])
 
@@ -892,7 +807,7 @@ def test_steps_on_the_same_breaths_share_one_detection_and_the_same_breaths():
         session=session,
     )["pixel_tiv_result"]
 
-    assert detector.calls == 1
+    assert fixed_breaths["calls"] == 1
     assert all(
         first is second
         for first, second in zip(eeli_result.intervals, tiv_result.intervals)
@@ -900,20 +815,30 @@ def test_steps_on_the_same_breaths_share_one_detection_and_the_same_breaths():
     assert eeli_result.intervals[0] is stored_first_breath
 
 
-def test_steps_ignore_stored_eit_breaths_that_are_not_breaths():
+def test_steps_ignore_stored_eit_breaths_that_are_not_breaths(fixed_breaths):
     """`add_events` accepts anything; a marker stored under "eit_breaths"
     must not break the steps that reuse stored breaths."""
 
-    session = _session_with_fake_adapter()
+    fixed_breaths["count"] = 3
+    session = M3Session()
     session.add_events("eit_breaths", [Event(name="marker", modality="eit", time=0.0)])
 
     result = eeli(
         _waveform([10.0, 11.0, 12.0, 13.0]),
-        breath_detector=_FakeBreathDetector(3),
+        breath_detector=BreathDetectionSettings(),
         session=session,
     )
 
     assert len(result["eeli_result"]) == 3
+
+
+def test_tiv_and_eeli_steps_refuse_a_breath_detector_of_another_type():
+    with pytest.raises(TypeError, match="BreathDetectionSettings"):
+        eeli(
+            _waveform([10.0, 11.0, 12.0, 13.0]),
+            breath_detector=SimpleNamespace(find_breaths=lambda signal: []),
+            session=M3Session(),
+        )
 
 
 def _lungspace_images() -> tuple[Signal, Signal]:
@@ -1092,8 +1017,7 @@ def test_adapter_filter_roi_by_size_takes_every_mask_form():
 
     pytest.importorskip("eitprocessing")
     from eitprocessing.roi import PixelMask as UpstreamPixelMask
-
-    from m3resp.adapters import EITProcessingAdapter
+    from reference.eitprocessing import EITProcessingAdapter
 
     mask = np.full((4, 4), np.nan)
     mask[1:3, 1:3] = 1.0
@@ -1179,7 +1103,7 @@ def test_validation_rejects_duplicate_context_writes():
 
 
 def test_output_renaming_lets_the_same_roi_step_run_twice():
-    session = _session_with_fake_adapter()
+    session = M3Session()
     spec = {
         "name": "repeated-roi",
         "steps": [
@@ -1216,12 +1140,10 @@ def test_output_renaming_lets_the_same_roi_step_run_twice():
     assert result.value("result_b").metadata["parameters"]["threshold"] == 0.2
 
 
-# -- full example end to end (needs the real optional dependency) ----------
+# -- full example end to end ------------------------------------------------
 
 
 def test_full_eit_example_workflow_runs_end_to_end(tmp_path):
-    pytest.importorskip("eitprocessing")
-
     repo_root = Path(__file__).resolve().parents[1]
     fixture = os.path.join(
         repo_root,

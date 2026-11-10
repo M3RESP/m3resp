@@ -1,6 +1,6 @@
 # How to change the EIT processing settings
 
-`session.preprocess_eit()` filters the {term}`EIT` data, finds the breaths and calculates the results per breath. Give the settings as keyword arguments. The settings go to `EITProcessingAdapter.preprocess`.
+`session.preprocess_eit()` filters the {term}`EIT` data, finds the breaths and calculates the results per breath. Give the settings as keyword arguments. The settings go to `m3resp.eit.processing.preprocess_eit_recording`, which has the same keyword arguments and defaults.
 
 ## Change the filter
 

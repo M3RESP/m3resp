@@ -1,9 +1,7 @@
 """Cutting one signal to a window of samples or time.
 
-These cut a single signal and return a shorter copy; the signal passed in is
-not changed. They work on m3resp's own `Signal`/`TimeSeries`, and on
-eitprocessing data (`EITData`, `ContinuousData`, `Sequence`), which cuts
-itself.
+These cut a single m3resp `Signal` or `TimeSeries` and return a shorter
+copy; the signal passed in is not changed.
 
 To cut a whole loaded recording in a session instead, use
 `M3Session.slice_emg`, `slice_eit` or `slice_ventilator`.
@@ -70,7 +68,9 @@ def time_slice_indices(
 
     time = np.asarray(time)
     if time.ndim != 1 or not np.all(np.isfinite(time)) or np.any(time[1:] < time[:-1]):
-        raise ValueError("Slicing bounds must be finite times in seconds or None.")
+        raise ValueError(
+            "Slicing by time needs a sorted, finite, one-dimensional time axis."
+        )
     if any(
         value is not None and not np.isfinite(value) for value in (start_time, end_time)
     ):
@@ -96,17 +96,25 @@ def slice_by_index(
 ) -> Any:
     """Keep samples `start_index` up to (not including) `end_index` of a signal.
 
-    Works on m3resp's own `Signal`/`TimeSeries` and on eitprocessing data
-    (`EITData`, `ContinuousData`, `Sequence`), which cut themselves.
-    Native values and times are copied. ``allow_empty=True`` allows an
-    empty native result; otherwise an empty selection raises ValueError.
+    Args:
+        data (Any): A ``Signal`` or ``TimeSeries``.
+        start_index (int): Index of the first kept sample.
+        end_index (int): Index after the last kept sample.
+        allow_empty (bool): If True, a window without samples gives an empty
+            signal.
+
+    Returns:
+        Any: A copy of ``data`` with the kept values and times (copied).
+
+    Raises:
+        TypeError: If ``data`` is not a ``TimeSeries``.
+        ValueError: If the window keeps no samples and ``allow_empty`` is
+            False.
     """
 
-    if isinstance(data, TimeSeries):
-        return _slice_time_series(
-            data, slice(start_index, end_index), allow_empty=allow_empty
-        )
-    return data[slice(start_index, end_index)]
+    return _slice_time_series(
+        _as_time_series(data), slice(start_index, end_index), allow_empty=allow_empty
+    )
 
 
 def slice_by_time(
@@ -123,28 +131,23 @@ def slice_by_time(
 
     Times are in seconds on the signal's own clock. The boundary flags
     follow ``time_slice_indices``. ``allow_empty=True`` returns an empty
-    native signal when the window keeps no samples.
+    signal when the window keeps no samples.
+
+    Raises:
+        TypeError: If ``data`` is not a ``Signal`` or ``TimeSeries``.
     """
 
-    if isinstance(data, TimeSeries):
-        start_index, end_index = time_slice_indices(
-            data.time,
-            start_time=start_time,
-            end_time=end_time,
-            start_inclusive=start_inclusive,
-            end_inclusive=end_inclusive,
-        )
-        return _slice_time_series(
-            data, slice(start_index, end_index), allow_empty=allow_empty
-        )
-    if start_inclusive or end_inclusive:
-        return data.select_by_time(
-            start_time=start_time,
-            end_time=end_time,
-            start_inclusive=start_inclusive,
-            end_inclusive=end_inclusive,
-        )
-    return data.t[slice(start_time, end_time)]
+    series = _as_time_series(data)
+    start_index, end_index = time_slice_indices(
+        series.time,
+        start_time=start_time,
+        end_time=end_time,
+        start_inclusive=start_inclusive,
+        end_inclusive=end_inclusive,
+    )
+    return _slice_time_series(
+        series, slice(start_index, end_index), allow_empty=allow_empty
+    )
 
 
 def slice_signal_by_mode(
@@ -161,6 +164,16 @@ def slice_signal_by_mode(
     if slicing_mode == "time":
         return slice_by_time(data, start_time=float(start), end_time=float(end))
     raise ValueError("slicing_mode must be 'index' or 'time'.")
+
+
+def _as_time_series(data: Any) -> TimeSeries:
+    """Return ``data``, or raise TypeError when it is not a ``TimeSeries``."""
+
+    if not isinstance(data, TimeSeries):
+        raise TypeError(
+            f"Slicing needs an m3resp Signal or TimeSeries, got {type(data).__name__}."
+        )
+    return data
 
 
 def _slice_time_series(

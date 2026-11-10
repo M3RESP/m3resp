@@ -6,8 +6,9 @@ import os
 from typing import Any
 
 import pytest
+from eit_file_data_cases import stand_in_eit_loader
 
-from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
+from m3resp.adapters import ReSurfEMGAdapter
 from m3resp.core.session import M3Session
 from m3resp.data import (
     BreathEvent,
@@ -44,9 +45,7 @@ def _temp_steps():
 
 def test_recorder_mirrors_loads_and_provenance_into_store():
     session = M3Session(
-        eit_adapter=EITProcessingAdapter(
-            loader=lambda path, vendor=None, **kwargs: {"path": path, "vendor": vendor}
-        ),
+        eit_loader=stand_in_eit_loader,
         emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: {"path": path}),
     )
     store = DataModelStore()
@@ -486,11 +485,7 @@ def test_workflow_result_prefers_layer1_objects_over_bare_scalars():
 
 
 def test_export_store_writes_one_json_file_per_table(tmp_path):
-    session = M3Session(
-        eit_adapter=EITProcessingAdapter(
-            loader=lambda path, vendor=None, **kwargs: {"path": path}
-        )
-    )
+    session = M3Session(eit_loader=stand_in_eit_loader)
     store = DataModelStore()
     session.datamodel = DataModelRecorder(session, store)
     session.load_eit("subject.eit")

@@ -96,8 +96,7 @@ def _upstream_pixel_breaths(dataset: str, kind: str) -> PixelBreaths:
     pytest.importorskip("eitprocessing")
     from eitprocessing.features.breath_detection import BreathDetection
     from eitprocessing.features.pixel_breath import PixelBreath
-
-    from m3resp.adapters.eitprocessing_adapter._signals import (
+    from reference.eitprocessing._signals import (
         as_continuous_data,
         as_eit_data,
     )
@@ -135,8 +134,7 @@ def _upstream_pixel_tiv(dataset: str, kind: str, method: str, timing: str) -> An
     pytest.importorskip("eitprocessing")
     from eitprocessing.features.breath_detection import BreathDetection
     from eitprocessing.parameters.tidal_impedance_variation import TIV
-
-    from m3resp.adapters.eitprocessing_adapter._signals import (
+    from reference.eitprocessing._signals import (
         as_continuous_data,
         as_eit_data,
     )

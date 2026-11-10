@@ -1,7 +1,6 @@
 # Full EIT preprocessing workflow.
 #
-# Exercises every EIT operation the gap migration closed onto
-# `EITProcessingAdapter`: loading, rate detection, MDN filtering, global
+# Runs every EIT operation: loading, rate detection, MDN filtering, global
 # breath detection, continuous TIV/EELI, pixel-breath timing, pixel TIV, and
 # the four ROI lung-space steps. Run with:
 #

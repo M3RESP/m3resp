@@ -18,13 +18,13 @@ import warnings
 
 import numpy as np
 import pytest
-
-import m3resp.workflows.steps  # noqa: F401 - registers the steps
-from m3resp.adapters.eitprocessing_adapter import (
+from reference.eitprocessing import (
     as_continuous_data,
     as_eit_data,
     as_signal,
 )
+
+import m3resp.workflows.steps  # noqa: F401 - registers the steps
 from m3resp.core.session import M3Session
 from m3resp.data import PixelBreaths
 from m3resp.eit.processing import (

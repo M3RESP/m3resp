@@ -107,7 +107,7 @@ def _upstream():
 def _upstream_breaths(waveform: Signal) -> np.ndarray:
     """(start, middle, end) times of eitprocessing ``find_breaths``."""
 
-    from m3resp.adapters.eitprocessing_adapter._signals import as_continuous_data
+    from reference.eitprocessing._signals import as_continuous_data
 
     breaths = _upstream().find_breaths(as_continuous_data(waveform)).values
     return np.array(
@@ -371,8 +371,7 @@ def test_breath_events_carry_times_indices_and_origin() -> None:
 def test_settings_change_the_result_as_in_eitprocessing() -> None:
     pytest.importorskip("eitprocessing")
     from eitprocessing.features.breath_detection import BreathDetection
-
-    from m3resp.adapters.eitprocessing_adapter._signals import as_continuous_data
+    from reference.eitprocessing._signals import as_continuous_data
 
     waveform = _random_waveform(7)
     options = {

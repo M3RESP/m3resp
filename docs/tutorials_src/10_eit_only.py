@@ -4,7 +4,7 @@ Process an EIT recording
 
 In this tutorial, we process one :term:`EIT` recording from the file to the results. We load the file, filter the signal, find the breaths and save the results. At the end, you have the figure below and a folder with result files.
 
-You need M3Resp with the EIT integration (``python -m pip install -e ".[eit]"``).
+You need M3Resp with the ``eit`` option (``python -m pip install -e ".[eit]"``) for the interactive figure. The base install does all other steps.
 """
 
 # %%
@@ -32,7 +32,7 @@ session.load_eit(
 # %%
 # The session now has the raw EIT data. The global impedance is the sum of all pixels in each EIT image.
 
-global_impedance = session.raw["eit"].global_impedance
+global_impedance = session.raw["eit"].raw_global_impedance
 print("Sampling rate:", global_impedance.sample_frequency, "Hz")
 print("Number of samples:", len(global_impedance.values))
 

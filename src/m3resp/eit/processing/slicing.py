@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import replace
+from typing import Any
 
 import numpy as np
 
@@ -141,7 +142,7 @@ def slice_intervals(
         )
         for i in indices
     ]
-    values = None
+    values: np.ndarray | list[Any] | tuple[Any, ...] | None = None
     if isinstance(data.values, np.ndarray):
         values = np.copy(data.values[indices])
     elif data.values is not None:

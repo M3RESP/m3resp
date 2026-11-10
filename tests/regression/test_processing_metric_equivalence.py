@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import sys
-from pathlib import Path
-
 import numpy as np
 import pytest
 
@@ -18,13 +14,6 @@ from m3resp.processing.metrics import (
     time_to_peak,
     window_integral,
 )
-
-
-def _add_sibling_checkout_to_path(name: str) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    sibling = repo_root.parent / name
-    if sibling.exists() and str(sibling) not in sys.path:
-        sys.path.insert(0, os.fspath(sibling))
 
 
 def test_resurfemg_feature_primitives_match_upstream():
@@ -130,7 +119,6 @@ def test_window_integral_matches_upstream_time_product_for_negative_deflections(
 
 
 def test_eit_tidal_variation_matches_tiv_private_calculation():
-    _add_sibling_checkout_to_path("eitprocessing")
     pytest.importorskip("eitprocessing")
     from eitprocessing.datahandling.breath import Breath
     from eitprocessing.parameters.tidal_impedance_variation import TIV

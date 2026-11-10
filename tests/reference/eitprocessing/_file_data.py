@@ -6,12 +6,14 @@ steps after loading read an eitprocessing ``Sequence``.
 ``load_eit_data`` gives for the same file, field by field.
 ``load_eit_file_as_sequence`` reads one file and builds its ``Sequence``.
 ``sequence_to_file_data`` goes the other way, for a ``Sequence`` from a
-custom loader or a cut ``Sequence``.
+custom loader or a cut ``Sequence``. ``recording_to_sequence`` builds the
+``Sequence`` of a loaded ``EITRecording``.
 """
 
 from __future__ import annotations
 
 import copy
+import dataclasses
 import os
 from pathlib import Path
 from typing import Any, cast
@@ -23,6 +25,7 @@ from m3resp.data.events import BreathEvent, Event, Interval
 from m3resp.data.signals import Signal
 from m3resp.eit.io.file_data import EITFileData
 from m3resp.eit.io.read_file import read_eit_file
+from m3resp.modalities.eit import EITRecording
 
 from ._shared import _lazy_import
 
@@ -351,3 +354,36 @@ def file_data_to_sequence(
         sparse_data=sparse,
         interval_data=intervals,
     )
+
+
+def recording_to_sequence(recording: EITRecording) -> Any:
+    """Return a loaded EIT recording as an eitprocessing ``Sequence``.
+
+    The Sequence holds the raw images, the waveforms, marks and breaths of
+    the device, and the raw global impedance under
+    ``"global_impedance_(raw)"``.
+
+    Args:
+        recording (EITRecording): The loaded recording.
+
+    Returns:
+        Any: An eitprocessing ``Sequence``.
+
+    Raises:
+        OptionalDependencyError: If eitprocessing is not installed.
+    """
+
+    from ._shared import add_to_collection
+    from ._signals import EITPROCESSING_FIELDS, signal_to_continuous_data
+
+    sequence = file_data_to_sequence(recording.to_file_data())
+    if "global_impedance_(raw)" not in sequence.continuous_data:
+        summed = recording.raw_global_impedance
+        summed = dataclasses.replace(summed, metadata=dict(summed.metadata))
+        summed.metadata[EITPROCESSING_FIELDS] = {
+            "label": "global_impedance_(raw)",
+            "unit": "AU",
+            "description": "Global impedance calculated from EIT pixel data.",
+        }
+        add_to_collection(sequence.continuous_data, signal_to_continuous_data(summed))
+    return sequence

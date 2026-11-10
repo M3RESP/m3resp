@@ -91,8 +91,7 @@ def _upstream_rates(
 
     pytest.importorskip("eitprocessing")
     from eitprocessing.features.rate_detection import RateDetection
-
-    from m3resp.adapters.eitprocessing_adapter._signals import as_eitprocessing
+    from reference.eitprocessing._signals import as_eitprocessing
 
     subject_type = settings.pop("subject_type")
     detector = RateDetection(subject_type, **settings)

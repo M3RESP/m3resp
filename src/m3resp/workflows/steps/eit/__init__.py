@@ -1,8 +1,7 @@
 """Registered EIT workflow steps.
 
-Each step wraps a single ``eitprocessing`` operation. Upstream imports are
-deferred to call time so the package installs without the optional
-``eitprocessing`` dependency.
+Each step runs one calculation of the m3resp EIT code (``m3resp.eit.io``,
+``m3resp.eit.processing`` and ``m3resp.eit.roi``).
 
 This package mirrors the former single ``eit.py`` module, split by workflow
 stage for readability. Importing it registers every step below (each

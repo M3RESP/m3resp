@@ -47,8 +47,8 @@ def run_workflow(
     spec: str | Path | dict[str, Any] | WorkflowSpec,
     *,
     session: M3Session | None = None,
-    eit_adapter: Any = None,
     emg_adapter: Any = None,
+    eit_loader: Any = None,
     extra_context: dict[str, Any] | None = None,
     event_sink: EventSink | None = None,
     cancellation_token: CancellationToken | None = None,
@@ -64,8 +64,9 @@ def run_workflow(
     Args:
         spec: A WorkflowSpec, dictionary, or YAML/JSON file path.
         session: Session to process and update; None creates a new session.
-        eit_adapter: EIT adapter used when creating a new session.
         emg_adapter: EMG adapter used when creating a new session.
+        eit_loader: Custom EIT loader of a new session (see
+            ``M3Session(eit_loader=...)``), for ``eit.load_custom``.
         extra_context: Values supplied under context keys before execution.
             These keys are treated as available during structural validation.
         event_sink: Optional callable receiving progress-event dictionaries
@@ -93,7 +94,7 @@ def run_workflow(
     _ensure_steps_registered()
     parsed = load_spec(spec)
     ctx = WorkflowContext(
-        session=session or M3Session(eit_adapter=eit_adapter, emg_adapter=emg_adapter),
+        session=session or M3Session(emg_adapter=emg_adapter, eit_loader=eit_loader),
         inputs=dict(parsed.inputs),
         root=parsed.root,
     )

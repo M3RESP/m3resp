@@ -29,8 +29,8 @@ from typing import Any
 
 import numpy as np
 import pytest
+from reference.eitprocessing import as_breath_detection
 
-from m3resp.adapters.eitprocessing_adapter import as_breath_detection
 from m3resp.core.session import M3Session
 from m3resp.workflows.engine import run_workflow
 
@@ -97,13 +97,17 @@ def _upstream(workflow_result, name: str) -> Any:
     """The eitprocessing object of a step input, made by eitprocessing alone.
 
     The steps pass m3resp ``Signal``s; the direct calls below take the
-    eitprocessing objects the workflow stored in its ``Sequence``.
+    eitprocessing objects of the loaded recording and of the filtered images.
     """
 
-    sequence = workflow_result.value("eit_sequence")
+    from reference.eitprocessing import signal_to_eit_data
+    from reference.eitprocessing._file_data import (
+        recording_to_sequence,
+    )
+
     if name == "raw_eit":
-        return sequence.eit_data["raw"]
-    filtered = sequence.eit_data["mdn_filtered"]
+        return recording_to_sequence(workflow_result.session.eit).eit_data["raw"]
+    filtered = signal_to_eit_data(workflow_result.value("filtered_eit"))
     if name == "filtered_eit":
         return filtered
     assert name == "global_impedance"
@@ -141,12 +145,7 @@ def test_mdn_filter_matches_direct_mdn_filter_call(workflow_result):
     signal = workflow_result.value("filtered_eit_signal")
     np.testing.assert_array_equal(signal.values, expected.pixel_impedance)
     assert signal.name == "MDN-filtered EIT data (mdn_filtered)"
-    # The step stores the filtered images in the Sequence for the steps that
-    # still call eitprocessing.
-    stored = _upstream(workflow_result, "filtered_eit")
-    assert stored == expected
-    assert stored.label == "mdn_filtered"
-    assert stored.name == signal.name
+    assert signal.metadata["label"] == "mdn_filtered"
 
 
 def test_eeli_matches_direct_eeli_call(workflow_result):

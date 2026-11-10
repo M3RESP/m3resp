@@ -24,7 +24,7 @@ uv sync
 :::
 ::::
 
-Then install the integration for each {term}`modality` that you use:
+The base package reads, processes and plots EIT recordings. Install an option for EMG processing or for the interactive figures:
 
 ::::{tab-set}
 :sync-group: installer
@@ -33,9 +33,9 @@ Then install the integration for each {term}`modality` that you use:
 :sync: pip
 
 ```bash
-python -m pip install -e ".[eit]"       # EIT processing
+python -m pip install -e ".[eit]"       # interactive EIT figures (plotly)
 python -m pip install -e ".[emg]"       # EMG processing
-python -m pip install -e ".[all]"       # EIT and EMG processing
+python -m pip install -e ".[all]"       # EMG processing and interactive figures
 ```
 :::
 
@@ -43,16 +43,16 @@ python -m pip install -e ".[all]"       # EIT and EMG processing
 :sync: uv
 
 ```bash
-uv sync --extra eit  # EIT processing
+uv sync --extra eit  # interactive EIT figures (plotly)
 uv sync --extra emg  # EMG processing
-uv sync --extra all  # Both integrations
+uv sync --extra all  # EMG processing and interactive figures
 ```
 :::
 ::::
 
 `uv sync` installs only the extras in the command and removes all other extras. So name each extra that you need, for example `uv sync --extra all --extra dev`.
 
-The base package reads and checks workflow files, synchronizes recordings, makes synthetic EIT data and exports results.
+The base package reads and checks workflow files, reads and processes EIT recordings, synchronizes recordings, makes synthetic EIT data and exports results. The `reference` option installs eitprocessing, for the tests that compare M3Resp with it.
 
 ## Run a workflow
 

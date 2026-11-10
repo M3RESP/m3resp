@@ -12,9 +12,9 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from reference.eitprocessing import EITProcessingAdapter, sparse_data_to_interval_data
 
-from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
-from m3resp.adapters.eitprocessing_adapter import sparse_data_to_interval_data
+from m3resp.adapters import ReSurfEMGAdapter
 from m3resp.core.exceptions import UnsupportedWorkflowError
 from m3resp.data import (
     BreathEvent,
@@ -210,7 +210,7 @@ def test_as_pixel_mask_passes_weight_zero_on_to_eitprocessing():
 
 def test_roi_mask_from_eitprocessing_keeps_weight_zero():
     roi = pytest.importorskip("eitprocessing.roi")
-    from m3resp.adapters.eitprocessing_adapter import _as_m3resp_pixel_mask
+    from reference.eitprocessing import _as_m3resp_pixel_mask
 
     upstream = roi.PixelMask([[np.nan, 0.0], [1.0, 0.5]], keep_zeros=True)
 

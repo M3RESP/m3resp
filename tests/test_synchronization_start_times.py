@@ -34,8 +34,16 @@ def _eit(
 ) -> EITRecording:
     time = first_time + np.arange(n_samples) / fs
     return EITRecording(
-        data=None,
         paths=(Path("synthetic_eit.bin"),),
+        vendor="draeger",
+        sample_frequency=fs,
+        pixel_impedance=Signal(
+            time=time,
+            values=np.zeros((n_samples, 1, 1)),
+            sample_frequency=fs,
+            modality="eit",
+            channel="pixel_impedance",
+        ),
         signals={
             "global_impedance_(raw)": Signal(
                 time=time,

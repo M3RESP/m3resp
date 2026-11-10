@@ -20,9 +20,9 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.adapters.eitprocessing_adapter import breath_intervals_to_breath_events
 from m3resp.core.session import M3Session
 from m3resp.data.pixel_maps import PixelMap
+from m3resp.eit.processing.breath_inputs import breath_intervals_to_breath_events
 from m3resp.synchronization.start_times import on_clock_of
 
 
@@ -51,20 +51,13 @@ def save_eit_figures(
             no figures were produced.
 
     Raises:
-        ImportError: If Matplotlib is unavailable.
         OSError: If a figure cannot be written.
     """
 
-    try:
-        import matplotlib
+    import matplotlib
 
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-    except ImportError as exc:  # pragma: no cover - depends on local extras
-        raise ImportError(
-            "Saving EIT figures requires matplotlib. Install the EIT optional "
-            "dependencies, or install matplotlib directly."
-        ) from exc
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
 
     figures_dir = Path(output_dir) / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)

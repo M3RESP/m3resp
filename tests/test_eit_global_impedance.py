@@ -55,7 +55,7 @@ def test_raw_global_impedance_matches_golden(dataset):
 @pytest.mark.parametrize("dataset", DATASETS)
 def test_filtered_global_impedance_equals_eitprocessing(dataset):
     pytest.importorskip("eitprocessing")
-    from m3resp.adapters.eitprocessing_adapter import eit_data_to_signal
+    from reference.eitprocessing import signal_to_eit_data
 
     path, vendor = _input(dataset)
     spec = {
@@ -78,13 +78,10 @@ def test_filtered_global_impedance_equals_eitprocessing(dataset):
             },
         ],
     }
-    sequence = run_workflow(spec, session=M3Session()).value("eit_sequence")
-    filtered = sequence.eit_data["mdn_filtered"]
-    upstream = filtered.get_summed_impedance()
+    filtered = run_workflow(spec, session=M3Session()).value("filtered_eit")
+    upstream = signal_to_eit_data(filtered).get_summed_impedance()
 
-    result = global_impedance(
-        eit_data_to_signal(filtered, processing_state="intermediate", name="mdn")
-    )
+    result = global_impedance(filtered)
 
     np.testing.assert_array_equal(result.values, upstream.values)
     np.testing.assert_array_equal(result.time, upstream.time)

@@ -190,11 +190,12 @@ def test_waveforms_with_a_different_sample_count_are_refused():
 
 
 @pytest.mark.parametrize("start,end", [(0, 1), (20, 201), (100, 400)])
-def test_rebuilt_sequence_equals_upstream_index_slice(
-    recording, start, end, monkeypatch
-):
+def test_recording_slice_equals_upstream_index_slice(recording, start, end):
     pytest.importorskip("eitprocessing")
-    from eitprocessing.datahandling.sequence import Sequence
+    from reference.eitprocessing import file_data_to_sequence
+    from reference.eitprocessing._slicing import (
+        sequence_from_sliced_data,
+    )
 
     from m3resp import M3Session
     from m3resp.modalities.eit import keep_frames
@@ -202,28 +203,27 @@ def test_rebuilt_sequence_equals_upstream_index_slice(
     _, data = recording
     session = M3Session()
     session.load_eit(data.paths[0], vendor=data.vendor)
-    expected = session.eit.data.select_by_index(start, end)
+    original = session.eit.to_file_data()
+    sequence = file_data_to_sequence(original)
+    expected = sequence.select_by_index(start, end)
 
-    def upstream_slicing_was_called(*args, **kwargs):
-        pytest.fail("The native recording slice called upstream slicing")
-
-    monkeypatch.setattr(Sequence, "select_by_index", upstream_slicing_was_called)
     keep_frames(session.eit, start, end)
+    rebuilt = sequence_from_sliced_data(
+        sequence, original, session.eit.to_file_data(), start, end
+    )
 
-    assert session.eit.data == expected
-    assert session.eit.data.name == expected.name
-    assert session.eit.data.description == expected.description
+    assert rebuilt == expected
+    assert rebuilt.name == expected.name
+    assert rebuilt.description == expected.description
     np.testing.assert_array_equal(
         session.eit.pixel_impedance.values, expected.eit_data["raw"].pixel_impedance
     )
     for key, waveform in expected.continuous_data.items():
-        rebuilt = session.eit.data.continuous_data[key]
-        assert rebuilt.description == waveform.description
-        assert rebuilt.locked == waveform.locked
+        assert rebuilt.continuous_data[key].description == waveform.description
+        assert rebuilt.continuous_data[key].locked == waveform.locked
 
 
 def test_session_device_marks_and_breaths_match_reader_golden(recording):
-    pytest.importorskip("eitprocessing")
     from m3resp import M3Session
 
     dataset, data = recording
@@ -254,7 +254,6 @@ def test_session_device_marks_and_breaths_match_reader_golden(recording):
 
 
 def test_workflow_raw_signals_record_the_vendor_source(recording):
-    pytest.importorskip("eitprocessing")
     from m3resp import M3Session
     from m3resp.workflows.steps.eit.loading import _loaded_recording_outputs
 
@@ -283,7 +282,7 @@ def test_sentec_loading_sums_native_pixels(monkeypatch):
     session = M3Session()
     session.load_eit(os.path.join(ROOT, entry["file"]), vendor="sentec")
     np.testing.assert_array_equal(
-        session.eit.global_impedance.values,
+        session.eit.raw_global_impedance.values,
         np.nansum(session.eit.pixel_impedance.values, axis=(1, 2)),
     )
 
@@ -295,9 +294,8 @@ def test_custom_sequence_keeps_interval_values_extra_images_and_waveforms():
     from eitprocessing.datahandling.intervaldata import (
         IntervalData as UpstreamIntervals,
     )
-
-    from m3resp.adapters import EITProcessingAdapter
-    from m3resp.adapters.eitprocessing_adapter import (
+    from reference.eitprocessing import (
+        EITProcessingAdapter,
         file_data_to_sequence,
         sequence_to_file_data,
     )
@@ -334,13 +332,29 @@ def test_custom_sequence_keeps_interval_values_extra_images_and_waveforms():
 
 def test_repeated_recording_slices_match_upstream(recording):
     pytest.importorskip("eitprocessing")
+    from reference.eitprocessing import file_data_to_sequence
+    from reference.eitprocessing._slicing import (
+        sequence_from_sliced_data,
+    )
+
     from m3resp import M3Session
     from m3resp.modalities.eit import keep_frames
 
     _, data = recording
     session = M3Session()
     session.load_eit(data.paths[0], vendor=data.vendor)
-    expected = session.eit.data.select_by_index(10, 400).select_by_index(5, 100)
+    original = session.eit.to_file_data()
+    sequence = file_data_to_sequence(original)
+    expected = sequence.select_by_index(10, 400).select_by_index(5, 100)
+
     keep_frames(session.eit, 10, 400)
+    once = session.eit.to_file_data()
     keep_frames(session.eit, 5, 100)
-    assert session.eit.data == expected
+    rebuilt = sequence_from_sliced_data(
+        sequence_from_sliced_data(sequence, original, once, 10, 400),
+        once,
+        session.eit.to_file_data(),
+        5,
+        100,
+    )
+    assert rebuilt == expected

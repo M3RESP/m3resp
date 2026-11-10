@@ -7,24 +7,15 @@ import weakref
 from collections.abc import Callable
 from typing import Any
 
-from m3resp.adapters.eitprocessing_adapter import (
-    as_continuous_data,
-    as_signal,
-    breath_intervals_to_breath_events,
-    given_breath_events,
-)
 from m3resp.core.session import M3Session
 from m3resp.data import BreathEvent, IntervalData, Signal
 from m3resp.data.events import Interval, reuse_matching_breaths
 from m3resp.eit.processing import BreathDetectionSettings, find_breaths
+from m3resp.eit.processing.breath_inputs import given_breath_events
 from m3resp.modalities.names import normalize_modality
 from m3resp.synchronization.start_times import on_clock_of
 from m3resp.synchronization.sync_methods import warn_if_not_synchronized
 from m3resp.workflows.registry import BREATHS_ARTIFACT_TYPE, StepArtifact
-
-#: Steps that build or read eitprocessing objects require this package.
-_EITPROCESSING = ("eitprocessing",)
-
 
 _SESSION_ARTIFACT = StepArtifact(
     name="session",
@@ -42,6 +33,28 @@ _BREATHS_FOUND: weakref.WeakKeyDictionary[
 ] = weakref.WeakKeyDictionary()
 
 
+def _as_signal(value: Any, *, name: str, step: str) -> Signal:
+    """Return a step input that must be a ``Signal``.
+
+    Args:
+        value (Any): The step input.
+        name (str): The name of the input, for the message.
+        step (str): The step name, for the message.
+
+    Returns:
+        Signal: ``value``.
+
+    Raises:
+        TypeError: If ``value`` is not a ``Signal``.
+    """
+
+    if not isinstance(value, Signal):
+        raise TypeError(
+            f"{step}: '{name}' must be an m3resp Signal, got {type(value).__name__}."
+        )
+    return value
+
+
 def _breaths_used_by(
     breath_detector: Any, signal: Any, session: M3Session
 ) -> list[BreathEvent]:
@@ -53,17 +66,18 @@ def _breaths_used_by(
     are reused on the first call; later calls use the remembered list.
 
     Args:
-        breath_detector: ``BreathDetectionSettings`` (the breaths are found
-            with ``m3resp.eit.processing.find_breaths``), or an
-            eitprocessing detector with ``find_breaths``.
-        signal: Waveform used by the per-breath calculations: a ``Signal``
-            or an eitprocessing ``ContinuousData``.
+        breath_detector: ``BreathDetectionSettings``; the breaths are found
+            with ``m3resp.eit.processing.find_breaths``.
+        signal: Waveform used by the per-breath calculations, a ``Signal``.
         session: Session that remembers detected breaths and supplies stored
             breaths for matching.
 
     Returns:
         list[BreathEvent]: Breaths in detector order, shared by per-breath
             results using this detector and signal.
+
+    Raises:
+        TypeError: If ``breath_detector`` is not ``BreathDetectionSettings``.
     """
 
     found = _BREATHS_FOUND.setdefault(session, [])
@@ -71,12 +85,12 @@ def _breaths_used_by(
         if detector is breath_detector and detected_on is signal:
             return breaths
 
-    if isinstance(breath_detector, BreathDetectionSettings):
-        detected = find_breaths(as_signal(signal), breath_detector)
-    else:
-        detected = breath_intervals_to_breath_events(
-            breath_detector.find_breaths(as_continuous_data(signal))
+    if not isinstance(breath_detector, BreathDetectionSettings):
+        raise TypeError(
+            "'breath_detector' must be BreathDetectionSettings (from "
+            f"'eit.detect_breaths'), got {type(breath_detector).__name__}."
         )
+    detected = find_breaths(signal, breath_detector)
     breaths = _use_stored_eit_breaths(detected, session)
     found.append((breath_detector, signal, breaths))
     return breaths
@@ -90,21 +104,18 @@ def _use_stored_eit_breaths(
     return reuse_matching_breaths(breaths, session.get_events("eit_breaths", None))
 
 
-def _upstream_metadata(
+def _step_provenance(
     *,
     source_function: str,
     operation: str,
     parameters: dict[str, Any],
-    source_package: str = "eitprocessing",
-    implementation: str = "upstream_adapter",
+    implementation: str,
+    source_package: str = "m3resp",
 ) -> dict[str, Any]:
     """The provenance details an EIT step returns under ``"_provenance"``.
 
-    They say which package and function computed the value, the settings
-    used, and the step name. `source_package`/`implementation` default to
-    the eitprocessing-adapter case; pass `source_package="m3resp"` and
-    `implementation="m3resp.<module>"` for a step whose value comes from
-    m3resp code.
+    They say which package, module (``implementation``) and function
+    computed the value, the settings used, and the step name.
     """
 
     return {
@@ -174,8 +185,7 @@ def _per_breath_values(
         calculate: ``tidal_impedance_variation`` or
             ``end_expiratory_lung_impedance`` with its settings, taking the
             waveform and the breaths.
-        signal: The impedance waveform (``Signal`` or eitprocessing
-            ``ContinuousData``).
+        signal: The impedance waveform, a ``Signal``.
         breaths: Breaths of the step input ``breaths``, or None.
         breath_detector: Breath detection settings, used when ``breaths`` is
             None.
@@ -187,17 +197,18 @@ def _per_breath_values(
             holds the given breath objects, on the clock of their modality.
 
     Raises:
+        TypeError: If ``signal`` is not a ``Signal``.
         ValueError: If both ``breaths`` and ``breath_detector`` are None.
     """
 
-    waveform = as_signal(signal)
+    waveform = _as_signal(signal, name="signal", step=action)
     if breaths is None:
         if breath_detector is None:
             raise ValueError(
                 f"{action} needs the breaths: connect 'breaths', or "
                 "'breath_detector' from 'eit.detect_breaths'."
             )
-        return calculate(waveform, _breaths_used_by(breath_detector, signal, session))
+        return calculate(waveform, _breaths_used_by(breath_detector, waveform, session))
     given = given_breath_events(breaths, function=action)
     result = calculate(waveform, _on_eit_clock(given, session, action=action))
     return dataclasses.replace(

@@ -14,10 +14,10 @@ from typing import Any, Literal
 
 import numpy as np
 
-from m3resp.adapters.eitprocessing_adapter import as_signal, given_breath_events
 from m3resp.core.session import M3Session
 from m3resp.data import BreathEvent, PixelMask, Signal
 from m3resp.eit.processing import BreathDetectionSettings, find_breaths
+from m3resp.eit.processing.breath_inputs import given_breath_events
 from m3resp.eit.roi import (
     GEOMETRIC_REGIONS,
     amplitude_lungspace,
@@ -39,8 +39,9 @@ from m3resp.workflows.registry import (
 
 from ._shared import (
     _SESSION_ARTIFACT,
+    _as_signal,
     _on_eit_clock,
-    _upstream_metadata,
+    _step_provenance,
     _use_stored_eit_breaths,
 )
 from .pixel import _eit_breaths
@@ -104,7 +105,7 @@ def _add_provenance(
 ) -> dict[str, Any]:
     """Add the provenance of a step to the metadata of its mask, and return it."""
 
-    provenance = _upstream_metadata(
+    provenance = _step_provenance(
         source_function=function,
         operation=operation,
         parameters=parameters,
@@ -246,8 +247,8 @@ def roi_tiv_lungspace(
     are recorded in the session's history.
 
     Args:
-        eit_data (Any): EIT images as a ``Signal`` (or an eitprocessing
-            ``EITData``), with time, row and column axes.
+        eit_data (Any): EIT images as a ``Signal``, with time, row and
+            column axes.
         timing_data (Any): Global or regional impedance waveform. Without
             ``breaths``, the breaths are found on it with the default
             ``BreathDetectionSettings``.
@@ -267,7 +268,8 @@ def roi_tiv_lungspace(
             and NaN elsewhere.
 
     Raises:
-        TypeError: If a given breath is not a ``BreathEvent``.
+        TypeError: If an input of images or of a waveform is not a
+            ``Signal``, or a given breath is not a ``BreathEvent``.
         ValueError: If the threshold is outside the open interval (0, 1),
             there are no breaths, or every TIV value is NaN.
     """
@@ -275,7 +277,7 @@ def roi_tiv_lungspace(
     action = "eit.roi_tiv_lungspace"
     _validate_unit_threshold(threshold, step=action, param="threshold")
     found = _lungspace_breaths(
-        as_signal(timing_data),
+        _as_signal(timing_data, name="timing_data", step=action),
         breaths,
         session=session,
         any_modality=True,
@@ -283,7 +285,10 @@ def roi_tiv_lungspace(
     )
     captures: dict[str, Any] = {}
     mask = tiv_lungspace(
-        as_signal(eit_data), found, threshold=float(threshold), captures=captures
+        _as_signal(eit_data, name="eit_data", step=action),
+        found,
+        threshold=float(threshold),
+        captures=captures,
     )
     provenance = _add_provenance(
         mask,
@@ -358,8 +363,8 @@ def roi_amplitude_lungspace(
     recorded in the session's history.
 
     Args:
-        eit_data (Any): EIT images as a ``Signal`` (or an eitprocessing
-            ``EITData``), with time, row and column axes.
+        eit_data (Any): EIT images as a ``Signal``, with time, row and
+            column axes.
         timing_data (Any): Global or regional impedance waveform, for the
             phase lag of each pixel. Without ``breaths``, the breaths are
             found on it with the default ``BreathDetectionSettings``.
@@ -378,7 +383,8 @@ def roi_amplitude_lungspace(
             column) with 1 for included pixels and NaN elsewhere.
 
     Raises:
-        TypeError: If a given breath is not a ``BreathEvent``.
+        TypeError: If an input of images or of a waveform is not a
+            ``Signal``, or a given breath is not a ``BreathEvent``.
         ValueError: If the threshold is outside the open interval (0, 1),
             a given breath has another modality than EIT, there are no
             breaths, or every amplitude value is NaN.
@@ -386,13 +392,13 @@ def roi_amplitude_lungspace(
 
     action = "eit.roi_amplitude_lungspace"
     _validate_unit_threshold(threshold, step=action, param="threshold")
-    signal = as_signal(timing_data)
+    signal = _as_signal(timing_data, name="timing_data", step=action)
     found = _lungspace_breaths(
         signal, breaths, session=session, any_modality=False, action=action
     )
     captures: dict[str, Any] = {}
     mask = amplitude_lungspace(
-        as_signal(eit_data),
+        _as_signal(eit_data, name="eit_data", step=action),
         signal,
         found,
         threshold=float(threshold),
@@ -477,8 +483,8 @@ def roi_watershed(
     processing settings are recorded in the session's history.
 
     Args:
-        eit_data (Any): EIT images as a ``Signal`` (or an eitprocessing
-            ``EITData``), with time, row and column axes.
+        eit_data (Any): EIT images as a ``Signal``, with time, row and
+            column axes.
         timing_data (Any): Global or regional impedance waveform, for the
             phase lag of each pixel. Without ``breaths``, the breaths are
             found on it with the default ``BreathDetectionSettings``.
@@ -497,7 +503,8 @@ def roi_watershed(
             column) with 1 for included pixels and NaN elsewhere.
 
     Raises:
-        TypeError: If a given breath is not a ``BreathEvent``.
+        TypeError: If an input of images or of a waveform is not a
+            ``Signal``, or a given breath is not a ``BreathEvent``.
         ValueError: If the threshold is outside the open interval (0, 1),
             a given breath has another modality than EIT, no breath has
             both TIV and amplitude values, or no local maximum of the mean
@@ -508,13 +515,13 @@ def roi_watershed(
     _validate_unit_threshold(
         threshold_fraction, step=action, param="threshold_fraction"
     )
-    signal = as_signal(timing_data)
+    signal = _as_signal(timing_data, name="timing_data", step=action)
     found = _lungspace_breaths(
         signal, breaths, session=session, any_modality=False, action=action
     )
     captures: dict[str, Any] = {}
     mask = watershed_lungspace(
-        as_signal(eit_data),
+        _as_signal(eit_data, name="eit_data", step=action),
         signal,
         found,
         threshold_fraction=float(threshold_fraction),
@@ -735,9 +742,8 @@ def geometric_mask(
     recorded in the session's history.
 
     Args:
-        eit_data: EIT images as a ``Signal`` (or an eitprocessing
-            ``EITData``), with time, row and column axes. Only the number of
-            rows and columns is used.
+        eit_data: EIT images as a ``Signal``, with time, row and column
+            axes. Only the number of rows and columns is used.
         session: Session that stores the mask and processing history.
         region: One of the 12 region names of
             :func:`m3resp.eit.roi.geometric_mask`.
@@ -747,12 +753,13 @@ def geometric_mask(
             with 1 for the pixels of the region and NaN elsewhere.
 
     Raises:
+        TypeError: If ``eit_data`` is not a ``Signal``.
         ValueError: If ``region`` is unknown, the images are not (time, row,
             column), or their rows or columns do not divide into the parts
             of the region.
     """
 
-    pixels = as_signal(eit_data)
+    pixels = _as_signal(eit_data, name="eit_data", step="eit.geometric_mask")
     values = np.asarray(pixels.values)
     if values.ndim != 3:
         raise ValueError(
@@ -760,7 +767,7 @@ def geometric_mask(
             f"axes, got {values.ndim} axes."
         )
     mask = _geometric_mask(region, shape=(values.shape[1], values.shape[2]))
-    metadata = _upstream_metadata(
+    metadata = _step_provenance(
         source_function="m3resp.eit.roi.geometric_mask",
         operation="eit.geometric_mask",
         parameters={"region": region},

@@ -54,7 +54,7 @@ def plot_session_overview(
     Raises:
         ValueError: If ``backend`` is unknown, if the session has no signal to
             plot, or if ``emg_channel`` is not the processed channel.
-        ImportError: If the plot library of ``backend`` is not installed.
+        ImportError: If ``backend="plotly"`` and plotly is not installed.
     """
 
     _check_backend(backend)
@@ -80,13 +80,7 @@ def plot_session_overview(
             panels.append([LinePanel(title, ylabel, time, values, [overlay])])
         return plotly_figures.line_grid_figure(panels, max_points=max_points)
 
-    try:
-        from matplotlib import pyplot as plt
-    except ImportError as exc:  # pragma: no cover - depends on local extras
-        raise ImportError(
-            "Session visualization requires matplotlib. Install the EIT or EMG "
-            "optional dependencies, or install matplotlib directly."
-        ) from exc
+    from matplotlib import pyplot as plt
 
     fig, axes = plt.subplots(
         len(rows),
@@ -149,7 +143,7 @@ def plot_eit_processing_summary(
         TypeError: If the session has no processed EIT data.
         ValueError: If ``backend`` is unknown, or if the processed EIT data
             has no global impedance.
-        ImportError: If the plot library of ``backend`` is not installed.
+        ImportError: If ``backend="plotly"`` and plotly is not installed.
     """
 
     _check_backend(backend)
@@ -162,8 +156,7 @@ def plot_eit_processing_summary(
     )
     if signal is None:
         raise ValueError("No EIT global impedance signal found in processed EIT data.")
-    # An eitprocessing waveform has a label; an m3resp Signal has a name.
-    signal_label = getattr(signal, "label", None) or signal.name
+    signal_label = signal.name
 
     tiv = _breath_values(processed.get("continuous_tiv"), "extremum_time", session)
     eeli = _breath_values(processed.get("eeli"), "end_time", session)
@@ -192,13 +185,7 @@ def plot_eit_processing_summary(
             max_points=max_points,
         )
 
-    try:
-        from matplotlib import pyplot as plt
-    except ImportError as exc:  # pragma: no cover - depends on local extras
-        raise ImportError(
-            "EIT visualization requires matplotlib. Install the EIT optional "
-            "dependencies, or install matplotlib directly."
-        ) from exc
+    from matplotlib import pyplot as plt
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 7), constrained_layout=True)
     ax_signal, ax_tiv, ax_eeli, ax_map = axes.ravel()
@@ -262,7 +249,7 @@ def plot_synchronization_comparison(
     Raises:
         ValueError: If ``backend`` is unknown, or if the session has no
             synchronization data or no signal to plot.
-        ImportError: If the plot library of ``backend`` is not installed.
+        ImportError: If ``backend="plotly"`` and plotly is not installed.
     """
 
     _check_backend(backend)
@@ -336,13 +323,7 @@ def plot_synchronization_comparison(
             )
         return plotly_figures.line_grid_figure(panels, max_points=max_points)
 
-    try:
-        from matplotlib import pyplot as plt
-    except ImportError as exc:  # pragma: no cover - depends on local extras
-        raise ImportError(
-            "Synchronization visualization requires matplotlib. Install the EIT "
-            "or EMG optional dependencies, or install matplotlib directly."
-        ) from exc
+    from matplotlib import pyplot as plt
 
     fig, axes = plt.subplots(
         len(rows),
@@ -434,19 +415,17 @@ def _get_eit_rows(
     if recording is None:
         return []
 
-    sequence = recording.data
     rows: list[tuple[str, str, np.ndarray, np.ndarray, str]] = []
-    continuous_data = getattr(sequence, "continuous_data", {})
-    if waveform not in continuous_data:
+    signal = (
+        recording.raw_global_impedance
+        if waveform == "global_impedance_(raw)"
+        else recording.signals.get(waveform)
+    )
+    if signal is None:
         return rows
 
-    rows.append(
-        (
-            "eit",
-            "EIT raw global impedance",
-            *_continuous_series(continuous_data[waveform]),
-        )
-    )
+    time, values, _ = _continuous_series(signal)
+    rows.append(("eit", "EIT raw global impedance", time, values, waveform))
 
     processed = session.processed.get("eit")
     if isinstance(processed, dict):
@@ -544,9 +523,20 @@ def _get_synchronization_plot_rows(
 
 
 def _continuous_series(data: Any) -> tuple[np.ndarray, np.ndarray, str]:
+    """Return the time, the values and the label of a waveform.
+
+    Args:
+        data (Any): A ``Signal``, or an object with ``time``, ``values`` and
+            ``label``.
+
+    Returns:
+        tuple[numpy.ndarray, numpy.ndarray, str]: Time in seconds, the
+            values, and the label (the name of a ``Signal``).
+    """
+
     time = np.asarray(data.time, dtype=float)
     values = np.asarray(data.values, dtype=float)
-    ylabel = data.label
+    ylabel = str(getattr(data, "label", None) or getattr(data, "name", None) or "")
     return time, values, ylabel
 
 

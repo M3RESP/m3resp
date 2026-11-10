@@ -97,8 +97,7 @@ def _upstream(signal: Signal, tiv_method: str = "inspiratory") -> tuple:
     from eitprocessing.features.breath_detection import BreathDetection
     from eitprocessing.parameters.eeli import EELI
     from eitprocessing.parameters.tidal_impedance_variation import TIV
-
-    from m3resp.adapters.eitprocessing_adapter._signals import as_continuous_data
+    from reference.eitprocessing._signals import as_continuous_data
 
     detector = BreathDetection(minimum_duration=MINIMUM_DURATION)
     data = as_continuous_data(signal)
@@ -376,8 +375,7 @@ def test_data_that_is_not_impedance_is_refused() -> None:
 
     pytest.importorskip("eitprocessing")
     from eitprocessing.parameters.eeli import EELI
-
-    from m3resp.adapters.eitprocessing_adapter._signals import as_continuous_data
+    from reference.eitprocessing._signals import as_continuous_data
 
     with pytest.raises(ValueError):
         EELI().compute_parameter(as_continuous_data(pressure))

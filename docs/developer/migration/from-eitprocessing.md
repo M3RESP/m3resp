@@ -2,6 +2,8 @@
 
 This page lists the `eitprocessing` calls and the M3Resp calls that do the same work. See the {doc}`../migration` for the tasks that are the same for all modalities.
 
+M3Resp reads and processes EIT data with its own code, so the base install (`pip install m3resp`) is enough for EIT. The `eit` option adds `plotly` for the interactive EIT figures. The `reference` option installs `eitprocessing` 1.8.7, for the tests that compare the two packages.
+
 ## Load a recording
 
 `session.load_eit` reads Draeger, Sentec and Timpel files with M3Resp's readers, using the same `vendor` names as `load_eit_data`:
@@ -16,7 +18,9 @@ sequence = load_eit_data("recording.bin", vendor="draeger")
 session.load_eit("recording.bin", vendor="draeger")
 ```
 
-`m3resp.io.load_eit(path, vendor=...)` loads a recording without a session.
+`m3resp.io.load_eit(path, vendor=...)` loads a recording without a session. A list of paths loads files recorded one after the other as one recording.
+
+The `loader` argument selects the reader: `"vendor"` uses the M3Resp reader of the device maker in `vendor`, `"custom"` uses your own loader, and `"auto"` (default) uses your loader if the session has one. Give your loader as `M3Session(eit_loader=my_loader)`, or to `run_workflow` and `run_spec` as `eit_loader=my_loader`. M3Resp calls it as `my_loader(path, vendor=...)`, and it must return an `m3resp.eit.io.EITFileData` with the images as a `Signal` (frames, rows, columns), the vendor, the paths and the sample frequency in Hz. Any other return value gives a `TypeError`. To use a reader of `eitprocessing`, change its `Sequence` into an `EITFileData` in your loader.
 
 The recording in `session.eit` holds native data:
 
@@ -27,11 +31,10 @@ The recording in `session.eit` holds native data:
 | `events` | Device marks as `EventData`, including marker values and text |
 | `intervals` | Device breaths as `IntervalData`; Timpel breaths are `BreathEvent`s with a turning point |
 | `raw_global_impedance` | Recorded global waveform, or the sum of the native images |
-| `data` | The `eitprocessing` Sequence used by the remaining processing calls |
 
-The raw EIT Signals identify the vendor in `source`. `eit.load` and `eit.slice_recording` expose the native images as `raw_eit` and the global waveform as `raw_global_impedance`. Their older `*_signal` output names refer to the same objects. Device marks and breaths are available through the recording fields above.
+The raw EIT Signals identify the vendor in `source`. `eit.load` and `eit.slice_recording` give the native images as `raw_eit` and the global waveform as `raw_global_impedance`. The steps give and take M3Resp objects only. Their older `*_signal` output names refer to the same objects. Device marks and breaths are available through the recording fields above.
 
-`session.slice_eit(start, end)` cuts native images, waveforms, marks and breaths using seconds from the first image. See {doc}`../../concepts/slicing` for boundary rules. Ventilator waveforms can be read from the native recording or an `EITFileData` with `ventilator_payload_from_sequence` in `m3resp.adapters.ventilator_adapter`.
+`session.slice_eit(start, end)` cuts native images, waveforms, marks and breaths using seconds from the first image. See {doc}`../../concepts/slicing` for boundary rules. Ventilator waveforms can be read from the native recording or an `EITFileData` with `ventilator_payload_from_eit` in `m3resp.adapters.ventilator_adapter`.
 
 ## Find the rates and the breaths
 
@@ -83,9 +86,9 @@ filtered = mdn_filter(raw_eit, respiratory_rate=0.25, heart_rate=1.2)
 
 `mdn_filter(..., captures={})` fills the dictionary with the keys of eitprocessing: `low_pass_frequency`, `n_harmonics`, `frequency_bands`, and the images before and after the filter as `Signal`s in `unfiltered_data` and `filtered_data`. A pixel with NaN at some samples becomes NaN at every sample, as in eitprocessing; M3Resp also gives a warning that names these pixels.
 
-The Butterworth filters of eitprocessing (`ButterworthFilter`) are `m3resp.processing.filters.butterworth_filter`, a function with the filter type, the cutoff, the sample frequency and the order as arguments. It gives the same numbers. For EIT images, the order is 1 to 10, as in eitprocessing.
+The Butterworth filters of eitprocessing (`ButterworthFilter`) are `m3resp.processing.filters.butterworth_filter`, a function with the filter type, the cutoff, the sample frequency and the order as arguments. It gives the same numbers. `m3resp.eit.processing.butterworth_filter_images` filters each pixel of EIT images with it. The order is 1 to 10, as in eitprocessing.
 
-The steps `eit.mdn_filter` and `eit.butterworth_filter` run these functions. `eit.mdn_filter` has the settings `noise_frequency_limit_hz`, `notch_distance_hz` and `order`. Both steps give the filtered images as a `Signal` and keep the captures under `filter_captures`. They also add the filtered images to the eitprocessing `Sequence`, for the steps that still run eitprocessing.
+The steps `eit.mdn_filter` and `eit.butterworth_filter` run these functions. `eit.mdn_filter` has the settings `noise_frequency_limit_hz`, `notch_distance_hz` and `order`. Both steps give the filtered images as a `Signal` and keep the captures under `filter_captures`.
 
 ## TIV and EELI
 
@@ -205,7 +208,7 @@ With the breaths of `find_breaths` and the default settings, the masks of the th
 | eitprocessing | M3Resp |
 |---|---|
 | The lung-space classes find the breaths with their own `BreathDetection` (default settings) | The functions take the global breaths as input |
-| Without `timing_data`, the classes use the sum of all pixels | The adapter methods do the same; the steps read `timing_data` (by default `global_impedance`) |
+| Without `timing_data`, the classes use the sum of all pixels | The steps read `timing_data` (by default `global_impedance`) |
 | `WatershedLungspace` runs `TIVLungspace` and `AmplitudeLungspace` in full and uses only their captures | The pixel TIV and the pixel amplitude are computed once; the masks are the same |
 | The watershed maxima are found with NaN read as 0, and the watershed regions on an image with NaN pixels, so the region borders near NaN pixels depend on how scikit-image treats NaN | Pixels with a NaN mean amplitude are in no region (number 0) and cannot be a maximum. At the default threshold the final mask of the test files is the same; at a threshold of 0.05, the Timpel file has 2 (raw) or 7 (filtered) pixels fewer. |
 | The capture `"included watershed regions"` holds every region, because `np.where` reads the mask object as one true value | It holds the included regions, NaN elsewhere |
@@ -256,7 +259,7 @@ The GUI reads the maps, masks, EIT images, lung-space captures and rate spectra 
 
 ## Filter and detect breaths
 
-`session.preprocess_eit()` runs rate detection, filter, breath detection, TIV, EELI and pixel TIV in one call, and pixel EELI with `compute_pixel_eeli=True`. All parts use M3Resp code. Each part has settings in `preprocess_eit`:
+`session.preprocess_eit()` runs rate detection, filter, breath detection, TIV, EELI and pixel TIV in one call, and pixel EELI with `compute_pixel_eeli=True`. It calls `m3resp.eit.processing.preprocess_eit_recording`, which you can also call on a loaded recording without a session. The images and waveforms in `session.processed["eit"]` are `Signal`s. Each part has settings in `preprocess_eit`:
 
 | `eitprocessing` | Settings of `preprocess_eit` |
 |---|---|

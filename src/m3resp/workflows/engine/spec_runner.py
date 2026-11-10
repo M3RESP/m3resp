@@ -42,8 +42,8 @@ def run_spec(
     path: str | Path,
     *,
     session: M3Session | None = None,
-    eit_adapter: Any = None,
     emg_adapter: Any = None,
+    eit_loader: Any = None,
     event_sink: EventSink | None = None,
     cancellation_token: CancellationToken | None = None,
 ) -> WorkflowResult:
@@ -57,8 +57,9 @@ def run_spec(
         path: YAML or JSON workflow file. Relative paths within the file are
             resolved against its parent directory.
         session: Session to process; None creates a new session.
-        eit_adapter: EIT adapter used when creating a new session.
         emg_adapter: EMG adapter used when creating a new session.
+        eit_loader: Custom EIT loader of a new session (see
+            ``M3Session(eit_loader=...)``), for ``eit.load_custom``.
         event_sink: Optional synchronous progress-event receiver.
         cancellation_token: Optional flag checked between steps.
 
@@ -134,8 +135,8 @@ def run_spec(
         result = run_workflow(
             parsed,
             session=session,
-            eit_adapter=eit_adapter,
             emg_adapter=emg_adapter,
+            eit_loader=eit_loader,
             extra_context=extra,
             event_sink=event_sink,
             cancellation_token=cancellation_token,
@@ -247,8 +248,7 @@ def _apply_outputs(spec: WorkflowSpec, result: WorkflowResult, *, mode: str) -> 
 
     session = result.session
 
-    if "eit_sequence" in result.context.values:
-        _maybe_assemble_eit(result)
+    _maybe_assemble_eit(result)
 
     from m3resp.export.session_export import export_session_summary
 
@@ -275,7 +275,6 @@ def _maybe_assemble_eit(result: WorkflowResult) -> None:
 
     filtered_eit = ctx.get("filtered_eit")
     result.session.processed["eit"] = {
-        "sequence": ctx.get("eit_sequence"),
         "raw_eit": ctx.get("raw_eit"),
         "raw_global_impedance": ctx.get("raw_global_impedance"),
         "filter_mode": _infer_filter_mode(filtered_eit),
@@ -307,8 +306,7 @@ def _infer_filter_mode(filtered_eit: Any) -> str:
     Args:
         filtered_eit (Any): The ``filtered_eit`` output of a workflow: a
             ``Signal`` from ``eit.mdn_filter`` or ``eit.butterworth_filter``
-            (the step name is in ``metadata["operation"]``), an eitprocessing
-            ``EITData`` (the filter is read from its label), or None.
+            (the step name is in ``metadata["operation"]``), or None.
 
     Returns:
         str: ``"mdn"``, the Butterworth mode (``"lowpass"``, ``"highpass"``,
@@ -323,10 +321,6 @@ def _infer_filter_mode(filtered_eit: Any) -> str:
         return "mdn"
     if operation == "eit.butterworth_filter":
         return str(metadata.get("parameters", {}).get("mode", "none"))
-    label = getattr(filtered_eit, "label", None) or ""
-    for mode in ("mdn", "lowpass", "bandpass"):
-        if mode in label:
-            return mode
     return "none"
 
 

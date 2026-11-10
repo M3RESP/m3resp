@@ -7,12 +7,12 @@ from typing import Any
 
 import numpy as np
 import pytest
-
-from m3resp.adapters.eitprocessing_adapter import (
+from reference.eitprocessing import (
     EITProcessingAdapter,
     file_data_to_sequence,
     load_eit_file_as_sequence,
 )
+
 from m3resp.eit.io import EITFileData, read_eit_file
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -143,6 +143,10 @@ class TestReadEitFile:
 
 
 class TestSameSequenceAsEitprocessing:
+    @pytest.fixture(autouse=True)
+    def _needs_eitprocessing(self):
+        pytest.importorskip("eitprocessing")
+
     @pytest.mark.parametrize("options", OPTIONS, ids=lambda o: ",".join(o) or "none")
     @pytest.mark.parametrize("vendor", sorted(TEST_FILES))
     def test_load_eit_file_as_sequence(self, vendor, options):

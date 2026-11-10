@@ -17,14 +17,14 @@ from typing import Any
 
 import numpy as np
 import pytest
-
-from m3resp.adapters import EITProcessingAdapter
-from m3resp.adapters.eitprocessing_adapter import (
+from reference.eitprocessing import (
+    EITProcessingAdapter,
     add_to_collection,
     as_signal,
     breaths_to_interval_data,
     signal_to_eit_data,
 )
+
 from m3resp.data import BreathEvent, IntervalData, PixelBreaths, PixelMask, Signal
 from m3resp.eit.processing import (
     BreathDetectionSettings,

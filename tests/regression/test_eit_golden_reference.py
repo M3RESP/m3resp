@@ -28,7 +28,6 @@ from typing import Any
 import numpy as np
 import pytest
 
-from m3resp.adapters.eitprocessing_adapter import as_signal
 from m3resp.core.session import M3Session
 from m3resp.data import PixelBreaths
 from m3resp.eit.processing import pixel_end_expiratory_lung_impedance
@@ -243,7 +242,6 @@ def _spec(path: str, vendor: str) -> dict[str, Any]:
 def m3resp_results() -> dict[str, Any]:
     """Run the m3resp EIT steps once for every test file."""
 
-    pytest.importorskip("eitprocessing")
     results = {}
     for dataset in DATASETS:
         entry = MANIFEST["inputs"][dataset]
@@ -276,7 +274,6 @@ def test_m3resp_ventilator_waveforms_from_the_eit_file_match_golden(
     A Sentec file holds no waveforms.
     """
 
-    pytest.importorskip("eitprocessing")
     entry = MANIFEST["inputs"][dataset]
     path = os.path.join(REPO_ROOT, entry["file"])
     golden = _golden(dataset, "reader")
@@ -449,7 +446,6 @@ def test_m3resp_lung_space_masks_match_golden(
 def preprocess_results() -> dict[str, Any]:
     """Run ``session.preprocess_eit()`` once for every test file."""
 
-    pytest.importorskip("eitprocessing")
     settings = MANIFEST["settings"]
     results = {}
     for dataset in DATASETS:
@@ -485,17 +481,14 @@ def test_preprocess_mdn_filter_matches_golden(
     result = preprocess_results[dataset]
     golden = _golden(dataset, "mdn_filter")
     assert result["filter_mode"] == "mdn"
-    assert_matches(
-        result["filtered_eit"].pixel_impedance, golden["pixel_impedance"], "pixels"
-    )
+    assert_matches(result["filtered_eit"].values, golden["pixel_impedance"], "pixels")
     for key, expected in golden.items():
         if key.startswith("captures/"):
             assert_matches(
                 result["filter_captures"][key.removeprefix("captures/")], expected, key
             )
-    stored = result["sequence"].eit_data["mdn_filtered"]
-    assert stored is result["filtered_eit"]
-    assert stored.name == "MDN-filtered EIT data"
+    assert result["filtered_eit"].name == "MDN-filtered EIT data"
+    assert result["filtered_eit"].metadata["label"] == "mdn_filtered"
 
 
 @pytest.mark.parametrize("dataset", DATASETS)
@@ -507,9 +500,6 @@ def test_preprocess_breaths_match_golden(
     breaths = result["breath_intervals"].intervals
     actual = [(b.start_time, b.extremum_time, b.end_time) for b in breaths]
     assert_matches(np.asarray(actual, dtype=float).reshape(-1, 3), golden, "breaths")
-    stored = result["sequence"].interval_data["eit_breaths"].values
-    upstream = [(b.start_time, b.middle_time, b.end_time) for b in stored]
-    assert_matches(np.asarray(upstream, dtype=float).reshape(-1, 3), golden, "Sequence")
 
 
 @pytest.mark.parametrize("dataset", DATASETS)
@@ -525,9 +515,6 @@ def test_preprocess_tiv_and_eeli_match_golden(
     # TIV and EELI hold the breaths of `breath_intervals`.
     assert all(a is b for a, b in zip(tiv.intervals, breaths, strict=True))
     assert all(a is b for a, b in zip(eeli.intervals, breaths, strict=True))
-    # The Sequence holds no TIV or EELI.
-    assert "continuous_tivs" not in result["sequence"].sparse_data
-    assert "continuous_eelis" not in result["sequence"].sparse_data
 
 
 @pytest.mark.parametrize("dataset", DATASETS)
@@ -542,13 +529,12 @@ def test_preprocess_pixel_tiv_matches_golden(
     assert_matches(values, golden["tiv/values"], "tiv/values")
     assert all(a is b for a, b in zip(pixel_tiv.intervals, breaths, strict=True))
     assert pixel_tiv.method == "m3resp.eit.processing.pixel_tidal_impedance_variation"
-    # The Sequence holds no pixel TIV, and pixel EELI is off by default.
-    assert "pixel_tivs" not in result["sequence"].sparse_data
+    assert "sequence" not in result
+    # Pixel EELI is off by default.
     assert result["pixel_eeli"] is None
 
 
 def test_preprocess_gives_pixel_eeli_when_asked() -> None:
-    pytest.importorskip("eitprocessing")
     dataset = DATASETS[0]
     entry = MANIFEST["inputs"][dataset]
     session = M3Session()
@@ -558,9 +544,7 @@ def test_preprocess_gives_pixel_eeli_when_asked() -> None:
 
     pixel_eeli = result["pixel_eeli"]
     breaths = result["breath_intervals"].intervals
-    expected = pixel_end_expiratory_lung_impedance(
-        as_signal(result["filtered_eit"]), breaths
-    )
+    expected = pixel_end_expiratory_lung_impedance(result["filtered_eit"], breaths)
     assert pixel_eeli.values == expected.values
     assert all(a is b for a, b in zip(pixel_eeli.intervals, breaths, strict=True))
     stored = [data for data in session.interval_data if data.name == "pixel_eelis"]

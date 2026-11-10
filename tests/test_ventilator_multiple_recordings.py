@@ -16,10 +16,12 @@ import os
 
 import numpy as np
 import pytest
+from eit_file_data_cases import small_eit_file_data
 
 from m3resp.adapters.resurfemg_adapter import ReSurfEMGAdapter, ventilator_signals
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.core.session import M3Session
+from m3resp.data import Signal
 
 FS = 100.0
 N = 500
@@ -38,53 +40,50 @@ def _payload(labels, units=None, rows=None) -> dict:
 
 
 def _session(
-    payloads: dict[str, dict], eit_sequence: object | None = None
+    payloads: dict[str, dict], eit_recording: object | None = None
 ) -> M3Session:
     """A session whose EMG loader returns a different payload per path.
 
-    `eit_sequence` injects an EIT loader too, for the `.bin` route where the
-    ventilator waveforms come out of the EIT recording itself.
+    `eit_recording` sets a custom EIT loader too, for the `.bin` route where
+    the ventilator waveforms come out of the EIT recording itself.
     """
-
-    from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
 
     return M3Session(
         emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: payloads[str(path)]),
-        eit_adapter=(
-            EITProcessingAdapter(
-                loader=lambda path, vendor=None, **kwargs: eit_sequence
-            )
-            if eit_sequence is not None
+        eit_loader=(
+            (lambda path, vendor=None, **kwargs: eit_recording)
+            if eit_recording is not None
             else None
         ),
     )
 
 
-class _ContinuousData:
-    """The `eitprocessing.ContinuousData` surface the ventilator path reads."""
+def _eit_recording() -> object:
+    """The data of an EIT file with Medibus ventilator waveforms."""
 
-    def __init__(self, label, values, unit=None):
-        self.label = label
-        self.name = label
-        self.values = np.asarray(values, dtype=float)
-        self.unit = unit
-        self.sample_frequency = FS
-        self.time = np.arange(len(self.values)) / FS
+    def waveform(label, values, unit):
+        return Signal(
+            values=np.asarray(values, dtype=float),
+            time=np.arange(len(values)) / FS,
+            sample_frequency=FS,
+            unit=unit,
+            name=label,
+            modality="eit",
+        )
 
-
-class _Sequence:
-    """A loaded EIT sequence carrying Medibus ventilator waveforms."""
-
-    def __init__(self):
-        self.continuous_data = {
-            channel.label: channel
-            for channel in (
-                _ContinuousData("global_impedance_(raw)", _wave(100.0), "a.u."),
-                _ContinuousData("airway pressure", _wave(10.0), "mbar"),
-                _ContinuousData("flow", _wave(5.0), "L/min"),
-                _ContinuousData("volume", _wave(500.0), "mL"),
-            )
-        }
+    channels = (
+        waveform("global_impedance_(raw)", _wave(100.0), "a.u."),
+        waveform("airway pressure", _wave(10.0), "mbar"),
+        waveform("flow", _wave(5.0), "L/min"),
+        waveform("volume", _wave(500.0), "mL"),
+    )
+    return small_eit_file_data(
+        "study.bin",
+        "draeger",
+        n_frames=len(channels[0].values),
+        sample_frequency=FS,
+        signals={channel.name: channel for channel in channels},
+    )
 
 
 class TestPositionalProducersNowResolveByName:
@@ -341,12 +340,12 @@ class TestVentilatorInheritsItsHostsClock:
     def test_a_bin_sourced_recording_reports_the_eit_clock(self):
         from m3resp.modalities.ventilator import ventilator_clock
 
-        session = _session({}, eit_sequence=_Sequence())
+        session = _session({}, eit_recording=_eit_recording())
         session.load_ventilator("study.bin")
         assert ventilator_clock(session.ventilator) == "eit"
 
     def test_a_bin_sourced_recording_is_not_cut_on_its_own(self):
-        session = _session({}, eit_sequence=_Sequence())
+        session = _session({}, eit_recording=_eit_recording())
         session.load_ventilator("study.bin")
         before = session.ventilator.data["array"].shape[1]
 

@@ -1,7 +1,9 @@
-"""Load and process EIT recordings through eitprocessing.
+"""Load and process EIT recordings through eitprocessing, for the comparison tests.
 
-Conversion helpers produce m3resp signals, breath events, rate parameters and
-values per breath from eitprocessing results.
+``EITProcessingAdapter`` reads EIT files with eitprocessing and runs the
+eitprocessing calculations. The conversion helpers turn m3resp signals,
+breaths and masks into eitprocessing objects and back. The comparison tests
+check the m3resp EIT code against these results.
 """
 
 from __future__ import annotations
@@ -52,10 +54,12 @@ from m3resp.eit.roi import (
     tiv_lungspace,
     watershed_lungspace,
 )
+from m3resp.modalities.eit import EITRecording
 
 from ._file_data import (
     file_data_to_sequence,
     load_eit_file_as_sequence,
+    recording_to_sequence,
     sequence_to_file_data,
 )
 from ._filtering import butterworth_filter_images
@@ -1048,7 +1052,9 @@ class EITProcessingAdapter:
         rates are calculated even when compute_rates is False.
 
         Args:
-            sequence: Loaded eitprocessing Sequence containing pixel impedance data.
+            sequence: The loaded ``EITRecording`` (converted with
+                ``recording_to_sequence``), or an eitprocessing Sequence with
+                the raw images.
             subject_type: adult or neonate, used for rate detection.
             welch_window_seconds: Rate-estimation window duration in seconds.
             filter_mode: mdn, lowpass, bandpass or none.
@@ -1100,6 +1106,8 @@ class EITProcessingAdapter:
             ),
         )
 
+        if isinstance(sequence, EITRecording):
+            sequence = recording_to_sequence(sequence)
         _require_eit_sequence(sequence)
 
         if not compute_breath_intervals and (

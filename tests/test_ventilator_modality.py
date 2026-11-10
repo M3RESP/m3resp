@@ -14,6 +14,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from eit_file_data_cases import stand_in_eit_loader
 
 from m3resp.adapters import ReSurfEMGAdapter
 from m3resp.core.session import M3Session
@@ -76,12 +77,9 @@ class TestLoadVentilator:
         assert entry.parameters["path"] == "subject.txt"
 
     def test_sits_alongside_eit_and_emg_in_provenance(self):
-        from m3resp.adapters import EITProcessingAdapter
 
         session = M3Session(
-            eit_adapter=EITProcessingAdapter(
-                loader=lambda path, vendor=None, **kwargs: {"path": path}
-            ),
+            eit_loader=stand_in_eit_loader,
             emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: _payload()),
         )
         session.load_eit("subject.eit")

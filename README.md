@@ -77,14 +77,15 @@ cd m3resp
 python -m pip install -e ".[all]"    # or: uv sync --extra all
 ```
 
-The `[all]` option installs the EIT and EMG packages. To install only the part that you need, use one of these options:
+The base install reads, processes and plots EIT recordings. The `[all]` option adds the EMG package and the interactive figures. To install only the part that you need, use one of these options:
 
 | Command | Adds | Use it for |
 | --- | --- | --- |
-| `python -m pip install -e .` | nothing | the data objects, workflows, synchronization, export, and ventilator data in Biopac `.txt` files |
-| `python -m pip install -e ".[eit]"` | `eitprocessing` | EIT recordings, and the ventilator data in EIT `.bin` files |
-| `python -m pip install -e ".[emg]"` | `resurfemg` | EMG processing, and EMG or ventilator recordings in `.Poly5` files |
-| `python -m pip install -e ".[all]"` | both | all of the above |
+| `python -m pip install -e .` | nothing | EIT recordings, the data objects, workflows, synchronization, export, and ventilator data in EIT `.bin` files and Biopac `.txt` files |
+| `python -m pip install -e ".[eit]"` | `plotly` | the interactive EIT figures |
+| `python -m pip install -e ".[emg]"` | `resurfemg`, `ipywidgets`, `plotly` | EMG processing, and EMG or ventilator recordings in `.Poly5` files |
+| `python -m pip install -e ".[all]"` | all of the above | all of the above |
+| `python -m pip install -e ".[reference]"` | `eitprocessing` | the tests that compare M3Resp with eitprocessing |
 
 With uv, use `uv sync`, `uv sync --extra eit`, `uv sync --extra emg` or `uv sync --extra all`. `uv sync` installs only the extras in the command and removes all other extras. So name each extra that you need, for example `uv sync --extra all --extra dev`.
 
@@ -116,13 +117,10 @@ The base package needs:
 - [pydantic](https://docs.pydantic.dev) 2 or newer
 - [PyYAML](https://pyyaml.org)
 - [loguru](https://github.com/Delgan/loguru)
+- [Matplotlib](https://matplotlib.org) 3.9 or newer, for the EIT figures
+- [scikit-image](https://scikit-image.org) 0.25.2 or newer
 
-The EIT and EMG options also need:
-
-- [eitprocessing](https://github.com/M3RESP/eitprocessing), for EIT
-- [ReSurfEMG](https://github.com/M3RESP/ReSurfEMG), for EMG
-
-The options install both packages from their `m3resp-integration` branch. [pyproject.toml](pyproject.toml) gives the exact sources.
+The EMG and `[all]` options also need [ReSurfEMG](https://github.com/M3RESP/ReSurfEMG), from its `m3resp-integration` branch. The `[reference]` option installs [eitprocessing](https://github.com/M3RESP/eitprocessing) 1.8.7 from PyPI. [pyproject.toml](pyproject.toml) gives the exact sources.
 
 ## Documentation
 
@@ -149,7 +147,7 @@ M3RESP/
 └── m3resp          synchronization, multimodal analysis and workflows
 ```
 
-M3Resp uses `eitprocessing` for EIT and `resurfemg` for EMG. Both packages are independent: you can install and use them without M3Resp. Some processing functions in M3Resp come from `eitprocessing` and ReSurfEMG code; [NOTICE.md](NOTICE.md) lists them.
+M3Resp has its own EIT code, which came from `eitprocessing`. It uses `resurfemg` for EMG. Both packages are independent: you can install and use them without M3Resp. [NOTICE.md](NOTICE.md) lists the processing functions in M3Resp that come from `eitprocessing` and ReSurfEMG code.
 
 New methods for one modality go into `eitprocessing` or `resurfemg`. Synchronization, the shared data objects, workflows and export go into M3Resp.
 

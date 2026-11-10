@@ -213,8 +213,7 @@ def _upstream(method: str, data: tuple[Signal, Signal], **settings: Any) -> Any:
     from eitprocessing.roi.amplitude import AmplitudeLungspace
     from eitprocessing.roi.tiv import TIVLungspace
     from eitprocessing.roi.watershed import WatershedLungspace
-
-    from m3resp.adapters.eitprocessing_adapter._signals import (
+    from reference.eitprocessing._signals import (
         as_continuous_data,
         as_eit_data,
     )
@@ -296,8 +295,7 @@ def _upstream_amplitude(data_key: tuple[str, ...]) -> np.ndarray:
 
     from eitprocessing.features.pixel_breath import PixelBreath
     from eitprocessing.parameters.tidal_impedance_variation import TIV
-
-    from m3resp.adapters.eitprocessing_adapter._signals import (
+    from reference.eitprocessing._signals import (
         as_continuous_data,
         as_eit_data,
     )

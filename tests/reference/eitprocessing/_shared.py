@@ -1,4 +1,9 @@
-"""Standalone helper functions for `EITProcessingAdapter`."""
+"""Helper functions of `EITProcessingAdapter` for eitprocessing objects.
+
+The m3resp parts are in ``m3resp.eit.processing.breath_inputs`` and
+``m3resp.eit.processing.butterworth``; this module adds the forms of
+eitprocessing (``IntervalData`` of ``Breath``s, ``BreathDetection``).
+"""
 
 from __future__ import annotations
 
@@ -10,10 +15,38 @@ from typing import Any
 import numpy as np
 
 from m3resp.core.exceptions import OptionalDependencyError
-from m3resp.data import IntervalData, PixelMap, Signal
+from m3resp.data import IntervalData, PixelMap
 from m3resp.data.events import BreathEvent, coerce_breath_events
-from m3resp.eit.processing import BreathDetectionSettings, find_breaths
-from m3resp.eit.processing._breath_samples import check_breaths
+from m3resp.eit.processing import BreathDetectionSettings
+from m3resp.eit.processing.breath_inputs import (
+    breath_intervals_to_breath_events as m3resp_breath_events,
+)
+from m3resp.eit.processing.breath_inputs import (
+    breaths_to_interval_data,
+    pixel_sign_breaths,
+)
+from m3resp.eit.processing.breath_inputs import (
+    given_breath_events as m3resp_given_breath_events,
+)
+from m3resp.eit.processing.butterworth import (
+    MAX_EIT_BUTTERWORTH_ORDER,
+    check_eit_butterworth_order,
+    filter_pixels_preserving_gaps,
+)
+
+__all__ = [
+    "MAX_EIT_BUTTERWORTH_ORDER",
+    "add_to_collection",
+    "as_breath_detection",
+    "breath_intervals_to_breath_events",
+    "breaths_to_eitprocessing",
+    "breaths_to_interval_data",
+    "check_eit_butterworth_order",
+    "filter_pixels_preserving_gaps",
+    "given_breath_events",
+    "pixel_sign_breaths",
+    "sparse_data_to_interval_data",
+]
 
 
 def _optional_dependency_error() -> OptionalDependencyError:
@@ -76,102 +109,6 @@ def add_to_collection(collection: Any, value: Any) -> None:
         collection.add(value)
 
 
-#: Highest order of a Butterworth filter of EIT images, as in eitprocessing.
-MAX_EIT_BUTTERWORTH_ORDER = 10
-
-
-def check_eit_butterworth_order(order: int) -> None:
-    """Refuse a Butterworth order outside 1 to 10 for EIT images.
-
-    The filter runs forwards and backwards, so the effective order is twice
-    the given order. Higher orders can give unstable or wrong results.
-
-    Args:
-        order (int): The order of the filter.
-
-    Raises:
-        ValueError: If ``order`` is below 1 or above 10.
-    """
-
-    if not 1 <= order <= MAX_EIT_BUTTERWORTH_ORDER:
-        raise ValueError(
-            "The order of a Butterworth filter of EIT images must be from 1 to "
-            f"{MAX_EIT_BUTTERWORTH_ORDER}, got {order}. Higher orders can give "
-            "unstable results."
-        )
-
-
-def filter_pixels_preserving_gaps(
-    pixel_impedance: Any,
-    *,
-    operation: str,
-    apply: Callable[[np.ndarray], Any],
-    captures: dict[str, Any] | None = None,
-) -> np.ndarray:
-    """Filter the measured pixels with `apply`; leave unmeasured pixels missing.
-
-    A pixel that was never measured - outside the electrode plane, or switched
-    off - is NaN for the whole recording, and must still be NaN afterwards.
-    Replacing it with zero would enter a real impedance reading where there was
-    no measurement, and everything downstream would treat it as data.
-
-    A Butterworth filter cannot be evaluated on NaN, so the unmeasured pixels
-    are given a placeholder for the duration of the call and set back to NaN in
-    the result. Nothing leaks between pixels: `apply` filters along time
-    (axis 0) and each pixel's time course is filtered independently, so a
-    placeholder can never reach a measured pixel.
-
-    A pixel that was measured but lost *some* samples is a different case: it
-    cannot be filtered without inventing the missing stretch, and quietly
-    emptying it would lose a real pixel. That is rejected here instead.
-
-    Pass the `captures` dict `apply` writes its diagnostics into to have the
-    unmeasured pixels blanked there too, so a diagnostic plot shows them as
-    absent rather than as a flat zero trace.
-    """
-
-    values = np.asarray(pixel_impedance, dtype=float)
-    missing = np.isnan(values)
-    if not missing.any():
-        return np.asarray(apply(values))
-
-    # Axis 0 is time; the remaining axes are the pixel grid.
-    n_samples = values.shape[0]
-    missing_per_pixel = missing.sum(axis=0)
-    partly_missing = (missing_per_pixel > 0) & (missing_per_pixel < n_samples)
-    if partly_missing.any():
-        examples = ", ".join(
-            "(" + ", ".join(str(int(axis)) for axis in position) + ")"
-            for position in np.argwhere(partly_missing)[:5]
-        )
-        raise ValueError(
-            f"{operation}: {int(partly_missing.sum())} pixel(s) are missing "
-            f"samples for part of the recording only (e.g. at {examples}). "
-            "A Butterworth filter cannot span a gap, so these cannot be "
-            "filtered without inventing the missing samples. Repair or drop "
-            "those pixels first. Pixels missing for the whole recording need "
-            "no action - they stay missing through the filter."
-        )
-
-    unmeasured = missing_per_pixel == n_samples
-    placeholder = values.copy()
-    placeholder[:, unmeasured] = 0.0
-    filtered = np.array(apply(placeholder), dtype=float, copy=True)
-    filtered[:, unmeasured] = np.nan
-
-    # The placeholder also reached any full-size array `apply` recorded as a
-    # diagnostic (the unfiltered and filtered pixel data); blank it there too
-    # so no capture claims a reading for a pixel that was never measured.
-    for key, captured in list((captures or {}).items()):
-        recorded = np.asarray(captured)
-        if recorded.shape == values.shape:
-            blanked = recorded.astype(float, copy=True)
-            blanked[:, unmeasured] = np.nan
-            captures[key] = blanked  # type: ignore[index]
-
-    return filtered
-
-
 def _breath_intervals_to_dicts(breath_intervals: Any) -> list[dict[str, Any]]:
     """Return one row per eitprocessing breath, preserving times in seconds.
 
@@ -206,10 +143,8 @@ def breath_intervals_to_breath_events(breath_intervals: Any) -> list[BreathEvent
             breaths the middle time becomes ``extremum_time``.
     """
 
-    if isinstance(breath_intervals, IntervalData):
-        return coerce_breath_events(breath_intervals.intervals, modality="eit")
-    if isinstance(breath_intervals, list):
-        return coerce_breath_events(breath_intervals, modality="eit")
+    if isinstance(breath_intervals, IntervalData | list):
+        return m3resp_breath_events(breath_intervals)
     return coerce_breath_events(
         _breath_intervals_to_dicts(breath_intervals),
         modality="eit",
@@ -236,35 +171,9 @@ def given_breath_events(breaths: Any, *, function: str) -> list[BreathEvent]:
             not a ``BreathEvent``.
     """
 
-    if isinstance(breaths, IntervalData):
-        return check_breaths(breaths.intervals, function=function)
-    if isinstance(breaths, (list, tuple)):
-        return check_breaths(breaths, function=function)
+    if isinstance(breaths, IntervalData | list | tuple):
+        return m3resp_given_breath_events(breaths, function=function)
     return breath_intervals_to_breath_events(breaths)
-
-
-def breaths_to_interval_data(
-    breaths: list[BreathEvent], *, name: str = "eit_breaths"
-) -> IntervalData:
-    """Return EIT breaths as an m3resp ``IntervalData`` without values.
-
-    Args:
-        breaths (list[BreathEvent]): The breaths, in time order.
-        name (str): The name of the result.
-
-    Returns:
-        IntervalData: The breaths in ``intervals``, modality ``"eit"``,
-            category ``"breath"`` and method
-            ``"m3resp.eit.processing.find_breaths"``.
-    """
-
-    return IntervalData(
-        name=name,
-        modality="eit",
-        intervals=list(breaths),
-        category="breath",
-        method="m3resp.eit.processing.find_breaths",
-    )
 
 
 def breaths_to_eitprocessing(
@@ -311,33 +220,6 @@ def breaths_to_eitprocessing(
         parameters={BreathDetectionSettings: asdict(settings)},
         derived_from=list(derived_from),
     )
-
-
-def pixel_sign_breaths(signal: Signal, detector: Any) -> list[BreathEvent] | None:
-    """Return the breaths that give the sign of each pixel in the pixel breath search.
-
-    eitprocessing 1.8.7 finds these breaths on the waveform with the default
-    settings of the breath detection, whatever the settings of the global
-    breaths. The result goes to ``sign_breaths`` of
-    ``m3resp.eit.processing.find_pixel_breaths``, so the pixel breaths are
-    the same as in eitprocessing.
-
-    Args:
-        signal (Signal): The waveform the global breaths were found in.
-        detector (Any): The settings of the global breaths
-            (``BreathDetectionSettings``), or an eitprocessing
-            ``BreathDetection``.
-
-    Returns:
-        list[BreathEvent] | None: The breaths of ``signal`` found with the
-            default settings. None when ``detector`` holds the default
-            settings, because the global breaths are then the same breaths.
-    """
-
-    default = BreathDetectionSettings()
-    if detector == default:
-        return None
-    return find_breaths(signal, default)
 
 
 def as_breath_detection(detector: Any) -> Any:
