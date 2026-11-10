@@ -17,7 +17,6 @@ import real_data_helpers as helpers
 def testps3_paths() -> dict[str, str]:
     """Paths of the dataset 3 files; skips the test when one is missing."""
 
-    pytest.importorskip("eitprocessing")
     pytest.importorskip("resurfemg")
     paths, reason = helpers.dataset_paths("testps3")
     if paths is None:

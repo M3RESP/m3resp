@@ -416,15 +416,10 @@ def test_synchronization_comparison_uses_raw_eit_signal_when_filtered_exists():
     plt = pytest.importorskip("matplotlib.pyplot")
     session = M3Session()
     session.raw["eit"] = SimpleNamespace(
-        data=SimpleNamespace(
-            continuous_data={
-                "global_impedance_(raw)": SimpleNamespace(
-                    time=[0.0, 1.0],
-                    values=[10.0, 11.0],
-                    label="raw impedance",
-                )
-            }
-        )
+        raw_global_impedance=SimpleNamespace(
+            time=[0.0, 1.0], values=[10.0, 11.0], name="raw impedance"
+        ),
+        signals={},
     )
     session.processed["eit"] = {
         "filtered_global_impedance": SimpleNamespace(

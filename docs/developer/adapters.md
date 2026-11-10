@@ -1,18 +1,20 @@
 # Adapters
 
-An adapter connects M3Resp to an outside package. It calls `eitprocessing` or `resurfemg`, and changes the results into the Layer 1 objects of the {doc}`concept guides <../concepts/index>`. The session, the workflow steps and the export read only these M3Resp objects.
+An adapter connects M3Resp to an outside package or a data source. `ReSurfEMGAdapter` calls `resurfemg`, and `VentilatorAdapter` reads ventilator channels from EMG files, EIT files or files with a reader of their own. Each adapter changes its results into the Layer 1 objects of the {doc}`concept guides <../concepts/index>`. The session, the workflow steps and the export read only these M3Resp objects.
 
 ```text
-eitprocessing or resurfemg result
+resurfemg result or ventilator channels
     |
     v
-EITProcessingAdapter, ReSurfEMGAdapter or VentilatorAdapter
-    |   to_signals, to_parameters, to_interval_data, to_quality_flags
+ReSurfEMGAdapter or VentilatorAdapter
+    |   to_signals, to_parameters, to_quality_flags
     v
-Signal, BreathEvent, ParameterResult, IntervalData, QualityFlag
+Signal, BreathEvent, ParameterResult, QualityFlag
 ```
 
-The session has one adapter of each type: `session.eit_adapter`, `session.emg_adapter` and `session.ventilator_adapter`.
+The session has one adapter of each type: `session.emg_adapter` and `session.ventilator_adapter`.
+
+The EIT code is part of M3Resp and has no adapter. `m3resp.eit.io` reads the files of the EIT devices, `m3resp.eit.processing` holds the EIT calculations and `m3resp.eit.roi` the regions of interest. `session.load_eit` and `session.preprocess_eit` call these modules. A custom EIT loader is given as `M3Session(eit_loader=...)`. It returns an `EITFileData`.
 
 ## The conversion methods
 
@@ -22,23 +24,8 @@ Each adapter has the same conversion methods. They read the result of `preproces
 |---|---|
 | `to_signals(result)` | `list[Signal]` |
 | `to_parameters(result)` | `list[ParameterResult]` |
-| `to_interval_data(result)` (EIT only) | `list[IntervalData]`: TIV, EELI and pixel TIV, each value next to its breath |
 | `to_quality_flags(result)` | `list[QualityFlag]` |
 | `detect_breaths(data)` | `list[BreathEvent]` |
-
-## EITProcessingAdapter
-
-The code is in `src/m3resp/adapters/eitprocessing_adapter/`.
-
-| Methods | What they do |
-|---|---|
-| `load(path, vendor)` | Load a vendor EIT file into an `eitprocessing` sequence |
-| `get_raw_eit`, `get_global_impedance`, `get_regional_impedance` | Get the pixel, global or regional impedance from a sequence |
-| `slice_sequence` | Cut a sequence to a range of frames |
-| `detect_rates`, `apply_mdn`, `find_breaths`, `find_pixel_breaths`, `compute_eeli`, `compute_pixel_tiv` | Run one `eitprocessing` operation each |
-| `compute_tiv_lungspace`, `compute_amplitude_lungspace`, `compute_watershed_lungspace`, `filter_roi_by_size`, `as_pixel_mask` | Make and filter regions of interest |
-| `preprocess(sequence, ...)` | Run rate detection, filter, breath detection, TIV, EELI and pixel TIV in one call. `session.preprocess_eit()` uses it. |
-| `compute_tiv(sequence, compute=...)` | Run a TIV function that you give |
 
 ## ReSurfEMGAdapter
 
@@ -71,7 +58,7 @@ The code is in `src/m3resp/adapters/ventilator_adapter/`. The adapter reads vent
 | Source | Read by |
 |---|---|
 | An EMG file with ventilator channels | `ReSurfEMGAdapter` |
-| An EIT `.bin` file with ventilator waveforms | `EITProcessingAdapter` |
+| An EIT `.bin` file with ventilator waveforms | `m3resp.modalities.eit.load` (the M3Resp EIT readers, or the custom EIT loader of the session) |
 | A file type with a reader of its own | The reader registered for its file extension |
 
 `source="eit"`, `"emg"` or `"ventilator"` selects the source. Without `source`, the adapter uses the reader registered for the file extension. Without a registered reader, it reads `.bin` files as EIT and all other files as EMG.
@@ -80,9 +67,9 @@ The code is in `src/m3resp/adapters/ventilator_adapter/`. The adapter reads vent
 
 ## Comparison tests
 
-The tests in `tests/regression/` compare the result of each adapter method with the direct call of `eitprocessing` or `resurfemg`, with the same settings. Most tests require exactly equal values. If one of these tests fails, look at the adapter method first. See {doc}`testing`.
+The tests in `tests/regression/` compare the result of each `ReSurfEMGAdapter` method with the direct call of `resurfemg`, and the result of the M3Resp EIT code with `eitprocessing` 1.8.7, with the same settings. Most tests require exactly equal values. If one of these tests fails, look at the adapter method or the M3Resp function first. The EIT comparisons need the `reference` option. The code that builds the `eitprocessing` objects for them is in `tests/reference/eitprocessing/`. See {doc}`testing`.
 
-## Add a function of eitprocessing or resurfemg
+## Add a function of resurfemg
 
 1. Add a method to the adapter. Give it the same argument names and defaults as the original function.
 2. To store the result in the session, change it into M3Resp objects in a `to_*` method.

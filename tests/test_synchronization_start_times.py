@@ -9,7 +9,6 @@ before/after synchronization plot.
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -17,6 +16,7 @@ import pytest
 from m3resp.adapters import ReSurfEMGAdapter
 from m3resp.core.session import M3Session
 from m3resp.data.events import BreathEvent
+from m3resp.data.signals import Signal
 from m3resp.modalities.eit import EITRecording
 from m3resp.modalities.emg import EMGRecording
 from m3resp.synchronization.start_times import own_first_time, shared_clock_shift
@@ -34,11 +34,26 @@ def _eit(
 ) -> EITRecording:
     time = first_time + np.arange(n_samples) / fs
     return EITRecording(
-        data=None,
         paths=(Path("synthetic_eit.bin"),),
-        global_impedance=SimpleNamespace(
-            time=time, values=np.zeros(n_samples), label="global_impedance"
+        vendor="draeger",
+        sample_frequency=fs,
+        pixel_impedance=Signal(
+            time=time,
+            values=np.zeros((n_samples, 1, 1)),
+            sample_frequency=fs,
+            modality="eit",
+            channel="pixel_impedance",
         ),
+        signals={
+            "global_impedance_(raw)": Signal(
+                time=time,
+                values=np.zeros(n_samples),
+                name="global_impedance",
+                sample_frequency=fs,
+                modality="eit",
+                channel="global_impedance",
+            )
+        },
     )
 
 

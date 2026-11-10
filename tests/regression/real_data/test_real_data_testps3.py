@@ -82,6 +82,7 @@ def _expected_eit_window(testps3_run, testps3_paths):
     file's first frame).
     """
 
+    pytest.importorskip("eitprocessing")
     from eitprocessing.datahandling.loading import load_eit_data
 
     dataset = testps3_run["dataset"]
@@ -105,15 +106,16 @@ def _main(results, window):
 
 def test_eit_slice_gives_the_frames_eitprocessing_cuts(testps3_run, testps3_paths):
     expected = _expected_eit_window(testps3_run, testps3_paths)
-    in_session = testps3_run["eit_session"].eit.raw
+    in_session = testps3_run["eit_session"].eit.pixel_impedance
     passed_on = testps3_run["eit_context"].get("raw_eit")
 
-    np.testing.assert_array_equal(in_session.pixel_impedance, expected.pixel_impedance)
+    np.testing.assert_array_equal(in_session.values, expected.pixel_impedance)
     # The data the next workflow steps read.
-    np.testing.assert_array_equal(passed_on.pixel_impedance, expected.pixel_impedance)
+    np.testing.assert_array_equal(passed_on.values, expected.pixel_impedance)
 
 
 def test_eit_rates_match_eitprocessing(testps3_run, testps3_paths):
+    pytest.importorskip("eitprocessing")
     from eitprocessing.features.rate_detection import RateDetection
 
     expected = _expected_eit_window(testps3_run, testps3_paths)
@@ -125,6 +127,7 @@ def test_eit_rates_match_eitprocessing(testps3_run, testps3_paths):
 
 
 def test_eit_mdn_filter_and_breaths_match_eitprocessing(testps3_run, testps3_paths):
+    pytest.importorskip("eitprocessing")
     from eitprocessing.features.breath_detection import BreathDetection
     from eitprocessing.features.rate_detection import RateDetection
     from eitprocessing.filters.mdn import MDNFilter
@@ -140,11 +143,11 @@ def test_eit_mdn_filter_and_breaths_match_eitprocessing(testps3_run, testps3_pat
 
     context = testps3_run["eit_context"]
     np.testing.assert_array_equal(
-        context.get("filtered_eit").pixel_impedance, filtered.pixel_impedance
+        context.get("filtered_eit").values, filtered.pixel_impedance
     )
     found = [
-        (b.start_time, b.middle_time, b.end_time)
-        for b in context.get("breath_intervals").values
+        (b.start_time, b.extremum_time, b.end_time)
+        for b in context.get("breath_intervals").intervals
     ]
     assert found == [(b.start_time, b.middle_time, b.end_time) for b in breaths.values]
 

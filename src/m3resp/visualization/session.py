@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 
 from m3resp.core.session import M3Session
+from m3resp.data.event_data import IntervalData
 from m3resp.data.events import BreathEvent
 from m3resp.synchronization.alignment import align_events_by_modality_offset
-from m3resp.synchronization.start_times import shared_clock_shifts
+from m3resp.synchronization.start_times import on_clock_of, shared_clock_shifts
 from m3resp.visualization import plotly_figures
 from m3resp.visualization.plotly_figures import EventOverlay, LinePanel
 
@@ -52,7 +54,7 @@ def plot_session_overview(
     Raises:
         ValueError: If ``backend`` is unknown, if the session has no signal to
             plot, or if ``emg_channel`` is not the processed channel.
-        ImportError: If the plot library of ``backend`` is not installed.
+        ImportError: If ``backend="plotly"`` and plotly is not installed.
     """
 
     _check_backend(backend)
@@ -78,13 +80,7 @@ def plot_session_overview(
             panels.append([LinePanel(title, ylabel, time, values, [overlay])])
         return plotly_figures.line_grid_figure(panels, max_points=max_points)
 
-    try:
-        from matplotlib import pyplot as plt
-    except ImportError as exc:  # pragma: no cover - depends on local extras
-        raise ImportError(
-            "Session visualization requires matplotlib. Install the EIT or EMG "
-            "optional dependencies, or install matplotlib directly."
-        ) from exc
+    from matplotlib import pyplot as plt
 
     fig, axes = plt.subplots(
         len(rows),
@@ -147,7 +143,7 @@ def plot_eit_processing_summary(
         TypeError: If the session has no processed EIT data.
         ValueError: If ``backend`` is unknown, or if the processed EIT data
             has no global impedance.
-        ImportError: If the plot library of ``backend`` is not installed.
+        ImportError: If ``backend="plotly"`` and plotly is not installed.
     """
 
     _check_backend(backend)
@@ -160,42 +156,42 @@ def plot_eit_processing_summary(
     )
     if signal is None:
         raise ValueError("No EIT global impedance signal found in processed EIT data.")
+    signal_label = signal.name
 
+    tiv = _breath_values(processed.get("continuous_tiv"), "extremum_time", session)
+    eeli = _breath_values(processed.get("eeli"), "end_time", session)
+    # One PixelMap of TIV per breath (IntervalData of eit.pixel_tiv).
     pixel_tiv = processed.get("pixel_tiv")
     mean_pixel_tiv = None
     if pixel_tiv is not None and len(pixel_tiv.values):
-        mean_pixel_tiv = np.nanmean(np.stack(pixel_tiv.values), axis=0)
+        mean_pixel_tiv = np.nanmean(
+            np.stack([np.asarray(m, dtype=float) for m in pixel_tiv.values]), axis=0
+        )
 
     if backend == "plotly":
         color, label = _event_style("eit")
         panel = LinePanel(
             "EIT global impedance",
-            signal.label,
+            signal_label,
             np.asarray(signal.time, dtype=float),
             np.asarray(signal.values, dtype=float),
             [EventOverlay(session.events.get("eit_breaths", []), color, label)],
         )
         return plotly_figures.eit_summary_figure(
             panel,
-            processed.get("continuous_tiv"),
-            processed.get("eeli"),
+            tiv,
+            eeli,
             mean_pixel_tiv,
             max_points=max_points,
         )
 
-    try:
-        from matplotlib import pyplot as plt
-    except ImportError as exc:  # pragma: no cover - depends on local extras
-        raise ImportError(
-            "EIT visualization requires matplotlib. Install the EIT optional "
-            "dependencies, or install matplotlib directly."
-        ) from exc
+    from matplotlib import pyplot as plt
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 7), constrained_layout=True)
     ax_signal, ax_tiv, ax_eeli, ax_map = axes.ravel()
 
     ax_signal.plot(signal.time, signal.values, linewidth=1)
-    ax_signal.set(title="EIT global impedance", xlabel="Time (s)", ylabel=signal.label)
+    ax_signal.set(title="EIT global impedance", xlabel="Time (s)", ylabel=signal_label)
     ax_signal.grid(True, alpha=0.25)
     _plot_events(
         [ax_signal],
@@ -205,8 +201,8 @@ def plot_eit_processing_summary(
     )
     _deduplicate_legends([ax_signal])
 
-    _plot_sparse(ax_tiv, processed.get("continuous_tiv"), "Continuous TIV", "TIV")
-    _plot_sparse(ax_eeli, processed.get("eeli"), "EELI", "EELI")
+    _plot_sparse(ax_tiv, tiv, "Continuous TIV", "TIV")
+    _plot_sparse(ax_eeli, eeli, "EELI", "EELI")
 
     if mean_pixel_tiv is not None:
         image = ax_map.imshow(mean_pixel_tiv, cmap="viridis")
@@ -253,7 +249,7 @@ def plot_synchronization_comparison(
     Raises:
         ValueError: If ``backend`` is unknown, or if the session has no
             synchronization data or no signal to plot.
-        ImportError: If the plot library of ``backend`` is not installed.
+        ImportError: If ``backend="plotly"`` and plotly is not installed.
     """
 
     _check_backend(backend)
@@ -327,13 +323,7 @@ def plot_synchronization_comparison(
             )
         return plotly_figures.line_grid_figure(panels, max_points=max_points)
 
-    try:
-        from matplotlib import pyplot as plt
-    except ImportError as exc:  # pragma: no cover - depends on local extras
-        raise ImportError(
-            "Synchronization visualization requires matplotlib. Install the EIT "
-            "or EMG optional dependencies, or install matplotlib directly."
-        ) from exc
+    from matplotlib import pyplot as plt
 
     fig, axes = plt.subplots(
         len(rows),
@@ -425,19 +415,17 @@ def _get_eit_rows(
     if recording is None:
         return []
 
-    sequence = recording.data
     rows: list[tuple[str, str, np.ndarray, np.ndarray, str]] = []
-    continuous_data = getattr(sequence, "continuous_data", {})
-    if waveform not in continuous_data:
+    signal = (
+        recording.raw_global_impedance
+        if waveform == "global_impedance_(raw)"
+        else recording.signals.get(waveform)
+    )
+    if signal is None:
         return rows
 
-    rows.append(
-        (
-            "eit",
-            "EIT raw global impedance",
-            *_continuous_series(continuous_data[waveform]),
-        )
-    )
+    time, values, _ = _continuous_series(signal)
+    rows.append(("eit", "EIT raw global impedance", time, values, waveform))
 
     processed = session.processed.get("eit")
     if isinstance(processed, dict):
@@ -535,9 +523,20 @@ def _get_synchronization_plot_rows(
 
 
 def _continuous_series(data: Any) -> tuple[np.ndarray, np.ndarray, str]:
+    """Return the time, the values and the label of a waveform.
+
+    Args:
+        data (Any): A ``Signal``, or an object with ``time``, ``values`` and
+            ``label``.
+
+    Returns:
+        tuple[numpy.ndarray, numpy.ndarray, str]: Time in seconds, the
+            values, and the label (the name of a ``Signal``).
+    """
+
     time = np.asarray(data.time, dtype=float)
     values = np.asarray(data.values, dtype=float)
-    ylabel = data.label
+    ylabel = str(getattr(data, "label", None) or getattr(data, "name", None) or "")
     return time, values, ylabel
 
 
@@ -673,6 +672,45 @@ def _plot_events(
                     linewidth=1,
                     label=label,
                 )
+
+
+@dataclass(frozen=True)
+class _BreathValues:
+    """Times (s) and values of a per-breath result, for the TIV and EELI panels."""
+
+    time: np.ndarray
+    values: np.ndarray
+
+    def __len__(self) -> int:
+        return len(self.values)
+
+
+def _breath_values(result: Any, point: str, session: M3Session) -> Any:
+    """Return a per-breath result as times and values for a figure.
+
+    Args:
+        result (Any): An ``IntervalData`` of breaths, an object with ``time``
+            and ``values``, or None.
+        point (str): For an ``IntervalData``, the breath time of each value:
+            ``"extremum_time"`` for TIV, ``"end_time"`` for EELI. A breath
+            with no time at that point gives NaN.
+        session (M3Session): Session with the start time of each recording.
+            Breaths of another modality are moved to the EIT clock with
+            these start times.
+
+    Returns:
+        Any: A ``_BreathValues`` for an ``IntervalData``, with times on the
+            EIT clock; any other result as it is.
+    """
+
+    if not isinstance(result, IntervalData):
+        return result
+    breaths = on_clock_of(session, result.intervals, "eit")
+    times = [getattr(breath, point, None) for breath in breaths]
+    return _BreathValues(
+        time=np.array([np.nan if t is None else t for t in times], dtype=float),
+        values=np.asarray(result.values, dtype=float),
+    )
 
 
 def _plot_sparse(ax: Any, sparse: Any, title: str, ylabel: str) -> None:

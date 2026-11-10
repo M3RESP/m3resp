@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
+import dataclasses
 import weakref
+from collections.abc import Callable
 from typing import Any
 
-from m3resp.adapters.eitprocessing_adapter import breath_intervals_to_breath_events
 from m3resp.core.session import M3Session
-from m3resp.data import BreathEvent
-from m3resp.data.events import reuse_matching_breaths
-from m3resp.workflows.registry import StepArtifact
-
-#: Every eit.* step ultimately calls eitprocessing, directly or through
-#: EITProcessingAdapter, so all of them declare the same optional dependency.
-_EITPROCESSING = ("eitprocessing",)
-
+from m3resp.data import BreathEvent, IntervalData, Signal
+from m3resp.data.events import Interval, reuse_matching_breaths
+from m3resp.eit.processing import BreathDetectionSettings, find_breaths
+from m3resp.eit.processing.breath_inputs import given_breath_events
+from m3resp.modalities.names import normalize_modality
+from m3resp.synchronization.start_times import on_clock_of
+from m3resp.synchronization.sync_methods import warn_if_not_synchronized
+from m3resp.workflows.registry import BREATHS_ARTIFACT_TYPE, StepArtifact
 
 _SESSION_ARTIFACT = StepArtifact(
     name="session",
@@ -32,6 +33,28 @@ _BREATHS_FOUND: weakref.WeakKeyDictionary[
 ] = weakref.WeakKeyDictionary()
 
 
+def _as_signal(value: Any, *, name: str, step: str) -> Signal:
+    """Return a step input that must be a ``Signal``.
+
+    Args:
+        value (Any): The step input.
+        name (str): The name of the input, for the message.
+        step (str): The step name, for the message.
+
+    Returns:
+        Signal: ``value``.
+
+    Raises:
+        TypeError: If ``value`` is not a ``Signal``.
+    """
+
+    if not isinstance(value, Signal):
+        raise TypeError(
+            f"{step}: '{name}' must be an m3resp Signal, got {type(value).__name__}."
+        )
+    return value
+
+
 def _breaths_used_by(
     breath_detector: Any, signal: Any, session: M3Session
 ) -> list[BreathEvent]:
@@ -43,14 +66,18 @@ def _breaths_used_by(
     are reused on the first call; later calls use the remembered list.
 
     Args:
-        breath_detector: eitprocessing detector with ``find_breaths``.
-        signal: Waveform used by the per-breath calculations.
+        breath_detector: ``BreathDetectionSettings``; the breaths are found
+            with ``m3resp.eit.processing.find_breaths``.
+        signal: Waveform used by the per-breath calculations, a ``Signal``.
         session: Session that remembers detected breaths and supplies stored
             breaths for matching.
 
     Returns:
         list[BreathEvent]: Breaths in detector order, shared by per-breath
             results using this detector and signal.
+
+    Raises:
+        TypeError: If ``breath_detector`` is not ``BreathDetectionSettings``.
     """
 
     found = _BREATHS_FOUND.setdefault(session, [])
@@ -58,12 +85,47 @@ def _breaths_used_by(
         if detector is breath_detector and detected_on is signal:
             return breaths
 
-    breaths = _use_stored_eit_breaths(
-        breath_intervals_to_breath_events(breath_detector.find_breaths(signal)),
-        session,
-    )
+    if not isinstance(breath_detector, BreathDetectionSettings):
+        raise TypeError(
+            "'breath_detector' must be BreathDetectionSettings (from "
+            f"'eit.detect_breaths'), got {type(breath_detector).__name__}."
+        )
+    detected = find_breaths(signal, breath_detector)
+    breaths = _use_stored_eit_breaths(detected, session)
     found.append((breath_detector, signal, breaths))
     return breaths
+
+
+#: The default breath detection settings, the detector of the sign breaths of
+#: the pixel breath search.
+_DEFAULT_DETECTION = BreathDetectionSettings()
+
+
+def _sign_breaths_used_by(
+    breath_detector: BreathDetectionSettings, signal: Signal, session: M3Session
+) -> list[BreathEvent] | None:
+    """Return the breaths that give the sign of each pixel in the pixel breath search.
+
+    These are the breaths of ``signal`` found with the default settings
+    (see ``m3resp.eit.processing.breath_inputs.pixel_sign_breaths``).
+    Detection runs once per signal object in each session.
+
+    Args:
+        breath_detector (BreathDetectionSettings): The settings of the
+            global breaths.
+        signal (Signal): The waveform the global breaths were found in.
+        session (M3Session): Session that remembers detected breaths.
+
+    Returns:
+        list[BreathEvent] | None: The breaths of ``signal`` found with the
+            default settings. None when ``breath_detector`` holds the
+            default settings, because the global breaths are then the same
+            breaths.
+    """
+
+    if breath_detector == _DEFAULT_DETECTION:
+        return None
+    return _breaths_used_by(_DEFAULT_DETECTION, signal, session)
 
 
 def _use_stored_eit_breaths(
@@ -74,18 +136,113 @@ def _use_stored_eit_breaths(
     return reuse_matching_breaths(breaths, session.get_events("eit_breaths", None))
 
 
-def _upstream_metadata(
-    *, source_function: str, operation: str, parameters: dict[str, Any]
+def _step_provenance(
+    *,
+    source_function: str,
+    operation: str,
+    parameters: dict[str, Any],
+    implementation: str,
+    source_package: str = "m3resp",
 ) -> dict[str, Any]:
-    """Build the Stage 2 EIT provenance metadata schema shared by native
-    `Signal`/`ParameterResult` outputs (see `plan/stage2/
-    1_eit_gap_migration_implementation_plan.md`, "Use one provenance
-    schema")."""
+    """The provenance details an EIT step returns under ``"_provenance"``.
+
+    They say which package, module (``implementation``) and function
+    computed the value, the settings used, and the step name.
+    """
 
     return {
-        "source_package": "eitprocessing",
+        "source_package": source_package,
         "source_function": source_function,
-        "implementation": "upstream_adapter",
+        "implementation": implementation,
         "parameters": parameters,
         "operation": operation,
     }
+
+
+#: Input of TIV and EELI: breaths of any modality, from another step.
+_BREATHS_ARTIFACT = StepArtifact(
+    name="breaths",
+    artifact_type=BREATHS_ARTIFACT_TYPE,
+    required=False,
+    description=(
+        "Breaths of any modality for the values; without them, the step finds "
+        "the breaths with 'breath_detector'. A list of BreathEvents or an "
+        "IntervalData of breaths, for example "
+        "the breaths of 'eit.detect_breaths', 'emg.detect_breaths' or "
+        "'ventilator.normalize_breaths'. Breaths of another modality are moved "
+        "to the EIT clock with the start times of the session. The values "
+        "are a TIV and an EELI only when the breath times mark the start and "
+        "the end of inspiration and the end of expiration in the impedance."
+    ),
+)
+
+
+def _on_eit_clock(
+    breaths: list[BreathEvent], session: M3Session, *, action: str
+) -> list[BreathEvent]:
+    """Return copies of the breaths with their times on the EIT clock.
+
+    Args:
+        breaths: The breaths, each on the clock of its modality.
+        session: Session with the start time of each recording.
+        action: Step name, for the warning.
+
+    Returns:
+        list[BreathEvent]: One copy per breath, with start, extremum and end
+            in seconds on the EIT clock (see ``on_clock_of``).
+
+    Warns:
+        UnsynchronizedDataWarning: When breaths of another modality are used
+            and the recordings were never synchronized.
+    """
+
+    modalities = sorted({normalize_modality(breath.modality) for breath in breaths})
+    if any(modality != "eit" for modality in modalities):
+        warn_if_not_synchronized(session, ["eit", *modalities], action=action)
+    return on_clock_of(session, breaths, "eit")
+
+
+def _per_breath_values(
+    calculate: Callable[[Signal, list[BreathEvent]], IntervalData],
+    signal: Any,
+    *,
+    breaths: Any,
+    breath_detector: Any,
+    session: M3Session,
+    action: str,
+) -> IntervalData:
+    """Run a TIV or EELI calculation on the given breaths or on the found ones.
+
+    Args:
+        calculate: ``tidal_impedance_variation`` or
+            ``end_expiratory_lung_impedance`` with its settings, taking the
+            waveform and the breaths.
+        signal: The impedance waveform, a ``Signal``.
+        breaths: Breaths of the step input ``breaths``, or None.
+        breath_detector: Breath detection settings, used when ``breaths`` is
+            None.
+        session: Session with the start times and the stored EIT breaths.
+        action: Step name, for the warning.
+
+    Returns:
+        IntervalData: The result of ``calculate``. With given breaths, it
+            holds the given breath objects, on the clock of their modality.
+
+    Raises:
+        TypeError: If ``signal`` is not a ``Signal``.
+        ValueError: If both ``breaths`` and ``breath_detector`` are None.
+    """
+
+    waveform = _as_signal(signal, name="signal", step=action)
+    if breaths is None:
+        if breath_detector is None:
+            raise ValueError(
+                f"{action} needs the breaths: connect 'breaths', or "
+                "'breath_detector' from 'eit.detect_breaths'."
+            )
+        return calculate(waveform, _breaths_used_by(breath_detector, waveform, session))
+    given = given_breath_events(breaths, function=action)
+    result = calculate(waveform, _on_eit_clock(given, session, action=action))
+    return dataclasses.replace(
+        result, intervals=list[Interval](given), metadata=dict(result.metadata)
+    )

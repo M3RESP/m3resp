@@ -37,7 +37,6 @@ def _synthetic_signal(fs: float = 1000.0, duration_seconds: float = 3.0):
 
 
 def test_moving_average_reproduces_eitprocessing_exactly():
-    _add_sibling_checkout_to_path("eitprocessing")
     pytest.importorskip("eitprocessing")
     from eitprocessing.features.moving_average import MovingAverage
 
@@ -59,7 +58,6 @@ def test_moving_average_reproduces_eitprocessing_exactly():
 
 
 def test_moving_average_shortens_overlong_window_like_eitprocessing():
-    _add_sibling_checkout_to_path("eitprocessing")
     pytest.importorskip("eitprocessing")
     from eitprocessing.features.moving_average import MovingAverage
 

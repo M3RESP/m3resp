@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from eit_file_data_cases import small_eit_file_data
 
 from m3resp.adapters.ventilator_adapter import (
     VentilatorAdapter,
@@ -21,6 +22,7 @@ from m3resp.adapters.ventilator_adapter import (
     unregister_ventilator_loader,
     ventilator_loaders,
 )
+from m3resp.data import Signal
 
 FS = 100.0
 N = 300
@@ -128,42 +130,47 @@ class TestDispatch:
 
 
 class TestEitSourcedRegistration:
-    def _sequence(self):
-        class _ContinuousData:
-            def __init__(self, label, values, unit):
-                self.label = label
-                self.name = label
-                self.values = np.asarray(values, dtype=float)
-                self.unit = unit
-                self.sample_frequency = FS
-                self.time = np.arange(len(self.values)) / FS
+    def _recording(self):
+        """The data of an EIT file with airway pressure, flow and volume."""
 
-        class _Sequence:
-            def __init__(self):
-                self.continuous_data = {
-                    "airway pressure": _ContinuousData(
-                        "airway pressure", _wave(10.0), "mbar"
-                    ),
-                    "flow": _ContinuousData("flow", _wave(5.0), "L/min"),
-                    "volume": _ContinuousData("volume", _wave(500.0), "mL"),
-                }
+        def waveform(label, values, unit):
+            return Signal(
+                values=np.asarray(values, dtype=float),
+                time=np.arange(N) / FS,
+                sample_frequency=FS,
+                unit=unit,
+                name=label,
+                modality="eit",
+            )
 
-        return _Sequence()
+        return small_eit_file_data(
+            "study.mfz",
+            "draeger",
+            n_frames=N,
+            sample_frequency=FS,
+            signals={
+                "airway pressure": waveform("airway pressure", _wave(10.0), "mbar"),
+                "flow": waveform("flow", _wave(5.0), "L/min"),
+                "volume": waveform("volume", _wave(500.0), "mL"),
+            },
+        )
 
     def test_an_eit_sourced_registration_is_unpacked_like_the_builtin_eit_path(self):
-        sequence = self._sequence()
-        register_ventilator_loader("mfz", lambda path, **kwargs: sequence, source="eit")
+        recording = self._recording()
+        register_ventilator_loader(
+            "mfz", lambda path, **kwargs: recording, source="eit"
+        )
         payload = VentilatorAdapter().load("study.mfz")
         assert payload["metadata"]["source"] == "eit"
         assert payload["array"].shape == (3, N)
 
     def test_the_reader_does_not_receive_channel_or_fs_kwargs(self):
-        sequence = self._sequence()
+        recording = self._recording()
         seen_kwargs = {}
 
         def reader(path, **kwargs):
             seen_kwargs.update(kwargs)
-            return sequence
+            return recording
 
         register_ventilator_loader("mfz", reader, source="eit")
         VentilatorAdapter().load(
@@ -173,14 +180,18 @@ class TestEitSourcedRegistration:
         assert "fs" not in seen_kwargs
 
     def test_ventilator_channels_still_selects_which_channels_are_read(self):
-        sequence = self._sequence()
-        register_ventilator_loader("mfz", lambda path, **kwargs: sequence, source="eit")
+        recording = self._recording()
+        register_ventilator_loader(
+            "mfz", lambda path, **kwargs: recording, source="eit"
+        )
         payload = VentilatorAdapter().load(
             "study.mfz", ventilator_channels=("airway_pressure", "flow")
         )
         assert payload["array"].shape == (2, N)
 
     def test_the_reported_clock_is_eit(self):
-        sequence = self._sequence()
-        register_ventilator_loader("mfz", lambda path, **kwargs: sequence, source="eit")
+        recording = self._recording()
+        register_ventilator_loader(
+            "mfz", lambda path, **kwargs: recording, source="eit"
+        )
         assert resolve_ventilator_source("study.mfz") == "eit"

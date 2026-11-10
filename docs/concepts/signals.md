@@ -77,7 +77,7 @@ Both fields accept any name. M3Resp changes a known other name of a category to 
 | `"processed"` | The final signal of a channel, ready for the calculation of parameters |
 | `"derived"` | Calculated from other signals, for example the difference of two signals. `derived_from` gives the state of those signals. |
 
-Two signals can have the same channel and the same processing state, for example two filtered signals that use different filters. The field `method` then tells them apart. M3Resp writes `method` as `"<package>.<function>"`, for example `"resurfemg.moving_baseline"` or `"eitprocessing.RateDetection"`.
+Two signals can have the same channel and the same processing state, for example two filtered signals that use different filters. The field `method` then tells them apart. M3Resp writes `method` as `"<package>.<function>"`, for example `"resurfemg.moving_baseline"` or `"m3resp.eit.processing.detect_rates"`.
 
 ## Where signals come from
 

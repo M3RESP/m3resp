@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import csv
 import json
-import os
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -92,7 +91,7 @@ def export_session_summary(
     }
 
     if summary_json:
-        Path(os.path.join(output_path, "summary.json")).write_text(
+        (Path(output_path) / "summary.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8"
         )
 
@@ -100,13 +99,13 @@ def export_session_summary(
         for name, events in session.events.items():
             if events:
                 _write_csv(
-                    Path(os.path.join(output_path, f"{name}.csv")),
+                    Path(output_path) / f"{name}.csv",
                     events_to_rows(events),
                 )
 
     if parameters_csv and parameters:
         _write_csv(
-            Path(os.path.join(output_path, "parameters.csv")),
+            Path(output_path) / "parameters.csv",
             parameters_to_rows(parameters),
         )
 
@@ -130,7 +129,7 @@ def _export_structured_collections(
     def path_to(filename: str) -> Path:
         """Return the export path for a filename."""
 
-        return Path(os.path.join(str(output_path), filename))
+        return Path(output_path) / filename
 
     # Convert the values per breath and the masks before writing anything, so
     # a result that cannot be stored stops the export before it has written

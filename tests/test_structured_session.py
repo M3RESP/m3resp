@@ -2,11 +2,9 @@
 
 Acceptance criterion under test: a session can store EIT and EMG data in the
 same structure (``session.signals``/``parameter_results``/``quality``),
-populated via each adapter's Milestone 2.3 conversion methods on the default
-preprocess/postprocess path. Adapters are given fixed, fake preprocessing
-outputs (rather than driving real ``eitprocessing``/``resurfemg`` numerics)
-so these tests isolate the session <-> adapter wiring itself; the conversion
-logic is already covered by ``tests/test_adapter_conversions.py``.
+populated on the default preprocess/postprocess path. The EIT preprocessing
+(``preprocess_eit_recording``) and the EMG adapter are given fixed, fake
+outputs, so these tests check how the session stores them.
 """
 
 from __future__ import annotations
@@ -17,34 +15,52 @@ from typing import Any
 import pytest
 
 from m3resp import M3Session
-from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
+from m3resp.adapters import ReSurfEMGAdapter
 from m3resp.core.exceptions import VariantAlreadyExistsError
-from m3resp.data import BreathEvent, ParameterResult, QualityFlag, Signal
+from m3resp.data import (
+    BreathEvent,
+    IntervalData,
+    ParameterResult,
+    QualityFlag,
+    Signal,
+)
+
+
+def _waveform(values: list[float], name: str) -> Signal:
+    return Signal(
+        values=values,
+        time=[0.0, 1.0, 2.0],
+        sample_frequency=1.0,
+        unit="a.u.",
+        name=name,
+        modality="eit",
+        category="impedance",
+        channel="global_impedance",
+    )
 
 
 def _fake_eit_preprocessed() -> dict[str, Any]:
     return {
-        "raw_global_impedance": SimpleNamespace(
-            values=[1.0, 2.0, 3.0],
-            time=[0.0, 1.0, 2.0],
-            unit="a.u.",
-            name="raw gi",
-            sample_frequency=1.0,
-        ),
-        "filtered_global_impedance": SimpleNamespace(
-            values=[1.1, 2.1, 3.1],
-            time=[0.0, 1.0, 2.0],
-            unit="a.u.",
-            name="filtered gi",
-            sample_frequency=1.0,
-        ),
+        "raw_global_impedance": _waveform([1.0, 2.0, 3.0], "raw gi"),
+        "filtered_global_impedance": _waveform([1.1, 2.1, 3.1], "filtered gi"),
         "respiratory_rate_hz": 0.3,
         "heart_rate_hz": 1.1,
-        "breath_intervals": object(),
+        "breath_intervals": IntervalData(
+            name="eit_breaths", modality="eit", intervals=[]
+        ),
         "continuous_tiv": None,
         "eeli": None,
         "pixel_tiv": None,
     }
+
+
+def _use_fake_eit_preprocessing(monkeypatch, make_result) -> None:
+    """Make ``session.preprocess_eit()`` return a new ``make_result()``."""
+
+    monkeypatch.setattr(
+        "m3resp.core.session.preprocess_eit_recording",
+        lambda *args, **kwargs: make_result(),
+    )
 
 
 def _fake_emg_preprocessed() -> dict[str, Any]:
@@ -57,10 +73,11 @@ def _fake_emg_preprocessed() -> dict[str, Any]:
     }
 
 
-def test_preprocess_eit_populates_typed_collections_on_default_adapter_path():
-    eit_adapter = EITProcessingAdapter()
-    eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
-    session = M3Session(eit_adapter=eit_adapter)
+def test_preprocess_eit_populates_typed_collections_on_default_adapter_path(
+    monkeypatch,
+):
+    _use_fake_eit_preprocessing(monkeypatch, _fake_eit_preprocessed)
+    session = M3Session()
     session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
 
     session.preprocess_eit()
@@ -75,7 +92,7 @@ def test_preprocess_eit_populates_typed_collections_on_default_adapter_path():
 
 
 def test_preprocess_eit_with_custom_callable_does_not_populate_collections():
-    session = M3Session(eit_adapter=EITProcessingAdapter())
+    session = M3Session()
     session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
 
     session.preprocess_eit(preprocess=lambda data, **kwargs: {"custom": True})
@@ -136,15 +153,14 @@ def test_postprocess_emg_populates_parameter_results_and_quality():
     ]
 
 
-def test_session_stores_eit_and_emg_signals_in_the_same_collection():
+def test_session_stores_eit_and_emg_signals_in_the_same_collection(monkeypatch):
     """The Milestone 2.2 acceptance criterion, verbatim."""
 
-    eit_adapter = EITProcessingAdapter()
-    eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
+    _use_fake_eit_preprocessing(monkeypatch, _fake_eit_preprocessed)
     emg_adapter = ReSurfEMGAdapter()
     emg_adapter.preprocess = lambda *args, **kwargs: _fake_emg_preprocessed()  # type: ignore[method-assign]
 
-    session = M3Session(eit_adapter=eit_adapter, emg_adapter=emg_adapter)
+    session = M3Session(emg_adapter=emg_adapter)
     session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
     session.raw["emg"] = SimpleNamespace(data=object())
 
@@ -155,7 +171,7 @@ def test_session_stores_eit_and_emg_signals_in_the_same_collection():
     assert modalities == {"eit", "emg"}
 
 
-def test_preprocess_eit_raises_on_duplicate_variant():
+def test_preprocess_eit_raises_on_duplicate_variant(monkeypatch):
     """Second write to an already-populated variant must not silently overwrite it.
 
     Reproduces the ambiguity flagged in PR #23 review: a reference stashed
@@ -163,9 +179,8 @@ def test_preprocess_eit_raises_on_duplicate_variant():
     underneath the caller just because something else preprocessed again.
     """
 
-    eit_adapter = EITProcessingAdapter()
-    eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
-    session = M3Session(eit_adapter=eit_adapter)
+    _use_fake_eit_preprocessing(monkeypatch, _fake_eit_preprocessed)
+    session = M3Session()
     session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
 
     session.preprocess_eit()
@@ -177,10 +192,9 @@ def test_preprocess_eit_raises_on_duplicate_variant():
         session.preprocess_eit(variant="default")
 
 
-def test_preprocess_eit_overwrite_true_replaces_existing_variant():
-    eit_adapter = EITProcessingAdapter()
-    eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
-    session = M3Session(eit_adapter=eit_adapter)
+def test_preprocess_eit_overwrite_true_replaces_existing_variant(monkeypatch):
+    _use_fake_eit_preprocessing(monkeypatch, _fake_eit_preprocessed)
+    session = M3Session()
     session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
 
     first = session.preprocess_eit()
@@ -191,14 +205,13 @@ def test_preprocess_eit_overwrite_true_replaces_existing_variant():
     assert session.processed_variants["eit"]["default"] is second
 
 
-def test_session_allow_overwrite_lets_repeated_preprocess_calls_through():
+def test_session_allow_overwrite_lets_repeated_preprocess_calls_through(monkeypatch):
     """`allow_overwrite` lets notebook code opt in once instead of passing
     `overwrite=True` on every call, without weakening the default guard for
     code that doesn't set it (e.g. once copied into a reusable workflow)."""
 
-    eit_adapter = EITProcessingAdapter()
-    eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
-    session = M3Session(eit_adapter=eit_adapter, allow_overwrite=True)
+    _use_fake_eit_preprocessing(monkeypatch, _fake_eit_preprocessed)
+    session = M3Session(allow_overwrite=True)
     session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
 
     first = session.preprocess_eit()
@@ -208,10 +221,9 @@ def test_session_allow_overwrite_lets_repeated_preprocess_calls_through():
     assert session.processed["eit"] is second
 
 
-def test_session_allow_overwrite_defaults_to_false():
-    eit_adapter = EITProcessingAdapter()
-    eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
-    session = M3Session(eit_adapter=eit_adapter)
+def test_session_allow_overwrite_defaults_to_false(monkeypatch):
+    _use_fake_eit_preprocessing(monkeypatch, _fake_eit_preprocessed)
+    session = M3Session()
     session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
 
     session.preprocess_eit()
@@ -220,10 +232,9 @@ def test_session_allow_overwrite_defaults_to_false():
         session.preprocess_eit()
 
 
-def test_preprocess_eit_distinct_variants_coexist_without_touching_default():
-    eit_adapter = EITProcessingAdapter()
-    eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed()  # type: ignore[method-assign]
-    session = M3Session(eit_adapter=eit_adapter)
+def test_preprocess_eit_distinct_variants_coexist_without_touching_default(monkeypatch):
+    _use_fake_eit_preprocessing(monkeypatch, _fake_eit_preprocessed)
+    session = M3Session()
     session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
 
     session.preprocess_eit(variant="mdn")
@@ -252,22 +263,28 @@ def test_preprocess_emg_raises_on_duplicate_variant():
 
 def _fake_eit_preprocessed_with_tiv() -> dict[str, Any]:
     preprocessed = _fake_eit_preprocessed()
-    preprocessed["breath_intervals"] = SimpleNamespace(
-        values=[
-            SimpleNamespace(start_time=0.0, middle_time=0.5, end_time=1.0),
-            SimpleNamespace(start_time=1.0, middle_time=1.5, end_time=2.0),
-        ]
+    breaths = [
+        BreathEvent("eit", 0.0, 1.0, extremum_time=0.5),
+        BreathEvent("eit", 1.0, 2.0, extremum_time=1.5),
+    ]
+    preprocessed["breath_intervals"] = IntervalData(
+        name="eit_breaths", modality="eit", intervals=list(breaths)
     )
-    preprocessed["continuous_tiv"] = SimpleNamespace(
-        values=[1.0, 2.0], time=[0.5, 1.5], unit="a.u.", label="continuous_tivs"
+    preprocessed["continuous_tiv"] = IntervalData(
+        name="continuous_tivs",
+        modality="eit",
+        intervals=list(breaths),
+        values=[1.0, 2.0],
+        unit="a.u.",
     )
     return preprocessed
 
 
-def test_breaths_detected_after_preprocessing_are_the_breaths_of_the_tiv_values():
-    eit_adapter = EITProcessingAdapter()
-    eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed_with_tiv()  # type: ignore[method-assign]
-    session = M3Session(eit_adapter=eit_adapter)
+def test_breaths_detected_after_preprocessing_are_the_breaths_of_the_tiv_values(
+    monkeypatch,
+):
+    _use_fake_eit_preprocessing(monkeypatch, _fake_eit_preprocessed_with_tiv)
+    session = M3Session()
     session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
 
     session.preprocess_eit()
@@ -277,10 +294,9 @@ def test_breaths_detected_after_preprocessing_are_the_breaths_of_the_tiv_values(
     assert all(stored is used for stored, used in zip(breaths, tiv.intervals))
 
 
-def test_tiv_values_computed_after_breath_detection_use_the_stored_breaths():
-    eit_adapter = EITProcessingAdapter()
-    eit_adapter.preprocess = lambda *args, **kwargs: _fake_eit_preprocessed_with_tiv()  # type: ignore[method-assign]
-    session = M3Session(eit_adapter=eit_adapter)
+def test_tiv_values_computed_after_breath_detection_use_the_stored_breaths(monkeypatch):
+    _use_fake_eit_preprocessing(monkeypatch, _fake_eit_preprocessed_with_tiv)
+    session = M3Session()
     session.raw["eit"] = SimpleNamespace(data=object(), path="subject.eit")
     stored = BreathEvent("eit", 0.0, 1.0, extremum_time=0.5)
     session.add_events("eit_breaths", [stored])

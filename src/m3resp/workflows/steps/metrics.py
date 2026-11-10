@@ -25,10 +25,10 @@ from m3resp.workflows.registry import StepArtifact, register_step
     input_artifacts=(
         StepArtifact(
             name="intervals",
-            artifact_type="interval_collection",
+            artifact_type="interval_data",
             description=(
-                "Interval/breath collection exposing a `.intervals` list of "
-                "(start, end) time pairs."
+                "Intervals or breaths with a `.intervals` list: m3resp "
+                "Intervals or BreathEvents, or (start, end) time pairs."
             ),
         ),
     ),
@@ -62,10 +62,20 @@ def interval_cv(intervals: Any) -> dict[str, Any]:
 
     Mirrors the ROTARC breath-duration calculation: durations are
     ``end - start`` per interval, and CV is ``std / mean``.
+
+    Args:
+        intervals: An object with ``.intervals``: m3resp ``Interval``s or
+            ``BreathEvent``s (an m3resp ``IntervalData``), objects with
+            ``start_time`` and ``end_time``, or (start, end) pairs. Times
+            in seconds.
+
+    Returns:
+        dict[str, Any]: ``cv`` (std / mean), ``mean`` and ``std`` of the
+            durations in seconds, and ``n``, the number of intervals.
     """
 
     durations = np.asarray(
-        [interval[1] - interval[0] for interval in intervals.intervals],
+        [_duration(interval) for interval in intervals.intervals],
         dtype=float,
     )
     mean = float(durations.mean())
@@ -76,3 +86,11 @@ def interval_cv(intervals: Any) -> dict[str, Any]:
         "std": std,
         "n": len(intervals.intervals),
     }
+
+
+def _duration(interval: Any) -> float:
+    """Return ``end - start`` of one interval, in seconds."""
+
+    if hasattr(interval, "end_time"):
+        return interval.end_time - interval.start_time
+    return interval[1] - interval[0]

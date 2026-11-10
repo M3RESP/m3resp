@@ -24,17 +24,18 @@ classifiers = [
 ]
 dependencies = [
   "loguru",
+  "matplotlib>=3.9",
   "numpy",
   "pandas",
   "pydantic>=2",
   "PyYAML",
+  "scikit-image>=0.25.2",
   "scipy",
 ]
 dynamic = ["version"]
 
 [project.optional-dependencies]
 eit = [
-  "eitprocessing @ git+https://github.com/M3RESP/eitprocessing.git@m3resp-integration",
   "plotly>=6.1",
 ]
 emg = [
@@ -43,10 +44,13 @@ emg = [
   "plotly>=6.1",
 ]
 all = [
-  "eitprocessing @ git+https://github.com/M3RESP/eitprocessing.git@m3resp-integration",
   "resurfemg @ git+https://github.com/M3RESP/ReSurfEMG.git@m3resp-integration",
   "ipywidgets",
   "plotly>=6.1",
+]
+# eitprocessing for the tests that compare m3resp with it (pytest -m reference).
+reference = [
+  "eitprocessing==1.8.7",
 ]
 dev = [
   "pre-commit",
@@ -92,11 +96,15 @@ packages = ["src/m3resp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# `reference` (the eitprocessing reference code) and the shared test helpers
+# are imported from the tests folder.
+pythonpath = ["tests"]
 # Tests on the full recordings are slow and need files outside the
 # repository; run them with `pytest -m real_data`.
 addopts = "-m 'not real_data'"
 markers = [
   "real_data: runs on recorded data from tests/regression/real_data/datasets.yaml",
+  "reference: compares m3resp with eitprocessing; needs the `reference` extra",
 ]
 
 [tool.marimo.runtime]
@@ -125,9 +133,9 @@ packages = ["m3resp"]
 
 [[tool.mypy.overrides]]
 module = [
-  "eitprocessing.*",
   "matplotlib.*",
   "plotly.*",
   "resurfemg.*",
+  "skimage.*",
 ]
 ignore_missing_imports = true

@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult
+from m3resp.eit.processing import RateDetectionSettings
+from m3resp.eit.processing import detect_rates as detect_rates_of
 from m3resp.workflows.registry import (
     StepArtifact,
     StepParameter,
@@ -14,9 +16,9 @@ from m3resp.workflows.registry import (
 )
 
 from ._shared import (
-    _EITPROCESSING,
     _SESSION_ARTIFACT,
-    _upstream_metadata,
+    _as_signal,
+    _step_provenance,
 )
 
 
@@ -32,18 +34,16 @@ from ._shared import (
         "heart_rate_result",
     ),
     summary="Estimate respiratory and heart rate from an EIT signal.",
-    description="Estimate respiratory and heart rate from an EIT signal via eitprocessing's RateDetection.",
+    description="Estimate respiratory and heart rate from the frequency spectra of EIT images (m3resp.eit.processing.detect_rates).",
     category="detection",
     modality="eit",
-    optional_packages=_EITPROCESSING,
     session_writes=("session.parameter_results",),
     input_artifacts=(
         StepArtifact(
             name="signal",
             artifact_type="eit_pixel_signal",
             default_context_key="selected_eit",
-            description="EIT signal (typically the detection-window slice) to estimate rates from.",
-            compatibility_only=True,
+            description="EIT images (pixel impedance), typically the detection-window slice, to estimate rates from.",
         ),
         _SESSION_ARTIFACT,
     ),
@@ -63,8 +63,8 @@ from ._shared import (
             unit="s",
             minimum=10,
             description=(
-                "Welch power-spectrum window length. Left unset, the detector "
-                "uses its own default of 30 s; it rejects anything below 10 s."
+                "Welch power-spectrum window length. Left unset, it is 30 s; "
+                "the shortest allowed window is 10 s."
             ),
         ),
         StepParameter(
@@ -91,9 +91,8 @@ from ._shared import (
         StepArtifact(
             name="rate_detector",
             artifact_type="eit_rate_detector",
-            description="Configured upstream RateDetection instance, reusable by later steps.",
+            description="The settings of the rate detection (RateDetectionSettings), for the rate figure.",
             public=False,
-            compatibility_only=True,
         ),
         StepArtifact(
             name="rate_captures",
@@ -124,24 +123,54 @@ def detect_rates(
     welch_window_seconds: float | None = None,
     capture: bool = False,
 ) -> dict[str, Any]:
-    rates = session.eit_adapter.detect_rates(
-        signal,
-        subject_type=subject_type,
-        welch_window_seconds=welch_window_seconds,
-        capture=capture,
+    """Find the breathing rate and the heart rate of EIT images.
+
+    The rates come from ``m3resp.eit.processing.detect_rates``. Both rates go
+    to ``session.parameter_results``.
+
+    Args:
+        signal (Any): EIT images as a ``Signal``, time in seconds.
+        session (M3Session): Session that stores the rates.
+        subject_type (Literal["adult", "neonate"]): Sets the rate ranges.
+        welch_window_seconds (float | None): Length of one Welch window in
+            seconds. None gives 30 s.
+        capture (bool): If True, also return the spectra for the rate figure
+            and give no warnings about short data or a rate at the edge of
+            its range.
+
+    Returns:
+        dict[str, Any]: ``respiratory_rate_hz`` and ``heart_rate_hz`` in Hz,
+            ``rate_detector`` (the ``RateDetectionSettings``),
+            ``rate_captures`` (the spectra, empty when ``capture`` is False)
+            and the two rates as ``ParameterResult``s.
+
+    Raises:
+        TypeError: If ``signal`` is not a ``Signal``.
+        ValueError: If a setting is invalid, or if a rate is NaN.
+    """
+
+    settings = (
+        RateDetectionSettings(subject_type)
+        if welch_window_seconds is None
+        else RateDetectionSettings(subject_type, welch_window=welch_window_seconds)
     )
-    respiratory_rate_hz = rates["respiratory_rate_hz"]
-    heart_rate_hz = rates["heart_rate_hz"]
+    captures: dict[str, Any] = {}
+    respiratory_rate_hz, heart_rate_hz = detect_rates_of(
+        _as_signal(signal, name="signal", step="eit.detect_rates"),
+        settings,
+        captures=captures if capture else None,
+        suppress_length_warnings=capture,
+        suppress_edge_case_warning=capture,
+    )
     for name, value in (
         ("respiratory_rate_hz", respiratory_rate_hz),
         ("heart_rate_hz", heart_rate_hz),
     ):
-        # NaN means no rate could be estimated. With eitprocessing's own
-        # detector this is the only failure that can occur: the rate is drawn
-        # from the search band and its parabolic refinement shifts it by less
-        # than half a frequency bin, so it cannot come back zero or negative,
-        # but a frequency bin in which no pixel was measured leaves NaN in the
-        # averaged pixel power spectrum and the refinement carries it through.
+        # NaN means no rate could be estimated. This is the only failure that
+        # can occur: the rate comes from the search band and the parabola
+        # refinement moves it by less than half a frequency step, so it stays
+        # above zero. A frequency step in which no pixel was measured leaves
+        # NaN in the averaged pixel spectrum, and the refinement keeps it.
         if math.isnan(value):
             raise ValueError(
                 f"eit.detect_rates could not estimate a {name}: the detector "
@@ -150,30 +179,24 @@ def detect_rates(
                 "that the signal covers enough breaths and that the subject "
                 "type matches the expected rate range."
             )
-        # A rate outside the search band cannot come from eitprocessing, but
-        # this step runs against whichever detector `session.eit_adapter`
-        # wraps, and a substituted or custom one is under no such constraint.
-        if not math.isfinite(value) or value <= 0:
-            raise ValueError(
-                f"eit.detect_rates produced an implausible {name}: {value!r}. "
-                "A rate must be finite and greater than zero."
-            )
 
-    metadata = _upstream_metadata(
-        source_function="eitprocessing.features.rate_detection.RateDetection.apply",
+    metadata = _step_provenance(
+        source_function="m3resp.eit.processing.detect_rates",
         operation="eit.detect_rates",
         parameters={
             "subject_type": subject_type,
             "welch_window_seconds": welch_window_seconds,
             "capture": capture,
         },
+        source_package="m3resp",
+        implementation="m3resp.eit.processing.rate_detection",
     )
     respiratory_rate_result = ParameterResult(
         name="respiratory_rate",
         value=respiratory_rate_hz,
         modality="eit",
         unit="Hz",
-        method="eitprocessing.RateDetection",
+        method="m3resp.eit.processing.detect_rates",
         metadata=dict(metadata),
     )
     heart_rate_result = ParameterResult(
@@ -181,7 +204,7 @@ def detect_rates(
         value=heart_rate_hz,
         modality="eit",
         unit="Hz",
-        method="eitprocessing.RateDetection",
+        method="m3resp.eit.processing.detect_rates",
         metadata=dict(metadata),
     )
     session.parameter_results.add(respiratory_rate_result)
@@ -190,8 +213,8 @@ def detect_rates(
     return {
         "respiratory_rate_hz": respiratory_rate_hz,
         "heart_rate_hz": heart_rate_hz,
-        "rate_detector": rates["rate_detector"],
-        "rate_captures": rates["rate_captures"],
+        "rate_detector": settings,
+        "rate_captures": captures,
         "respiratory_rate_result": respiratory_rate_result,
         "heart_rate_result": heart_rate_result,
         "_provenance": metadata,

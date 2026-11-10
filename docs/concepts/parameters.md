@@ -9,7 +9,7 @@ rate = session.parameter_results.for_name("respiratory_rate")[0]
 print(rate.value)     # 0.2313914079219103
 print(rate.unit)      # Hz
 print(rate.modality)  # eit
-print(rate.method)    # eitprocessing.RateDetection
+print(rate.method)    # m3resp.eit.processing.detect_rates
 ```
 
 To find parameters, use `for_name`, `for_modality` or `for_category`:

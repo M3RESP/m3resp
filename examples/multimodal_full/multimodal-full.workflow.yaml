@@ -116,7 +116,7 @@ steps:
 
   - id: roi_filter_by_size
     uses: eit.roi_filter_by_size
-    in:  { mask: watershed_lungspace_mask }
+    in:  { mask: watershed_lungspace_result }
     with: { min_region_size: 10, connectivity: 1 }
 
   # -- EMG processing (full chain, see emg-full.workflow.yaml) -----------------

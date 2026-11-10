@@ -376,3 +376,105 @@ def test_optional_reads_must_name_a_declared_read():
         )
         def _bad(a: Any) -> dict[str, Any]:
             return {}
+
+
+@pytest.fixture
+def _one_of_read_steps():
+    @register_step(
+        "one_of_test.make_hint",
+        writes=("hint",),
+    )
+    def _make_hint() -> dict[str, Any]:
+        return {"hint": 10}
+
+    @register_step(
+        "one_of_test.use_hint_or_guess",
+        reads={"hint": "hint", "guess": "guess"},
+        optional_reads=("hint", "guess"),
+        one_of_reads=(("hint", "guess"),),
+        writes=("used",),
+    )
+    def _use_hint_or_guess(hint: Any = None, guess: Any = None) -> dict[str, Any]:
+        return {"used": hint if hint is not None else guess}
+
+    yield
+    STEP_REGISTRY.pop("one_of_test.make_hint", None)
+    STEP_REGISTRY.pop("one_of_test.use_hint_or_guess", None)
+
+
+def test_a_step_with_none_of_its_one_of_reads_is_refused(_one_of_read_steps):
+    spec = load_spec(
+        {"name": "p", "steps": [{"uses": "one_of_test.use_hint_or_guess"}]}
+    )
+
+    [diagnostic] = validate_workflow(spec, readiness=False).structural
+
+    assert diagnostic.code == "missing_one_of_inputs"
+    assert "['hint', 'guess']" in diagnostic.message
+
+
+def test_a_step_with_one_of_its_one_of_reads_compiles(_one_of_read_steps):
+    spec = load_spec(
+        {
+            "name": "p",
+            "steps": [
+                {"uses": "one_of_test.make_hint"},
+                {"uses": "one_of_test.use_hint_or_guess"},
+            ],
+        }
+    )
+
+    assert validate_workflow(spec, readiness=False).structural == ()
+
+
+@pytest.mark.parametrize(
+    "group", [("a",), ("a", "c")], ids=["one name", "name outside optional_reads"]
+)
+def test_one_of_reads_needs_two_optional_reads(group: tuple[str, ...]):
+    with pytest.raises(ValueError, match="one_of_reads"):
+
+        @register_step(
+            "one_of_test.bad",
+            reads={"a": "a", "b": "b", "c": "c"},
+            optional_reads=("a", "b"),
+            one_of_reads=(group,),
+        )
+        def _bad(a: Any = None, b: Any = None, c: Any = None) -> dict[str, Any]:
+            return {}
+
+
+@pytest.fixture
+def _unbound_optional_read_step():
+    @register_step(
+        "unbound_test.make_hint",
+        writes=("hint",),
+    )
+    def _make_hint() -> dict[str, Any]:
+        return {"hint": 10}
+
+    @register_step(
+        "unbound_test.use_hint",
+        reads={"hint": None},
+        optional_reads=("hint",),
+        writes=("used",),
+    )
+    def _use_hint(hint: Any = None) -> dict[str, Any]:
+        return {"used": hint}
+
+    yield
+    STEP_REGISTRY.pop("unbound_test.make_hint", None)
+    STEP_REGISTRY.pop("unbound_test.use_hint", None)
+
+
+def test_an_optional_read_with_no_default_key_is_used_only_when_bound(
+    _unbound_optional_read_step,
+):
+    steps = [{"uses": "unbound_test.make_hint"}, {"uses": "unbound_test.use_hint"}]
+    unbound = load_spec({"name": "p", "steps": steps})
+    bound = load_spec(
+        {"name": "p", "steps": [steps[0], {**steps[1], "in": {"hint": "hint"}}]}
+    )
+
+    assert validate_workflow(unbound, readiness=False).structural == ()
+    assert "hint" not in compile_workflow(unbound).steps[1].input_bindings
+    assert compile_workflow(bound).steps[1].input_bindings == {"hint": "hint"}

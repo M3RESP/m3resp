@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
+from reference.eitprocessing import EITProcessingAdapter
 
 from m3resp import BreathEvent, M3Session
-from m3resp.adapters import EITProcessingAdapter
+from m3resp.data import Signal
+from m3resp.eit.io import EITFileData
 from m3resp.io import load_eit
+from m3resp.modalities.eit import EITRecording
 from m3resp.modalities.eit import load as load_eit_recording
 
 
@@ -55,21 +57,32 @@ class FakeIntervals:
     values: ClassVar = [FakeBreath()]
 
 
-def test_load_eit_sets_preferred_and_legacy_session_slots():
-    sequence = FakeSequence()
-    session = M3Session(
-        eit_adapter=EITProcessingAdapter(loader=lambda *args, **kwargs: sequence)
+def _file_data(path: Any, vendor: Any = None, **kwargs: Any) -> EITFileData:
+    """Three frames of one pixel, as a custom loader gives them."""
+
+    return EITFileData(
+        vendor="sentec",
+        paths=(Path(str(path)),),
+        sample_frequency=1.0,
+        pixel_impedance=Signal(
+            values=[[[1.0]], [[2.0]], [[3.0]]],
+            time=[0.0, 1.0, 2.0],
+            sample_frequency=1.0,
+            name="raw",
+            modality="eit",
+        ),
     )
+
+
+def test_load_eit_sets_preferred_and_legacy_session_slots():
+    session = M3Session(eit_loader=_file_data)
 
     returned = session.load_eit("subject.eit", vendor="sentec")
 
-    assert returned is sequence
+    assert returned is session.eit
     assert session.eit is session.raw["eit"]
-    assert session.eit.raw is sequence.eit_data["raw"]
-    assert (
-        session.eit.global_impedance
-        is sequence.continuous_data["global_impedance_(raw)"]
-    )
+    assert session.eit.vendor == "sentec"
+    assert list(session.eit.raw_global_impedance.values) == [1.0, 2.0, 3.0]
 
 
 def test_global_impedance_reuses_existing_continuous_signal():
@@ -124,25 +137,17 @@ def test_default_detection_reads_processed_breath_intervals():
 
 
 def test_top_level_and_modality_load_helpers_return_recordings():
-    sequence = FakeSequence()
-    adapter = EITProcessingAdapter(loader=lambda *args, **kwargs: sequence)
+    top_level = load_eit("subject.eit", vendor="sentec", custom_loader=_file_data)
+    modality_level = load_eit_recording(
+        "subject.eit", vendor="sentec", custom_loader=_file_data
+    )
 
-    top_level = load_eit("subject.eit", vendor="sentec", adapter=adapter)
-    modality_level = load_eit_recording("subject.eit", vendor="sentec", adapter=adapter)
-
-    assert top_level.raw is sequence.eit_data["raw"]
-    assert modality_level.global_impedance.label == "global_impedance_(raw)"
+    assert isinstance(top_level, EITRecording)
+    assert modality_level.raw_global_impedance.name == "Global impedance (raw)"
 
 
 def test_eit_real_data_workflow_uses_committed_sample():
     repo_root = Path(__file__).resolve().parents[1]
-    sibling_eitprocessing = os.path.join(repo_root.parent, "eitprocessing")
-    if (
-        os.path.exists(sibling_eitprocessing)
-        and str(sibling_eitprocessing) not in sys.path
-    ):
-        sys.path.insert(0, str(sibling_eitprocessing))
-
     pytest.importorskip("eitprocessing")
 
     eit_path = os.path.join(
@@ -157,10 +162,9 @@ def test_eit_real_data_workflow_uses_committed_sample():
     session.load_eit(eit_path, vendor="draeger")
 
     assert session.eit is not None
-    assert session.eit.raw is not None
-    assert len(session.eit.raw) > 0
-    assert len(session.eit.global_impedance.time) > 0
-    assert len(session.eit.global_impedance.values) > 0
+    assert len(session.eit.pixel_impedance.values) > 0
+    assert len(session.eit.raw_global_impedance.time) > 0
+    assert len(session.eit.raw_global_impedance.values) > 0
 
     processed = session.preprocess_eit()
 

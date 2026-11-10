@@ -42,10 +42,10 @@ def register_ventilator_loader(
 
     ``loader(path, **kwargs)`` should return the ``{"array", "metadata"}``
     payload shape the built-in sEMG-file path produces, unless
-    ``source="eit"``, in which case it should return an
-    `eitprocessing`-Sequence-shaped object (anything with ``.continuous_data``)
-    matching the EIT path - `VentilatorAdapter.load` unpacks it the same way
-    either source arrived.
+    ``source="eit"``, in which case it should return an ``EITRecording`` or
+    ``EITFileData`` with the ventilator waveforms in ``signals``, as the EIT
+    path gives it - `VentilatorAdapter.load` unpacks it the same way either
+    source arrived.
 
     `source` decides which clock the loaded channels are treated as sharing
     (see `_core.resolve_ventilator_source`): ``"eit"``/``"emg"`` for a format

@@ -122,7 +122,7 @@ def test_plotly_eit_summary_has_signal_tiv_eeli_and_pixel_map():
         "filtered_global_impedance": SimpleNamespace(
             time=[0.0, 0.05, 0.1, 0.15],
             values=[1.0, 3.0, 2.0, 1.0],
-            label="impedance (a.u.)",
+            name="impedance (a.u.)",
         ),
         "continuous_tiv": FakeSparse([0.05], [2.0]),
         "eeli": FakeSparse([], []),

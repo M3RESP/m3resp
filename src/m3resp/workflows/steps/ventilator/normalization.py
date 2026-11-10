@@ -24,9 +24,9 @@ from ._shared import (
         "ventilator_signals": "ventilator_signals",
         "session": "session",
     },
-    writes=(),
+    writes=("ventilator_breath_events",),
     summary="Normalize detected ventilator breath indices into session events.",
-    description="Convert detected ventilator breath peak indices into native BreathEvents and store them on the session as 'ventilator_breaths'.",
+    description="Convert detected ventilator breath peak indices into native BreathEvents, store them on the session as 'ventilator_breaths' and give them as 'ventilator_breath_events'.",
     category="detection",
     modality="ventilator",
     session_writes=("session.events.ventilator_breaths",),
@@ -53,6 +53,13 @@ from ._shared import (
             description="Assumed breath width used to derive start/end times around each peak.",
         ),
     ),
+    output_artifacts=(
+        StepArtifact(
+            name="ventilator_breath_events",
+            artifact_type="breath_event_list",
+            description="The ventilator breaths as BreathEvents, the same objects as in session.events['ventilator_breaths'].",
+        ),
+    ),
 )
 def normalize_breaths(
     ventilator_breath_indices: Any,
@@ -75,9 +82,10 @@ def normalize_breaths(
             boundaries are retained.
 
     Returns:
-        dict[str, Any]: Empty mapping. Events are stored by `session.add_events`,
-            which also records provenance. Event times are in seconds from the
-            recording's first sample, with modality "ventilator".
+        dict[str, Any]: ``ventilator_breath_events``, the breaths stored by
+            `session.add_events` under ``"ventilator_breaths"``. Event times
+            are in seconds from the recording's first sample, with modality
+            "ventilator".
     """
 
     fs = float(ventilator_signals["fs"])
@@ -98,5 +106,5 @@ def normalize_breaths(
         )
         for detection in iter_ventilator_detections(ventilator_breath_indices)
     ]
-    session.add_events("ventilator_breaths", events)
-    return {}
+    stored = session.add_events("ventilator_breaths", events)
+    return {"ventilator_breath_events": stored}

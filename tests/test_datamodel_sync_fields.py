@@ -4,8 +4,9 @@ session's synchronization (`session.sync_methods`, `session.start_times`)."""
 from __future__ import annotations
 
 import numpy as np
+from eit_file_data_cases import stand_in_eit_loader
 
-from m3resp.adapters import EITProcessingAdapter, ReSurfEMGAdapter
+from m3resp.adapters import ReSurfEMGAdapter
 from m3resp.core.session import M3Session
 from m3resp.data.signals import Signal
 from m3resp.datamodel import DataModelRecorder, DataModelStore
@@ -23,7 +24,7 @@ def _payload() -> dict:
 
 def _session() -> tuple[M3Session, DataModelStore]:
     session = M3Session(
-        eit_adapter=EITProcessingAdapter(loader=lambda path, **kwargs: {"path": path}),
+        eit_loader=stand_in_eit_loader,
         emg_adapter=ReSurfEMGAdapter(loader=lambda path, **kwargs: _payload()),
     )
     store = DataModelStore()

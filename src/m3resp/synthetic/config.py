@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import asdict, dataclass, field, fields
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-DEFAULT_OUTPUT_DIR = os.path.join("data", "source")
+DEFAULT_OUTPUT_DIR = str(Path("data") / "source")
 DEFAULT_BASENAME = "synthetic"
 DEFAULT_TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 DEFAULT_TIMESTAMP_SUFFIX_WIDTH = 2
@@ -258,7 +258,7 @@ def load_synthetic_generator_config(path: str) -> SyntheticGeneratorConfig:
             "dependencies or construct SyntheticGeneratorConfig directly."
         ) from exc
 
-    config_path = os.path.abspath(os.path.normpath(path))
+    config_path = Path(path).resolve()
     with open(config_path, encoding="utf-8") as file_obj:
         data = yaml.safe_load(file_obj) or {}
 
@@ -266,10 +266,8 @@ def load_synthetic_generator_config(path: str) -> SyntheticGeneratorConfig:
         raise TypeError("Synthetic generator YAML must contain a mapping.")
 
     config = synthetic_generator_config_from_dict(data)
-    if not os.path.isabs(config.output_dir):
-        config.output_dir = os.path.normpath(
-            os.path.join(os.path.dirname(config_path), config.output_dir)
-        )
+    if not Path(config.output_dir).is_absolute():
+        config.output_dir = str((config_path.parent / config.output_dir).resolve())
     return config
 
 

@@ -260,6 +260,48 @@ def _artifact_type_steps():
         return None
 
     @register_step(
+        "artifact_type_test.produce_images",
+        writes=("out",),
+        output_artifacts=(StepArtifact(name="out", artifact_type="eit_pixel_signal"),),
+    )
+    def _produce_images() -> dict[str, Any]:
+        return {"out": 1}
+
+    @register_step(
+        "artifact_type_test.produce_waveform",
+        writes=("out",),
+        output_artifacts=(
+            StepArtifact(name="out", artifact_type="eit_impedance_waveform"),
+        ),
+    )
+    def _produce_waveform() -> dict[str, Any]:
+        return {"out": 1}
+
+    @register_step(
+        "artifact_type_test.produce_signal",
+        writes=("out",),
+        output_artifacts=(StepArtifact(name="out", artifact_type="signal"),),
+    )
+    def _produce_signal() -> dict[str, Any]:
+        return {"out": 1}
+
+    @register_step(
+        "artifact_type_test.consume_signal",
+        reads={"value": "out"},
+        input_artifacts=(StepArtifact(name="value", artifact_type="signal"),),
+    )
+    def _consume_signal(value: Any) -> None:
+        return None
+
+    @register_step(
+        "artifact_type_test.consume_images",
+        reads={"value": "out"},
+        input_artifacts=(StepArtifact(name="value", artifact_type="eit_pixel_signal"),),
+    )
+    def _consume_images(value: Any) -> None:
+        return None
+
+    @register_step(
         "artifact_type_test.consume_untyped",
         reads={"value": "out"},
     )
@@ -273,6 +315,11 @@ def _artifact_type_steps():
         "produce_any",
         "consume_a",
         "consume_untyped",
+        "produce_images",
+        "produce_waveform",
+        "produce_signal",
+        "consume_signal",
+        "consume_images",
     ):
         STEP_REGISTRY.pop(f"artifact_type_test.{name}", None)
 
@@ -338,6 +385,34 @@ def test_undeclared_artifact_type_on_either_side_is_skipped_not_flagged(
         }
     )
     assert collect_diagnostics(spec) == []
+
+
+def _artifact_type_diagnostics(producer: str, consumer: str) -> list[Any]:
+    spec = load_spec(
+        {
+            "name": "p",
+            "steps": [
+                {"uses": f"artifact_type_test.{producer}"},
+                {"uses": f"artifact_type_test.{consumer}"},
+            ],
+        }
+    )
+    return collect_diagnostics(spec)
+
+
+def test_a_signal_input_accepts_eit_images_and_impedance_waveforms(
+    _artifact_type_steps,
+):
+    assert _artifact_type_diagnostics("produce_images", "consume_signal") == []
+    assert _artifact_type_diagnostics("produce_waveform", "consume_signal") == []
+
+
+def test_an_eit_image_input_refuses_a_waveform_and_a_plain_signal(
+    _artifact_type_steps,
+):
+    for producer in ("produce_waveform", "produce_signal"):
+        diagnostics = _artifact_type_diagnostics(producer, "consume_images")
+        assert [d.code for d in diagnostics] == ["artifact_type_mismatch"], producer
 
 
 @pytest.fixture

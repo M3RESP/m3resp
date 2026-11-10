@@ -13,6 +13,7 @@ from m3resp.workflows.context import (
 )
 from m3resp.workflows.diagnostics import Diagnostic
 from m3resp.workflows.registry import (
+    ACCEPTED_ARTIFACT_TYPES,
     ANY_ARTIFACT_TYPE,
     StepArtifact,
     StepDefinition,
@@ -315,6 +316,10 @@ def _check_bindings(
 
     for param, default in definition.reads.items():
         context_key = step_spec.inputs.get(param, default)
+        if context_key is None and param in definition.optional_reads:
+            # An optional input with no default key is passed only when
+            # 'in:' binds it.
+            continue
         if context_key is None:
             diagnostics.append(
                 Diagnostic(
@@ -356,6 +361,30 @@ def _check_bindings(
                     step_spec,
                     position,
                     step_label,
+                )
+            )
+    for group in definition.one_of_reads:
+        present = [
+            param
+            for param in group
+            if step_spec.inputs.get(param, definition.reads[param]) in produced
+        ]
+        if not present:
+            diagnostics.append(
+                Diagnostic(
+                    severity="error",
+                    code="missing_one_of_inputs",
+                    message=(
+                        f"{step_label} needs one of the inputs {list(group)}, "
+                        "but none is produced by an earlier step or declared "
+                        "in inputs."
+                    ),
+                    step_id=step_spec.id,
+                    step_position=position,
+                    operation_id=step_spec.uses,
+                    suggestion=(
+                        "Bind one of them with 'in:', or add the step that produces it."
+                    ),
                 )
             )
     for context_key in definition.requires:
@@ -406,9 +435,9 @@ def _check_artifact_type_compatibility(
     produced the context key it's bound to ("compilation validates
     ... artifact compatibility"), unless either side
     declares :data:`ANY_ARTIFACT_TYPE` (a genuine passthrough, e.g.
-    ``eit.slice_signal``). Only checked when *both* sides declare a type - this is
-    additive metadata, backfilled module by module, so an undeclared type on
-    either side is simply skipped rather than flagged."""
+    ``eit.slice_signal``). The check runs only when both sides declare a
+    type. An input of a group type (``"signal"``, ``"breaths"``) also
+    accepts the types listed for it in :data:`ACCEPTED_ARTIFACT_TYPES`."""
 
     consumer_artifact = input_artifacts_by_name.get(param)
     if consumer_artifact is None:
@@ -420,6 +449,8 @@ def _check_artifact_type_compatibility(
     if ANY_ARTIFACT_TYPE in (consumer_type, producer_type):
         return []
     if consumer_type == producer_type:
+        return []
+    if producer_type in ACCEPTED_ARTIFACT_TYPES.get(consumer_type, frozenset()):
         return []
     return [
         Diagnostic(
