@@ -1357,7 +1357,11 @@ class M3Session:
             data = self.processed.get("emg")
 
         data = data or self._require_raw("emg").data
-        events = self.events.get("emg_breaths")
+        events = (
+            self.events.get("emg_breaths")
+            if variant is None
+            else self.events.get(f"emg_breaths:{variant}")
+        )
         self.parameters["emg_postprocessing"] = self.emg_adapter.postprocess(
             data,
             events=events,
