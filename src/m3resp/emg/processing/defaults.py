@@ -1132,8 +1132,8 @@ def _postprocess_default(
         ``ventilator_volume_channel``: channels to use from the ventilator
         recording (default: None, chosen automatically)
     - ``peep``: positive end-expiratory pressure, in the pressure channel's
-        units (default: NaN). Without it, ``find_occluded_breaths`` is skipped,
-        because PEEP cannot be estimated reliably from the pressure trace.
+        units (default: NaN). If not provided, it is estimated from the
+        ventilator pressure and volume signals.
 
     ## Features
     Functions (category "features"):
