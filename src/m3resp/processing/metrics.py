@@ -118,7 +118,6 @@ def pseudo_slope(
     Returns:
         np.ndarray: The pseudo-slope of each breath, in signal units per sample.
     """
-
     if smoothing is not None:
         smooth = smoothing
 
@@ -295,7 +294,6 @@ def respiratory_rate_from_indices(
         With fewer than two breaths there is no time between breaths to
         measure, so this warns and returns NaN and an empty array.
     """
-
     breath_indices = np.asarray(indices)
     if breath_indices.size < 2:
         warnings.warn(
@@ -323,7 +321,6 @@ def tidal_variation(
     method: str = "inspiratory",
 ) -> np.ndarray:
     """Compute EIT-style tidal variation for breath-like timing objects."""
-
     data = np.asarray(values)
     sample_time = np.asarray(time)
     breaths_array = np.asarray(breaths, dtype=object)

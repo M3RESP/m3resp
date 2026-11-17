@@ -658,12 +658,25 @@ def _plot_events(
 ) -> None:
     """Shade each breath interval and mark available extrema on each axis.
 
-    Times are in seconds. Adds artists to the supplied axes using color,
-    with label attached to each extremum line.
+    Times are in seconds. Only breaths inside the time range of the signals
+    already drawn on an axis are shown, as in the plotly figures, so a signal
+    cut off by ``max_seconds`` gets no breaths after its end. Adds artists to
+    the supplied axes using color, with label attached to each extremum line.
     """
 
-    for event in events:
-        for ax in axes:
+    events = list(events)
+    for ax in axes:
+        drawn_times = [
+            np.asarray(line.get_xdata(), dtype=float) for line in ax.get_lines()
+        ]
+        drawn_times = [times for times in drawn_times if times.size]
+        if not drawn_times:
+            continue
+        t_min = min(float(np.nanmin(times)) for times in drawn_times)
+        t_max = max(float(np.nanmax(times)) for times in drawn_times)
+        for event in events:
+            if event.end_time < t_min or event.start_time > t_max:
+                continue
             ax.axvspan(event.start_time, event.end_time, color=color, alpha=0.08)
             if event.extremum_time is not None:
                 ax.axvline(

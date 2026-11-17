@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from m3resp.core.session import M3Session
 from m3resp.workflows.registry import StepArtifact
 
-#: Steps that call resurfemg directly or through ReSurfEMGAdapter declare this.
+if TYPE_CHECKING:
+    from m3resp.core.session import M3Session
+    from m3resp.data.quality import Severity
+
+#: Steps that call resurfemg directly or through ReSurfEMG declare this.
 _RESURFEMG = ("resurfemg",)
 
 _SESSION_ARTIFACT = StepArtifact(
@@ -40,7 +44,6 @@ def _upstream_metadata(
     pass `source_package="m3resp"`, `implementation="m3resp.processing.<module>"`
     for a step whose value comes from a native primitive instead.
     """
-
     return {
         "source_package": source_package,
         "source_function": source_function,
@@ -61,9 +64,9 @@ def resolve_emg_source(processed_emg: Any, source: str | None, step_name: str) -
     the ``clean`` -> ``filt`` order ReSurfEMG resolves signals in, and it lets
     two removal steps chain without either naming a key.
     """
-
     if not isinstance(processed_emg, Mapping):
-        raise TypeError(f"{step_name} needs a processed EMG bundle.")
+        msg = f"{step_name} needs a processed EMG bundle."
+        raise TypeError(msg)
 
     key = source
     if key is None:
@@ -73,10 +76,11 @@ def resolve_emg_source(processed_emg: Any, source: str | None, step_name: str) -
             else "filtered"
         )
     if processed_emg.get(key) is None:
-        raise ValueError(
+        msg = (
             f"{step_name} source {key!r} is not present in processed_emg; "
             f"available keys: {sorted(processed_emg.keys())}."
         )
+        raise ValueError(msg)
     return key
 
 
@@ -117,12 +121,14 @@ def require_envelope(processed_emg: Any, step_name: str) -> np.ndarray:
 
 def _require_positive_seconds(name: str, value: float) -> None:
     if not np.isfinite(value) or value <= 0:
-        raise ValueError(f"{name} must be a finite, positive number; got {value!r}.")
+        msg = f"{name} must be a finite, positive number; got {value!r}."
+        raise ValueError(msg)
 
 
 def _require_percentile(name: str, value: float) -> None:
     if not (0.0 <= float(value) <= 100.0):
-        raise ValueError(f"{name} must be between 0 and 100; got {value!r}.")
+        msg = f"{name} must be between 0 and 100; got {value!r}."
+        raise ValueError(msg)
 
 
 def _processed_channel_label_and_unit(processed_emg: Any) -> tuple[str, str | None]:
@@ -141,3 +147,14 @@ def _processed_channel_label_and_unit(processed_emg: Any) -> tuple[str, str | No
         else None
     )
     return label, unit
+
+
+def _require_equal_length(**named_arrays: Any) -> None:
+    """Raise a clear error instead of silently truncating with
+    `min(len(...))` when paired arrays disagree in length (plan Phase 5.4:
+    "Do not truncate arrays... without reporting unmatched events").
+    """
+    lengths = {name: len(array) for name, array in named_arrays.items()}
+    if len(set(lengths.values())) > 1:
+        msg = f"Arrays must have equal length; got {lengths}."
+        raise ValueError(msg)

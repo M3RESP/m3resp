@@ -14,7 +14,7 @@ import pytest
 from m3resp.core.session import M3Session
 from m3resp.workflows.steps.emg import ecg_detect_peaks, ecg_wavelet_denoising
 
-pytest.importorskip("resurfemg")
+
 np = pytest.importorskip("numpy")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +26,7 @@ def _read_parameter_results_csv(output_dir: Path) -> list[dict]:
 
 
 def test_ecg_wavelet_array_results_round_trip_through_the_shared_archive(tmp_path):
+    """Wavelet ECG-removal arrays survive export to and reload from the archive."""
     session = M3Session()
     fs = 2048.0
     n = 20 * 2048 + 5  # non-power-of-16 length, exercises real padding
@@ -87,6 +88,7 @@ def test_ecg_wavelet_array_results_round_trip_through_the_shared_archive(tmp_pat
 
 
 def test_ecg_gate_mask_round_trips_and_is_a_bool_array(tmp_path):
+    """The ECG gate mask exports and reloads as a boolean array."""
     from m3resp.workflows.steps.emg import ecg_gating
 
     session = M3Session()

@@ -6,10 +6,11 @@ import numpy as np
 import pytest
 
 from m3resp import M3Session
-from m3resp.adapters import ReSurfEMGAdapter
+from m3resp.emg import ReSurfEMG
 from m3resp.adapters.ventilator_adapter import VentilatorAdapter
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.workflows.steps.emg.slicing import slice_recording
+
 
 FS = 100.0
 DURATION_SECONDS = 60.0
@@ -32,13 +33,14 @@ def _recording() -> dict:
 def _session() -> M3Session:
     # Every load reads the file again, as the real loader does.
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(loader=lambda *args, **kwargs: _recording())
+        emg_adapter=ReSurfEMG(loader=lambda *args, **kwargs: _recording())
     )
     session.load_emg("study.txt")
     return session
 
 
 def test_slice_keeps_only_the_window():
+    """Slicing keeps only the requested window and stores a summary."""
     session = _session()
 
     summary = session.slice_emg(10.0, 25.0)
@@ -52,6 +54,7 @@ def test_slice_keeps_only_the_window():
 
 
 def test_without_an_end_the_rest_of_the_recording_is_kept():
+    """Without an end time, everything after the start is kept."""
     session = _session()
 
     session.slice_emg(50.0)
@@ -87,7 +90,7 @@ def test_ventilator_data_at_its_own_rate_is_cut_at_the_same_times():
         "metadata": {"fs": ventilator_fs, "labels": ["Paw", "Flow", "Volume"]},
     }
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(loader=lambda *args, **kwargs: _recording()),
+        emg_adapter=ReSurfEMG(loader=lambda *args, **kwargs: _recording()),
         ventilator_adapter=VentilatorAdapter(loader=lambda *args, **kwargs: payload),
     )
     session.load_emg("study.txt")
@@ -103,8 +106,9 @@ def test_ventilator_data_at_its_own_rate_is_cut_at_the_same_times():
 
 
 def test_emg_data_held_as_a_list_stays_a_list():
+    """EMG data held as nested lists is sliced and stays a list."""
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(
+        emg_adapter=ReSurfEMG(
             loader=lambda *args, **kwargs: {
                 "array": _recording()["array"].tolist(),
                 "metadata": {"fs": FS},
@@ -125,6 +129,7 @@ def test_emg_data_held_as_a_list_stays_a_list():
     [(-1.0, 10.0), (20.0, 10.0), (10.0, 10.0), (0.0, DURATION_SECONDS + 1.0)],
 )
 def test_a_window_outside_the_recording_is_refused(start, end):
+    """A window outside the recording raises ValueError and keeps the data."""
     session = _session()
 
     with pytest.raises(ValueError, match="start < end"):
@@ -134,11 +139,13 @@ def test_a_window_outside_the_recording_is_refused(start, end):
 
 
 def test_slicing_needs_a_loaded_recording():
+    """Slicing without loaded EMG raises MissingModalityDataError."""
     with pytest.raises(MissingModalityDataError):
         M3Session().slice_emg(0.0, 1.0)
 
 
 def test_step_calls_the_session_method():
+    """`emg.slice_recording` calls `session.slice_emg`."""
     session = _session()
 
     result = slice_recording(session, start_seconds=5.0)
@@ -148,11 +155,12 @@ def test_step_calls_the_session_method():
 
 
 def test_steps_after_the_slice_step_read_the_cut_recording(tmp_path):
+    """Steps after `emg.slice_recording` in a workflow see the cut recording."""
     from m3resp.workflows import load_spec, run_workflow
 
     (tmp_path / "study.txt").write_text("")
     session = M3Session(
-        emg_adapter=ReSurfEMGAdapter(loader=lambda *args, **kwargs: _recording())
+        emg_adapter=ReSurfEMG(loader=lambda *args, **kwargs: _recording())
     )
     spec = {
         "name": "cut",

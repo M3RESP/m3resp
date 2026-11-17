@@ -1,7 +1,7 @@
 """Regression coverage for the granular `emg.*` postprocessing steps.
 
 Confirms the per-function `emg.*` workflow steps (src/m3resp/workflows/steps/emg/)
-are a faithful factoring of `ReSurfEMGAdapter._postprocess_default`, not a
+are a faithful factoring of `ReSurfEMG._postprocess_default`, not a
 behavioral rewrite, by running both against the same committed sample data
 and comparing numeric output.
 """
@@ -15,7 +15,7 @@ import pytest
 from m3resp.core.session import M3Session
 from m3resp.workflows import run_workflow
 
-pytest.importorskip("resurfemg")
+
 np = pytest.importorskip("numpy")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -68,17 +68,22 @@ GRANULAR_SPEC = {
 
 
 def test_granular_emg_workflow_matches_monolithic_postprocess():
+    """The step-by-step EMG workflow gives the same results as `postprocess_emg`."""
     result = run_workflow(GRANULAR_SPEC)
 
     reference_session = M3Session()
     reference_session.load_emg(str(EMG_PATH), verbose=False)
     reference_session.preprocess_emg(
-        channel=0, high_pass_hz=80, envelope_window_seconds=0.5
+        channel=0, high_pass_hz=80, envelope_window_seconds=0.5, remove_ecg=False
     )
     reference_session.detect_emg_breaths(min_breath_width_seconds=1.0)
     ventilator = reference_session.emg_adapter.load(str(VENT_PATH), verbose=False)
     reference = reference_session.postprocess_emg(
         ventilator=ventilator,
+        ventilator_breath_width_seconds=0.5,
+        baseline_window_seconds=7.5,
+        baseline_step_seconds=0.2,
+        baseline_percentile=33.0,
         selected_functions={
             "baseline": {"moving_baseline": True},
             "event_detection": {
@@ -88,7 +93,9 @@ def test_granular_emg_workflow_matches_monolithic_postprocess():
             "quality_assessment": {"detect_non_consecutive_manoeuvres": True},
         },
     )
-
+    np.testing.assert_allclose(
+        result.value("envelope_signal").values, reference_session.emg.envelope
+    )
     np.testing.assert_allclose(
         result.value("baseline"),
         reference["computed"]["baseline"]["moving_baseline"],

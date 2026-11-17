@@ -10,7 +10,7 @@ from m3resp.adapters.ventilator_adapter import primary_channel
 from m3resp.core.exceptions import MissingModalityDataError
 from m3resp.workflows.registry import StepArtifact
 
-#: Ventilator loading/quality steps currently go through ReSurfEMGAdapter
+#: Ventilator loading/quality steps currently go through ReSurfEMG
 #: (loading shares the sEMG's file; Pocc quality assessment wraps
 #: resurfemg's quality_assessment module), so they declare this the same way
 #: EMG steps do.
