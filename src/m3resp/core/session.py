@@ -1345,7 +1345,18 @@ class M3Session:
                 the settings used (``"settings"``). Also stored in
                 `session.parameters["emg_postprocessing"]`.
         """
-        data = self.processed.get("emg") or self._require_raw("emg").data
+        variant = kwargs.get("variant")
+        if variant is not None:
+            if variant not in self.processed_variants["emg"]:
+                raise MissingModalityDataError(
+                    f"No EMG preprocessing variant {variant!r}; call "
+                    f"preprocess_emg(variant={variant!r}, ...) first."
+                )
+            data = self.processed_variants["emg"][variant]
+        else:
+            data = self.processed.get("emg")
+
+        data = data or self._require_raw("emg").data
         events = self.events.get("emg_breaths")
         self.parameters["emg_postprocessing"] = self.emg_adapter.postprocess(
             data,
