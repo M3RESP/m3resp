@@ -226,3 +226,8 @@ ignore_missing_imports = true
 [tool.coverage.run]
 source = ["m3resp"]
 branch = true
+
+[dependency-groups]
+dev = [
+    "ipympl>=0.10.0",
+]
