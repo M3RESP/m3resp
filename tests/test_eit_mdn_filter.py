@@ -23,6 +23,10 @@ with open(os.path.join(GOLDEN_DIR, "manifest.json"), encoding="utf-8") as _handl
     MANIFEST = json.load(_handle)
 DATASETS = sorted(MANIFEST["inputs"])
 MINUTE = 60
+#: Largest difference from a golden file, as a part of the largest absolute
+#: golden value. Other computers and library builds round the last digits
+#: differently.
+RELATIVE_TOLERANCE = 1e-9
 
 #: Rates and settings in Hz, each with a different number of removed harmonics
 #: or another setting. The keys are the eitprocessing setting names.
@@ -134,7 +138,13 @@ def test_filtered_images_and_captures_match_golden(dataset: str, images: dict) -
         captures=captures,
     )
 
-    np.testing.assert_array_equal(result.values, golden["pixel_impedance"])
+    expected = golden["pixel_impedance"]
+    assert result.values.shape == expected.shape
+    np.testing.assert_array_equal(np.isnan(result.values), np.isnan(expected))
+    scale = float(np.nanmax(np.abs(expected)))
+    np.testing.assert_allclose(
+        result.values, expected, rtol=0, atol=RELATIVE_TOLERANCE * scale
+    )
     assert captures["low_pass_frequency"] == golden["captures/low_pass_frequency"]
     assert captures["n_harmonics"] == golden["captures/n_harmonics"]
     np.testing.assert_array_equal(
