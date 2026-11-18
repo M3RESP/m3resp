@@ -78,7 +78,7 @@ uv run m3resp run examples/multimodal_example/multimodal.workflow.yaml
 :::
 ::::
 
-The example uses the synthetic recordings in `tests/data` and writes the results to `output/multimodal-summary`. M3Resp reads the file paths in a workflow file from the folder of that file.
+The example uses the synthetic recordings in `tests/data` and writes the results to `output/workflows/multimodal-summary`. M3Resp reads the file paths in a workflow file from the folder of that file.
 
 To list all processing steps:
 

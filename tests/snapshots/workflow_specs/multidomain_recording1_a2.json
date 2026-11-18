@@ -11,7 +11,7 @@
   },
   "name": "multidomain_recording1_a2",
   "outputs": {
-    "dir": "output/multidomain-recording1-a2",
+    "dir": "output/workflows/multidomain-recording1-a2",
     "event_csvs": true,
     "figures": true,
     "mode": null,

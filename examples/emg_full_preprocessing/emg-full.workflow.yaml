@@ -31,7 +31,7 @@ schema_version: 1
 name: emg-full-preprocessing
 
 outputs:
-  dir: ../../output/emg-full-preprocessing
+  dir: ../../output/workflows/emg-full-preprocessing
   mode: automatic
   timestamped: true
   summary_json: true

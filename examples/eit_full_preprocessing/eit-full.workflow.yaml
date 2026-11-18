@@ -38,7 +38,7 @@ schema_version: 1
 name: eit-full-preprocessing
 
 outputs:
-  dir: ../../output/eit-full-preprocessing
+  dir: ../../output/workflows/eit-full-preprocessing
   mode: automatic
   timestamped: true
   summary_json: true

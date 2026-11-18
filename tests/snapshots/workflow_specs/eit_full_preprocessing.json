@@ -12,7 +12,7 @@
   },
   "name": "eit-full-preprocessing",
   "outputs": {
-    "dir": "output/eit-full-preprocessing",
+    "dir": "output/workflows/eit-full-preprocessing",
     "event_csvs": true,
     "figures": true,
     "mode": "automatic",

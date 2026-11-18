@@ -37,7 +37,7 @@ The repository has synthetic EIT, EMG and ventilator recordings in `tests/data`.
 m3resp run examples/multimodal_example/multimodal.workflow.yaml
 ```
 
-The workflow loads the three recordings and synchronizes them. Then it finds the breaths in each modality and calculates the parameters. The results go to a new folder in `output/multimodal-summary/`, with one CSV file for each breath list, a `parameters.csv` file, a `summary.json` file and figures.
+The workflow loads the three recordings and synchronizes them. Then it finds the breaths in each modality and calculates the parameters. The results go to a new folder in `output/workflows/multimodal-summary/`, with one CSV file for each breath list, a `parameters.csv` file, a `summary.json` file and figures.
 
 You can do the same analysis step by step in Python:
 

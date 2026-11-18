@@ -25,7 +25,7 @@ schema_version: 1
 name: multimodal-full
 
 outputs:
-  dir: ../../output/multimodal-full-summary
+  dir: ../../output/workflows/multimodal-full-summary
   mode: automatic
   timestamped: true
   summary_json: true
