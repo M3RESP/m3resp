@@ -38,7 +38,7 @@ def test_the_sign_breaths_are_found_once_per_signal_and_session(monkeypatch) -> 
 
     def counting_find_breaths(signal, settings):
         calls.append(settings)
-        return find_breaths(signal, settings)
+        return find_breaths(signal, settings=settings)
 
     monkeypatch.setattr(shared, "find_breaths", counting_find_breaths)
     waveform = _waveform()

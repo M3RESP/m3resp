@@ -230,7 +230,7 @@ def _pixel_breath_timing(
             "or 'breath_detector' from 'eit.detect_breaths'."
         )
     return find_pixel_breaths(
-        pixels, waveform, global_breaths, sign_breaths=sign_breaths
+        pixels, signal=waveform, breaths=global_breaths, sign_breaths=sign_breaths
     )
 
 
@@ -484,7 +484,7 @@ def pixel_tiv(
     )
     result = _pixel_values(
         lambda pixels, timing: pixel_tidal_impedance_variation(
-            pixels, timing, method=tiv_method, name=result_label
+            pixels, breaths=timing, method=tiv_method, name=result_label
         ),
         eit_data,
         signal,
@@ -599,7 +599,7 @@ def pixel_eeli(
     )
     result = _pixel_values(
         lambda pixels, timing: pixel_end_expiratory_lung_impedance(
-            pixels, timing, name=result_label
+            pixels, breaths=timing, name=result_label
         ),
         eit_data,
         signal,
@@ -761,15 +761,15 @@ def pixel_breaths(
     if breaths is None:
         settings = BreathDetectionSettings(minimum_duration=minimum_duration_seconds)
         global_breaths = _use_stored_eit_breaths(
-            find_breaths(waveform, settings), session
+            find_breaths(waveform, settings=settings), session
         )
         sign_breaths = _sign_breaths_used_by(settings, waveform, session)
     else:
         global_breaths = _eit_breaths(breaths, action="eit.pixel_breaths")
     result = find_pixel_breaths(
         _as_signal(eit_data, name="eit_data", step="eit.pixel_breaths"),
-        waveform,
-        global_breaths,
+        signal=waveform,
+        breaths=global_breaths,
         phase_correction_mode=phase_correction_mode,
         name=result_label,
         sign_breaths=sign_breaths,

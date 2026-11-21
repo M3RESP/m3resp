@@ -65,10 +65,10 @@ def test_masks_and_errors_equal_eitprocessing(region, shape):
         expected = upstream_roi.get_geometric_mask(region, shape)
     except ValueError:
         with pytest.raises(ValueError, match="multiple of"):
-            geometric_mask(region, shape)
+            geometric_mask(region, shape=shape)
         return
 
-    mask = geometric_mask(region, shape)
+    mask = geometric_mask(region, shape=shape)
 
     np.testing.assert_array_equal(mask.values, expected.mask)
     assert mask.name == expected.label == SHORT_NAMES.get(region, region)
@@ -106,11 +106,11 @@ def test_the_parts_cover_the_image_once():
         ("quadrant 1", "quadrant 2", "quadrant 3", "quadrant 4"),
     ):
         counts = sum(
-            np.nan_to_num(geometric_mask(part, shape).values) for part in parts
+            np.nan_to_num(geometric_mask(part, shape=shape).values) for part in parts
         )
         np.testing.assert_array_equal(counts, np.ones(shape))
         collection = PixelMaskCollection(
-            items=[geometric_mask(part, shape) for part in parts]
+            items=[geometric_mask(part, shape=shape) for part in parts]
         )
         whole = collection.combine("sum", name="whole image")
         np.testing.assert_array_equal(whole.values, np.ones(shape))
@@ -127,7 +127,7 @@ def test_layers_one_and_two_are_the_ventral_half():
 
 
 def test_anatomical_right_is_the_left_side_of_the_image():
-    right = geometric_mask("R", (2, 4))
+    right = geometric_mask("R", shape=(2, 4))
 
     np.testing.assert_array_equal(
         right.values, [[1.0, 1.0, np.nan, np.nan], [1.0, 1.0, np.nan, np.nan]]
@@ -147,7 +147,7 @@ def test_the_height_error_names_the_number():
     with pytest.raises(
         ValueError, match="height that is a multiple of 4; the height is 30"
     ):
-        geometric_mask("layer 1", (30, 32))
+        geometric_mask("layer 1", shape=(30, 32))
 
 
 @pytest.mark.parametrize(
@@ -155,7 +155,7 @@ def test_the_height_error_names_the_number():
 )
 def test_shapes_that_are_not_two_positive_whole_numbers_are_refused(shape):
     with pytest.raises(ValueError, match="shape"):
-        geometric_mask("ventral", shape)
+        geometric_mask("ventral", shape=shape)
 
 
 # --- step ---------------------------------------------------------------------
@@ -195,7 +195,8 @@ def test_step_takes_the_shape_of_the_images():
     )
 
     np.testing.assert_array_equal(
-        result["geometric_mask_result"].values, geometric_mask("Q3", (8, 4)).values
+        result["geometric_mask_result"].values,
+        geometric_mask("Q3", shape=(8, 4)).values,
     )
 
 
@@ -247,5 +248,5 @@ def test_ventral_impedance_in_a_workflow():
     np.testing.assert_array_equal(mask.values, geometric_mask("ventral").values)
     np.testing.assert_array_equal(
         result.value("ventral_impedance").values,
-        regional_impedance(pixels, mask).values,
+        regional_impedance(pixels, mask=mask).values,
     )

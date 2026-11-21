@@ -55,6 +55,7 @@ VENDOR_READERS: dict[str, Callable[..., EITFileData]] = {
 def read_eit_file(
     path: str | os.PathLike[str],
     vendor: Any,
+    *,
     sample_frequency: float | None = None,
     first_frame: int | None = 0,
     max_frames: int | None = None,

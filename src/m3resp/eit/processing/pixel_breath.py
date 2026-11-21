@@ -131,9 +131,9 @@ TOO_MANY_BREATHS_SKIPPED: Final = "too_many_breaths_skipped"
 
 def find_pixel_breaths(
     pixels: Signal,
+    *,
     signal: Signal,
     breaths: Sequence[BreathEvent],
-    *,
     phase_correction_mode: PhaseCorrectionMode = "negative amplitude",
     name: str = NAME,
     sign_breaths: Sequence[BreathEvent] | None = None,
@@ -235,7 +235,7 @@ def find_pixel_breaths(
         middle_in_data = (middle_array >= time[0]) & (middle_array <= time[-1])
         sign_samples = breath_samples(
             pixels,
-            checked_sign,
+            breaths=checked_sign,
             points=("start_time", "extremum_time", "end_time"),
             function=function,
         )

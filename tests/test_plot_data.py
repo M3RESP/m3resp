@@ -27,7 +27,7 @@ from m3resp.eit.processing import (
     RateDetectionSettings,
     detect_rates,
     find_breaths,
-    minute_image,
+    mean_breath_image,
     pixel_tidal_impedance_variation,
 )
 from m3resp.eit.roi import (
@@ -36,6 +36,7 @@ from m3resp.eit.roi import (
     tiv_lungspace,
     watershed_lungspace,
 )
+from m3resp.eit.roi.amplitude import pixel_amplitude_per_breath
 from m3resp.visualization.pixel_map_style import (
     pixel_map_style,
     scale_limits,
@@ -102,7 +103,7 @@ def _file(dataset):
         modality="eit",
         category="impedance",
     )
-    breaths = find_breaths(signal, BreathDetectionSettings())
+    breaths = find_breaths(signal, settings=BreathDetectionSettings())
     return pixels, signal, breaths
 
 
@@ -138,7 +139,7 @@ def test_pixel_map_plot_data_holds_the_map_and_its_style(kind):
     style = pixel_map_style(kind)
     assert data["style"]["name"] == style.name
     assert data["style"]["colors"] == [list(c) for c in style.colors]
-    assert data["style"]["limits"] == list(scale_limits(style, pixel_map.values))
+    assert data["style"]["limits"] == list(scale_limits(style, values=pixel_map.values))
     assert data["style"]["extend"] == style.extend
 
 
@@ -185,7 +186,7 @@ def test_eit_image_at_a_time_is_the_nearest_sample(dataset):
     picks = [time[0], time[-1], time[5], (time[7] + time[8]) / 2 + 1e-6]
     picks += list(rng.uniform(time[0], time[-1], 5))
     for value in picks:
-        data = _json(eit_image_plot_data(pixels, float(value)))
+        data = _json(eit_image_plot_data(pixels, time=float(value)))
         sample = int(np.argmin(np.abs(time - value)))
         assert data["sample"] == sample
         assert data["time"] == float(time[sample])
@@ -193,7 +194,9 @@ def test_eit_image_at_a_time_is_the_nearest_sample(dataset):
         assert data["shape"] == list(pixels.values.shape[1:])
         image = np.asarray(pixels.values)[sample]
         assert np.array_equal(_from_plot(data["values"]), image, equal_nan=True)
-        assert data["style"]["limits"] == list(scale_limits(pixel_map_style(), image))
+        assert data["style"]["limits"] == list(
+            scale_limits(pixel_map_style(), values=image)
+        )
 
 
 def test_eit_image_halfway_between_two_samples_takes_the_first():
@@ -204,13 +207,13 @@ def test_eit_image_halfway_between_two_samples_takes_the_first():
         name="pixels",
         modality="eit",
     )
-    assert eit_image_plot_data(pixels, 0.5)["sample"] == 0
-    assert eit_image_plot_data(pixels, 0.5, kind="tiv")["style"]["name"] == "tiv"
+    assert eit_image_plot_data(pixels, time=0.5)["sample"] == 0
+    assert eit_image_plot_data(pixels, time=0.5, kind="tiv")["style"]["name"] == "tiv"
     with pytest.raises(ValueError, match="outside the data"):
-        eit_image_plot_data(pixels, 2.5)
+        eit_image_plot_data(pixels, time=2.5)
     with pytest.raises(ValueError, match="shape"):
         eit_image_plot_data(
-            Signal(values=np.arange(3.0), time=np.arange(3.0), name="w"), 1.0
+            Signal(values=np.arange(3.0), time=np.arange(3.0), name="w"), time=1.0
         )
 
 
@@ -219,7 +222,7 @@ def test_eit_images_from_start_to_end_share_one_scale(dataset):
     pixels, _, _ = _file(dataset)
     time = np.asarray(pixels.time)
     start, end, step = float(time[3]), float(time[3]) + 2.0, 0.1
-    data = _json(eit_images_plot_data(pixels, start, end, step))
+    data = _json(eit_images_plot_data(pixels, start=start, end=end, step=step))
 
     requested = start + step * np.arange(21)
     assert np.allclose(data["requested_times"], requested, rtol=0, atol=1e-12)
@@ -230,17 +233,19 @@ def test_eit_images_from_start_to_end_share_one_scale(dataset):
     assert len(data["images"]) == 21
     for grid, image in zip(data["images"], images, strict=True):
         assert np.array_equal(_from_plot(grid), image, equal_nan=True)
-    assert data["style"]["limits"] == list(scale_limits(pixel_map_style(), images))
+    assert data["style"]["limits"] == list(
+        scale_limits(pixel_map_style(), values=images)
+    )
 
 
 def test_eit_images_refuse_wrong_times():
     pixels, _, _ = _file(DATASETS[0])
     with pytest.raises(ValueError, match="step > 0"):
-        eit_images_plot_data(pixels, 0.0, 1.0, 0.0)
+        eit_images_plot_data(pixels, start=0.0, end=1.0, step=0.0)
     with pytest.raises(ValueError, match="start <= end"):
-        eit_images_plot_data(pixels, 2.0, 1.0, 0.1)
+        eit_images_plot_data(pixels, start=2.0, end=1.0, step=0.1)
     with pytest.raises(ValueError, match="outside the data"):
-        eit_images_plot_data(pixels, float(pixels.time[0]) - 1, 1.0, 0.5)
+        eit_images_plot_data(pixels, start=float(pixels.time[0]) - 1, end=1.0, step=0.5)
 
 
 def _small_images(time):
@@ -256,14 +261,14 @@ def _small_images(time):
 def test_eit_images_reach_the_last_sample():
     # 0.1 + 0.1 * 2 is 0.30000000000000004, just after the last sample.
     pixels = _small_images([0.0, 0.1, 0.2, 0.3])
-    data = eit_images_plot_data(pixels, 0.1, 0.3, 0.1)
+    data = eit_images_plot_data(pixels, start=0.1, end=0.3, step=0.1)
     assert data["requested_times"][-1] == 0.3
     assert data["samples"] == [1, 2, 3]
 
 
 def test_eit_images_halfway_between_two_samples_take_the_first():
     pixels = _small_images([0.0, 1.0, 2.0, 3.0])
-    data = eit_images_plot_data(pixels, 0.0, 3.0, 0.5)
+    data = eit_images_plot_data(pixels, start=0.0, end=3.0, step=0.5)
     assert data["samples"] == [0, 0, 1, 1, 2, 2, 3]
     assert data["images"][1] == [[0.0, 1.0], [2.0, 3.0]]
 
@@ -271,9 +276,9 @@ def test_eit_images_halfway_between_two_samples_take_the_first():
 def test_eit_images_need_a_rising_time_axis():
     pixels = _small_images([0.0, 0.2, 0.1, 0.3])
     with pytest.raises(ValueError, match="time axis that rises"):
-        eit_image_plot_data(pixels, 0.1)
+        eit_image_plot_data(pixels, time=0.1)
     with pytest.raises(ValueError, match="time axis that rises"):
-        eit_images_plot_data(pixels, 0.0, 0.3, 0.1)
+        eit_images_plot_data(pixels, start=0.0, end=0.3, step=0.1)
 
 
 @pytest.mark.parametrize("kind", ["tiv", "amplitude", "perfusion", "pendelluft"])
@@ -288,21 +293,23 @@ def test_scale_from_zero_of_a_map_with_only_negative_values(kind):
 
 
 @pytest.mark.parametrize("dataset", DATASETS)
-def test_minute_image_is_the_mean_pixel_tiv_of_the_breaths_inside(dataset):
+def test_mean_breath_image_is_the_mean_pixel_tiv_of_the_breaths_inside(dataset):
     pixels, _, breaths = _file(dataset)
     start = breaths[1].start_time - 0.01
     end = breaths[4].end_time + 0.01
-    found = minute_image(pixels, breaths, start=start, end=end)
+    found = mean_breath_image(pixels, breaths=breaths, start=start, end=end)
 
     inside = breaths[1:5]
-    per_breath = pixel_tidal_impedance_variation(pixels, inside)
+    per_breath = pixel_tidal_impedance_variation(pixels, breaths=inside)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         expected = np.nanmean(np.stack([m.values for m in per_breath.values]), axis=0)
     assert np.array_equal(found.values, expected, equal_nan=True)
     assert found.kind == "tiv"
     assert found.unit == pixels.unit
+    assert found.name == "mean_breath_tiv"
     assert found.metadata == {
+        "quantity": "tiv",
         "start": start,
         "end": end,
         "breath_count": 4,
@@ -313,30 +320,32 @@ def test_minute_image_is_the_mean_pixel_tiv_of_the_breaths_inside(dataset):
 
 
 @pytest.mark.parametrize("dataset", DATASETS)
-def test_minute_image_of_the_whole_data_is_the_mean_tiv_of_tiv_lungspace(dataset):
+def test_mean_breath_image_of_the_whole_data_is_the_mean_tiv_of_tiv_lungspace(dataset):
     pixels, _, breaths = _file(dataset)
     captures = {}
-    tiv_lungspace(pixels, breaths, captures=captures)
-    found = minute_image(pixels, breaths)
+    tiv_lungspace(pixels, breaths=breaths, captures=captures)
+    found = mean_breath_image(pixels, breaths=breaths)
     assert np.array_equal(found.values, captures["mean TIV"].values, equal_nan=True)
     assert found.metadata["breath_count"] == len(breaths)
 
 
-def test_minute_image_leaves_out_breaths_partly_outside_and_checks_input():
+def test_mean_breath_image_leaves_out_breaths_partly_outside_and_checks_input():
     pixels, _, breaths = _file(DATASETS[0])
     halfway = (breaths[2].start_time + breaths[2].end_time) / 2
-    found = minute_image(pixels, breaths, start=halfway, end=breaths[5].end_time)
+    found = mean_breath_image(
+        pixels, breaths=breaths, start=halfway, end=breaths[5].end_time
+    )
     assert found.metadata["breath_count"] == 3
-    found = minute_image(
-        pixels, breaths, start=breaths[0].start_time, end=breaths[0].end_time
+    found = mean_breath_image(
+        pixels, breaths=breaths, start=breaths[0].start_time, end=breaths[0].end_time
     )
     assert found.metadata["breath_count"] == 1
     with pytest.raises(ValueError, match="No breath lies fully inside"):
-        minute_image(pixels, breaths, start=halfway, end=halfway + 0.1)
+        mean_breath_image(pixels, breaths=breaths, start=halfway, end=halfway + 0.1)
     with pytest.raises(ValueError, match="start <= end"):
-        minute_image(pixels, breaths, start=5.0, end=4.0)
+        mean_breath_image(pixels, breaths=breaths, start=5.0, end=4.0)
     with pytest.raises(TypeError, match="BreathEvent"):
-        minute_image(pixels, [(0.0, 1.0)])
+        mean_breath_image(pixels, breaths=[(0.0, 1.0)])
     end = float(pixels.time[-1])
     late = BreathEvent(
         modality="eit",
@@ -345,15 +354,85 @@ def test_minute_image_leaves_out_breaths_partly_outside_and_checks_input():
         extremum_time=end + 3.0,
     )
     with pytest.warns(UserWarning, match="partly outside the data"):
-        found = minute_image(pixels, [breaths[0], late], start=0.0, end=end + 10.0)
+        found = mean_breath_image(
+            pixels, breaths=[breaths[0], late], start=0.0, end=end + 10.0
+        )
     assert found.metadata["breath_count"] == 1
     with (
         pytest.warns(UserWarning, match="partly outside the data"),
-        pytest.raises(ValueError, match="has NaN TIV in all pixels"),
+        pytest.raises(ValueError, match="has a NaN tiv in all pixels"),
     ):
-        minute_image(pixels, [late], start=0.0, end=end + 10.0)
-    expiratory = minute_image(pixels, breaths, tiv_method="expiratory")
+        mean_breath_image(pixels, breaths=[late], start=0.0, end=end + 10.0)
+    expiratory = mean_breath_image(pixels, breaths=breaths, tiv_method="expiratory")
     assert expiratory.metadata["tiv_method"] == "expiratory"
+
+
+def test_mean_breath_image_with_a_duration_is_the_same_as_with_an_end():
+    pixels, _, breaths = _file(DATASETS[0])
+    start = breaths[0].start_time
+    by_end = mean_breath_image(pixels, breaths=breaths, start=start, end=start + 10.0)
+    by_duration = mean_breath_image(pixels, breaths=breaths, start=start, duration=10.0)
+
+    assert np.array_equal(by_duration.values, by_end.values, equal_nan=True)
+    assert by_duration.metadata == by_end.metadata
+    assert by_duration.metadata["end"] == start + 10.0
+    with pytest.raises(ValueError, match="give end or duration"):
+        mean_breath_image(pixels, breaths=breaths, end=10.0, duration=10.0)
+    with pytest.raises(ValueError, match="duration >= 0"):
+        mean_breath_image(pixels, breaths=breaths, duration=-1.0)
+
+
+@pytest.mark.parametrize("dataset", DATASETS)
+def test_mean_breath_amplitude_of_the_whole_data_is_that_of_amplitude_lungspace(
+    dataset,
+):
+    pixels, signal, breaths = _file(dataset)
+    captures = {}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        amplitude_lungspace(pixels, breaths=breaths, signal=signal, captures=captures)
+        found = mean_breath_image(
+            pixels, breaths=breaths, quantity="amplitude", signal=signal
+        )
+
+    # amplitude_lungspace also averages the breaths with NaN in every pixel,
+    # so the sums can differ in the last bit.
+    expected = captures["mean amplitude"].values
+    np.testing.assert_allclose(found.values, expected, rtol=1e-12, atol=0)
+    assert found.kind == "amplitude"
+    assert found.name == "mean_breath_amplitude"
+    assert found.metadata["quantity"] == "amplitude"
+
+
+def test_mean_breath_amplitude_in_a_window_uses_the_pixel_breaths_inside():
+    pixels, signal, breaths = _file(DATASETS[0])
+    start = breaths[1].start_time - 0.01
+    end = breaths[4].end_time + 0.01
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        found = mean_breath_image(
+            pixels,
+            breaths=breaths,
+            quantity="amplitude",
+            signal=signal,
+            start=start,
+            end=end,
+        )
+        per_breath = pixel_amplitude_per_breath(pixels, signal=signal, breaths=breaths)
+        expected = np.nanmean(
+            np.stack([m.values for m in per_breath.values[1:5]]), axis=0
+        )
+
+    assert np.array_equal(found.values, expected, equal_nan=True)
+    assert found.metadata["breath_count"] == 4
+
+
+def test_mean_breath_image_checks_quantity_and_signal():
+    pixels, signal, breaths = _file(DATASETS[0])
+    with pytest.raises(ValueError, match="quantity must be one of"):
+        mean_breath_image(pixels, breaths=breaths, quantity="eeli")
+    with pytest.raises(ValueError, match="signal is used only with"):
+        mean_breath_image(pixels, breaths=breaths, signal=signal)
 
 
 @pytest.mark.parametrize("dataset", DATASETS)
@@ -363,7 +442,9 @@ def test_lungspace_plot_data_equals_the_watershed_captures(dataset):
     with warnings.catch_warnings():
         # The Timpel file has pixels without breaths; the method warns.
         warnings.simplefilter("ignore", RuntimeWarning)
-        mask = watershed_lungspace(pixels, signal, breaths, captures=captures)
+        mask = watershed_lungspace(
+            pixels, signal=signal, breaths=breaths, captures=captures
+        )
     data = _json(lungspace_plot_data(captures, mask=mask))
 
     assert set(data["maps"]) == {
@@ -406,9 +487,11 @@ def test_lungspace_plot_data_equals_the_watershed_captures(dataset):
 def test_lungspace_plot_data_of_tiv_amplitude_and_size_filter(dataset):
     pixels, signal, breaths = _file(dataset)
     for function, key in (
-        (lambda c: tiv_lungspace(pixels, breaths, captures=c), "TIV"),
+        (lambda c: tiv_lungspace(pixels, breaths=breaths, captures=c), "TIV"),
         (
-            lambda c: amplitude_lungspace(pixels, signal, breaths, captures=c),
+            lambda c: amplitude_lungspace(
+                pixels, signal=signal, breaths=breaths, captures=c
+            ),
             "amplitude",
         ),
     ):
@@ -451,8 +534,10 @@ def test_rate_spectrum_plot_data_equals_the_captures(dataset):
     captures = {}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        respiratory_rate, heart_rate = detect_rates(pixels, settings, captures=captures)
-    data = _json(rate_spectrum_plot_data(captures, settings))
+        respiratory_rate, heart_rate = detect_rates(
+            pixels, settings=settings, captures=captures
+        )
+    data = _json(rate_spectrum_plot_data(captures, settings=settings))
 
     assert data["frequency_unit"] == "Hz"
     for key in (

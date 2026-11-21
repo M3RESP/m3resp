@@ -15,6 +15,12 @@ from typing import Any
 import numpy as np
 
 from m3resp.data.events import BreathEvent
+from m3resp.visualization.pixel_map_style import (
+    PixelMapStyle,
+    normalized_values,
+    pixel_map_style,
+    scale_limits,
+)
 
 # Hex codes of the matplotlib "tab" colors, so both versions of a figure use
 # the same colors.
@@ -220,24 +226,156 @@ def eit_summary_figure(
     if mean_pixel_tiv is None:
         _hide_axes(fig, row=2, col=2)
     else:
-        fig.add_trace(
-            go.Heatmap(
-                z=mean_pixel_tiv,
-                colorscale="Viridis",
-                colorbar={"len": 0.42, "y": 0.21, "thickness": 14},
-                hovertemplate="column %{x}, row %{y}<br>%{z:.4g}<extra></extra>",
-            ),
-            row=2,
-            col=2,
-        )
+        style = pixel_map_style("tiv")
+        for trace in pixel_map_traces(
+            mean_pixel_tiv,
+            style=style,
+            colorbar={"len": 0.42, "y": 0.21, "thickness": 14},
+        ):
+            fig.add_trace(trace, row=2, col=2)
         # Row 0 of the image is at the top and the pixels are square.
         fig.update_yaxes(
             autorange="reversed", scaleanchor="x4", constrain="domain", row=2, col=2
         )
         fig.update_xaxes(constrain="domain", row=2, col=2)
+        if style.hide_axes:
+            fig.update_xaxes(showticklabels=False, showgrid=False, row=2, col=2)
+            fig.update_yaxes(showticklabels=False, showgrid=False, row=2, col=2)
 
     _apply_layout(fig, height)
     return fig
+
+
+def pixel_map_traces(
+    values: Any,
+    *,
+    style: PixelMapStyle,
+    colorbar: dict[str, Any] | None = None,
+) -> list[Any]:
+    """Return the plotly layers that draw a pixel map in the colours of a style.
+
+    The pixels get the same colours as in
+    :func:`~m3resp.visualization.pixel_maps.plot_pixel_map`. The layers are,
+    from the bottom to the top:
+
+    1. the background colour of the style, which shows through NaN pixels
+       when ``bad_color`` is transparent;
+    2. ``bad_color`` on the NaN pixels, if it is not transparent;
+    3. the values inside the colour scale, with the colour table of the style
+       and the colour bar;
+    4. ``under_color`` on the values below the low end of the scale;
+    5. ``over_color`` on the values above the high end of the scale.
+
+    A layer with no pixels is left out. The ends of the scale come from
+    :func:`~m3resp.visualization.pixel_map_style.scale_limits`.
+
+    Args:
+        values (Any): The values, a 2D grid of numbers (row, column).
+        style (PixelMapStyle): The style, for example
+            ``pixel_map_style("tiv")``.
+        colorbar (dict | None): Extra options for the plotly colour bar, such
+            as its position. The title is the ``colorbar_label`` of the style.
+
+    Returns:
+        list: The ``plotly.graph_objects.Heatmap`` layers, to add to a figure
+            in this order.
+
+    Raises:
+        ValueError: If the style has ``boundaries`` (masks and region
+            numbers), or shows its colour bar as a percentage or without the
+            sign. These styles have no plotly version yet.
+        ImportError: If plotly is not installed.
+    """
+
+    if style.boundaries is not None or style.percentage or style.absolute:
+        raise ValueError(
+            f"The pixel map style {style.name!r} has no plotly version yet. "
+            "Use plot_pixel_map for a matplotlib figure."
+        )
+    go, _ = _import_plotly()
+    grid = np.asarray(values, dtype=float)
+    if style.normalize:
+        grid = normalized_values(grid)
+    low, high = scale_limits(style, values=grid)
+    bad = np.isnan(grid)
+    with np.errstate(invalid="ignore"):
+        below = grid < low
+        above = grid > high
+    hover = "column %{x}, row %{y}<br>%{z:.4g}<extra></extra>"
+
+    def one_color_layer(where: np.ndarray, color: Any, *, z: np.ndarray) -> Any:
+        return go.Heatmap(
+            z=np.where(where, z, np.nan),
+            colorscale=[[0, _plotly_color(color)], [1, _plotly_color(color)]],
+            showscale=False,
+            hovertemplate=hover,
+            hoverongaps=False,
+        )
+
+    layers = [
+        go.Heatmap(
+            z=np.zeros(grid.shape),
+            colorscale=[
+                [0, _plotly_color(style.background)],
+                [1, _plotly_color(style.background)],
+            ],
+            showscale=False,
+            hoverinfo="skip",
+        )
+    ]
+    if bad.any() and style.bad_color[3] > 0:
+        layers.append(one_color_layer(bad, style.bad_color, z=np.zeros(grid.shape)))
+        layers[-1].update(hoverinfo="skip", hovertemplate=None)
+    layers.append(
+        go.Heatmap(
+            z=np.where(below | above, np.nan, grid),
+            colorscale=plotly_colorscale(style),
+            zmin=low,
+            zmax=high,
+            showscale=style.colorbar,
+            colorbar={"title": {"text": style.colorbar_label}, **(colorbar or {})},
+            hovertemplate=hover,
+            hoverongaps=False,
+        )
+    )
+    if below.any():
+        layers.append(one_color_layer(below, style.under_color, z=grid))
+    if above.any():
+        layers.append(one_color_layer(above, style.over_color, z=grid))
+    return layers
+
+
+def plotly_colorscale(style: PixelMapStyle) -> list[list[Any]]:
+    """Return the colour table of a style as a plotly colour scale.
+
+    Each colour of the table fills one equal step of the scale, as in
+    matplotlib, so the colours are not blended between the steps.
+
+    Args:
+        style (PixelMapStyle): The style.
+
+    Returns:
+        list[list]: Pairs of (position from 0 to 1, colour), two per colour:
+            the start and the end of its step.
+    """
+
+    count = len(style.colors)
+    scale = []
+    for step, color in enumerate(style.colors):
+        text = _plotly_color((*color, 1.0))
+        scale.append([step / count, text])
+        scale.append([(step + 1) / count, text])
+    return scale
+
+
+def _plotly_color(color: Any) -> str:
+    """A colour with red, green, blue and alpha from 0 to 1, as plotly text."""
+
+    red, green, blue, alpha = (float(part) for part in color)
+    return (
+        f"rgba({round(red * 255)}, {round(green * 255)}, {round(blue * 255)}, "
+        f"{alpha:g})"
+    )
 
 
 def reduce_points(

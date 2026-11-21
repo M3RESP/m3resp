@@ -28,8 +28,10 @@ Portions of this module are derived from eitprocessing.
 Modified for M3RESP:
     - The class `AmplitudeLungspace` and its method `apply` are one function,
       `amplitude_lungspace`, with the EIT images and the waveform as
-      `Signal`s. The global breaths are an input (eitprocessing runs
-      `BreathDetection` with the default settings on the timing data).
+      `Signal`s. As in eitprocessing, the waveform (`timing_data`) is the
+      sum of the pixels by default. The global breaths are an input
+      (eitprocessing runs `BreathDetection` with the default settings on the
+      timing data).
     - The amplitude per breath comes from `find_pixel_breaths` with
       "phase shift" and `pixel_tidal_impedance_variation` (eitprocessing:
       `TIV.compute_pixel_parameter` with `tiv_timing="pixel"` and
@@ -57,7 +59,7 @@ from m3resp.eit.processing import (
     find_pixel_breaths,
     pixel_tidal_impedance_variation,
 )
-from m3resp.eit.roi._shared import check_threshold, finish_mask
+from m3resp.eit.roi._shared import breath_waveform, check_threshold, finish_mask
 from m3resp.eit.roi.tiv import mean_map_and_mask
 
 NAME = "amplitude_lungspace_mask"
@@ -66,9 +68,9 @@ METHOD = "m3resp.eit.roi.amplitude_lungspace"
 
 def amplitude_lungspace(
     pixels: Signal,
-    signal: Signal,
-    breaths: Sequence[BreathEvent],
     *,
+    breaths: Sequence[BreathEvent],
+    signal: Signal | None = None,
     threshold: float = 0.15,
     name: str = NAME,
     captures: dict[str, Any] | None = None,
@@ -78,10 +80,11 @@ def amplitude_lungspace(
     Args:
         pixels (Signal): EIT images, values with shape (time, row, column),
             with time in seconds.
-        signal (Signal): The waveform of the breaths, for example the global
-            impedance; the pixel breath search uses it for the phase lag of
-            each pixel.
         breaths (Sequence[BreathEvent]): The global breaths of ``signal``.
+        signal (Signal | None): The waveform of the breaths, for example the
+            global impedance; the pixel breath search uses it for the phase
+            lag of each pixel. None (the default) uses the sum of all pixels
+            of each image.
         threshold (float): Fraction of the largest mean amplitude that a
             pixel must reach, between 0 and 1.
         name (str): Name of the mask.
@@ -98,7 +101,8 @@ def amplitude_lungspace(
     Raises:
         TypeError: If ``threshold`` is not a float.
         ValueError: If ``threshold`` is not between 0 and 1, there are no
-            breaths, or every amplitude value is NaN; also the errors of
+            breaths, every amplitude value is NaN, or ``signal`` is None and
+            the images are masked; also the errors of
             :func:`~m3resp.eit.processing.find_pixel_breaths`.
 
     Warns:
@@ -107,7 +111,10 @@ def amplitude_lungspace(
     """
 
     check_threshold(threshold, name="threshold", function="amplitude_lungspace")
-    amplitude_per_breath = pixel_amplitude_per_breath(pixels, signal, breaths)
+    signal = breath_waveform(pixels, signal=signal, function="amplitude_lungspace")
+    amplitude_per_breath = pixel_amplitude_per_breath(
+        pixels, signal=signal, breaths=breaths
+    )
     _, mask = mean_map_and_mask(
         amplitude_per_breath,
         quantity="amplitude",
@@ -126,7 +133,7 @@ def amplitude_lungspace(
 
 
 def pixel_amplitude_per_breath(
-    pixels: Signal, signal: Signal, breaths: Sequence[BreathEvent]
+    pixels: Signal, *, signal: Signal, breaths: Sequence[BreathEvent]
 ) -> IntervalData:
     """Return the amplitude of each pixel in each global breath.
 
@@ -142,8 +149,8 @@ def pixel_amplitude_per_breath(
     """
 
     pixel_breaths = find_pixel_breaths(
-        pixels, signal, breaths, phase_correction_mode="phase shift"
+        pixels, signal=signal, breaths=breaths, phase_correction_mode="phase shift"
     )
     return pixel_tidal_impedance_variation(
-        pixels, pixel_breaths, name="pixel_amplitudes"
+        pixels, breaths=pixel_breaths, name="pixel_amplitudes"
     )

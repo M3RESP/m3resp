@@ -136,7 +136,7 @@ def check_breaths(breaths: Sequence[Any], *, function: str) -> list[BreathEvent]
 
 
 def check_pixel_breaths(
-    breaths: Sequence[Any] | PixelBreaths, data: np.ndarray, *, function: str
+    breaths: Sequence[Any] | PixelBreaths, *, data: np.ndarray, function: str
 ) -> tuple[list[BreathEvent] | PixelBreaths, list[BreathEvent], str]:
     """Return the breaths for a pixel calculation, after the checks.
 
@@ -160,10 +160,10 @@ def check_pixel_breaths(
     """
 
     if isinstance(breaths, PixelBreaths):
-        if breaths.shape != data.shape[1:]:
+        if breaths.grid_shape != data.shape[1:]:
             raise ValueError(
-                f"{function}: the pixel breaths are on a {breaths.shape[0]} x "
-                f"{breaths.shape[1]} grid, the images on a {data.shape[1]} x "
+                f"{function}: the pixel breaths are on a {breaths.grid_shape[0]} x "
+                f"{breaths.grid_shape[1]} grid, the images on a {data.shape[1]} x "
                 f"{data.shape[2]} grid."
             )
         return breaths, list(breaths.breaths), "pixel"
@@ -233,8 +233,8 @@ def nearest_samples(
 
 def breath_samples(
     signal: Signal,
-    breaths: list[BreathEvent] | PixelBreaths,
     *,
+    breaths: list[BreathEvent] | PixelBreaths,
     points: Sequence[str],
     function: str,
 ) -> dict[str, np.ndarray]:
@@ -384,9 +384,9 @@ def values_at(data: np.ndarray, indices: np.ndarray) -> np.ndarray:
 
 def pixel_maps_per_breath(
     values: np.ndarray,
+    *,
     pixels: Signal,
     breaths: list[BreathEvent],
-    *,
     name: str,
     method: str,
     metadata: dict[str, Any],

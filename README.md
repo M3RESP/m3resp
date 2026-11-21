@@ -42,15 +42,15 @@ The workflow loads the three recordings and synchronizes them. Then it finds the
 You can do the same analysis step by step in Python:
 
 ```python
-import os
+from pathlib import Path
 
 from m3resp import M3Session
 
-data = os.path.join("tests", "data")
+data = Path("tests", "data")
 
 session = M3Session()
-session.load_eit(os.path.join(data, "m3resp_multimodal_1_eit_draeger.bin"), vendor="draeger")
-session.load_emg(os.path.join(data, "m3resp_multimodal_1_emg.Poly5"))
+session.load_eit(data / "m3resp_multimodal_1_eit_draeger.bin", vendor="draeger")
+session.load_emg(data / "m3resp_multimodal_1_emg.Poly5")
 
 # The EMG recording started 2 s before the EIT recording.
 session.synchronize_raw_modalities(offset_seconds={"emg": -2.0})
@@ -60,7 +60,7 @@ session.preprocess_emg(channel=1)
 session.detect_eit_breaths()
 baseline = session.emg_moving_baseline()  # the quiet level of the EMG envelope
 session.detect_emg_breaths(baseline=baseline)
-session.export_summary(os.path.join("output", "my-first-analysis"))
+session.export_summary(Path("output", "my-first-analysis"))
 ```
 
 To see all workflow steps, run `m3resp steps`. If you installed M3Resp with [uv](https://docs.astral.sh/uv/), put `uv run` in front of each command, for example `uv run m3resp steps`.

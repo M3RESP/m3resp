@@ -138,7 +138,7 @@ def test_the_tiv_mask_takes_breaths_of_another_modality() -> None:
     with pytest.warns(UserWarning, match="1 of 13 breaths lie partly outside"):
         expected = tiv_lungspace(
             result.value("filtered_eit"),
-            on_clock_of(session, session.events["ventilator_breaths"], "eit"),
+            breaths=on_clock_of(session, session.events["ventilator_breaths"], "eit"),
         )
     np.testing.assert_array_equal(mask.values, expected.values)
     assert mask.metadata["parameters"]["breaths"] == "input"

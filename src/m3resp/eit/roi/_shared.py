@@ -6,7 +6,37 @@ from typing import Any
 
 import numpy as np
 
-from m3resp.data import IntervalData, PixelMap, PixelMask
+from m3resp.data import IntervalData, PixelMap, PixelMask, Signal
+from m3resp.data.pixel_maps import MASKS_KEY
+from m3resp.eit.processing import global_impedance
+
+
+def breath_waveform(pixels: Signal, *, signal: Signal | None, function: str) -> Signal:
+    """Return ``signal``, or the sum of all pixels of each image when it is None.
+
+    Args:
+        pixels (Signal): EIT images, values with shape (time, row, column).
+        signal (Signal | None): The waveform of the breaths, or None.
+        function (str): Name of the function, for the error message.
+
+    Returns:
+        Signal: ``signal``, or the global impedance of ``pixels``.
+
+    Raises:
+        ValueError: If ``signal`` is None and the images are masked
+            (``metadata["masks"]``).
+    """
+
+    if signal is not None:
+        return signal
+    if pixels.metadata.get(MASKS_KEY):
+        raise ValueError(
+            f"{function}: the images {pixels.name!r} are masked, so their sum is "
+            "not the global impedance. Give the waveform of the breaths as "
+            "signal=..., for example the global impedance of the images before "
+            "masking."
+        )
+    return global_impedance(pixels)
 
 
 def check_threshold(value: Any, *, name: str, function: str) -> None:

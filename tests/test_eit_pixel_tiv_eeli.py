@@ -86,7 +86,7 @@ def _golden_data(dataset: str, kind: str) -> tuple[Signal, Signal]:
 def _breaths(dataset: str, kind: str) -> list[BreathEvent]:
     _, waveform = _golden_data(dataset, kind)
     settings = BreathDetectionSettings(minimum_duration=MINIMUM_DURATION)
-    return find_breaths(waveform, settings)
+    return find_breaths(waveform, settings=settings)
 
 
 @functools.cache
@@ -183,7 +183,7 @@ def test_pixel_tiv_matches_golden(dataset: str) -> None:
 
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        result = pixel_tidal_impedance_variation(pixels, breaths)
+        result = pixel_tidal_impedance_variation(pixels, breaths=breaths)
 
     np.testing.assert_array_equal(_maps(result), golden["tiv/values"])
     # With global timing every pixel of a breath has the time of the breath.
@@ -203,7 +203,7 @@ def test_pixel_tiv_equals_eitprocessing(dataset: str, kind: str, timing: str) ->
         breaths = _upstream_pixel_breaths(dataset, kind)
 
     for method in TIV_METHODS:
-        result = pixel_tidal_impedance_variation(pixels, breaths, method=method)
+        result = pixel_tidal_impedance_variation(pixels, breaths=breaths, method=method)
         upstream = _upstream_pixel_tiv(dataset, kind, method, timing)
         np.testing.assert_array_equal(
             _maps(result), np.asarray(upstream.values, dtype=float)
@@ -226,16 +226,18 @@ def test_sum_over_the_pixels_equals_the_global_value(dataset: str, kind: str) ->
     scale = float(np.nanmax(np.abs(summed.values)))
 
     for method in TIV_METHODS:
-        pixel_tiv = pixel_tidal_impedance_variation(pixels, breaths, method=method)
-        tiv = tidal_impedance_variation(summed, breaths, method=method)
+        pixel_tiv = pixel_tidal_impedance_variation(
+            pixels, breaths=breaths, method=method
+        )
+        tiv = tidal_impedance_variation(summed, breaths=breaths, method=method)
         np.testing.assert_allclose(
             np.nansum(_maps(pixel_tiv), axis=(1, 2)),
             np.asarray(tiv.values),
             rtol=0,
             atol=1e-9 * scale,
         )
-    pixel_eeli = pixel_end_expiratory_lung_impedance(pixels, breaths)
-    eeli = end_expiratory_lung_impedance(summed, breaths)
+    pixel_eeli = pixel_end_expiratory_lung_impedance(pixels, breaths=breaths)
+    eeli = end_expiratory_lung_impedance(summed, breaths=breaths)
     np.testing.assert_allclose(
         np.nansum(_maps(pixel_eeli), axis=(1, 2)),
         np.asarray(eeli.values),
@@ -264,8 +266,8 @@ def test_pixel_eeli_by_hand() -> None:
         end_time=np.array([[[3.0, 5.0]], [[8.0, np.nan]]]),
     )
 
-    continuous = pixel_end_expiratory_lung_impedance(pixels, breaths)
-    per_pixel = pixel_end_expiratory_lung_impedance(pixels, pixel_breaths)
+    continuous = pixel_end_expiratory_lung_impedance(pixels, breaths=breaths)
+    per_pixel = pixel_end_expiratory_lung_impedance(pixels, breaths=pixel_breaths)
 
     np.testing.assert_array_equal(_maps(continuous), [[[40.0, 400.0]], [[70.0, 700.0]]])
     np.testing.assert_array_equal(_maps(per_pixel), [[[30.0, 500.0]], [[80.0, np.nan]]])
@@ -286,7 +288,7 @@ def test_pixel_tiv_by_hand() -> None:
         "mean": [[4.0 - 8.5, -2.0 + 2.5]],
     }
     for method, grid in expected.items():
-        result = pixel_tidal_impedance_variation(pixels, breaths, method=method)
+        result = pixel_tidal_impedance_variation(pixels, breaths=breaths, method=method)
         np.testing.assert_array_equal(_maps(result)[0], grid)
 
 
@@ -301,7 +303,7 @@ def test_the_result_keeps_the_global_breaths_and_describes_the_maps() -> None:
         (pixel_tidal_impedance_variation, "pixel_tivs"),
         (pixel_end_expiratory_lung_impedance, "pixel_eelis"),
     ):
-        result = function(pixels, pixel_breaths)
+        result = function(pixels, breaths=pixel_breaths)
         assert result.name == name
         assert result.intervals == pixel_breaths.breaths
         assert result.unit == pixels.unit == "a.u."
@@ -329,8 +331,8 @@ def test_all_nan_pixels_give_nan_and_no_warning(timing: str) -> None:
 
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        tiv = _maps(pixel_tidal_impedance_variation(pixels, breaths))
-        eeli = _maps(pixel_end_expiratory_lung_impedance(pixels, breaths))
+        tiv = _maps(pixel_tidal_impedance_variation(pixels, breaths=breaths))
+        eeli = _maps(pixel_end_expiratory_lung_impedance(pixels, breaths=breaths))
 
     assert np.isnan(tiv[:, all_nan]).all()
     assert np.isnan(eeli[:, all_nan]).all()
@@ -341,8 +343,8 @@ def test_no_breaths_give_an_empty_result() -> None:
     pixels, _ = _golden_data(DATASETS[0], "filtered")
 
     for breaths in ([], _no_pixel_breaths([], (32, 32))):
-        assert pixel_tidal_impedance_variation(pixels, breaths).values == []
-        assert pixel_end_expiratory_lung_impedance(pixels, breaths).values == []
+        assert pixel_tidal_impedance_variation(pixels, breaths=breaths).values == []
+        assert pixel_end_expiratory_lung_impedance(pixels, breaths=breaths).values == []
 
 
 def test_global_breaths_partly_outside_the_data_give_nan_with_one_warning() -> None:
@@ -353,7 +355,7 @@ def test_global_breaths_partly_outside_the_data_give_nan_with_one_warning() -> N
     ]
 
     with pytest.warns(UserWarning, match="1 of 2 breaths lie partly outside"):
-        result = pixel_tidal_impedance_variation(pixels, breaths)
+        result = pixel_tidal_impedance_variation(pixels, breaths=breaths)
 
     assert (_maps(result)[0] == 0).all()
     assert np.isnan(_maps(result)[1]).all()
@@ -364,8 +366,8 @@ def test_the_input_is_left_unchanged() -> None:
     values = pixels.values.copy()
     breaths = _breaths(DATASETS[0], "filtered")
 
-    pixel_tidal_impedance_variation(pixels, breaths)
-    pixel_end_expiratory_lung_impedance(pixels, breaths)
+    pixel_tidal_impedance_variation(pixels, breaths=breaths)
+    pixel_end_expiratory_lung_impedance(pixels, breaths=breaths)
 
     np.testing.assert_array_equal(pixels.values, values)
 
@@ -388,20 +390,20 @@ def test_wrong_input_is_refused(function: Any) -> None:
     )
 
     with pytest.raises(ValueError, match=r"shape \(time, row, column\)"):
-        function(waveform, breaths)
+        function(waveform, breaths=breaths)
     with pytest.raises(ValueError, match="2 x 2 grid"):
-        function(pixels, _no_pixel_breaths(breaths, (2, 2)))
+        function(pixels, breaths=_no_pixel_breaths(breaths, (2, 2)))
     with pytest.raises(ValueError, match="2 x 2 grid"):
-        function(pixels, _no_pixel_breaths([], (2, 2)))
+        function(pixels, breaths=_no_pixel_breaths([], (2, 2)))
     with pytest.raises(TypeError, match="needs BreathEvent objects"):
-        function(pixels, [(0.0, 1.0, 2.0)])
+        function(pixels, breaths=[(0.0, 1.0, 2.0)])
     with pytest.raises(TypeError, match="needs a Signal"):
-        function(pixels.values, breaths)
+        function(pixels.values, breaths=breaths)
     with pytest.raises(ValueError, match="impedance data only"):
-        function(pressure, breaths)
+        function(pressure, breaths=breaths)
 
 
 def test_a_wrong_tiv_method_is_refused() -> None:
     pixels, _ = _golden_data(DATASETS[0], "filtered")
     with pytest.raises(ValueError, match="Unknown TIV method"):
-        pixel_tidal_impedance_variation(pixels, [], method="peak")
+        pixel_tidal_impedance_variation(pixels, breaths=[], method="peak")

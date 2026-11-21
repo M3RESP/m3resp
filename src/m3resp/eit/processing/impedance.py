@@ -80,7 +80,7 @@ def global_impedance(
         raise ValueError(
             f"global_impedance: the images {pixel_impedance.name!r} are masked "
             f"with {masks}, so their sum is a regional impedance. Use "
-            "regional_impedance(images, mask) on the images before masking."
+            "regional_impedance(images, mask=mask) on the images before masking."
         )
     return _summed(
         pixel_impedance,
@@ -93,8 +93,8 @@ def global_impedance(
 
 def regional_impedance(
     pixel_impedance: Signal,
-    mask: PixelMask,
     *,
+    mask: PixelMask,
     name: str | None = None,
     channel: str = "regional_impedance",
 ) -> Signal:
@@ -137,8 +137,8 @@ def regional_impedance(
 
 def functional_impedance(
     pixel_impedance: Signal,
-    lung_space: PixelMask,
     *,
+    lung_space: PixelMask,
     name: str = "functional_impedance",
 ) -> Signal:
     """Return the functional impedance: the sum of the pixels in the lung space.

@@ -81,8 +81,8 @@ PIXEL_METHOD: Final = "m3resp.eit.processing.pixel_end_expiratory_lung_impedance
 
 def end_expiratory_lung_impedance(
     signal: Signal,
-    breaths: Sequence[BreathEvent],
     *,
+    breaths: Sequence[BreathEvent],
     name: str = NAME,
 ) -> IntervalData:
     """Return the end-expiratory lung impedance (EELI) of each breath.
@@ -117,7 +117,7 @@ def end_expiratory_lung_impedance(
     data = check_impedance_waveform(signal, function=function)
     checked = check_breaths(breaths, function=function)
     end = breath_samples(
-        signal, checked, points=("start_time", "end_time"), function=function
+        signal, breaths=checked, points=("start_time", "end_time"), function=function
     )["end_time"]
 
     return IntervalData(
@@ -134,8 +134,8 @@ def end_expiratory_lung_impedance(
 
 def pixel_end_expiratory_lung_impedance(
     pixels: Signal,
-    breaths: Sequence[BreathEvent] | PixelBreaths,
     *,
+    breaths: Sequence[BreathEvent] | PixelBreaths,
     name: str = PIXEL_NAME,
 ) -> IntervalData:
     """Return the EELI of each pixel, as one map per breath.
@@ -179,16 +179,16 @@ def pixel_end_expiratory_lung_impedance(
     function = "pixel_end_expiratory_lung_impedance"
     data = check_pixel_impedance(pixels, function=function)
     checked, global_breaths, timing = check_pixel_breaths(
-        breaths, data, function=function
+        breaths, data=data, function=function
     )
     end = breath_samples(
-        pixels, checked, points=("start_time", "end_time"), function=function
+        pixels, breaths=checked, points=("start_time", "end_time"), function=function
     )["end_time"]
 
     return pixel_maps_per_breath(
         values_at(data, end),
-        pixels,
-        global_breaths,
+        pixels=pixels,
+        breaths=global_breaths,
         name=name,
         method=PIXEL_METHOD,
         metadata={

@@ -11,8 +11,8 @@ TIV and the EELI of each breath of an impedance waveform, and
 ``pixel_tidal_impedance_variation`` and ``pixel_end_expiratory_lung_impedance``
 give one map of TIV or EELI values per breath for the pixels of EIT images.
 ``find_pixel_breaths`` finds the breaths of each pixel from the global
-breaths. ``minute_image`` gives the mean pixel TIV over the breaths in a time
-window. ``butterworth_filter_images`` filters each pixel of EIT images with a
+breaths. ``mean_breath_image`` gives the mean pixel TIV or pixel amplitude over
+the breaths in a time window, for example the minute image. ``butterworth_filter_images`` filters each pixel of EIT images with a
 Butterworth filter. ``breath_intervals_to_breath_events`` and
 ``breaths_to_interval_data`` change EIT breaths between a list of
 ``BreathEvent`` objects and an ``IntervalData``. ``preprocess_eit_recording`` runs
@@ -41,7 +41,7 @@ from m3resp.eit.processing.impedance import (
     regional_impedance,
 )
 from m3resp.eit.processing.mdn_filter import mdn_filter, mdn_frequency_bands
-from m3resp.eit.processing.minute_image import minute_image
+from m3resp.eit.processing.mean_breath_image import mean_breath_image
 from m3resp.eit.processing.pixel_breath import find_pixel_breaths
 from m3resp.eit.processing.preprocess import preprocess_eit_recording
 from m3resp.eit.processing.rate_detection import (
@@ -70,7 +70,7 @@ __all__ = [
     "global_impedance",
     "mdn_filter",
     "mdn_frequency_bands",
-    "minute_image",
+    "mean_breath_image",
     "pixel_end_expiratory_lung_impedance",
     "pixel_tidal_impedance_variation",
     "preprocess_eit_recording",

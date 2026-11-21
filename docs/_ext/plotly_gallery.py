@@ -12,7 +12,7 @@ PNG image needs kaleido and a Chrome browser.
 
 from __future__ import annotations
 
-import os
+from pathlib import Path
 from typing import Any
 
 import plotly.graph_objects as go
@@ -64,7 +64,7 @@ def plotly_scraper(
         figure = go.Figure(renderer.figures.pop(0))
         png_path = next(block_vars["image_path_iterator"])
         figure.write_image(png_path, width=PNG_WIDTH, height=figure.layout.height)
-        html_path = os.path.splitext(png_path)[0] + ".html"
+        html_path = Path(png_path).with_suffix(".html")
         figure.update_layout(paper_bgcolor=TRANSPARENT, plot_bgcolor=TRANSPARENT)
         figure.write_html(
             html_path,
@@ -74,7 +74,7 @@ def plotly_scraper(
             post_script=PAGE_SCRIPT,
         )
         # The tutorial page is one folder above the images folder.
-        gallery_dir = os.path.dirname(os.path.dirname(png_path))
-        relative_path = os.path.relpath(html_path, gallery_dir).replace(os.sep, "/")
+        gallery_dir = Path(png_path).parent.parent
+        relative_path = html_path.relative_to(gallery_dir).as_posix()
         rst += f"\n.. raw:: html\n    :file: {relative_path}\n\n"
     return rst

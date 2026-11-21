@@ -159,7 +159,7 @@ def preprocess_eit_recording(
         )
         respiratory_rate_hz, heart_rate_hz = detect_rates(
             raw_eit,
-            rate_detector,
+            settings=rate_detector,
             captures=rate_captures,
             suppress_length_warnings=True,
             suppress_edge_case_warning=True,
@@ -193,24 +193,26 @@ def preprocess_eit_recording(
             )
         breaths = find_breaths(
             filtered_global_impedance,
-            BreathDetectionSettings(minimum_duration=breath_min_duration_seconds),
+            settings=BreathDetectionSettings(
+                minimum_duration=breath_min_duration_seconds
+            ),
         )
         breath_intervals = breaths_to_interval_data(breaths)
         if compute_continuous_tiv:
             continuous_tiv = tidal_impedance_variation(
-                filtered_global_impedance, breaths, name="continuous_tivs"
+                filtered_global_impedance, breaths=breaths, name="continuous_tivs"
             )
         if compute_eeli:
             eeli = end_expiratory_lung_impedance(
-                filtered_global_impedance, breaths, name="continuous_eelis"
+                filtered_global_impedance, breaths=breaths, name="continuous_eelis"
             )
         if compute_pixel_tiv:
             pixel_tiv = pixel_tidal_impedance_variation(
-                filtered_eit, breaths, name="pixel_tivs"
+                filtered_eit, breaths=breaths, name="pixel_tivs"
             )
         if compute_pixel_eeli:
             pixel_eeli = pixel_end_expiratory_lung_impedance(
-                filtered_eit, breaths, name="pixel_eelis"
+                filtered_eit, breaths=breaths, name="pixel_eelis"
             )
 
     return {

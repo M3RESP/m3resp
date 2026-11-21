@@ -2,16 +2,17 @@
 
 This page lists the default settings of the EIT, EMG and ventilator processing in one place. It also lists the settings where two places use different values for the same thing.
 
-M3Resp gets most of its processing from `eitprocessing` (EIT) and `resurfemg` (EMG and part of the ventilator processing). Each package has its own defaults. M3Resp shows some of them as step settings. Others are fixed in the code of the package.
+M3Resp does the EIT processing with its own code, ported from `eitprocessing` 1.8.7. The last column of the EIT table says where a default differs from eitprocessing. The EMG processing and part of the ventilator processing come from `resurfemg`, which has its own defaults. M3Resp shows some of them as step settings. Others are fixed in the code of ReSurfEMG.
 
 ## Checked versions
 
-The values come from the code on 2026-10-01. Both packages come from the `m3resp-integration` branch of the M3RESP copies, at the commits in `uv.lock`:
+The EIT values are in the M3Resp code. The table compares them with eitprocessing 1.8.7 (commit `6d6da6a825a08201ad01c0a7b68f4de07d4501f3` of the `m3resp-integration` branch of the M3RESP copy).
 
-- eitprocessing 1.8.7, commit `6d6da6a825a08201ad01c0a7b68f4de07d4501f3`
+The EMG and ventilator values come from the code of ReSurfEMG on 2026-10-01, from the `m3resp-integration` branch of the M3RESP copy, at the commit in `uv.lock`:
+
 - ReSurfEMG 1.1.1.dev47, commit `c63668689030e4581d5f985e7d09d3a8c01e7a77`
 
-Check the values again after an update of either package.
+Check these values again after an update of ReSurfEMG.
 
 ## The "Set by" column
 
@@ -20,7 +21,7 @@ Check the values again after an update of either package.
 | m3resp | A step setting. It shows in a workflow file and in the GUI. |
 | m3resp (undeclared) | M3Resp gives it to the package, but the step does not list it as a setting. You can set it in a workflow file, but the GUI does not show it. |
 | m3resp (fixed) | A value in the M3Resp code. You cannot change it. |
-| eitprocessing, ReSurfEMG | A value in the code of the package. You cannot change it from a workflow file. |
+| ReSurfEMG | A value in the code of ReSurfEMG. You cannot change it from a workflow file. |
 
 ## 1. Open points
 
@@ -54,7 +55,7 @@ The packages give no default for these settings, so M3Resp chose the values. Eac
 
 ## 3. All defaults, by modality
 
-### EIT (eitprocessing)
+### EIT
 
 | Step | Setting | Value | Set by |
 |---|---|---|---|

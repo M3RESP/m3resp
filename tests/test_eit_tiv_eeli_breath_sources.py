@@ -71,7 +71,7 @@ def test_eit_breaths_through_the_input_give_the_values_of_the_detector() -> None
     session = _eit_session()
     waveform = session.eit.raw_global_impedance
     settings = BreathDetectionSettings()
-    breaths = breaths_to_interval_data(find_breaths(waveform, settings))
+    breaths = breaths_to_interval_data(find_breaths(waveform, settings=settings))
 
     with warnings.catch_warnings():
         warnings.simplefilter("error")
@@ -98,7 +98,9 @@ def test_timpel_device_breaths_give_the_impedance_at_their_samples() -> None:
     device_breaths = data.intervals["breaths_(timpel)"]
     assert len(device_breaths) > 1
 
-    function_result = end_expiratory_lung_impedance(waveform, device_breaths.intervals)
+    function_result = end_expiratory_lung_impedance(
+        waveform, breaths=device_breaths.intervals
+    )
     step_result = eeli(waveform, session=M3Session(), breaths=device_breaths)[
         "eeli_result"
     ]
@@ -256,7 +258,7 @@ def test_the_eeli_figure_shows_breaths_of_another_modality_on_the_eit_clock(
 
     monkeypatch.setattr(Figure, "savefig", keep_lines)
     save_eit_figures(
-        {"global_impedance": waveform, "eeli_result": result}, tmp_path, session
+        {"global_impedance": waveform, "eeli_result": result}, tmp_path, session=session
     )
 
     [lines] = lines_of_saved_figures

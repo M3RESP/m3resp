@@ -46,8 +46,10 @@ Portions of this module are derived from eitprocessing.
 Modified for M3RESP:
     - The class `WatershedLungspace` and its method `apply` are one function,
       `watershed_lungspace`, with the EIT images and the waveform as
-      `Signal`s. The global breaths are an input (eitprocessing runs
-      `BreathDetection` with the default settings on the timing data).
+      `Signal`s. As in eitprocessing, the waveform (`timing_data`) is the
+      sum of the pixels by default. The global breaths are an input
+      (eitprocessing runs `BreathDetection` with the default settings on the
+      timing data).
     - The pixel TIV and the pixel amplitude per breath are computed once
       (eitprocessing runs `TIVLungspace.apply` and
       `AmplitudeLungspace.apply` in full, and then uses only their
@@ -94,7 +96,12 @@ from skimage import feature, segmentation
 
 from m3resp.data import BreathEvent, PixelMap, PixelMask, Signal
 from m3resp.eit.processing import pixel_tidal_impedance_variation
-from m3resp.eit.roi._shared import check_per_breath, check_threshold, finish_mask
+from m3resp.eit.roi._shared import (
+    breath_waveform,
+    check_per_breath,
+    check_threshold,
+    finish_mask,
+)
 from m3resp.eit.roi.amplitude import pixel_amplitude_per_breath
 
 NAME = "watershed_lungspace_mask"
@@ -103,9 +110,9 @@ METHOD = "m3resp.eit.roi.watershed_lungspace"
 
 def watershed_lungspace(
     pixels: Signal,
-    signal: Signal,
-    breaths: Sequence[BreathEvent],
     *,
+    breaths: Sequence[BreathEvent],
+    signal: Signal | None = None,
     threshold_fraction: float = 0.15,
     name: str = NAME,
     captures: dict[str, Any] | None = None,
@@ -115,10 +122,11 @@ def watershed_lungspace(
     Args:
         pixels (Signal): EIT images, values with shape (time, row, column),
             with time in seconds.
-        signal (Signal): The waveform of the breaths, for example the global
-            impedance; the pixel breath search uses it for the phase lag of
-            each pixel.
         breaths (Sequence[BreathEvent]): The global breaths of ``signal``.
+        signal (Signal | None): The waveform of the breaths, for example the
+            global impedance; the pixel breath search uses it for the phase
+            lag of each pixel. None (the default) uses the sum of all pixels
+            of each image.
         threshold_fraction (float): Fraction of the largest mean TIV for the
             TIV mask, between 0 and 1. The same TIV value is the threshold of
             the amplitude mask.
@@ -146,8 +154,9 @@ def watershed_lungspace(
     Raises:
         TypeError: If ``threshold_fraction`` is not a float.
         ValueError: If ``threshold_fraction`` is not between 0 and 1, no
-            breath has TIV or amplitude values, no breath has both, or no
-            local maximum lies inside the TIV mask. The errors of the pixel
+            breath has TIV or amplitude values, no breath has both, no local
+            maximum lies inside the TIV mask, or ``signal`` is None and the
+            images are masked. The errors of the pixel
             TIV and the pixel amplitude (for example images that are not
             (time, row, column)) are raised as they are.
 
@@ -162,8 +171,9 @@ def watershed_lungspace(
     check_threshold(
         threshold_fraction, name="threshold_fraction", function="watershed_lungspace"
     )
-    tiv = pixel_tidal_impedance_variation(pixels, breaths)
-    amplitude = pixel_amplitude_per_breath(pixels, signal, breaths)
+    signal = breath_waveform(pixels, signal=signal, function="watershed_lungspace")
+    tiv = pixel_tidal_impedance_variation(pixels, breaths=breaths)
+    amplitude = pixel_amplitude_per_breath(pixels, signal=signal, breaths=breaths)
     try:
         tiv_grids = check_per_breath(tiv, quantity="TIV")
         amplitude_grids = check_per_breath(amplitude, quantity="amplitude")

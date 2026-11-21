@@ -87,7 +87,7 @@ def _lungspace_breaths(
 
     if breaths is None:
         return _use_stored_eit_breaths(
-            find_breaths(signal, BreathDetectionSettings()), session
+            find_breaths(signal, settings=BreathDetectionSettings()), session
         )
     if any_modality:
         given = given_breath_events(breaths, function=action)
@@ -286,7 +286,7 @@ def roi_tiv_lungspace(
     captures: dict[str, Any] = {}
     mask = tiv_lungspace(
         _as_signal(eit_data, name="eit_data", step=action),
-        found,
+        breaths=found,
         threshold=float(threshold),
         captures=captures,
     )
@@ -399,8 +399,8 @@ def roi_amplitude_lungspace(
     captures: dict[str, Any] = {}
     mask = amplitude_lungspace(
         _as_signal(eit_data, name="eit_data", step=action),
-        signal,
-        found,
+        signal=signal,
+        breaths=found,
         threshold=float(threshold),
         captures=captures,
     )
@@ -524,8 +524,8 @@ def roi_watershed(
     captures: dict[str, Any] = {}
     mask = watershed_lungspace(
         _as_signal(eit_data, name="eit_data", step=action),
-        signal,
-        found,
+        signal=signal,
+        breaths=found,
         threshold_fraction=float(threshold_fraction),
         captures=captures,
     )

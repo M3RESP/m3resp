@@ -232,7 +232,7 @@ def _chain_breaths(
 
     return find_breaths(
         as_signal(loaded_chain["filtered_gi"]),
-        BreathDetectionSettings(minimum_duration=minimum_duration),
+        settings=BreathDetectionSettings(minimum_duration=minimum_duration),
     )
 
 
@@ -252,8 +252,8 @@ class TestFindPixelBreaths:
         assert isinstance(result, PixelBreaths)
         assert result == find_pixel_breaths(
             as_signal(loaded_chain["filtered_eit"]),
-            as_signal(loaded_chain["filtered_gi"]),
-            _chain_breaths(loaded_chain),
+            signal=as_signal(loaded_chain["filtered_gi"]),
+            breaths=_chain_breaths(loaded_chain),
             name="pixel_breaths_test",
         )
         assert not result.has_breath[0].any()
@@ -284,8 +284,8 @@ class TestFindPixelBreaths:
 
         assert result == find_pixel_breaths(
             as_signal(loaded_chain["filtered_eit"]),
-            as_signal(loaded_chain["filtered_gi"]),
-            _chain_breaths(loaded_chain, minimum_duration=1.0),
+            signal=as_signal(loaded_chain["filtered_gi"]),
+            breaths=_chain_breaths(loaded_chain, minimum_duration=1.0),
             sign_breaths=_chain_breaths(loaded_chain),
         )
 
@@ -312,7 +312,7 @@ class TestComputeTivAndEeli:
         adapter = loaded_chain["adapter"]
         waveform = as_signal(loaded_chain["filtered_gi"])
         breaths = find_breaths(
-            waveform, BreathDetectionSettings(minimum_duration=2 / 3)
+            waveform, settings=BreathDetectionSettings(minimum_duration=2 / 3)
         )
         sparse_before = dict(sequence.sparse_data)
 
@@ -327,9 +327,11 @@ class TestComputeTivAndEeli:
 
         assert dict(sequence.sparse_data) == sparse_before
         assert eeli == end_expiratory_lung_impedance(
-            waveform, breaths, name="eeli_test"
+            waveform, breaths=breaths, name="eeli_test"
         )
-        assert tiv == tidal_impedance_variation(waveform, breaths, method="mean")
+        assert tiv == tidal_impedance_variation(
+            waveform, breaths=breaths, method="mean"
+        )
         assert len(eeli) == len(tiv) == len(breaths) > 0
 
 
@@ -354,9 +356,9 @@ class TestComputePixelTivAndEeli:
 
         assert dict(sequence.sparse_data) == sparse_before
         assert tiv == pixel_tidal_impedance_variation(
-            pixels, breaths, method="expiratory", name="pixel_tiv_test"
+            pixels, breaths=breaths, method="expiratory", name="pixel_tiv_test"
         )
-        assert eeli == pixel_end_expiratory_lung_impedance(pixels, breaths)
+        assert eeli == pixel_end_expiratory_lung_impedance(pixels, breaths=breaths)
         assert tiv.values[0].shape == (32, 32)
         assert len(tiv) == len(eeli) == len(breaths)
 
@@ -374,8 +376,10 @@ class TestComputePixelTivAndEeli:
             loaded_chain["filtered_eit"], breaths=pixel_breaths
         )
 
-        assert tiv == pixel_tidal_impedance_variation(pixels, pixel_breaths)
-        assert eeli == pixel_end_expiratory_lung_impedance(pixels, pixel_breaths)
+        assert tiv == pixel_tidal_impedance_variation(pixels, breaths=pixel_breaths)
+        assert eeli == pixel_end_expiratory_lung_impedance(
+            pixels, breaths=pixel_breaths
+        )
         assert tiv.metadata["tiv_timing"] == "pixel"
         assert eeli.metadata["eeli_timing"] == "pixel"
 
@@ -390,7 +394,7 @@ class TestRoiLungspaceMethods:
         adapter = loaded_chain["adapter"]
         pixels = as_signal(loaded_chain["filtered_eit"])
         waveform = as_signal(loaded_chain["filtered_gi"])
-        breaths = find_breaths(waveform, BreathDetectionSettings())
+        breaths = find_breaths(waveform, settings=BreathDetectionSettings())
 
         tiv = adapter.compute_tiv_lungspace(
             loaded_chain["filtered_eit"], timing_data=loaded_chain["filtered_gi"]
@@ -403,9 +407,9 @@ class TestRoiLungspaceMethods:
         )
 
         for result, expected in (
-            (tiv, tiv_lungspace(pixels, breaths)),
-            (amplitude, amplitude_lungspace(pixels, waveform, breaths)),
-            (watershed, watershed_lungspace(pixels, waveform, breaths)),
+            (tiv, tiv_lungspace(pixels, breaths=breaths)),
+            (amplitude, amplitude_lungspace(pixels, signal=waveform, breaths=breaths)),
+            (watershed, watershed_lungspace(pixels, signal=waveform, breaths=breaths)),
         ):
             assert isinstance(result["mask"], PixelMask)
             assert result["mask"].shape == (32, 32)
@@ -417,7 +421,7 @@ class TestRoiLungspaceMethods:
     def test_given_breaths_equal_the_found_breaths(self, loaded_chain: dict[str, Any]):
         adapter = loaded_chain["adapter"]
         waveform = as_signal(loaded_chain["filtered_gi"])
-        breaths = find_breaths(waveform, BreathDetectionSettings())
+        breaths = find_breaths(waveform, settings=BreathDetectionSettings())
 
         found = adapter.compute_watershed_lungspace(
             loaded_chain["filtered_eit"], timing_data=waveform

@@ -69,6 +69,7 @@ SENTEC_SAMPLE_FREQUENCY = 50.2
 
 def read_sentec(
     path: str | os.PathLike[str],
+    *,
     sample_frequency: float | None = None,
     first_frame: int = 0,
     max_frames: int | None = None,

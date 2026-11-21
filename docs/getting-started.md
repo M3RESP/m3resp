@@ -118,12 +118,12 @@ print(result.resolved_output_dir)  # the folder with the result files
 To run each step yourself, use a {term}`session`:
 
 ```python
-import os
+from pathlib import Path
 
 from m3resp import M3Session
 
 session = M3Session()
-session.load_eit(os.path.join("tests", "data", "m3resp_multimodal_1_eit_draeger.bin"), vendor="draeger")
+session.load_eit(Path("tests", "data", "m3resp_multimodal_1_eit_draeger.bin"), vendor="draeger")
 session.run_preset("eit")
 print(len(session.events["eit_breaths"]))  # 13
 ```

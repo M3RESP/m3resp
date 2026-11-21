@@ -90,7 +90,7 @@ def _breaths_used_by(
             "'breath_detector' must be BreathDetectionSettings (from "
             f"'eit.detect_breaths'), got {type(breath_detector).__name__}."
         )
-    detected = find_breaths(signal, breath_detector)
+    detected = find_breaths(signal, settings=breath_detector)
     breaths = _use_stored_eit_breaths(detected, session)
     found.append((breath_detector, signal, breaths))
     return breaths

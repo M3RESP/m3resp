@@ -33,7 +33,8 @@ Portions of this module are derived from eitprocessing.
     License:    Apache License, Version 2.0
 
 Modified for M3RESP:
-    - The function is `geometric_mask(region, shape)`; the result is an
+    - The function is `geometric_mask(region, shape=...)`, with `shape` given
+      by name; the result is an
       m3resp `PixelMask` with the full region name as `name`, and `region`
       and `shape` in `metadata`.
     - Each mask is set from a range of rows and a range of columns
@@ -89,7 +90,7 @@ _QUADRANT_HALVES = {
 }
 
 
-def geometric_mask(region: str, shape: tuple[int, int] = (32, 32)) -> PixelMask:
+def geometric_mask(region: str, *, shape: tuple[int, int] = (32, 32)) -> PixelMask:
     """Return the mask of a fixed part of the EIT image.
 
     Args:

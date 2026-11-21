@@ -69,8 +69,8 @@ _LABEL_BOX = {"facecolor": "white", "edgecolor": "none", "alpha": 0.7, "pad": 2}
 
 def plot_pixel_map(
     pixel_map: PixelMap | PixelMask,
-    ax: Axes | None = None,
     *,
+    ax: Axes | None = None,
     colorbar: bool | None = None,
     normalize: bool | None = None,
     percentage: bool | None = None,
@@ -146,7 +146,7 @@ def plot_pixel_map(
         if vmax is not None:
             norm.vmax = vmax
         if style.scale == "from_zero" and norm.vmin == 0 and norm.vmax is None:
-            low, high = scale_limits(style, values)
+            low, high = scale_limits(style, values=values)
             if low < 0:
                 # Only negative values: matplotlib would take the largest
                 # value as the high end, below the low end of 0.
@@ -255,6 +255,7 @@ def _add_colorbar(
 
 def add_region_labels(
     regions: PixelMap,
+    *,
     ax: Axes,
     labels: Mapping[int, str] | None = None,
     **text_options: Any,

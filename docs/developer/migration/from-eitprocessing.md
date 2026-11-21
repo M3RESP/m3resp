@@ -56,8 +56,8 @@ from m3resp.eit.processing import (
     find_breaths,
 )
 
-respiratory_rate, heart_rate = detect_rates(raw_eit, RateDetectionSettings("adult"))
-breaths = find_breaths(global_impedance, BreathDetectionSettings(minimum_duration=2 / 3))
+respiratory_rate, heart_rate = detect_rates(raw_eit, settings=RateDetectionSettings("adult"))
+breaths = find_breaths(global_impedance, settings=BreathDetectionSettings(minimum_duration=2 / 3))
 ```
 
 `raw_eit` is a `Signal` with the EIT images (frames, rows, columns), and `global_impedance` is a `Signal` with one value per frame. Both rates are in Hz. `find_breaths` returns a list of `BreathEvent`s. The `middle_time` of an eitprocessing `Breath` is the `extremum_time` of a `BreathEvent`.
@@ -112,8 +112,8 @@ from m3resp.eit.processing import (
 )
 
 breaths = find_breaths(global_impedance)
-tiv = tidal_impedance_variation(global_impedance, breaths)
-eeli = end_expiratory_lung_impedance(global_impedance, breaths)
+tiv = tidal_impedance_variation(global_impedance, breaths=breaths)
+eeli = end_expiratory_lung_impedance(global_impedance, breaths=breaths)
 ```
 
 With the breaths of `find_breaths`, both give the numbers of eitprocessing 1.8.7. `method` is the `tiv_method` of eitprocessing: `"inspiratory"` (default), `"expiratory"` or `"mean"`. The result is an `IntervalData` with the given breaths and one value per breath, in the unit of the waveform. eitprocessing gives a `SparseData` with no unit; its `time` is the `extremum_time` of each breath for TIV and the `end_time` for EELI.
@@ -149,9 +149,9 @@ from m3resp.eit.processing import (
 )
 
 breaths = find_breaths(global_impedance)
-pixel_breaths = find_pixel_breaths(pixels, global_impedance, breaths)
-tiv = pixel_tidal_impedance_variation(pixels, pixel_breaths)
-eeli = pixel_end_expiratory_lung_impedance(pixels, pixel_breaths)
+pixel_breaths = find_pixel_breaths(pixels, signal=global_impedance, breaths=breaths)
+tiv = pixel_tidal_impedance_variation(pixels, breaths=pixel_breaths)
+eeli = pixel_end_expiratory_lung_impedance(pixels, breaths=pixel_breaths)
 ```
 
 With the breaths of `find_breaths`, the pixel breaths and the pixel TIV are the numbers of eitprocessing 1.8.7, with the three phase correction modes, both timings and the three TIV methods. The differences:
@@ -179,10 +179,10 @@ The step `eit.pixel_breaths` runs `find_pixel_breaths` and gives `pixel_breaths`
 | `PixelMap.from_aggregate`, `normalize`, `create_mask_from_threshold`, `convert_to`, `to_boolean_array`, `to_integer_array`, `to_non_nan_array`, `+ - * /` | The same names on `m3resp.PixelMap` |
 | `PixelMask * + -`, `is_weighted` | The same on `m3resp.PixelMask`; the result is named `"a and b"`, `"a or b"` or `"a without b"` |
 | `PixelMaskCollection.combine`, `apply` | `m3resp.PixelMaskCollection.combine(method, name=...)`, `apply(data)` |
-| `get_geometric_mask(region, shape)` | `m3resp.eit.roi.geometric_mask(region, shape)` |
-| `TIVLungspace(threshold).apply(eit_data, timing_data=...)` | `m3resp.eit.roi.tiv_lungspace(pixels, breaths, threshold=...)` |
-| `AmplitudeLungspace(threshold).apply(...)` | `amplitude_lungspace(pixels, global_impedance, breaths, threshold=...)` |
-| `WatershedLungspace(threshold_fraction).apply(...)` | `watershed_lungspace(pixels, global_impedance, breaths, threshold_fraction=...)` |
+| `get_geometric_mask(region, shape)` | `m3resp.eit.roi.geometric_mask(region, shape=shape)` |
+| `TIVLungspace(threshold).apply(eit_data, timing_data=...)` | `m3resp.eit.roi.tiv_lungspace(pixels, breaths=breaths, threshold=...)` |
+| `AmplitudeLungspace(threshold).apply(...)` | `amplitude_lungspace(pixels, signal=global_impedance, breaths=breaths, threshold=...)` |
+| `WatershedLungspace(threshold_fraction).apply(...)` | `watershed_lungspace(pixels, signal=global_impedance, breaths=breaths, threshold_fraction=...)` |
 | `FilterROIBySize(min_region_size, connectivity).apply(mask)` | `filter_mask_by_size(mask, min_region_size=..., connectivity=...)` |
 
 ```python
@@ -198,9 +198,9 @@ mask = WatershedLungspace(threshold_fraction=0.15).apply(
 from m3resp.eit.processing import BreathDetectionSettings, find_breaths
 from m3resp.eit.roi import watershed_lungspace
 
-breaths = find_breaths(global_impedance, BreathDetectionSettings())
+breaths = find_breaths(global_impedance, settings=BreathDetectionSettings())
 captures = {}
-mask = watershed_lungspace(pixels, global_impedance, breaths, captures=captures)
+mask = watershed_lungspace(pixels, signal=global_impedance, breaths=breaths, captures=captures)
 ```
 
 With the breaths of `find_breaths` and the default settings, the masks of the three test files are the masks of eitprocessing 1.8.7. The differences:
@@ -208,7 +208,7 @@ With the breaths of `find_breaths` and the default settings, the masks of the th
 | eitprocessing | M3Resp |
 |---|---|
 | The lung-space classes find the breaths with their own `BreathDetection` (default settings) | The functions take the global breaths as input |
-| Without `timing_data`, the classes use the sum of all pixels | The steps read `timing_data` (by default `global_impedance`) |
+| Without `timing_data`, the classes use the sum of all pixels | Without `signal`, `amplitude_lungspace` and `watershed_lungspace` use the sum of all pixels too. The steps read `timing_data` (by default `global_impedance`) |
 | `WatershedLungspace` runs `TIVLungspace` and `AmplitudeLungspace` in full and uses only their captures | The pixel TIV and the pixel amplitude are computed once; the masks are the same |
 | The watershed maxima are found with NaN read as 0, and the watershed regions on an image with NaN pixels, so the region borders near NaN pixels depend on how scikit-image treats NaN | Pixels with a NaN mean amplitude are in no region (number 0) and cannot be a maximum. At the default threshold the final mask of the test files is the same; at a threshold of 0.05, the Timpel file has 2 (raw) or 7 (filtered) pixels fewer. This rule is unfinished and can change ([eitprocessing issue 483](https://github.com/EIT-ALIVE/eitprocessing/issues/483)); the method gives a `UserWarning` when a pixel has a NaN mean amplitude. |
 | The capture `"included watershed regions"` holds every region, because `np.where` reads the mask object as one true value | It holds the included regions, NaN elsewhere |
@@ -235,10 +235,10 @@ See {doc}`../../concepts/pixel-maps`.
 
 | eitprocessing | M3Resp |
 |---|---|
-| `TIVMap(values).plotting.imshow(ax=ax)` | `plot_pixel_map(PixelMap(name=..., values=..., kind="tiv"), ax)` |
+| `TIVMap(values).plotting.imshow(ax=ax)` | `plot_pixel_map(PixelMap(name=..., values=..., kind="tiv"), ax=ax)` |
 | `imshow(colorbar, normalize, percentage, absolute, colorbar_kwargs, facecolor, **kwargs)` | `plot_pixel_map(..., colorbar, normalize, percentage, absolute, colorbar_options, background, **imshow_options)`, and `hide_axes` |
 | `PixelMask(...).plotting.imshow()` | `plot_pixel_map(mask)` |
-| `regions.plotting.add_region_markers(ax, label_map, **kwargs)` | `add_region_labels(regions, ax, labels, **text_options)`, for a map of kind `"integer"` |
+| `regions.plotting.add_region_markers(ax, label_map, **kwargs)` | `add_region_labels(regions, ax=ax, labels=labels, **text_options)`, for a map of kind `"integer"` |
 | `get_plot_config(TIVMap)`, the 10 `*PlotConfig` classes | `m3resp.visualization.pixel_map_style.pixel_map_style("tiv")`, one `PixelMapStyle` per kind, for kind None and for `"mask"` |
 | `set_pixelmap_plot_config(TIVMap, ...)` | `plot_pixel_map(..., style=pixel_map_style("tiv", ...))` for one figure |
 | `RateDetection.plotting.plot` | `m3resp.visualization.plot_rate_detection(settings, **captures)` |

@@ -104,7 +104,7 @@ def breaths_to_interval_data(
 
 
 def pixel_sign_breaths(
-    signal: Signal, detector: BreathDetectionSettings
+    signal: Signal, *, detector: BreathDetectionSettings
 ) -> list[BreathEvent] | None:
     """Return the breaths that give the sign of each pixel in the pixel breath search.
 
@@ -128,4 +128,4 @@ def pixel_sign_breaths(
     default = BreathDetectionSettings()
     if detector == default:
         return None
-    return find_breaths(signal, default)
+    return find_breaths(signal, settings=default)

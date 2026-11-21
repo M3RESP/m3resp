@@ -167,7 +167,7 @@ def test_save_eit_figures_without_eitprocessing(tmp_path):
         "from m3resp.workflows import run_workflow\n"
         "session = M3Session()\n"
         f"result = run_workflow({str(spec)!r}, session=session)\n"
-        f"paths = save_eit_figures(result.outputs, {str(tmp_path)!r}, session)\n"
+        f"paths = save_eit_figures(result.outputs, {str(tmp_path)!r}, session=session)\n"
         "names = sorted(path.name for path in paths)\n"
         "assert names == ['global_impedance.png', 'pixel_tiv.png', "
         "'rate_detection.png'], names\n"

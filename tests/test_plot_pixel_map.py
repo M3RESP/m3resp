@@ -115,7 +115,7 @@ def test_default_figures_equal_imshow_of_eitprocessing(kind):
     for case, grid in seeded_grids(kind).items():
         upstream = upstream_object(kind, grid)
         ours = m3resp_object(kind, np.asarray(upstream.values))
-        found = _draw(lambda ax, o=ours: plot_pixel_map(o, ax))
+        found = _draw(lambda ax, o=ours: plot_pixel_map(o, ax=ax))
         finite = ours.values[~np.isnan(ours.values)]
         largest = finite.max() if finite.size else 0.0
         if pixel_map_style(kind).scale == "from_zero" and largest < 0:
@@ -138,7 +138,7 @@ def test_figures_with_flags_equal_imshow_of_eitprocessing(kind, flags):
         expected = _draw(
             lambda ax, u=upstream, opt=options: u.plotting.imshow(ax=ax, **opt)
         )
-        found = _draw(lambda ax, o=ours, opt=options: plot_pixel_map(o, ax, **opt))
+        found = _draw(lambda ax, o=ours, opt=options: plot_pixel_map(o, ax=ax, **opt))
         _assert_same(found, expected, case)
 
 
@@ -162,7 +162,9 @@ def test_colorbar_axes_background_and_imshow_options_equal_eitprocessing(kind):
         expected = _draw(
             lambda ax, u=upstream, opt=upstream_options: u.plotting.imshow(ax=ax, **opt)
         )
-        found = _draw(lambda ax, o=ours, opt=our_options: plot_pixel_map(o, ax, **opt))
+        found = _draw(
+            lambda ax, o=ours, opt=our_options: plot_pixel_map(o, ax=ax, **opt)
+        )
         _assert_same(found, expected, our_options)
 
 
@@ -240,7 +242,7 @@ def test_region_labels_equal_add_region_markers_of_eitprocessing(source, name):
     # eitprocessing labels region 0 (the background) first; m3resp skips it.
     skip = 1 if 0 in regions else 0
     expected = _labels(regions, lambda ax: upstream.plotting.add_region_markers(ax))
-    found = _labels(regions, lambda ax: add_region_labels(ours, ax))
+    found = _labels(regions, lambda ax: add_region_labels(ours, ax=ax))
     assert found == expected[skip:]
 
     label_map = {int(regions.max()): "last", 99: "unused"}
@@ -249,14 +251,16 @@ def test_region_labels_equal_add_region_markers_of_eitprocessing(source, name):
         regions,
         lambda ax: upstream.plotting.add_region_markers(ax, label_map, **style),
     )
-    found = _labels(regions, lambda ax: add_region_labels(ours, ax, label_map, **style))
+    found = _labels(
+        regions, lambda ax: add_region_labels(ours, ax=ax, labels=label_map, **style)
+    )
     assert found == expected[skip:]
 
 
 def test_add_region_labels_passes_other_text_options():
     fig, ax = plt.subplots()
     regions = PixelMap(name="regions", values=np.eye(3), kind="integer")
-    texts = add_region_labels(regions, ax, fontweight="bold")
+    texts = add_region_labels(regions, ax=ax, fontweight="bold")
     assert [text.get_text() for text in texts] == ["1"]
     assert all(text.get_fontweight() == "bold" for text in texts)
     plt.close(fig)
@@ -265,7 +269,7 @@ def test_add_region_labels_passes_other_text_options():
 def test_add_region_labels_needs_a_map_of_region_numbers():
     fig, ax = plt.subplots()
     with pytest.raises(TypeError, match="kind 'integer'"):
-        add_region_labels(PixelMap(name="tiv", values=np.eye(3), kind="tiv"), ax)
+        add_region_labels(PixelMap(name="tiv", values=np.eye(3), kind="tiv"), ax=ax)
     with pytest.raises(TypeError, match="kind 'integer'"):
-        add_region_labels(np.eye(3), ax)
+        add_region_labels(np.eye(3), ax=ax)
     plt.close(fig)

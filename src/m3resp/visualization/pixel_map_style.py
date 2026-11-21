@@ -109,7 +109,7 @@ Color = tuple[float, float, float, float]
 _COLOR_FILE = Path(__file__).resolve().parent / "pixel_map_colors.json"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class PixelMapStyle:
     """How a pixel map or mask is drawn.
 
@@ -399,7 +399,7 @@ def normalized_values(values: Any) -> np.ndarray:
     return grid / np.nanmax(grid, initial=1)
 
 
-def scale_limits(style: PixelMapStyle, values: Any) -> tuple[float, float]:
+def scale_limits(style: PixelMapStyle, *, values: Any) -> tuple[float, float]:
     """Return the two ends of the colour scale for a grid of values.
 
     The ends follow the scale rule of the style (see :data:`SCALE_RULES`) and
@@ -437,6 +437,7 @@ def scale_limits(style: PixelMapStyle, values: Any) -> tuple[float, float]:
 
 def pixel_colors(
     style: PixelMapStyle,
+    *,
     values: Any,
     limits: tuple[float, float] | None = None,
 ) -> np.ndarray:
@@ -479,7 +480,7 @@ def pixel_colors(
     if style.boundaries is not None:
         index = _boundary_index(style, grid)
     else:
-        low, high = scale_limits(style, grid) if limits is None else limits
+        low, high = scale_limits(style, values=grid) if limits is None else limits
         if low > high:
             raise ValueError("The low end of the scale must not be above the high end.")
         if low == high:

@@ -130,7 +130,7 @@ _NON_NEGATIVE_KINDS = frozenset({"amplitude", "perfusion", "pendelluft"})
 MASKS_KEY = "masks"
 
 
-def masked_metadata(metadata: dict[str, Any], mask_name: str) -> dict[str, Any]:
+def masked_metadata(metadata: dict[str, Any], *, mask_name: str) -> dict[str, Any]:
     """Return a copy of ``metadata`` with ``mask_name`` added to the masks.
 
     Args:
@@ -875,7 +875,7 @@ class PixelMask:
             return replace(
                 data,
                 values=self._multiply(np.asarray(data.values)),
-                metadata=masked_metadata(data.metadata, self.name),
+                metadata=masked_metadata(data.metadata, mask_name=self.name),
             )
         if isinstance(data, PixelMap):
             return data.with_values(self._multiply(data.values))

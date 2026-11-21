@@ -77,6 +77,7 @@ SAMPLE_FREQUENCY_ESTIMATION_PRECISION = 4
 
 def read_draeger(
     path: str | os.PathLike[str],
+    *,
     sample_frequency: float | None = None,
     first_frame: int = 0,
     max_frames: int | None = None,

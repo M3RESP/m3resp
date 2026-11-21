@@ -343,7 +343,7 @@ class PixelMaskCollection:
         results: dict[str, Any] = {}
         for mask in self.items:
             metadata = (
-                masked_metadata(data.metadata, mask.name)
+                masked_metadata(data.metadata, mask_name=mask.name)
                 if isinstance(data, Signal)
                 else dict(data.metadata)
             )

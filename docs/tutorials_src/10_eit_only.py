@@ -17,15 +17,16 @@ You need M3Resp with the ``eit`` option (``python -m pip install -e ".[eit]"``) 
 
 import os
 import tempfile
+from pathlib import Path
 
 from m3resp import M3Session
 
 # The example recordings are in the tests/data folder of the M3Resp source code.
-data_dir = os.environ.get("M3RESP_EXAMPLE_DATA", os.path.join("tests", "data"))
+data_dir = Path(os.environ.get("M3RESP_EXAMPLE_DATA", Path("tests", "data")))
 
 session = M3Session()
 session.load_eit(
-    os.path.join(data_dir, "m3resp_multimodal_1_eit_draeger.bin"),
+    data_dir / "m3resp_multimodal_1_eit_draeger.bin",
     vendor="draeger",
 )
 
@@ -109,11 +110,11 @@ fig.show()
 #
 # :meth:`~m3resp.M3Session.export_summary` writes all results of the session to a folder. Here we use a temporary folder. In your own analysis, give the path of your results folder.
 
-output_dir = tempfile.mkdtemp()
+output_dir = Path(tempfile.mkdtemp())
 session.export_summary(output_dir)
 
-for file_name in sorted(os.listdir(output_dir)):
-    print(file_name)
+for path in sorted(output_dir.iterdir()):
+    print(path.name)
 
 # %%
 # Recap

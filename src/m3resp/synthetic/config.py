@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
@@ -247,7 +248,9 @@ class SyntheticDraegerData:
     components: dict[str, np.ndarray] = field(default_factory=dict)
 
 
-def load_synthetic_generator_config(path: str) -> SyntheticGeneratorConfig:
+def load_synthetic_generator_config(
+    path: str | os.PathLike[str],
+) -> SyntheticGeneratorConfig:
     """Load a synthetic generator configuration from a YAML file."""
 
     try:

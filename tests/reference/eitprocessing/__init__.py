@@ -172,7 +172,11 @@ def _lungspace_inputs(
         global_impedance(pixels) if timing_data is None else as_signal(timing_data)
     )
     if breaths is None:
-        return pixels, waveform, find_breaths_of(waveform, BreathDetectionSettings())
+        return (
+            pixels,
+            waveform,
+            find_breaths_of(waveform, settings=BreathDetectionSettings()),
+        )
     return pixels, waveform, given_breath_events(breaths, function=function)
 
 
@@ -484,7 +488,7 @@ class EITProcessingAdapter:
         captures: dict[str, Any] = {}
         respiratory_rate_hz, heart_rate_hz = detect_rates_of(
             as_signal(signal),
-            settings,
+            settings=settings,
             captures=captures if capture else None,
             suppress_length_warnings=capture,
             suppress_edge_case_warning=capture,
@@ -590,7 +594,7 @@ class EITProcessingAdapter:
 
         settings = BreathDetectionSettings(minimum_duration=minimum_duration_seconds)
         return breaths_to_interval_data(
-            find_breaths_of(as_signal(timing_data), settings)
+            find_breaths_of(as_signal(timing_data), settings=settings)
         )
 
     def find_pixel_breaths(
@@ -643,14 +647,14 @@ class EITProcessingAdapter:
             settings = BreathDetectionSettings(
                 minimum_duration=minimum_duration_seconds
             )
-            global_breaths = find_breaths_of(waveform, settings)
-            sign_breaths = pixel_sign_breaths(waveform, settings)
+            global_breaths = find_breaths_of(waveform, settings=settings)
+            sign_breaths = pixel_sign_breaths(waveform, detector=settings)
         else:
             global_breaths = given_breath_events(breaths, function="find_pixel_breaths")
         return find_pixel_breaths_of(
             as_signal(eit_data),
-            waveform,
-            global_breaths,
+            signal=waveform,
+            breaths=global_breaths,
             phase_correction_mode=phase_correction_mode,
             name=result_label,
             sign_breaths=sign_breaths,
@@ -686,7 +690,7 @@ class EITProcessingAdapter:
 
         return tidal_impedance_variation(
             as_signal(timing_data),
-            given_breath_events(breaths, function="compute_continuous_tiv"),
+            breaths=given_breath_events(breaths, function="compute_continuous_tiv"),
             method=tiv_method,
             name=result_label,
         )
@@ -719,7 +723,7 @@ class EITProcessingAdapter:
 
         return end_expiratory_lung_impedance(
             as_signal(timing_data),
-            given_breath_events(breaths, function="compute_eeli"),
+            breaths=given_breath_events(breaths, function="compute_eeli"),
             name=result_label,
         )
 
@@ -756,7 +760,7 @@ class EITProcessingAdapter:
 
         return pixel_tidal_impedance_variation(
             as_signal(eit_data),
-            _pixel_or_global_breaths(breaths, function="compute_pixel_tiv"),
+            breaths=_pixel_or_global_breaths(breaths, function="compute_pixel_tiv"),
             method=tiv_method,
             name=result_label,
         )
@@ -788,7 +792,7 @@ class EITProcessingAdapter:
 
         return pixel_end_expiratory_lung_impedance(
             as_signal(eit_data),
-            _pixel_or_global_breaths(breaths, function="compute_pixel_eeli"),
+            breaths=_pixel_or_global_breaths(breaths, function="compute_pixel_eeli"),
             name=result_label,
         )
 
@@ -833,7 +837,9 @@ class EITProcessingAdapter:
             eit_data, timing_data, breaths, function="compute_tiv_lungspace"
         )
         captures: dict[str, Any] = {}
-        mask = tiv_lungspace(pixels, found, threshold=threshold, captures=captures)
+        mask = tiv_lungspace(
+            pixels, breaths=found, threshold=threshold, captures=captures
+        )
         return {"mask": mask, "captures": captures}
 
     def compute_amplitude_lungspace(
@@ -881,7 +887,11 @@ class EITProcessingAdapter:
         )
         captures: dict[str, Any] = {}
         mask = amplitude_lungspace(
-            pixels, waveform, found, threshold=threshold, captures=captures
+            pixels,
+            signal=waveform,
+            breaths=found,
+            threshold=threshold,
+            captures=captures,
         )
         return {"mask": mask, "captures": captures}
 
@@ -928,8 +938,8 @@ class EITProcessingAdapter:
         captures: dict[str, Any] = {}
         mask = watershed_lungspace(
             pixels,
-            waveform,
-            found,
+            signal=waveform,
+            breaths=found,
             threshold_fraction=threshold_fraction,
             captures=captures,
         )
@@ -1210,7 +1220,7 @@ class EITProcessingAdapter:
                 minimum_duration=breath_min_duration_seconds
             )
             breaths = find_breaths_of(
-                as_signal(filtered_global_impedance), breath_detector
+                as_signal(filtered_global_impedance), settings=breath_detector
             )
             breath_intervals = breaths_to_interval_data(breaths)
             add_to_collection(

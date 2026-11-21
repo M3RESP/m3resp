@@ -81,6 +81,7 @@ TIMPEL_SAMPLE_FREQUENCY = 50
 
 def read_timpel(
     path: str | os.PathLike[str],
+    *,
     sample_frequency: float | None = TIMPEL_SAMPLE_FREQUENCY,
     first_frame: int = 0,
     max_frames: int | None = None,

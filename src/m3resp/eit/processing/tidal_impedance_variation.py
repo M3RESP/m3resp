@@ -99,8 +99,8 @@ PIXEL_METHOD: Final = "m3resp.eit.processing.pixel_tidal_impedance_variation"
 
 def tidal_impedance_variation(
     signal: Signal,
-    breaths: Sequence[BreathEvent],
     *,
+    breaths: Sequence[BreathEvent],
     method: str = "inspiratory",
     name: str = NAME,
 ) -> IntervalData:
@@ -142,7 +142,7 @@ def tidal_impedance_variation(
     checked = check_breaths(breaths, function=function)
     samples = breath_samples(
         signal,
-        checked,
+        breaths=checked,
         points=("start_time", "extremum_time", "end_time"),
         function=function,
     )
@@ -165,8 +165,8 @@ def tidal_impedance_variation(
 
 def pixel_tidal_impedance_variation(
     pixels: Signal,
-    breaths: Sequence[BreathEvent] | PixelBreaths,
     *,
+    breaths: Sequence[BreathEvent] | PixelBreaths,
     method: str = "inspiratory",
     name: str = PIXEL_NAME,
 ) -> IntervalData:
@@ -215,19 +215,19 @@ def pixel_tidal_impedance_variation(
     _check_method(method)
     data = check_pixel_impedance(pixels, function=function)
     checked, global_breaths, timing = check_pixel_breaths(
-        breaths, data, function=function
+        breaths, data=data, function=function
     )
     samples = breath_samples(
         pixels,
-        checked,
+        breaths=checked,
         points=("start_time", "extremum_time", "end_time"),
         function=function,
     )
 
     return pixel_maps_per_breath(
         _tiv_values(data, samples, method),
-        pixels,
-        global_breaths,
+        pixels=pixels,
+        breaths=global_breaths,
         name=name,
         method=PIXEL_METHOD,
         metadata={

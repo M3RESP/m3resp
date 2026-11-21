@@ -162,7 +162,7 @@ def _impedance_in_mask(
 
     pixels = _as_signal(signal, name="signal", step=step)
     region = _as_mask(mask)
-    native = regional_impedance_of(pixels, region, name=output, channel=output)
+    native = regional_impedance_of(pixels, mask=region, name=output, channel=output)
     metadata = _step_provenance(
         source_function="m3resp.eit.processing.regional_impedance",
         operation=step,
@@ -395,7 +395,7 @@ def detect_breaths(signal: Any, *, min_duration_s: float = 2 / 3) -> dict[str, A
         "breath_intervals": breaths_to_interval_data(
             find_breaths(
                 _as_signal(signal, name="signal", step="eit.detect_breaths"),
-                settings,
+                settings=settings,
             )
         ),
         "breath_detector": settings,
@@ -543,7 +543,7 @@ def continuous_tiv(
     )
     result = _per_breath_values(
         lambda waveform, found: tidal_impedance_variation(
-            waveform, found, method=tiv_method
+            waveform, breaths=found, method=tiv_method
         ),
         signal,
         breaths=breaths,
@@ -651,7 +651,7 @@ def eeli(
     )
     result = _per_breath_values(
         lambda waveform, found: end_expiratory_lung_impedance(
-            waveform, found, name=result_label
+            waveform, breaths=found, name=result_label
         ),
         signal,
         breaths=breaths,

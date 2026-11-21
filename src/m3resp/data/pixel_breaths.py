@@ -32,7 +32,7 @@ PIXEL_BREATH_POINTS = ("start_time", "extremum_time", "end_time")
 GRID_SHAPE_KEY = "grid_shape"
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, kw_only=True)
 class PixelBreaths:
     """The start, extremum and end time of the breath of each pixel.
 
@@ -112,8 +112,19 @@ class PixelBreaths:
                 "extremum_time <= end_time."
             )
 
+    def __len__(self) -> int:
+        """Return the number of global breaths."""
+
+        return len(self.breaths)
+
     @property
-    def shape(self) -> tuple[int, int]:
+    def shape(self) -> tuple[int, int, int]:
+        """Return the shape of the times: (breath, row, column)."""
+
+        return self.start_time.shape
+
+    @property
+    def grid_shape(self) -> tuple[int, int]:
         """Return the number of rows and columns of the image, in that order."""
 
         _, rows, columns = self.start_time.shape
@@ -149,7 +160,7 @@ class PixelBreaths:
             ValueError: If ``row`` or ``column`` is outside the grid.
         """
 
-        rows, columns = self.shape
+        rows, columns = self.grid_shape
         if not (0 <= row < rows and 0 <= column < columns):
             raise ValueError(
                 f"Pixel ({row}, {column}) is outside the {rows} x {columns} grid."
@@ -196,7 +207,7 @@ class PixelBreaths:
             values=list(grids),
             unit="s",
             method=self.method,
-            metadata={**self.metadata, GRID_SHAPE_KEY: list(self.shape)},
+            metadata={**self.metadata, GRID_SHAPE_KEY: list(self.grid_shape)},
         )
 
     @classmethod

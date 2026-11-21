@@ -101,7 +101,10 @@ class TestPixelBreaths:
 
         assert pixel_breaths.start_time.dtype == float
         assert pixel_breaths.start_time.shape == (2, 1, 2)
-        assert pixel_breaths.shape == (1, 2)
+        assert pixel_breaths.shape == (2, 1, 2)
+        assert pixel_breaths.grid_shape == (1, 2)
+        assert len(pixel_breaths) == 2
+        assert pixel_breaths.shape == pixel_breaths.has_breath.shape
         assert pixel_breaths.has_breath.tolist() == [[[True, True]], [[True, False]]]
 
     def test_times_of_different_shapes_are_refused(self):
@@ -255,7 +258,7 @@ class TestIntervalDataForm:
         back = PixelBreaths.from_interval_data(data)
 
         assert data.metadata["grid_shape"] == [32, 32]
-        assert back.shape == (32, 32)
+        assert back.grid_shape == (32, 32)
         assert back == pixel_breaths
 
     def test_a_grid_shape_that_differs_from_the_grids_is_refused(self):
@@ -327,7 +330,7 @@ def test_pixel_gives_the_golden_times_of_every_pixel(dataset: str) -> None:
     pixel_breaths = _golden_pixel_breaths(dataset)
     data = pixel_breaths.to_interval_data()
 
-    rows, columns = pixel_breaths.shape
+    rows, columns = pixel_breaths.grid_shape
     for row in range(rows):
         for column in range(columns):
             pixel = landmarks[:, row, column]
@@ -362,11 +365,13 @@ def test_sample_lookup_on_the_grid_equals_the_lookup_per_pixel(dataset: str) -> 
 def test_pixels_with_no_breath_give_no_sample_and_no_warning(dataset: str) -> None:
     _, landmarks, time = _golden(dataset)
     pixel_breaths = _golden_pixel_breaths(dataset)
-    signal = _pixel_signal(time, pixel_breaths.shape)
+    signal = _pixel_signal(time, pixel_breaths.grid_shape)
 
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        samples = breath_samples(signal, pixel_breaths, points=POINTS, function="test")
+        samples = breath_samples(
+            signal, breaths=pixel_breaths, points=POINTS, function="test"
+        )
 
     no_breath = np.isnan(landmarks[..., 0])
     # The first and the last global breath have no pixel breaths.
@@ -391,7 +396,9 @@ def test_pixel_breaths_outside_the_data_warn_once_and_have_no_sample() -> None:
     )
 
     with pytest.warns(UserWarning, match="1 of 4 pixel breaths lie partly outside"):
-        samples = breath_samples(signal, pixel_breaths, points=POINTS, function="test")
+        samples = breath_samples(
+            signal, breaths=pixel_breaths, points=POINTS, function="test"
+        )
 
     for point in POINTS:
         assert samples[point][1, 0, 1] == NO_SAMPLE

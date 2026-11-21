@@ -102,7 +102,7 @@ Two masks of the same shape combine pixel by pixel. The name of the result comes
 
 `lung.apply(data)` multiplies the last two axes of a NumPy array, a `Signal` or a `PixelMap` by the mask and returns the same kind of object. A masked `Signal` or `PixelMap` keeps its other fields. The image size must match the mask size.
 
-`m3resp.eit.processing.regional_impedance(pixel_impedance, lung)` sums the masked images into one value per frame. `functional_impedance` performs the same calculation for a functional lung-space mask. Both return a `Signal` with the time, sampling frequency and device source of the images, in arbitrary units (`a.u.`). The sum leaves out NaN pixels; an image with only NaNs gives 0.
+`m3resp.eit.processing.regional_impedance(pixel_impedance, mask=lung)` sums the masked images into one value per frame. `functional_impedance` performs the same calculation for a functional lung-space mask. Both return a `Signal` with the time, sampling frequency and device source of the images, in arbitrary units (`a.u.`). The sum leaves out NaN pixels; an image with only NaNs gives 0.
 
 Masks from `eitprocessing`, and masks that M3Resp gives to `eitprocessing`, keep their values, including the zeros.
 
@@ -124,7 +124,7 @@ from m3resp.eit.processing import regional_impedance
 from m3resp.eit.roi import geometric_mask
 
 ventral = geometric_mask("ventral")
-ventral_impedance = regional_impedance(pixels, ventral)
+ventral_impedance = regional_impedance(pixels, mask=ventral)
 ```
 
 The step `eit.geometric_mask` makes one mask (parameter `region`) with the rows and columns of its input `eit_data`. Four steps give the four layers or quadrants.
@@ -135,9 +135,9 @@ The functional lung space is the part of the image that takes part in ventilatio
 
 | Function | Step | A pixel is in the lung space when |
 |---|---|---|
-| `tiv_lungspace(pixels, breaths, threshold=0.15)` | `eit.roi_tiv_lungspace` | Its mean TIV over the breaths is at least 15 % of the largest mean TIV. The TIV uses the times of the global breaths for every pixel. |
-| `amplitude_lungspace(pixels, signal, breaths, threshold=0.15)` | `eit.roi_amplitude_lungspace` | Its mean amplitude is at least 15 % of the largest mean amplitude. The amplitude is the TIV between the pixel's own breath start and end of inspiration, found in the mode `"phase shift"`, so it is positive for a pixel that is out of phase. The first and the last breath have no amplitude. |
-| `watershed_lungspace(pixels, signal, breaths, threshold_fraction=0.15)` | `eit.roi_watershed` | It lies in a watershed region whose largest amplitude lies inside the TIV mask, and its mean amplitude reaches the TIV threshold. See below. |
+| `tiv_lungspace(pixels, breaths=breaths, threshold=0.15)` | `eit.roi_tiv_lungspace` | Its mean TIV over the breaths is at least 15 % of the largest mean TIV. The TIV uses the times of the global breaths for every pixel. |
+| `amplitude_lungspace(pixels, signal=signal, breaths=breaths, threshold=0.15)` | `eit.roi_amplitude_lungspace` | Its mean amplitude is at least 15 % of the largest mean amplitude. The amplitude is the TIV between the pixel's own breath start and end of inspiration, found in the mode `"phase shift"`, so it is positive for a pixel that is out of phase. The first and the last breath have no amplitude. |
+| `watershed_lungspace(pixels, signal=signal, breaths=breaths, threshold_fraction=0.15)` | `eit.roi_watershed` | It lies in a watershed region whose largest amplitude lies inside the TIV mask, and its mean amplitude reaches the TIV threshold. See below. |
 
 Warning: the amplitude lung space can include reconstruction artefacts, so do not use it alone. The watershed method uses it together with the TIV.
 
@@ -154,15 +154,15 @@ A pixel with a low TIV because of pendelluft (air that moves between lung region
 
 There are two TIV masks. `tiv_lungspace` and `eit.roi_tiv_lungspace` use all breaths. The TIV mask inside the watershed method (the capture `"functional tiv mask"`) uses the breaths with both TIV and amplitude, so without the first and the last breath. For the same data and threshold, the two masks can differ by some pixels.
 
-The breaths are an input of the functions. The steps take them from the optional input `breaths`; without it, they find the breaths on `timing_data` with the default `BreathDetectionSettings`, as `eitprocessing` does. `eit.roi_tiv_lungspace` takes breaths of any modality, moved to the EIT clock with the start times of the session. `eit.roi_amplitude_lungspace` and `eit.roi_watershed` take EIT breaths only, because they find the breaths of each pixel from them.
+The breaths are an input of the functions, given by name (`breaths=...`). The waveform `signal` of `amplitude_lungspace` and `watershed_lungspace` is optional; without it, the functions use the sum of all pixels of each image. The steps take the breaths from the optional input `breaths`; without it, they find the breaths on `timing_data` with the default `BreathDetectionSettings`, as `eitprocessing` does. `eit.roi_tiv_lungspace` takes breaths of any modality, moved to the EIT clock with the start times of the session. `eit.roi_amplitude_lungspace` and `eit.roi_watershed` take EIT breaths only, because they find the breaths of each pixel from them.
 
 ```python
 from m3resp.eit.processing import BreathDetectionSettings, find_breaths
 from m3resp.eit.roi import watershed_lungspace
 
-breaths = find_breaths(global_impedance, BreathDetectionSettings())
+breaths = find_breaths(global_impedance, settings=BreathDetectionSettings())
 captures = {}
-lung = watershed_lungspace(pixels, global_impedance, breaths, captures=captures)
+lung = watershed_lungspace(pixels, signal=global_impedance, breaths=breaths, captures=captures)
 print(lung.included_pixel_count, lung.metadata["breath_count"])
 ```
 
@@ -204,8 +204,10 @@ The result is a `PixelBreaths`. It holds the global breaths, and three arrays of
 from m3resp.eit.processing import find_breaths, find_pixel_breaths
 
 global_breaths = find_breaths(global_impedance)
-pixel_breaths = find_pixel_breaths(pixels, global_impedance, global_breaths)
-print(pixel_breaths.shape)                # (32, 32): rows and columns
+pixel_breaths = find_pixel_breaths(pixels, signal=global_impedance, breaths=global_breaths)
+print(len(pixel_breaths))                 # number of global breaths
+print(pixel_breaths.shape)                # (breaths, 32, 32): breath, row, column
+print(pixel_breaths.grid_shape)           # (32, 32): rows and columns
 print(pixel_breaths.has_breath.sum())     # number of pixel breaths
 breaths = pixel_breaths.pixel(16, 12)     # the breaths of one pixel
 ```
@@ -237,9 +239,9 @@ from m3resp.eit.processing import (
     pixel_tidal_impedance_variation,
 )
 
-tiv_global_timing = pixel_tidal_impedance_variation(pixels, global_breaths)
-tiv_pixel_timing = pixel_tidal_impedance_variation(pixels, pixel_breaths)
-eeli = pixel_end_expiratory_lung_impedance(pixels, global_breaths)
+tiv_global_timing = pixel_tidal_impedance_variation(pixels, breaths=global_breaths)
+tiv_pixel_timing = pixel_tidal_impedance_variation(pixels, breaths=pixel_breaths)
+eeli = pixel_end_expiratory_lung_impedance(pixels, breaths=global_breaths)
 ```
 
 With the global timing, the sum of the pixel values of a breath (NaN pixels left out) is the value of the global impedance waveform. The steps `eit.pixel_tiv` and `eit.pixel_eeli` choose the timing with `tiv_timing` and `eeli_timing`. The global timing does not use the input `pixel_breaths`. Without an `eit.pixel_breaths` step, the pixel timing finds the pixel breaths itself in the mode `"negative amplitude"`. With such a step, the input `pixel_breaths` reads its output `pixel_breaths`:
@@ -253,20 +255,31 @@ With the global timing, the sum of the pixel values of a breath (NaN pixels left
 
 The input `pixel_breaths` takes only a `PixelBreaths`, so the workflow check refuses `pixel_breath_timing_result` there.
 
-## The minute image
+## The mean over a time window and the minute image
 
-`m3resp.eit.processing.minute_image(pixels, breaths, start=..., end=...)` gives the mean pixel TIV over the breaths that lie fully inside a time window, in seconds. A breath is inside when it starts at or after `start` and ends at or before `end`. The TIV uses the times of the global breaths for every pixel. The result is a `PixelMap` of kind `"tiv"`; its `metadata` holds `start`, `end`, `breath_count` and `tiv_method`. Without `start` and `end`, the window is the whole recording. When no breath lies inside the window, the function raises `ValueError`.
+`m3resp.eit.processing.mean_breath_image(pixels, breaths=breaths, start=..., duration=...)` gives the mean pixel TIV or pixel amplitude over the breaths that lie fully inside a time window, in seconds. A breath is inside when it starts at or after `start` and ends at or before the end of the window. The window ends at `end`, or at `start + duration`. A window of 60 s gives the minute image. Without `start`, `end` and `duration`, the window is the whole recording. When no breath lies inside the window, the function raises `ValueError`.
+
+`quantity` sets what is averaged:
+
+- `"tiv"` (the default): the TIV of each pixel with the times of the global breaths. TIV is the usual measure during controlled ventilation. The result is a `PixelMap` of kind `"tiv"`.
+- `"amplitude"`: the TIV of each pixel with the times of its own breaths, found in the "phase shift" mode, as in the amplitude lung space. Amplitude is the usual measure during assisted ventilation. The pixel breaths are found from `signal`; without `signal`, from the sum of all pixels. The result is a `PixelMap` of kind `"amplitude"`.
+
+The `metadata` of the result holds `quantity`, `start`, `end`, `breath_count` (the breaths in the mean) and `tiv_method`.
 
 ```python
-from m3resp.eit.processing import minute_image
+from m3resp.eit.processing import mean_breath_image
 
-image = minute_image(pixels, global_breaths, start=60.0, end=120.0)
-print(image.metadata["breath_count"])
+image = mean_breath_image(pixels, breaths=global_breaths, start=60.0, duration=60.0)
+print(image.metadata["breath_count"])     # breaths in the minute image from 60 s to 120 s
+
+amplitude = mean_breath_image(
+    pixels, breaths=global_breaths, quantity="amplitude", signal=global_impedance
+)                                         # mean amplitude over the whole recording
 ```
 
 ## Draw a pixel map
 
-`m3resp.visualization.pixel_maps.plot_pixel_map(item, ax)` draws a `PixelMap` or a `PixelMask` with Matplotlib, with a colour bar, and returns the Matplotlib image. It gives the picture of `PixelMap.plotting.imshow` of `eitprocessing` 1.8.7. Each map kind has its own style: the colours, the two ends of the colour scale and the label of the colour bar.
+`m3resp.visualization.pixel_maps.plot_pixel_map(item, ax=ax)` draws a `PixelMap` or a `PixelMask` with Matplotlib, with a colour bar, and returns the Matplotlib image. It gives the picture of `PixelMap.plotting.imshow` of `eitprocessing` 1.8.7. Each map kind has its own style: the colours, the two ends of the colour scale and the label of the colour bar.
 
 | Kind | Colours | Ends of the colour scale |
 |---|---|---|
@@ -288,14 +301,14 @@ import matplotlib.pyplot as plt
 from m3resp.visualization.pixel_maps import add_region_labels, plot_pixel_map
 
 fig, ax = plt.subplots()
-plot_pixel_map(image, ax)  # the minute image, kind "tiv"
+plot_pixel_map(image, ax=ax)  # the minute image, kind "tiv"
 ```
 
 The arguments `colorbar`, `normalize`, `percentage`, `absolute`, `hide_axes` and `background` change one setting of the style for this figure. With `normalize=True`, the values are divided by the largest value, or by 1 when the largest value is below 1, as in `eitprocessing`. `style=pixel_map_style("tiv", colorbar_label="TIV (mL)")` gives a changed style. Other arguments, such as `vmin`, `vmax` and `cmap`, go to Matplotlib `imshow`.
 
-`add_region_labels(regions, ax)` writes the number of each region at a point inside that region, in a white box. `regions` is a map of kind `"integer"`, for example the capture `"watershed regions"`. `labels` gives other texts for some region numbers.
+`add_region_labels(regions, ax=ax)` writes the number of each region at a point inside that region, in a white box. `regions` is a map of kind `"integer"`, for example the capture `"watershed regions"`. `labels` gives other texts for some region numbers.
 
-`pixel_map_style(kind)` in `m3resp.visualization.pixel_map_style` gives the style of a kind. `scale_limits(style, values)` gives the two ends of the colour scale, and `pixel_colors(style, values)` the colour of each pixel, as red, green, blue and alpha from 0 to 1. These three functions work without Matplotlib. The colours are stored in the package, so the figures and the GUI use the same colours.
+`pixel_map_style(kind)` in `m3resp.visualization.pixel_map_style` gives the style of a kind. `scale_limits(style, values=values)` gives the two ends of the colour scale, and `pixel_colors(style, values=values)` the colour of each pixel, as red, green, blue and alpha from 0 to 1. These three functions work without Matplotlib. The colours are stored in the package, so the figures and the GUI use the same colours.
 
 ## Plot data for the GUI
 
@@ -305,10 +318,10 @@ The GUI draws the EIT results in the browser. The functions of `m3resp.visualiza
 |---|---|
 | `pixel_map_plot_data(pixel_map)` | A `PixelMap`: name, kind, unit, shape, values and style |
 | `pixel_mask_plot_data(mask)` | A `PixelMask`: values (1 or a weight, None outside), number and fraction of included pixels |
-| `eit_image_plot_data(pixels, time)` | The EIT image at the sample nearest to `time`, with the time and the number of that sample |
-| `eit_images_plot_data(pixels, start, end, step)` | One image per `step` seconds from `start` to `end`, with one colour scale for all images |
+| `eit_image_plot_data(pixels, time=time)` | The EIT image at the sample nearest to `time`, with the time and the number of that sample |
+| `eit_images_plot_data(pixels, start=start, end=end, step=step)` | One image per `step` seconds from `start` to `end`, with one colour scale for all images |
 | `lungspace_plot_data(captures, mask=...)` | The captures of a lung-space method: mean maps, masks, watershed regions with the point of each region label, and peaks |
-| `rate_spectrum_plot_data(captures, settings)` | The spectra of `detect_rates`, in Hz, and the breathing rate and heart rate |
+| `rate_spectrum_plot_data(captures, settings=settings)` | The spectra of `detect_rates`, in Hz, and the breathing rate and heart rate |
 
 A time outside the time axis of the images gives `ValueError`. An infinite value gives `ValueError`, because JSON has no infinite numbers.
 

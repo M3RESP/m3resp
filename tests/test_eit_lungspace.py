@@ -28,10 +28,15 @@ import numpy as np
 import pytest
 
 from m3resp.data import BreathEvent, PixelMap, PixelMask, Signal
-from m3resp.eit.processing import BreathDetectionSettings, find_breaths
+from m3resp.eit.processing import (
+    BreathDetectionSettings,
+    find_breaths,
+    global_impedance,
+)
 from m3resp.eit.roi import (
     amplitude_lungspace,
     filter_mask_by_size,
+    geometric_mask,
     tiv_lungspace,
     watershed_lungspace,
 )
@@ -189,7 +194,7 @@ def _breaths(data: tuple[Signal, Signal]) -> list[BreathEvent]:
 
     key = id(data[1])
     if key not in _BREATHS:
-        _BREATHS[key] = find_breaths(data[1], BreathDetectionSettings())
+        _BREATHS[key] = find_breaths(data[1], settings=BreathDetectionSettings())
     return _BREATHS[key]
 
 
@@ -242,12 +247,14 @@ def _ours(method: str, data: tuple[Signal, Signal], **settings: Any) -> Any:
     breaths = _breaths(data)
     captures: dict[str, Any] = {}
     calls = {
-        "tiv": lambda: tiv_lungspace(pixels, breaths, captures=captures, **settings),
+        "tiv": lambda: tiv_lungspace(
+            pixels, breaths=breaths, captures=captures, **settings
+        ),
         "amplitude": lambda: amplitude_lungspace(
-            pixels, waveform, breaths, captures=captures, **settings
+            pixels, signal=waveform, breaths=breaths, captures=captures, **settings
         ),
         "watershed": lambda: watershed_lungspace(
-            pixels, waveform, breaths, captures=captures, **settings
+            pixels, signal=waveform, breaths=breaths, captures=captures, **settings
         ),
     }
     mask, error = _run(calls[method])
@@ -346,7 +353,9 @@ def _assert_same_as_upstream(
         from m3resp.eit.roi.amplitude import pixel_amplitude_per_breath
 
         ours_amplitude = _quiet(
-            lambda: pixel_amplitude_per_breath(*data, _breaths(data))
+            lambda: pixel_amplitude_per_breath(
+                data[0], signal=data[1], breaths=_breaths(data)
+            )
         )
         fixed = _amplitude_fix_pixels(
             data,
@@ -387,12 +396,14 @@ def test_masks_and_captures_match_golden(dataset: str) -> None:
 
     masks = _quiet(
         lambda: {
-            "tiv_lungspace": tiv_lungspace(pixels, breaths, captures=captures["tiv"]),
+            "tiv_lungspace": tiv_lungspace(
+                pixels, breaths=breaths, captures=captures["tiv"]
+            ),
             "amplitude_lungspace": amplitude_lungspace(
-                pixels, waveform, breaths, captures=captures["amplitude"]
+                pixels, signal=waveform, breaths=breaths, captures=captures["amplitude"]
             ),
             "watershed_lungspace": watershed_lungspace(
-                pixels, waveform, breaths, captures=captures["watershed"]
+                pixels, signal=waveform, breaths=breaths, captures=captures["watershed"]
             ),
         }
     )
@@ -443,7 +454,11 @@ def test_masks_and_captures_match_golden(dataset: str) -> None:
 def test_capture_types(dataset: str) -> None:
     data = _file_data(dataset, "filtered")
     captures: dict[str, Any] = {}
-    _quiet(lambda: watershed_lungspace(*data, _breaths(data), captures=captures))
+    _quiet(
+        lambda: watershed_lungspace(
+            data[0], signal=data[1], breaths=_breaths(data), captures=captures
+        )
+    )
 
     assert isinstance(captures["mean TIV of shared breaths"], PixelMap)
     assert captures["mean TIV of shared breaths"].kind == "tiv"
@@ -459,7 +474,11 @@ def test_capture_types(dataset: str) -> None:
 @pytest.mark.parametrize("dataset", DATASETS)
 def test_mask_fields(dataset: str) -> None:
     data = _file_data(dataset, "filtered")
-    mask = _quiet(lambda: watershed_lungspace(*data, _breaths(data), name="lung"))
+    mask = _quiet(
+        lambda: watershed_lungspace(
+            data[0], signal=data[1], breaths=_breaths(data), name="lung"
+        )
+    )
 
     included = ~np.isnan(mask.values)
     assert mask.name == "lung"
@@ -517,9 +536,9 @@ def test_threshold_checks_equal_eitprocessing(method, value) -> None:
 def test_no_breaths_is_an_error(method) -> None:
     pixels, waveform = _synthetic(1, "one maximum")
     calls = {
-        "tiv": lambda: tiv_lungspace(pixels, []),
-        "amplitude": lambda: amplitude_lungspace(pixels, waveform, []),
-        "watershed": lambda: watershed_lungspace(pixels, waveform, []),
+        "tiv": lambda: tiv_lungspace(pixels, breaths=[]),
+        "amplitude": lambda: amplitude_lungspace(pixels, signal=waveform, breaths=[]),
+        "watershed": lambda: watershed_lungspace(pixels, signal=waveform, breaths=[]),
     }
 
     with pytest.raises(ValueError, match="breaths"):
@@ -532,7 +551,9 @@ def test_watershed_gives_the_errors_of_the_pixel_values_unchanged() -> None:
     flat_pixels = dataclasses.replace(pixels, values=pixels.values[:, :, 0])
 
     with pytest.raises(ValueError, match=r"shape \(time, row, column\)"):
-        _quiet(lambda: watershed_lungspace(flat_pixels, waveform, breaths))
+        _quiet(
+            lambda: watershed_lungspace(flat_pixels, signal=waveform, breaths=breaths)
+        )
 
 
 # --- the size filter ---------------------------------------------------------------
@@ -630,8 +651,12 @@ def test_watershed_tiv_mask_uses_the_shared_breaths_only() -> None:
     data = _file_data(TIMPEL, "filtered")
     breaths = _breaths(data)
     captures: dict[str, Any] = {}
-    _quiet(lambda: watershed_lungspace(*data, breaths, captures=captures))
-    shared = _quiet(lambda: tiv_lungspace(data[0], breaths[1:-1]))
+    _quiet(
+        lambda: watershed_lungspace(
+            data[0], signal=data[1], breaths=breaths, captures=captures
+        )
+    )
+    shared = _quiet(lambda: tiv_lungspace(data[0], breaths=breaths[1:-1]))
 
     np.testing.assert_array_equal(captures["functional tiv mask"].values, shared.values)
 
@@ -640,7 +665,11 @@ def test_watershed_tiv_mask_uses_the_shared_breaths_only() -> None:
 def test_pixels_without_amplitude_belong_to_no_region(dataset: str) -> None:
     data = _file_data(dataset, "filtered")
     captures: dict[str, Any] = {}
-    mask = _quiet(lambda: watershed_lungspace(*data, _breaths(data), captures=captures))
+    mask = _quiet(
+        lambda: watershed_lungspace(
+            data[0], signal=data[1], breaths=_breaths(data), captures=captures
+        )
+    )
 
     no_amplitude = np.isnan(captures["mean amplitude of shared breaths"].values)
     assert no_amplitude.any()
@@ -666,7 +695,7 @@ def test_watershed_warns_for_pixels_without_mean_amplitude(
 
     data = _file_data(dataset, kind)
     with pytest.warns(UserWarning) as caught:
-        watershed_lungspace(*data, _breaths(data))
+        watershed_lungspace(data[0], signal=data[1], breaths=_breaths(data))
 
     messages = [str(w.message) for w in caught if "no mean amplitude" in str(w.message)]
     expected = (
@@ -684,7 +713,7 @@ def test_watershed_gives_no_nan_warning_when_every_pixel_has_an_amplitude() -> N
     data = _file_data("draeger_synthetic_20Hz", "raw")
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        watershed_lungspace(*data, _breaths(data))
+        watershed_lungspace(data[0], signal=data[1], breaths=_breaths(data))
 
     assert not [w for w in caught if "no mean amplitude" in str(w.message)]
 
@@ -695,7 +724,11 @@ def test_included_watershed_regions_hold_the_included_regions_only(
 ) -> None:
     data = _file_data(dataset, "filtered")
     captures: dict[str, Any] = {}
-    _quiet(lambda: watershed_lungspace(*data, _breaths(data), captures=captures))
+    _quiet(
+        lambda: watershed_lungspace(
+            data[0], signal=data[1], breaths=_breaths(data), captures=captures
+        )
+    )
 
     regions = captures["watershed regions"].values
     included = captures["included region"].values == 1
@@ -707,3 +740,45 @@ def test_included_watershed_regions_hold_the_included_regions_only(
         np.unique(regions[included]), np.unique(captures["included marker indices"])
     )
     assert np.any(~included & (regions > 0))
+
+
+@pytest.mark.parametrize("function", [amplitude_lungspace, watershed_lungspace])
+@pytest.mark.parametrize("dataset", DATASETS)
+def test_default_signal_is_the_sum_of_the_pixels(function: Any, dataset: str) -> None:
+    pixels = _file_data(dataset, "raw")[0]
+    summed = global_impedance(pixels)
+    breaths = find_breaths(summed, settings=BreathDetectionSettings())
+    with_default = _quiet(lambda: function(pixels, breaths=breaths))
+    with_sum = _quiet(lambda: function(pixels, breaths=breaths, signal=summed))
+
+    np.testing.assert_array_equal(with_default.values, with_sum.values)
+    assert with_default.metadata == with_sum.metadata
+
+
+@pytest.mark.parametrize("function", [amplitude_lungspace, watershed_lungspace])
+def test_default_signal_of_masked_images_is_an_error(function: Any) -> None:
+    pixels = _file_data(DATASETS[0], "raw")[0]
+    breaths = find_breaths(global_impedance(pixels), settings=BreathDetectionSettings())
+    shape = pixels.values.shape[1:]
+    masked = geometric_mask("ventral", shape=shape).apply(pixels)
+
+    with pytest.raises(ValueError, match="masked"):
+        function(masked, breaths=breaths)
+
+
+@pytest.mark.parametrize(
+    ("function", "extra"),
+    [
+        (tiv_lungspace, ()),
+        (amplitude_lungspace, ("signal",)),
+        (watershed_lungspace, ("signal",)),
+    ],
+)
+def test_breaths_and_signal_must_be_named(
+    function: Any, extra: tuple[str, ...]
+) -> None:
+    data = _file_data(DATASETS[0], "raw")
+    positional = (data[1],) * len(extra)
+
+    with pytest.raises(TypeError):
+        function(data[0], *positional, _breaths(data))

@@ -129,7 +129,7 @@ def pixel_map_plot_data(
         "shape": list(pixel_map.shape),
         "values": grid_plot_data(values, owner=pixel_map.name),
         "normalized": bool(normalize),
-        "style": style_plot_data(style, values),
+        "style": style_plot_data(style, values=values),
     }
 
 
@@ -161,12 +161,12 @@ def pixel_mask_plot_data(mask: PixelMask) -> dict[str, Any]:
         "included_pixel_count": int(count),
         "included_pixel_fraction": float(count / mask.values.size),
         "is_weighted": bool(mask.is_weighted),
-        "style": style_plot_data(pixel_map_style("mask"), mask.values),
+        "style": style_plot_data(pixel_map_style("mask"), values=mask.values),
     }
 
 
 def eit_image_plot_data(
-    pixels: Signal, time: float, *, kind: str | None = None
+    pixels: Signal, *, time: float, kind: str | None = None
 ) -> dict[str, Any]:
     """Return the EIT image at the sample nearest to a time.
 
@@ -200,16 +200,16 @@ def eit_image_plot_data(
         "sample": int(sample),
         "shape": list(image.shape),
         "values": grid_plot_data(image, owner=str(pixels.name)),
-        "style": style_plot_data(pixel_map_style(kind), image),
+        "style": style_plot_data(pixel_map_style(kind), values=image),
     }
 
 
 def eit_images_plot_data(
     pixels: Signal,
+    *,
     start: float,
     end: float,
     step: float,
-    *,
     kind: str | None = None,
 ) -> dict[str, Any]:
     """Return the EIT images from ``start`` to ``end``, one per ``step``.
@@ -258,7 +258,7 @@ def eit_images_plot_data(
         "times": [float(sample_times[sample]) for sample in samples],
         "samples": [int(sample) for sample in samples],
         "images": [grid_plot_data(image, owner=str(pixels.name)) for image in chosen],
-        "style": style_plot_data(pixel_map_style(kind), chosen),
+        "style": style_plot_data(pixel_map_style(kind), values=chosen),
     }
 
 
@@ -341,7 +341,7 @@ def lungspace_plot_data(
 
 
 def rate_spectrum_plot_data(
-    captures: Mapping[str, Any], settings: Any = None
+    captures: Mapping[str, Any], *, settings: Any = None
 ) -> dict[str, Any]:
     """Return the spectra and the rates of the rate detection as plot data.
 
@@ -390,7 +390,7 @@ def rate_spectrum_plot_data(
     return data
 
 
-def style_plot_data(style: PixelMapStyle, values: Any) -> dict[str, Any]:
+def style_plot_data(style: PixelMapStyle, *, values: Any) -> dict[str, Any]:
     """Return a style, with the scale ends for some values, as plot data.
 
     Args:
@@ -404,7 +404,7 @@ def style_plot_data(style: PixelMapStyle, values: Any) -> dict[str, Any]:
     """
 
     data = style.to_dict()
-    data["limits"] = list(scale_limits(style, values))
+    data["limits"] = list(scale_limits(style, values=values))
     return data
 
 

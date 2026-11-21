@@ -215,7 +215,7 @@ def test_masks_and_sums_equal_eitprocessing_on_the_golden_masks(dataset):
         upstream = UpstreamPixelMask(grid, keep_zeros=True).apply(eit_data)
 
         masked = mask.apply(pixels)
-        summed = regional_impedance(pixels, mask)
+        summed = regional_impedance(pixels, mask=mask)
 
         np.testing.assert_array_equal(masked.values, upstream.pixel_impedance)
         np.testing.assert_array_equal(
@@ -314,9 +314,9 @@ class TestPixelMaskApply:
         signal = Signal(values=PIXELS, time=np.arange(PIXELS.shape[0]) / FS)
         ventral = PixelMask(name="ventral", values=[[1.0, 1.0], [np.nan, np.nan]])
 
-        assert regional_impedance(signal, ventral).name == "ventral_impedance"
-        assert regional_impedance(signal, ventral, name="top").name == "top"
-        assert regional_impedance(signal, ventral).channel == "regional_impedance"
+        assert regional_impedance(signal, mask=ventral).name == "ventral_impedance"
+        assert regional_impedance(signal, mask=ventral, name="top").name == "top"
+        assert regional_impedance(signal, mask=ventral).channel == "regional_impedance"
 
     def test_global_impedance_of_unmasked_images_is_the_sum(self):
         signal = Signal(values=PIXELS, time=np.arange(PIXELS.shape[0]) / FS)

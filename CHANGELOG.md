@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Named arguments in the EIT functions
+
+The EIT functions take their data as the first argument and every other argument by name, for example `tiv_lungspace(pixels, breaths=breaths)` and `find_breaths(waveform, settings=settings)`. A call that gives these arguments by position raises a `TypeError`. The functions:
+
+- `m3resp.eit.roi`: `breaths` and `signal` of `tiv_lungspace`, `amplitude_lungspace` and `watershed_lungspace`; `shape` of `geometric_mask`.
+- `m3resp.eit.processing`: `settings` of `find_breaths` and `detect_rates`; `breaths` of `tidal_impedance_variation`, `end_expiratory_lung_impedance`, `pixel_tidal_impedance_variation`, `pixel_end_expiratory_lung_impedance` and `mean_breath_image`; `signal` and `breaths` of `find_pixel_breaths`; `mask` of `regional_impedance`; `lung_space` of `functional_impedance`. The parts of `find_breaths` in `m3resp.eit.processing.breath_detection` follow the same rule.
+- `m3resp.eit.io`: `sample_frequency`, `first_frame` and `max_frames` of `read_eit_file`, `read_draeger`, `read_sentec` and `read_timpel`.
+- `m3resp.visualization`: `ax` of `plot_pixel_map`; `ax` and `labels` of `add_region_labels`; `time` of `eit_image_plot_data`; `start`, `end` and `step` of `eit_images_plot_data`; `settings` of `rate_spectrum_plot_data`; `session` of `save_eit_figures`; `values` of `scale_limits`, `pixel_colors` and `style_plot_data`.
+- `m3resp.data`: `mask_name` of `masked_metadata`. `PixelBreaths` and `PixelMapStyle` take all fields by name.
+
+`signal` of `amplitude_lungspace` and `watershed_lungspace` is optional. Without it, the functions use the sum of all pixels of each image, as eitprocessing does. For masked images, they raise a `ValueError` and ask for `signal`.
+
 ### EIT needs no extra package
 
 `pip install m3resp` reads, processes and plots EIT data. No file in `src/m3resp` imports eitprocessing, and every `eit.*` step has the status `"available"` in the base install. `tests/test_eit_without_eitprocessing.py` checks this with eitprocessing hidden.
@@ -106,7 +118,7 @@ Changes that a user can see:
 
 `eit.pixel_breaths`, `eit.pixel_tiv`, `EITProcessingAdapter.find_pixel_breaths`, `compute_pixel_tiv` and `session.preprocess_eit()` run m3resp code. `m3resp.eit.processing.find_pixel_breaths` is copied from `PixelBreath` of eitprocessing 1.8.7, and `pixel_tidal_impedance_variation` from the pixel part of `TIV`. With the same global breaths they give the same numbers, with the three phase correction modes, both timings and the three TIV methods. `pixel_end_expiratory_lung_impedance` is new: the impedance of each pixel at the end of each breath (#114).
 
-The new type `m3resp.PixelBreaths` holds the global breaths and the start, end of inspiration and end time of the breath of each pixel, as three (breath, row, column) arrays in seconds, NaN for a pixel with no breath. `pixel(row, column)` gives the breaths of one pixel as `BreathEvent`s. The pixel TIV and pixel EELI functions take a list of `BreathEvent`s (the times of the global breaths for every pixel) or a `PixelBreaths` (the times of each pixel), and give one `PixelMap` per global breath (#136).
+The new type `m3resp.PixelBreaths` holds the global breaths and the start, end of inspiration and end time of the breath of each pixel, as three (breath, row, column) arrays in seconds, NaN for a pixel with no breath. `len()` gives the number of global breaths, `shape` the (breath, row, column) shape of the times and `grid_shape` the number of rows and columns. `pixel(row, column)` gives the breaths of one pixel as `BreathEvent`s. The pixel TIV and pixel EELI functions take a list of `BreathEvent`s (the times of the global breaths for every pixel) or a `PixelBreaths` (the times of each pixel), and give one `PixelMap` per global breath (#136).
 
 Changes that a user can see:
 
@@ -129,7 +141,7 @@ Changes that a user can see:
 
 `eit.roi_tiv_lungspace`, `eit.roi_amplitude_lungspace`, `eit.roi_watershed`, `eit.roi_filter_by_size` and the matching `EITProcessingAdapter` methods run the new functions `tiv_lungspace`, `amplitude_lungspace`, `watershed_lungspace` and `filter_mask_by_size` of `m3resp.eit.roi`. They are copied from `TIVLungspace`, `AmplitudeLungspace`, `WatershedLungspace` and `FilterROIBySize` of eitprocessing 1.8.7. With the default settings, the masks of the three test files are the same as in eitprocessing. The four steps run without eitprocessing. `scikit-image` (0.25.2 or newer) is a main dependency, for the watershed method.
 
-`m3resp.eit.roi.geometric_mask(region, shape)` gives the mask of the ventral or dorsal half, the anatomical right or left half, one of four layers or one of four quadrants, like `get_geometric_mask` of eitprocessing. The new step `eit.geometric_mask` makes one of these masks for the size of its EIT images and gives `geometric_mask_result`.
+`m3resp.eit.roi.geometric_mask(region, shape=shape)` gives the mask of the ventral or dorsal half, the anatomical right or left half, one of four layers or one of four quadrants, like `get_geometric_mask` of eitprocessing. The new step `eit.geometric_mask` makes one of these masks for the size of its EIT images and gives `geometric_mask_result`.
 
 `PixelMap` has the new field `kind` (`"tiv"`, `"amplitude"`, `"odcl"`, `"difference"`, `"perfusion"`, `"pendelluft"`, `"signed_pendelluft"`, `"integer"` or None) and the methods of the eitprocessing `PixelMap`: `from_aggregate`, `normalize`, `create_mask_from_threshold`, `convert_to`, `to_boolean_array`, `to_integer_array`, `to_non_nan_array` and `+ - * /`. `PixelMask` has `* + -` and `is_weighted`, and `PixelMaskCollection` has `combine` and `apply`.
 
@@ -155,11 +167,14 @@ Changes that a user can see:
 
 `m3resp.visualization.plot_data` gives plot data for the GUI: `pixel_map_plot_data`, `pixel_mask_plot_data`, `eit_image_plot_data` (the EIT image at one time), `eit_images_plot_data` (the images from one time to another, with one colour scale), `lungspace_plot_data` (the captures of the lung-space methods) and `rate_spectrum_plot_data` (the spectra of `detect_rates`). Each result holds only numbers, text, lists, True/False and None, with None for a NaN pixel, so `json.dumps(..., allow_nan=False)` writes it.
 
-`m3resp.eit.processing.minute_image(pixels, breaths, start=..., end=...)` gives the mean pixel TIV over the breaths fully inside a time window, as a `PixelMap` of kind `"tiv"`. A breath with NaN TIV in every pixel, such as a breath that reaches past the data, does not count in the mean or in `breath_count`.
+`m3resp.visualization.plotly_figures.pixel_map_traces` gives the plotly layers that draw a pixel map in the colours of its style, with the same pixel colours as `plot_pixel_map`. The mask style, the region-number style and the ODCL style have no plotly version yet.
+
+`m3resp.eit.processing.mean_breath_image(pixels, breaths=breaths, start=..., duration=...)` gives the mean pixel TIV (`quantity="tiv"`, a `PixelMap` of kind `"tiv"`) or pixel amplitude (`quantity="amplitude"`, kind `"amplitude"`) over the breaths fully inside a time window. The window ends at `end` or at `start + duration`; `duration=60` gives the minute image. The amplitude uses the pixel breaths of the "phase shift" mode, as `amplitude_lungspace`. A breath with a NaN value in every pixel, such as a breath that reaches past the data, does not count in the mean or in `breath_count`.
 
 Changes that a user can see:
 
 - `pixel_tiv.png` of `save_eit_figures` is drawn with `plot_pixel_map`, so it is written also when eitprocessing is not installed. Before, the figure was left out without eitprocessing. The picture is the same as before, pixel for pixel.
+- The mean pixel TIV of `plot_eit_processing_summary` has the TIV colours of `plot_pixel_map` in both backends: reversed blues from 0, purple for negative pixels and grey behind NaN pixels. Before, it had the viridis colours.
 - `add_region_labels` of a map of another kind raises `TypeError`; eitprocessing raises `NotImplementedError`.
 - Region 0, the background of the watershed regions, gets no label in `add_region_labels` and no label point in `lungspace_plot_data`. eitprocessing writes "0" in the background.
 - A TIV, amplitude, perfusion or pendelluft map with only negative values gets the colour scale from its largest value to 0. In eitprocessing the scale goes from 0 down to that value: Matplotlib stops with an error, or, with a colour bar, turns the scale around and widens it by 10 %.

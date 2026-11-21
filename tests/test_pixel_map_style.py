@@ -131,8 +131,8 @@ def test_scale_ends_and_colours_equal_imshow_of_eitprocessing(plt, kind, normali
             image.norm.vmin, image.norm.vmax = image.norm.vmax, image.norm.vmin
             expected_colors = image.to_rgba(image.get_array())
         limits = (image.norm.vmin, image.norm.vmax)
-        assert scale_limits(style, values) == limits, case
-        assert np.array_equal(pixel_colors(style, values), expected_colors), case
+        assert scale_limits(style, values=values) == limits, case
+        assert np.array_equal(pixel_colors(style, values=values), expected_colors), case
         plt.close(fig)
 
 
@@ -147,7 +147,7 @@ def test_normalized_values_divide_by_the_largest_value_or_by_1():
 def test_pixel_colors_with_given_limits_and_outside_values():
     style = pixel_map_style("tiv")
     values = np.array([[-1.0, 0.0, 10.0, 20.0, np.nan]])
-    colors = pixel_colors(style, values, (0, 10))
+    colors = pixel_colors(style, values=values, limits=(0, 10))
     assert np.array_equal(colors[0, 0], style.under_color)
     assert np.array_equal(colors[0, 1], (*style.colors[0], 1.0))
     assert np.array_equal(colors[0, 2], (*style.colors[-1], 1.0))

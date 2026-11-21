@@ -457,7 +457,7 @@ def _breathing_images() -> tuple[Signal, Signal]:
 
 
 def _default_breaths(waveform: Signal) -> list[BreathEvent]:
-    return find_breaths(waveform, BreathDetectionSettings())
+    return find_breaths(waveform, settings=BreathDetectionSettings())
 
 
 def _assert_same_pixel_times(result: PixelBreaths, expected: PixelBreaths) -> None:
@@ -485,7 +485,7 @@ def test_pixel_tiv_step_gives_one_pixel_map_per_global_breath():
     assert set(get_step("eit.pixel_tiv").writes) == set(result)
     pixel_tiv_result = result["pixel_tiv_result"]
     breaths = _default_breaths(waveform)
-    expected = pixel_tidal_impedance_variation(pixels, breaths, method="mean")
+    expected = pixel_tidal_impedance_variation(pixels, breaths=breaths, method="mean")
     assert len(pixel_tiv_result) == len(breaths) > 5
     assert all(isinstance(m, PixelMap) for m in pixel_tiv_result.values)
     assert pixel_tiv_result.values == expected.values
@@ -519,7 +519,9 @@ def test_pixel_tiv_keeps_the_given_global_breaths():
     )["pixel_tiv_result"]
 
     assert all(a is b for a, b in zip(result.intervals, breaths, strict=True))
-    assert result.values == pixel_tidal_impedance_variation(pixels, breaths).values
+    assert (
+        result.values == pixel_tidal_impedance_variation(pixels, breaths=breaths).values
+    )
 
 
 def test_pixel_timing_with_and_without_pixel_breaths_gives_the_same_values():
@@ -566,7 +568,7 @@ def test_the_continuous_timing_leaves_pixel_breaths_unused():
 
     assert (
         with_pixel_breaths.values
-        == pixel_tidal_impedance_variation(pixels, breaths).values
+        == pixel_tidal_impedance_variation(pixels, breaths=breaths).values
     )
     assert with_pixel_breaths.metadata["tiv_timing"] == "continuous"
     assert with_pixel_breaths.metadata["parameters"]["breaths"] == "input"
@@ -647,9 +649,9 @@ def test_pixel_eeli_step_gives_the_impedance_of_each_pixel_at_the_breath_end(tim
     timing_breaths = (
         breaths
         if timing == "continuous"
-        else find_pixel_breaths(pixels, waveform, breaths)
+        else find_pixel_breaths(pixels, signal=waveform, breaths=breaths)
     )
-    expected = pixel_end_expiratory_lung_impedance(pixels, timing_breaths)
+    expected = pixel_end_expiratory_lung_impedance(pixels, breaths=timing_breaths)
     assert pixel_eeli_result.values == expected.values
     assert pixel_eeli_result.name == "pixel_eelis"
     assert pixel_eeli_result.metadata["eeli_timing"] == timing
@@ -696,7 +698,8 @@ def test_pixel_breaths_step_gives_pixel_breaths_and_their_time_grids():
     found = result["pixel_breaths"]
     assert isinstance(found, PixelBreaths)
     _assert_same_pixel_times(
-        found, find_pixel_breaths(pixels, waveform, _default_breaths(waveform))
+        found,
+        find_pixel_breaths(pixels, signal=waveform, breaths=_default_breaths(waveform)),
     )
     assert found.metadata["operation"] == "eit.pixel_breaths"
     # A stored EIT breath with the same times is reused.
@@ -775,8 +778,10 @@ def test_pixel_breaths_step_takes_the_sign_from_the_default_breaths():
         result["pixel_breaths"],
         find_pixel_breaths(
             pixels,
-            waveform,
-            find_breaths(waveform, BreathDetectionSettings(minimum_duration=1.0)),
+            signal=waveform,
+            breaths=find_breaths(
+                waveform, settings=BreathDetectionSettings(minimum_duration=1.0)
+            ),
             sign_breaths=_default_breaths(waveform),
         ),
     )
@@ -912,7 +917,7 @@ def test_roi_lungspace_steps_with_eit_breaths_equal_the_steps_without(
     give the same mask as the breaths the step finds itself."""
 
     pixels, waveform = _lungspace_images()
-    breaths = find_breaths(waveform, BreathDetectionSettings())
+    breaths = find_breaths(waveform, settings=BreathDetectionSettings())
 
     found = step_func(eit_data=pixels, timing_data=waveform, session=M3Session())
     given = step_func(
@@ -933,7 +938,7 @@ def test_amplitude_and_watershed_steps_refuse_breaths_of_another_modality(step_f
     pixels, waveform = _lungspace_images()
     breaths = [
         dataclasses.replace(breath, modality="ventilator")
-        for breath in find_breaths(waveform, BreathDetectionSettings())
+        for breath in find_breaths(waveform, settings=BreathDetectionSettings())
     ]
 
     with pytest.raises(ValueError, match="EIT breaths only; got breaths of ventilator"):
@@ -947,7 +952,7 @@ def test_tiv_lungspace_step_takes_breaths_of_another_modality():
 
     session = M3Session()
     pixels, waveform = _lungspace_images()
-    breaths = find_breaths(waveform, BreathDetectionSettings())
+    breaths = find_breaths(waveform, settings=BreathDetectionSettings())
     session.start_times["eit"] = 0.0
     session.start_times["ventilator"] = 1.0
     ventilator = [

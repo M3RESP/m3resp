@@ -157,7 +157,7 @@ def detect_rates(
     captures: dict[str, Any] = {}
     respiratory_rate_hz, heart_rate_hz = detect_rates_of(
         _as_signal(signal, name="signal", step="eit.detect_rates"),
-        settings,
+        settings=settings,
         captures=captures if capture else None,
         suppress_length_warnings=capture,
         suppress_edge_case_warning=capture,

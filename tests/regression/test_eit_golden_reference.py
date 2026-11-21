@@ -544,7 +544,9 @@ def test_preprocess_gives_pixel_eeli_when_asked() -> None:
 
     pixel_eeli = result["pixel_eeli"]
     breaths = result["breath_intervals"].intervals
-    expected = pixel_end_expiratory_lung_impedance(result["filtered_eit"], breaths)
+    expected = pixel_end_expiratory_lung_impedance(
+        result["filtered_eit"], breaths=breaths
+    )
     assert pixel_eeli.values == expected.values
     assert all(a is b for a, b in zip(pixel_eeli.intervals, breaths, strict=True))
     stored = [data for data in session.interval_data if data.name == "pixel_eelis"]

@@ -236,7 +236,7 @@ def _apply_outputs(spec: WorkflowSpec, result: WorkflowResult, *, mode: str) -> 
         output_dir.mkdir(parents=True, exist_ok=True)
         from m3resp.visualization.eit_figures import save_eit_figures
 
-        save_eit_figures(result.context.values, output_dir, result.session)
+        save_eit_figures(result.context.values, output_dir, session=result.session)
 
     if mode == "explicit":
         return

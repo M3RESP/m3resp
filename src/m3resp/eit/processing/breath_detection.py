@@ -118,7 +118,7 @@ class BreathDetectionSettings:
 
 
 def find_breaths(
-    waveform: Signal, settings: BreathDetectionSettings | None = None
+    waveform: Signal, *, settings: BreathDetectionSettings | None = None
 ) -> list[BreathEvent]:
     """Return the breaths of an impedance waveform.
 
@@ -164,16 +164,18 @@ def find_breaths(
         percentile=settings.invalid_data_removal_percentile,
         multiplier=settings.invalid_data_removal_multiplier,
     )
-    data = remove_invalid_data(data, invalid_data_indices)
+    data = remove_invalid_data(data, invalid_data_indices=invalid_data_indices)
     peak_indices, valley_indices = detect_peaks_and_valleys(
-        data, sample_frequency, settings
+        data, sample_frequency=sample_frequency, settings=settings
     )
-    breaths = create_breaths_from_peak_valley_data(peak_indices, valley_indices)
+    breaths = create_breaths_from_peak_valley_data(
+        peak_indices=peak_indices, valley_indices=valley_indices
+    )
     breaths = remove_breaths_around_invalid_data(
         breaths,
-        len(data),
-        sample_frequency,
-        invalid_data_indices,
+        n_samples=len(data),
+        sample_frequency=sample_frequency,
+        invalid_data_indices=invalid_data_indices,
         window_length=settings.invalid_data_removal_window_length,
     )
     return [
@@ -225,7 +227,7 @@ def detect_invalid_data(
 
 
 def remove_invalid_data(
-    data: np.ndarray, invalid_data_indices: np.ndarray
+    data: np.ndarray, *, invalid_data_indices: np.ndarray
 ) -> np.ndarray:
     """Return a copy of the data with invalid values and NaN filled in.
 
@@ -293,7 +295,7 @@ def fill_nan_with_nearest_neighbour(data: np.ndarray) -> np.ndarray:
 
 
 def detect_peaks_and_valleys(
-    data: np.ndarray, sample_frequency: float, settings: BreathDetectionSettings
+    data: np.ndarray, *, sample_frequency: float, settings: BreathDetectionSettings
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return the peaks and valleys that make the breaths.
 
@@ -331,7 +333,10 @@ def detect_peaks_and_valleys(
         return np.array([], dtype=int), np.array([], dtype=int)
 
     peak_indices, valley_indices = remove_edge_cases(
-        data, peak_indices, valley_indices, average
+        data,
+        peak_indices=peak_indices,
+        valley_indices=valley_indices,
+        moving_average=average,
     )
     peak_indices, valley_indices = remove_duplicate_extrema(
         data, peak_indices, valley_indices
@@ -343,6 +348,7 @@ def detect_peaks_and_valleys(
 
 def remove_edge_cases(
     data: np.ndarray,
+    *,
     peak_indices: np.ndarray,
     valley_indices: np.ndarray,
     moving_average: np.ndarray,
@@ -381,7 +387,7 @@ def remove_edge_cases(
 
 
 def create_breaths_from_peak_valley_data(
-    peak_indices: np.ndarray, valley_indices: np.ndarray
+    *, peak_indices: np.ndarray, valley_indices: np.ndarray
 ) -> list[BreathIndices]:
     """Join each peak with the valleys before and after it into one breath.
 
@@ -408,10 +414,10 @@ def create_breaths_from_peak_valley_data(
 
 def remove_breaths_around_invalid_data(
     breaths: list[BreathIndices],
+    *,
     n_samples: int,
     sample_frequency: float,
     invalid_data_indices: np.ndarray,
-    *,
     window_length: float,
 ) -> list[BreathIndices]:
     """Remove the breaths with invalid data in them or close to them.

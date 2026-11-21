@@ -112,7 +112,9 @@ def test_the_pixel_timing_uses_the_pixel_breaths_of_an_earlier_step() -> None:
     assert tiv.metadata["parameters"]["breaths"] == "pixel_breaths"
     np.testing.assert_array_equal(
         _maps(tiv),
-        _maps(pixel_tidal_impedance_variation(result.value("filtered_eit"), found)),
+        _maps(
+            pixel_tidal_impedance_variation(result.value("filtered_eit"), breaths=found)
+        ),
     )
 
 
@@ -191,14 +193,16 @@ def test_pixel_timing_in_a_workflow_gives_the_values_of_eitprocessing() -> None:
     np.testing.assert_array_equal(_maps(connected), _maps(alone))
     np.testing.assert_array_equal(
         _maps(connected),
-        _maps(pixel_tidal_impedance_variation(pixels, found, method="expiratory")),
+        _maps(
+            pixel_tidal_impedance_variation(pixels, breaths=found, method="expiratory")
+        ),
     )
     np.testing.assert_array_equal(
         _maps(result.value("eeli_connected")), _maps(result.value("eeli_alone"))
     )
     np.testing.assert_array_equal(
         _maps(result.value("eeli_connected")),
-        _maps(pixel_end_expiratory_lung_impedance(pixels, found)),
+        _maps(pixel_end_expiratory_lung_impedance(pixels, breaths=found)),
     )
     assert connected.metadata["parameters"]["breaths"] == "pixel_breaths"
     assert alone.metadata["parameters"]["breaths"] == "breath_detector"
@@ -252,7 +256,7 @@ def test_continuous_timing_takes_breaths_of_another_modality() -> None:
     with pytest.warns(UserWarning, match="1 of 13 breaths lie partly outside"):
         expected = pixel_end_expiratory_lung_impedance(
             as_signal(result.value("filtered_eit")),
-            on_clock_of(session, ventilator_breaths, "eit"),
+            breaths=on_clock_of(session, ventilator_breaths, "eit"),
         )
     np.testing.assert_array_equal(_maps(pixel_eeli), _maps(expected))
     assert np.isfinite(_maps(pixel_eeli)).any()
@@ -296,7 +300,7 @@ def _small_pixel_tiv():
         BreathEvent("eit", start, start + 4.0, extremum_time=start + 2.0)
         for start in (3.0, 7.0, 11.0)
     ]
-    return pixel_tidal_impedance_variation(pixels, breaths)
+    return pixel_tidal_impedance_variation(pixels, breaths=breaths)
 
 
 def test_the_pixel_tiv_figure_shows_the_mean_map_of_pixel_tiv_result(

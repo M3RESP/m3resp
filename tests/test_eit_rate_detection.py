@@ -118,7 +118,9 @@ def test_rates_and_captures_match_golden(dataset: str, images: dict) -> None:
     captures: dict = {}
     respiratory_rate, heart_rate = detect_rates(
         images[dataset],
-        RateDetectionSettings(MANIFEST["settings"]["rate_detection"]["subject_type"]),
+        settings=RateDetectionSettings(
+            MANIFEST["settings"]["rate_detection"]["subject_type"]
+        ),
         captures=captures,
         suppress_length_warnings=True,
         suppress_edge_case_warning=True,
@@ -165,7 +167,7 @@ def test_rates_equal_eitprocessing(
         warnings.simplefilter("always")
         actual = detect_rates(
             images[dataset],
-            RateDetectionSettings(subject_type, welch_window=welch_window),
+            settings=RateDetectionSettings(subject_type, welch_window=welch_window),
             captures=actual_captures,
         )
 
@@ -191,7 +193,7 @@ def test_settings_give_the_rates_of_eitprocessing(
     )
     actual = detect_rates(
         signal,
-        RateDetectionSettings(
+        settings=RateDetectionSettings(
             "adult",
             welch_window=20.0,
             welch_overlap=welch_overlap,
@@ -203,7 +205,7 @@ def test_settings_give_the_rates_of_eitprocessing(
 
 def test_synthetic_rates_are_found() -> None:
     respiratory_rate, heart_rate = detect_rates(
-        _synthetic_images(), RateDetectionSettings("adult", welch_window=20.0)
+        _synthetic_images(), settings=RateDetectionSettings("adult", welch_window=20.0)
     )
     assert respiratory_rate == pytest.approx(0.25, abs=0.01)
     assert heart_rate == pytest.approx(1.2, abs=0.01)
@@ -214,14 +216,16 @@ def test_data_shorter_than_the_window_warns_as_eitprocessing() -> None:
     with pytest.warns(UserWarning, match="longer than the data"):
         expected = _upstream_rates(signal, subject_type="adult", welch_window=30.0)
     with pytest.warns(UserWarning, match="longer than the data"):
-        actual = detect_rates(signal, RateDetectionSettings("adult", welch_window=30.0))
+        actual = detect_rates(
+            signal, settings=RateDetectionSettings("adult", welch_window=30.0)
+        )
     assert actual == expected
 
     with warnings.catch_warnings():
         warnings.simplefilter("error", UserWarning)
         detect_rates(
             signal,
-            RateDetectionSettings("adult", welch_window=30.0),
+            settings=RateDetectionSettings("adult", welch_window=30.0),
             suppress_length_warnings=True,
         )
 
@@ -233,7 +237,7 @@ def test_peak_at_the_edge_of_the_range_warns_as_eitprocessing() -> None:
     with pytest.warns(RuntimeWarning, match="edge"):
         expected = _upstream_rates(signal, subject_type="adult", **limits)
     with pytest.warns(RuntimeWarning, match="edge of the range"):
-        actual = detect_rates(signal, RateDetectionSettings("adult", **limits))
+        actual = detect_rates(signal, settings=RateDetectionSettings("adult", **limits))
     assert actual == expected
     # Without refinement the rate is a frequency step of the spectrum at an
     # edge of the range (steps of 1/30 Hz for the 30 s window).
@@ -243,7 +247,7 @@ def test_peak_at_the_edge_of_the_range_warns_as_eitprocessing() -> None:
         warnings.simplefilter("error", RuntimeWarning)
         detect_rates(
             signal,
-            RateDetectionSettings("adult", **limits),
+            settings=RateDetectionSettings("adult", **limits),
             suppress_edge_case_warning=True,
         )
 
@@ -293,7 +297,7 @@ def test_a_range_without_any_frequency_is_refused() -> None:
         "adult", welch_window=20.0, min_respiratory_rate=0.26, max_respiratory_rate=0.27
     )
     with pytest.raises(ValueError, match="breathing-rate range 15.6 to 16.2"):
-        detect_rates(_synthetic_images(), settings)
+        detect_rates(_synthetic_images(), settings=settings)
 
 
 def test_images_without_three_axes_or_frame_rate_are_refused() -> None:
@@ -302,10 +306,10 @@ def test_images_without_three_axes_or_frame_rate_are_refused() -> None:
         values=signal.values[:, 0, 0], time=signal.time, sample_frequency=20.0
     )
     with pytest.raises(ValueError, match="shape"):
-        detect_rates(waveform, RateDetectionSettings("adult"))
+        detect_rates(waveform, settings=RateDetectionSettings("adult"))
     no_rate = Signal(values=signal.values, time=signal.time, name="images")
     with pytest.raises(ValueError, match="frames per second"):
-        detect_rates(no_rate, RateDetectionSettings("adult"))
+        detect_rates(no_rate, settings=RateDetectionSettings("adult"))
 
 
 def test_no_captures_store_nothing_and_leave_the_images_unchanged() -> None:
@@ -313,9 +317,13 @@ def test_no_captures_store_nothing_and_leave_the_images_unchanged() -> None:
     before = signal.values.copy()
     captures: dict = {}
     with_captures = detect_rates(
-        signal, RateDetectionSettings("adult", welch_window=20.0), captures=captures
+        signal,
+        settings=RateDetectionSettings("adult", welch_window=20.0),
+        captures=captures,
     )
-    without = detect_rates(signal, RateDetectionSettings("adult", welch_window=20.0))
+    without = detect_rates(
+        signal, settings=RateDetectionSettings("adult", welch_window=20.0)
+    )
     assert with_captures == without
     assert tuple(captures) == CAPTURE_KEYS
     np.testing.assert_array_equal(signal.values, before)
@@ -336,7 +344,7 @@ def test_rate_figure_draws_the_picture_of_eitprocessing(subject_type: str) -> No
 
     settings = RateDetectionSettings(subject_type, welch_window=20.0)
     captures: dict = {}
-    detect_rates(_synthetic_images(), settings, captures=captures)
+    detect_rates(_synthetic_images(), settings=settings, captures=captures)
 
     def pixels(figure) -> np.ndarray:
         figure.canvas.draw()

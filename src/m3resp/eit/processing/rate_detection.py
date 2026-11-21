@@ -152,8 +152,8 @@ class RateDetectionSettings:
 
 def detect_rates(
     pixel_impedance: Signal,
-    settings: RateDetectionSettings,
     *,
+    settings: RateDetectionSettings,
     captures: dict[str, Any] | None = None,
     suppress_length_warnings: bool = False,
     suppress_edge_case_warning: bool = False,

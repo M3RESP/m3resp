@@ -114,7 +114,7 @@ def _breaths(
     waveform: Signal, minimum_duration: float = MINIMUM_DURATION
 ) -> list[BreathEvent]:
     settings = BreathDetectionSettings(minimum_duration=minimum_duration)
-    return find_breaths(waveform, settings)
+    return find_breaths(waveform, settings=settings)
 
 
 def _upstream(
@@ -190,7 +190,7 @@ def _assert_equals_upstream(
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         result = find_pixel_breaths(
-            pixels, waveform, breaths, phase_correction_mode=mode
+            pixels, signal=waveform, breaths=breaths, phase_correction_mode=mode
         )
     found = _times(result)
     same = (found == times) | (np.isnan(found) & np.isnan(times))
@@ -223,7 +223,7 @@ def test_pixel_breaths_match_golden(dataset: str) -> None:
     breaths = _breaths(waveform)
     golden = _golden(dataset, "pixel")
 
-    result = find_pixel_breaths(pixels, waveform, breaths)
+    result = find_pixel_breaths(pixels, signal=waveform, breaths=breaths)
 
     np.testing.assert_array_equal(_times(result), golden["breaths/landmarks"])
     np.testing.assert_array_equal(
@@ -263,11 +263,11 @@ def test_random_pixels_cover_every_kind_of_pixel() -> None:
             warnings.simplefilter("ignore", RuntimeWarning)
             for mode in ("negative amplitude", "phase shift", "none"):
                 result = find_pixel_breaths(
-                    pixels, waveform, breaths, phase_correction_mode=mode
+                    pixels, signal=waveform, breaths=breaths, phase_correction_mode=mode
                 )
                 for reason in seen:
                     seen[reason] += len(_skipped(result, reason))
-            tiv = pixel_tidal_impedance_variation(pixels, breaths)
+            tiv = pixel_tidal_impedance_variation(pixels, breaths=breaths)
             mean_tiv = np.nanmean(
                 [pixel_map.values for pixel_map in tiv.values], axis=0
             )
@@ -283,14 +283,16 @@ def test_sign_breaths_give_the_sign_as_in_eitprocessing() -> None:
 
     pixels, waveform = _golden_data("sentec_healthy_volunteer_1b", "raw")
     breaths = _breaths(waveform, minimum_duration=1.0)
-    default_breaths = find_breaths(waveform, BreathDetectionSettings())
+    default_breaths = find_breaths(waveform, settings=BreathDetectionSettings())
     times, intervals, _ = _upstream(
         pixels, waveform, "negative amplitude", minimum_duration=1.0
     )
     assert [(b.start_time, b.end_time) for b in breaths] == intervals
 
-    result = find_pixel_breaths(pixels, waveform, breaths, sign_breaths=default_breaths)
-    same_breaths = find_pixel_breaths(pixels, waveform, breaths)
+    result = find_pixel_breaths(
+        pixels, signal=waveform, breaths=breaths, sign_breaths=default_breaths
+    )
+    same_breaths = find_pixel_breaths(pixels, signal=waveform, breaths=breaths)
 
     np.testing.assert_array_equal(_times(result), times)
     assert not np.array_equal(_times(same_breaths), times, equal_nan=True)
@@ -303,11 +305,15 @@ def test_the_result_keeps_the_breaths_and_describes_the_pixel_breaths() -> None:
     pixels, waveform = _golden_data(DATASETS[0], "filtered")
     breaths = _breaths(waveform)
 
-    result = find_pixel_breaths(pixels, waveform, breaths, name="test_breaths")
+    result = find_pixel_breaths(
+        pixels, signal=waveform, breaths=breaths, name="test_breaths"
+    )
 
     assert result.name == "test_breaths"
     assert result.breaths == breaths
-    assert result.shape == (32, 32)
+    assert result.grid_shape == (32, 32)
+    assert len(result) == len(breaths)
+    assert result.shape == (len(breaths), 32, 32)
     assert result.modality == "eit"
     assert result.method == "m3resp.eit.processing.find_pixel_breaths"
     assert result.metadata["phase_correction_mode"] == "negative amplitude"
@@ -332,7 +338,10 @@ def test_warnings_come_once_per_kind_with_the_pixel_positions() -> None:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         result = find_pixel_breaths(
-            pixels, waveform, breaths, phase_correction_mode="phase shift"
+            pixels,
+            signal=waveform,
+            breaths=breaths,
+            phase_correction_mode="phase shift",
         )
 
     messages = [str(w.message) for w in caught if w.category is RuntimeWarning]
@@ -347,7 +356,9 @@ def test_warnings_come_once_per_kind_with_the_pixel_positions() -> None:
 def test_fewer_than_three_breaths_give_no_pixel_breaths(count: int) -> None:
     pixels, waveform = _golden_data(DATASETS[0], "filtered")
 
-    result = find_pixel_breaths(pixels, waveform, _breaths(waveform)[:count])
+    result = find_pixel_breaths(
+        pixels, signal=waveform, breaths=_breaths(waveform)[:count]
+    )
 
     assert result.start_time.shape == (count, 32, 32)
     assert not result.has_breath.any()
@@ -359,7 +370,10 @@ def test_the_input_is_left_unchanged() -> None:
 
     for mode in MODES:
         find_pixel_breaths(
-            pixels, waveform, _breaths(waveform), phase_correction_mode=mode
+            pixels,
+            signal=waveform,
+            breaths=_breaths(waveform),
+            phase_correction_mode=mode,
         )
 
     np.testing.assert_array_equal(pixels.values, values)
@@ -403,9 +417,13 @@ def test_breaths_after_the_end_of_the_data_have_no_pixel_breaths() -> None:
     # The sign of each pixel comes from the same breaths: three of them end
     # after the data.
     with pytest.warns(UserWarning, match="find_pixel_breaths: 3 of 13 breaths"):
-        result = find_pixel_breaths(short_pixels, short_waveform, breaths)
+        result = find_pixel_breaths(
+            short_pixels, signal=short_waveform, breaths=breaths
+        )
     with pytest.warns(UserWarning, match="find_pixel_breaths: 1 of 11 breaths"):
-        expected = find_pixel_breaths(short_pixels, short_waveform, inside)
+        expected = find_pixel_breaths(
+            short_pixels, signal=short_waveform, breaths=inside
+        )
 
     # Pixel breath i uses the ends of inspiration of global breaths i - 1,
     # i and i + 1, so global breaths -3, -2 and -1 have no pixel breaths.
@@ -422,7 +440,7 @@ def test_a_pixel_with_every_breath_left_out_is_listed_with_a_warning() -> None:
     spike = _signal(values, pixels.time, name="pixels")
 
     with pytest.warns(RuntimeWarning, match=r"1 pixel\(s\) have more than 25%"):
-        result = find_pixel_breaths(spike, waveform, _breaths(waveform))
+        result = find_pixel_breaths(spike, signal=waveform, breaths=_breaths(waveform))
 
     assert result.metadata["skipped_pixels"][TOO_MANY_BREATHS_SKIPPED] == [[1, 1]]
     assert not result.has_breath[:, 1, 1].any()
@@ -434,7 +452,7 @@ def test_no_pixel_breaths_give_a_warning_with_the_reasons() -> None:
 
     with pytest.warns(RuntimeWarning, match="no pixel has a breath") as caught:
         result = find_pixel_breaths(
-            pixels, waveform, _breaths(waveform), sign_breaths=[]
+            pixels, signal=waveform, breaths=_breaths(waveform), sign_breaths=[]
         )
 
     assert not result.has_breath.any()
@@ -453,7 +471,9 @@ def test_warnings_about_the_sign_breaths_name_find_pixel_breaths() -> None:
     expected = f"find_pixel_breaths: 1 of {len(breaths) + 1} breaths"
 
     with pytest.warns(UserWarning, match=expected) as caught:
-        find_pixel_breaths(pixels, waveform, breaths, sign_breaths=[*breaths, late])
+        find_pixel_breaths(
+            pixels, signal=waveform, breaths=breaths, sign_breaths=[*breaths, late]
+        )
 
     [warning] = [w for w in caught if expected in str(w.message)]
     assert warning.filename == __file__
@@ -467,20 +487,24 @@ def test_wrong_input_is_refused() -> None:
     breaths = _breaths(waveform)
 
     with pytest.raises(ValueError, match="Unknown phase correction mode"):
-        find_pixel_breaths(pixels, waveform, breaths, phase_correction_mode="both")  # type: ignore[arg-type]
+        find_pixel_breaths(
+            pixels, signal=waveform, breaths=breaths, phase_correction_mode="both"
+        )  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="extremum_time"):
-        find_pixel_breaths(pixels, waveform, [BreathEvent("eit", 1.0, 2.0)])
+        find_pixel_breaths(
+            pixels, signal=waveform, breaths=[BreathEvent("eit", 1.0, 2.0)]
+        )
     with pytest.raises(ValueError, match=r"shape \(time, row, column\)"):
-        find_pixel_breaths(waveform, waveform, breaths)
+        find_pixel_breaths(waveform, signal=waveform, breaths=breaths)
     with pytest.raises(ValueError, match="one value per sample"):
-        find_pixel_breaths(pixels, pixels, breaths)
+        find_pixel_breaths(pixels, signal=pixels, breaths=breaths)
     half = len(waveform.time) // 2
     with pytest.raises(ValueError, match="on the time axis of the EIT images"):
-        find_pixel_breaths(pixels, _sliced(waveform, half), breaths)
+        find_pixel_breaths(pixels, signal=_sliced(waveform, half), breaths=breaths)
     later = _signal(waveform.values, waveform.time + 1.0, name="global")
     with pytest.raises(ValueError, match="on the time axis of the EIT images"):
-        find_pixel_breaths(pixels, later, breaths)
+        find_pixel_breaths(pixels, signal=later, breaths=breaths)
     with pytest.raises(TypeError, match="needs BreathEvent objects"):
-        find_pixel_breaths(pixels, waveform, [(0.0, 1.0, 2.0)])  # type: ignore[list-item]
+        find_pixel_breaths(pixels, signal=waveform, breaths=[(0.0, 1.0, 2.0)])  # type: ignore[list-item]
     with pytest.raises(TypeError, match="needs BreathEvent objects"):
-        find_pixel_breaths(pixels, waveform, breaths, sign_breaths=[1.0])  # type: ignore[list-item]
+        find_pixel_breaths(pixels, signal=waveform, breaths=breaths, sign_breaths=[1.0])  # type: ignore[list-item]

@@ -142,7 +142,7 @@ def test_breaths_match_golden(dataset: str) -> None:
     settings = BreathDetectionSettings(
         minimum_duration=MANIFEST["settings"]["breath_detection"]["minimum_duration_s"]
     )
-    actual = _times(find_breaths(waveform, settings))
+    actual = _times(find_breaths(waveform, settings=settings))
     assert actual.shape == golden.shape
     np.testing.assert_allclose(
         actual, golden, rtol=0, atol=RELATIVE_TOLERANCE * np.max(np.abs(golden))
@@ -174,7 +174,7 @@ def test_each_part_equals_eitprocessing(seed: int) -> None:
 
     invalid = detect_invalid_data(data, percentile=5, multiplier=4)
     np.testing.assert_array_equal(invalid, upstream._detect_invalid_data(data))
-    filled = remove_invalid_data(data, invalid)
+    filled = remove_invalid_data(data, invalid_data_indices=invalid)
     np.testing.assert_array_equal(filled, upstream._remove_invalid_data(data, invalid))
 
     from eitprocessing.features.moving_average import MovingAverage
@@ -208,10 +208,17 @@ def test_each_part_equals_eitprocessing(seed: int) -> None:
     except IndexError:
         assert all(
             len(part) == 0
-            for part in remove_edge_cases(filled, peaks, valleys, average)
+            for part in remove_edge_cases(
+                filled,
+                peak_indices=peaks,
+                valley_indices=valleys,
+                moving_average=average,
+            )
         )
         return
-    peaks, valleys = remove_edge_cases(filled, peaks, valleys, average)
+    peaks, valleys = remove_edge_cases(
+        filled, peak_indices=peaks, valley_indices=valleys, moving_average=average
+    )
     np.testing.assert_array_equal(peaks, expected[0])
     np.testing.assert_array_equal(valleys, expected[1])
 
@@ -225,7 +232,9 @@ def test_each_part_equals_eitprocessing(seed: int) -> None:
     np.testing.assert_array_equal(peaks, expected[0])
     np.testing.assert_array_equal(valleys, expected[1])
 
-    breaths = create_breaths_from_peak_valley_data(peaks, valleys)
+    breaths = create_breaths_from_peak_valley_data(
+        peak_indices=peaks, valley_indices=valleys
+    )
     upstream_breaths = upstream._create_breaths_from_peak_valley_data(
         waveform.time, peaks, valleys
     )
@@ -234,7 +243,11 @@ def test_each_part_equals_eitprocessing(seed: int) -> None:
     ] == [(b.start_time, b.middle_time, b.end_time) for b in upstream_breaths]
 
     kept = remove_breaths_around_invalid_data(
-        breaths, len(filled), fs, invalid, window_length=0.5
+        breaths,
+        n_samples=len(filled),
+        sample_frequency=fs,
+        invalid_data_indices=invalid,
+        window_length=0.5,
     )
     upstream_kept = upstream._remove_breaths_around_invalid_data(
         upstream_breaths, waveform.time, fs, invalid
@@ -256,11 +269,13 @@ def test_random_waveforms_cover_the_cases_of_the_tests() -> None:
         with_invalid += bool(len(invalid))
         with_nan += bool(np.isnan(data).any())
         settings = BreathDetectionSettings()
-        filled = remove_invalid_data(data, invalid)
+        filled = remove_invalid_data(data, invalid_data_indices=invalid)
         peaks, valleys = detect_peaks_and_valleys(
-            filled, waveform.sample_frequency, settings
+            filled, sample_frequency=waveform.sample_frequency, settings=settings
         )
-        breaths = create_breaths_from_peak_valley_data(peaks, valleys)
+        breaths = create_breaths_from_peak_valley_data(
+            peak_indices=peaks, valley_indices=valleys
+        )
         with_removed_breaths += len(find_breaths(waveform)) < len(breaths)
     assert with_invalid >= 5
     assert with_nan >= 5
@@ -340,7 +355,12 @@ def test_no_valley_left_gives_no_breaths() -> None:
     # the moving average, so both valleys are removed.
     data = np.array([0.0, 1.0, 0.0, 3.0, 0.0, 1.0, 0.0])
     average = np.full(7, 1.5)
-    peaks, valleys = remove_edge_cases(data, np.array([3]), np.array([2, 4]), average)
+    peaks, valleys = remove_edge_cases(
+        data,
+        peak_indices=np.array([3]),
+        valley_indices=np.array([2, 4]),
+        moving_average=average,
+    )
     assert len(peaks) == 0
     assert len(valleys) == 0
     with pytest.raises(IndexError):
@@ -384,7 +404,7 @@ def test_settings_change_the_result_as_in_eitprocessing() -> None:
         "invalid_data_removal_multiplier": 2,
     }
     expected = BreathDetection(**options).find_breaths(as_continuous_data(waveform))
-    actual = find_breaths(waveform, BreathDetectionSettings(**options))
+    actual = find_breaths(waveform, settings=BreathDetectionSettings(**options))
     assert _times(actual).tolist() == [
         [b.start_time, b.middle_time, b.end_time] for b in expected.values
     ]

@@ -29,6 +29,7 @@ from m3resp.synchronization.start_times import on_clock_of
 def save_eit_figures(
     context_values: Mapping[str, Any],
     output_dir: str | Path,
+    *,
     session: M3Session | None = None,
 ) -> list[Path]:
     """Save available EIT workflow figures as PNG files.
@@ -223,7 +224,7 @@ def _figure_pixel_tiv(ctx, figures_dir: Path, plt) -> Path | None:
 
     plt.close("all")
     fig, ax = plt.subplots(figsize=(5.0, 4.6))
-    plot_pixel_map(mean_map, ax, colorbar=True, style=pixel_map_style(None))
+    plot_pixel_map(mean_map, ax=ax, colorbar=True, style=pixel_map_style(None))
     ax.set_title(f"Mean pixel TIV over {maps.shape[0]} breaths")
     fig.tight_layout()
     path = figures_dir / "pixel_tiv.png"

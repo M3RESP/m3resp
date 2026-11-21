@@ -126,7 +126,9 @@ def plot_eit_processing_summary(
     """Plot the results of the EIT processing of a session.
 
     The four panels show the global impedance with the EIT breaths, the TIV
-    and the EELI of each breath, and the mean TIV of each pixel.
+    and the EELI of each breath, and the mean TIV of each pixel. In both
+    backends, the pixel map has the TIV colours of
+    :func:`~m3resp.visualization.pixel_maps.plot_pixel_map`.
 
     Args:
         session (M3Session): The session after the EIT processing.
@@ -205,9 +207,15 @@ def plot_eit_processing_summary(
     _plot_sparse(ax_eeli, eeli, "EELI", "EELI")
 
     if mean_pixel_tiv is not None:
-        image = ax_map.imshow(mean_pixel_tiv, cmap="viridis")
+        from m3resp.data.pixel_maps import PixelMap
+        from m3resp.visualization.pixel_maps import plot_pixel_map
+
+        plot_pixel_map(
+            PixelMap(name="mean_pixel_tiv", values=mean_pixel_tiv, kind="tiv"),
+            ax=ax_map,
+            colorbar_options={"fraction": 0.046, "pad": 0.04},
+        )
         ax_map.set(title="Mean pixel TIV")
-        fig.colorbar(image, ax=ax_map, fraction=0.046, pad=0.04)
     else:
         ax_map.set_axis_off()
 
