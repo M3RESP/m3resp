@@ -4,7 +4,7 @@ Process an EIT recording
 
 In this tutorial, we process one :term:`EIT` recording from the file to the results. We load the file, filter the signal, find the breaths and save the results. At the end, you have the figure below and a folder with result files.
 
-You need M3Resp with the EIT integration (``python -m pip install -e ".[eit]"``).
+You need M3Resp with the ``eit`` option (``python -m pip install -e ".[eit]"``) for the interactive figure. The base install does all other steps.
 """
 
 # %%
@@ -17,22 +17,23 @@ You need M3Resp with the EIT integration (``python -m pip install -e ".[eit]"``)
 
 import os
 import tempfile
+from pathlib import Path
 
 from m3resp import M3Session
 
 # The example recordings are in the tests/data folder of the M3Resp source code.
-data_dir = os.environ.get("M3RESP_EXAMPLE_DATA", os.path.join("tests", "data"))
+data_dir = Path(os.environ.get("M3RESP_EXAMPLE_DATA", Path("tests", "data")))
 
 session = M3Session()
 session.load_eit(
-    os.path.join(data_dir, "m3resp_multimodal_1_eit_draeger.bin"),
+    data_dir / "m3resp_multimodal_1_eit_draeger.bin",
     vendor="draeger",
 )
 
 # %%
 # The session now has the raw EIT data. The global impedance is the sum of all pixels in each EIT image.
 
-global_impedance = session.raw["eit"].global_impedance
+global_impedance = session.raw["eit"].raw_global_impedance
 print("Sampling rate:", global_impedance.sample_frequency, "Hz")
 print("Number of samples:", len(global_impedance.values))
 
@@ -109,11 +110,11 @@ fig.show()
 #
 # :meth:`~m3resp.M3Session.export_summary` writes all results of the session to a folder. Here we use a temporary folder. In your own analysis, give the path of your results folder.
 
-output_dir = tempfile.mkdtemp()
+output_dir = Path(tempfile.mkdtemp())
 session.export_summary(output_dir)
 
-for file_name in sorted(os.listdir(output_dir)):
-    print(file_name)
+for path in sorted(output_dir.iterdir()):
+    print(path.name)
 
 # %%
 # Recap

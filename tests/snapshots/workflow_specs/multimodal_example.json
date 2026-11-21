@@ -13,7 +13,7 @@
   },
   "name": "multimodal",
   "outputs": {
-    "dir": "output/multimodal-summary",
+    "dir": "output/workflows/multimodal-summary",
     "event_csvs": true,
     "figures": true,
     "mode": null,

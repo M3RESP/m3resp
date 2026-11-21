@@ -73,6 +73,27 @@ class TestTimeSeries:
             "metadata": {},
         }
 
+    def test_nan_at_the_same_places_counts_as_equal(self):
+        values = np.array([[1.0, np.nan], [np.nan, 4.0]])
+
+        first = TimeSeries(values=values, time=[0.0, 1.0])
+        second = TimeSeries(values=values.copy(), time=[0.0, 1.0])
+
+        assert first == second
+
+    def test_nan_at_other_places_is_not_equal(self):
+        first = TimeSeries(values=[1.0, np.nan], time=[0.0, 1.0])
+        second = TimeSeries(values=[np.nan, 2.0], time=[0.0, 1.0])
+
+        assert first != second
+        assert first != TimeSeries(values=[1.0, 2.0], time=[0.0, 1.0])
+
+    def test_text_values_compare(self):
+        first = TimeSeries(values=np.array(["a", "b"]), time=[0.0, 1.0])
+
+        assert first == TimeSeries(values=np.array(["a", "b"]), time=[0.0, 1.0])
+        assert first != TimeSeries(values=np.array(["a", "c"]), time=[0.0, 1.0])
+
 
 class TestSignal:
     def test_create_with_modality_and_channel(self):
@@ -91,6 +112,16 @@ class TestSignal:
         assert row["modality"] == "eit"
         assert row["source"] == "subject.eit"
 
+    def test_eit_images_with_missing_pixels_are_equal(self):
+        frames = np.full((3, 2, 2), np.nan)
+        frames[:, 0, 0] = [1.0, 2.0, 3.0]
+
+        first = Signal(values=frames, time=[0.0, 0.05, 0.1], modality="eit")
+        second = Signal(values=frames.copy(), time=[0.0, 0.05, 0.1], modality="eit")
+
+        assert first == second
+        assert first != Signal(values=frames, time=[0.0, 0.05, 0.1], modality="emg")
+
     def test_accepts_any_modality(self):
         # Modality is an open vocabulary: new loaders/quantity types aren't
         # blocked by a fixed enum (only processing_state is still enforced).
@@ -108,6 +139,15 @@ class TestSignal:
 
 
 class TestParameterResult:
+    def test_nan_value_counts_as_equal(self):
+        first = ParameterResult(name="tiv", value=float("nan"), modality="eit")
+        grid = np.array([[1.0, np.nan], [np.nan, 4.0]])
+        image = ParameterResult(name="map", value=grid, modality="eit")
+
+        assert first == ParameterResult(name="tiv", value=float("nan"), modality="eit")
+        assert first != ParameterResult(name="tiv", value=1.0, modality="eit")
+        assert image == ParameterResult(name="map", value=grid.copy(), modality="eit")
+
     def test_scalar_value_serializes_to_float(self):
         result = ParameterResult(
             name="tidal_impedance_variation", value=1.23, modality="eit", unit="a.u."

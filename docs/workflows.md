@@ -198,7 +198,7 @@ Run `m3resp steps` for the list of all steps. The groups are:
 
 | Group | Steps for |
 |---|---|
-| `eit.*` | Load and slice EIT data, filter, find the rates and the breaths, calculate TIV, EELI, pixel TIV and lung regions |
+| `eit.*` | Load and slice EIT data, filter, find the rates and the breaths, calculate TIV, EELI, pixel breaths, pixel TIV, pixel EELI and lung regions |
 | `emg.*` | Load and slice EMG data, filter, remove the ECG, find the baseline and the breaths, calculate the parameters and the quality checks |
 | `ventilator.*` | Load and slice ventilator data, select the channels, find the breaths and the occlusions (Pocc) |
 | `sync.*` | Put the recordings on the shared clock: `sync.raw_modalities`, `sync.skip`, `sync.estimate_offset`, `sync.apply_estimated_offset` (see {doc}`concepts/synchronization-overview`) |
@@ -221,18 +221,15 @@ Two steps load EIT data:
 
 | Step | Reads |
 |---|---|
-| `eit.load` | A Dräger, Sentec or Timpel file, with `eitprocessing`. `vendor` is required. `sample_frequency`, `first_frame` and `max_frames` are optional. |
-| `eit.load_custom` | Any other file, with a loader that you write in Python. M3Resp calls it as `loader(file_path, vendor=None, **loader_options)`, and it returns an `eitprocessing` `Sequence`. |
+| `eit.load` | A Dräger, Sentec or Timpel file, with the M3Resp readers of `m3resp.eit.io`. `vendor` is required. `sample_frequency`, `first_frame` and `max_frames` are optional. |
+| `eit.load_custom` | Any other file, with a loader that you write in Python. M3Resp calls it as `loader(file_path, vendor=None, **loader_options)`, and it returns an `m3resp.eit.io.EITFileData`. Any other return value gives a `TypeError`. |
 
-Both steps give the same results (`raw_eit`, `raw_global_impedance_signal`, `raw_pixel_impedance_signal`, ...), so the next steps work with both. Give the loader to the EIT adapter of the session before the run:
+Both steps give the same results (`raw_eit`, `raw_global_impedance_signal`, `raw_pixel_impedance_signal`, ...), so the next steps work with both. Give the loader to the run, or to the session as `M3Session(eit_loader=my_loader)`:
 
 ```python
-from m3resp.adapters import EITProcessingAdapter
 from m3resp.workflows import run_workflow
 
-result = run_workflow(
-    "my-workflow.yaml", eit_adapter=EITProcessingAdapter(loader=my_loader)
-)
+result = run_workflow("my-workflow.yaml", eit_loader=my_loader)
 ```
 
 Without a loader, `eit.load_custom` stops with an error.
@@ -248,7 +245,7 @@ A device can split one recording into several files. The `file_path` of both ste
 - Each file must start after the end of the file before it. If the files are in the wrong order or overlap, the workflow stops with an error that names the two files.
 - A pause between two files stays in the time axis and gives a warning with its length, because the filters and the breath detection run across the pause.
 - The files must come from the same device, with the same image size and sampling rate.
-- `first_frame` and `max_frames` work only with one file, because `eitprocessing` would apply them to each file. To slice the joined recording, use `eit.slice_recording`.
+- `first_frame` and `max_frames` work only with one file, because the reader would apply them to each file. To slice the joined recording, use `eit.slice_recording`.
 - `eit.load_custom` gives the list to the loader as it is.
 
 ### Ventilator channels

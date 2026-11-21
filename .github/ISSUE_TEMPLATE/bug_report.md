@@ -22,7 +22,6 @@ assignees: ""
 
 - Python version:
 - M3Resp version:
-- `eitprocessing` version, if relevant:
 - `resurfemg` version, if relevant:
 
 ## Additional context

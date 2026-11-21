@@ -15,6 +15,7 @@ import numpy as np
 from m3resp.data.categories import normalize_category
 from m3resp.data.events import check_breath_scope
 from m3resp.data.metrics import normalize_metric_name
+from m3resp.data.timeseries import _arrays_equal
 from m3resp.data.units import normalize_unit
 
 
@@ -83,12 +84,13 @@ class ParameterResult:
         # The dataclass-generated __eq__ compares `value` with plain `==`,
         # which raises ValueError ("truth value of an array with more than
         # one element is ambiguous") for array-valued parameters - use
-        # np.array_equal instead, which collapses to a single bool.
+        # np.array_equal instead, which collapses to a single bool. A NaN at
+        # the same place in both values counts as equal.
         if type(other) is not type(self):
             return NotImplemented
         return (
             self.name == other.name
-            and np.array_equal(self.value, other.value)
+            and _arrays_equal(np.asarray(self.value), np.asarray(other.value))
             and self.modality == other.modality
             and self.category == other.category
             and self.unit == other.unit

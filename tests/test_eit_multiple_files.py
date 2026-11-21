@@ -7,14 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from m3resp.adapters import EITProcessingAdapter
 from m3resp.core.session import M3Session
 from m3resp.datamodel import DataModelRecorder, DataModelStore
+from m3resp.eit.io import join_eit_file_data, read_eit_file
 from m3resp.workflows import load_spec, run_workflow, validate_workflow
 from m3resp.workflows.steps.eit import load
 
 np = pytest.importorskip("numpy")
-pytest.importorskip("eitprocessing")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DRAEGER_PATH = os.path.join(
@@ -48,9 +47,11 @@ def test_two_consecutive_files_give_the_same_recording_as_one_file(two_halves):
 
     joined.load_eit(two_halves, vendor="draeger")
 
-    np.testing.assert_array_equal(joined.eit.raw.time, whole.eit.raw.time)
     np.testing.assert_array_equal(
-        joined.eit.raw.pixel_impedance, whole.eit.raw.pixel_impedance
+        joined.eit.pixel_impedance.time, whole.eit.pixel_impedance.time
+    )
+    np.testing.assert_array_equal(
+        joined.eit.pixel_impedance.values, whole.eit.pixel_impedance.values
     )
     assert joined.eit.paths == tuple(Path(p) for p in two_halves)
     assert joined.provenance[-1].parameters["path"] == two_halves
@@ -78,7 +79,7 @@ def test_a_pause_between_files_is_kept_and_reported(tmp_path):
     with pytest.warns(UserWarning, match=r"gap of 20\.000 s between EIT files"):
         session.load_eit(files, vendor="draeger")
 
-    time = session.eit.raw.time
+    time = session.eit.pixel_impedance.time
     assert len(time) == 800
     assert time[400] - time[399] == pytest.approx(20.05)
 
@@ -94,7 +95,7 @@ def test_one_file_in_a_list_reads_like_a_single_path():
 
     load(session, file_path=[DRAEGER_PATH], vendor="draeger", max_frames=30)
 
-    assert session.eit.raw.pixel_impedance.shape[0] == 30
+    assert session.eit.pixel_impedance.values.shape[0] == 30
 
 
 def test_custom_loader_receives_the_list_as_given(two_halves):
@@ -102,13 +103,13 @@ def test_custom_loader_receives_the_list_as_given(two_halves):
 
     def loader(path, vendor=None, **kwargs):
         received.append(path)
-        return EITProcessingAdapter().load_with_eitprocessing(path, vendor="draeger")
+        return join_eit_file_data([read_eit_file(item, "draeger") for item in path])
 
-    session = M3Session(eit_adapter=EITProcessingAdapter(loader=loader))
+    session = M3Session(eit_loader=loader)
     session.load_eit(two_halves, loader="custom")
 
     assert received == [two_halves]
-    assert session.eit.raw.pixel_impedance.shape[0] == 1200
+    assert session.eit.pixel_impedance.values.shape[0] == 1200
 
 
 def test_workflow_resolves_a_list_of_relative_paths(two_halves, tmp_path):

@@ -37,7 +37,6 @@ def _synthetic_signal(fs: float = 1000.0, duration_seconds: float = 3.0):
 
 
 def test_butterworth_filter_reproduces_eitprocessing_lowpass_exactly():
-    _add_sibling_checkout_to_path("eitprocessing")
     pytest.importorskip("eitprocessing")
     from eitprocessing.filters.butterworth_filters import ButterworthFilter
 

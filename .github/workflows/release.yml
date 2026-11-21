@@ -5,8 +5,8 @@ name: Release
 #
 # The PyPI upload is kept below but only runs when this workflow is started by
 # hand (Actions tab -> Release -> Run workflow) with "publish_to_pypi" ticked.
-# Before that can work: the eit/emg/all extras must stop pointing at git links
-# (PyPI refuses those), and trusted publishing must be set up on pypi.org.
+# Before that can work: the emg/all extras must stop pointing at the resurfemg
+# git link (PyPI refuses those), and trusted publishing must be set up on pypi.org.
 # A PyPI version number can never be uploaded twice, even after deleting it.
 
 on:

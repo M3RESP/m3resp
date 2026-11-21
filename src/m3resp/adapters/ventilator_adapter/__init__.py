@@ -1,24 +1,23 @@
-"""Adapter boundary for ventilator data.
+"""Adapter for ventilator data.
 
-Unlike `EITProcessingAdapter` and `ReSurfEMGAdapter`, this adapter does not wrap
-an upstream library: no ventilator preprocessing exists in either `eitprocessing`
-or `resurfemg`, which is why ventilator channels were used unfiltered and why
-ventilator data reached a session only as a passenger of the EMG path. Its
-defaults are native, built on `m3resp.processing.filters` and
-`m3resp.processing.peaks`.
+The ventilator adapter processes ventilator channels with m3resp code
+(`m3resp.processing.filters` and `m3resp.processing.peaks`).
 
-Loading is the one exception, and it has three sources:
-ventilator channels arrive in the multi-channel file shared with the sEMG -
-where `load` delegates to `ReSurfEMGAdapter` - inside the EIT `*.bin` itself,
-where the device stores them beside the impedance frames and `load` goes
-through `EITProcessingAdapter` (see `_eit_source`) - or in a third-party format
-neither of those knows about, read by a function registered via
-`register_ventilator_loader` (see `_loaders`), so a new format is added
-without editing this module. Dispatch is by file suffix for the first two; either can be
-replaced with an injected loader per instance, or a registered extension takes
-over automatically for every instance.
+`load` reads ventilator channels from three sources:
 
-Composed from mixins split by responsibility, matching the layout of
+- the multi-channel file that also holds the sEMG, read with
+  `ReSurfEMGAdapter`;
+- the EIT `*.bin` file, where the device stores the ventilator channels next
+  to the impedance frames, read with the m3resp EIT loader (see
+  `_eit_source`);
+- a file in another format, read by a function registered with
+  `register_ventilator_loader` (see `_loaders`).
+
+The file extension selects the source. A loader given to one adapter replaces
+the built-in loader of that adapter. A registered loader applies to every
+adapter.
+
+The adapter is made of mixins, one per task, with the same layout as
 `m3resp.adapters.resurfemg_adapter`.
 """
 
@@ -55,7 +54,7 @@ from ._eit_source import (
     EIT_ORIGIN,
     SENTINEL_CUTOFF,
     available_ventilator_channels,
-    ventilator_payload_from_sequence,
+    ventilator_payload_from_eit,
 )
 from ._loaders import (
     register_ventilator_loader,
@@ -102,5 +101,5 @@ __all__ = [
     "split_channels",
     "unregister_ventilator_loader",
     "ventilator_loaders",
-    "ventilator_payload_from_sequence",
+    "ventilator_payload_from_eit",
 ]

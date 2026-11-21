@@ -1,6 +1,6 @@
 # Coding guidelines
 
-This page has the rules for choices that come back often in the code: the return value of a function, the choice of a field, names, and two arguments for one value. Add a rule here when the team agrees on a new one.
+This page has the rules for choices that come back often in the code: the return value of a function, named arguments, settings objects, the choice of a field, names, and two arguments for one value. Add a rule here when the team agrees on a new one.
 
 See `AGENTS.md` in the source folder for the rules for docstrings and comments.
 
@@ -18,6 +18,40 @@ def detect_peaks(..., captures: dict[str, Any] | None = None) -> np.ndarray:
 A caller who wants the extra outputs gives an empty dictionary and reads it after the call. `m3resp.processing.filters` and `m3resp.processing.peaks` use this rule.
 
 Do not add a True/False argument that changes the return type, for example from a value to a tuple. A caller who forgets to unpack the tuple gets an error much later in the code.
+
+## Arguments after the data go by name
+
+The first argument of a function is the data it works on, for example the EIT images or a waveform. Put `*` after it, so the caller gives every other argument by name:
+
+```python
+def amplitude_lungspace(
+    pixels: Signal,
+    *,
+    breaths: Sequence[BreathEvent],
+    signal: Signal | None = None,
+    threshold: float = 0.15,
+) -> PixelMask: ...
+
+
+mask = amplitude_lungspace(pixels, breaths=breaths, signal=global_impedance)
+```
+
+A reader then sees what each value is without the order of the arguments. Two arguments can stay positional when their order is clear from the function name: a start and an end time (`slice_intervals(data, start_time, end_time)`), a row and a column, and `read_eit_file(path, vendor)`.
+
+## Named arguments or a settings object
+
+The settings of a function are named arguments, for example `mdn_filter(images, respiratory_rate=0.25, heart_rate=1.2, order=10)`. Values measured on the recording, such as the breathing rate and the heart rate that the MDN filter needs, are always arguments.
+
+A settings object holds the settings when they depend on each other. In `RateDetectionSettings`, `subject_type` (`"adult"` or `"neonate"`) sets the default limits of the breathing rate and the heart rate. `BreathDetectionSettings` holds the seven settings of the breath detection, as in eitprocessing.
+
+To use the same settings in several calls, put the named arguments in a dictionary:
+
+```python
+mdn_options = {"notch_distance": 0.2, "order": 8}  # notch_distance in Hz
+filtered = mdn_filter(images, respiratory_rate=rate, heart_rate=heart, **mdn_options)
+```
+
+In a workflow file, each step takes its settings as parameters, also when the function behind the step has a settings object.
 
 ## Choose a field by what the method calculates
 

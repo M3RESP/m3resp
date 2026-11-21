@@ -16,7 +16,7 @@ pytest
 | Page | Contents |
 |---|---|
 | {doc}`architecture` | The two kinds of data objects, the folders of the code, and the folder for each kind of new code |
-| {doc}`adapters` | How M3Resp calls `eitprocessing` and `resurfemg`, and changes their results into M3Resp objects |
+| {doc}`adapters` | How M3Resp calls `resurfemg` and reads ventilator data, and changes the results into M3Resp objects |
 | {doc}`preset-contracts` | What a preset does, and how it differs from a workflow file |
 | {doc}`testing` | The test folders, the comparison tests with the two packages, the synthetic test data, and how to run the tests |
 | {doc}`coding_guidelines` | Rules for the arguments, return values and names of functions |

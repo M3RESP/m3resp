@@ -16,7 +16,7 @@ This checks that the file is correct: each step exists, each input of a step com
 m3resp validate --readiness my-analysis.workflow.yaml
 ```
 
-This also checks that the input files exist and that the packages of each step (`eitprocessing`, `resurfemg`) are installed. A missing file is an error. A missing package is a warning.
+This also checks that the input files exist and that the packages of each step (such as `resurfemg` for the EMG steps) are installed. A missing file is an error. A missing package is a warning.
 
 ## See the steps that will run
 

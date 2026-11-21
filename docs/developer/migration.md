@@ -11,7 +11,7 @@ migration/from-resurfemg
 
 ## How M3Resp uses the two packages
 
-M3Resp calls `eitprocessing` and `resurfemg` to load, filter and detect breaths. Some functions of both packages are copied into `m3resp.processing`, and [NOTICE.md](https://github.com/M3RESP/m3resp/blob/main/NOTICE.md) lists them. The tests in `tests/regression/` check that M3Resp gives the same results as the direct calls with the same settings.
+M3Resp does all EIT work with its own code: reading the files, slicing, filters, breath detection, TIV, EELI, pixel maps and lung spaces. This code was ported from `eitprocessing` 1.8.7, and `eitprocessing` is not installed with M3Resp. EMG loading and calculations use `resurfemg`. [NOTICE.md](https://github.com/M3RESP/m3resp/blob/main/NOTICE.md) lists the functions adapted from both packages. The tests in `tests/regression/` check that M3Resp gives the same results as the two packages with the same settings. The EIT comparison tests need the `reference` option (`pytest -m reference`).
 
 Both packages stay separate. You can still use them without M3Resp.
 

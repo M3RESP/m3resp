@@ -28,7 +28,7 @@ experiment:
   selection: selected
 
 outputs:
-  dir: ../../output/rotarc-breath-duration
+  dir: ../../output/workflows/rotarc-breath-duration
   mode: explicit
   # export.rotarc_result honors this: results land under
   # <dir>/<timestamp>/subject_results/<run_identifier>/... instead of

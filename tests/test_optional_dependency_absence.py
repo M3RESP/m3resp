@@ -1,12 +1,11 @@
 """Capability discovery and structural validation with upstream packages absent.
 
-Every other test in this repo runs with ``eitprocessing``/``resurfemg``
-actually installed (they're dev dependencies), and confirms only that no
-step module *eagerly imports* one at module scope
-(``test_registry_coverage.py::test_no_step_module_eagerly_imports_an_optional_package``).
-That is necessary but not sufficient: it has never been verified that
-discovery/validation/dry-run actually keep working end-to-end when a
-package is genuinely unimportable.
+``test_registry_coverage.py::test_no_step_module_eagerly_imports_an_optional_package``
+checks that no step module imports an optional package at module scope.
+These tests check that discovery, validation and dry runs keep working when
+``resurfemg`` and ``eitprocessing`` cannot be imported. ``emg.preprocess``
+is the example of a step that needs an optional package (``resurfemg``);
+the EIT steps need none.
 
 ``importlib.util.find_spec(name)`` - what ``step_capability_state`` uses -
 treats ``sys.modules[name] is None`` as the standard "known absent, do not
@@ -44,18 +43,16 @@ def _absent_optional_packages(monkeypatch):
 def _eit_emg_spec() -> dict:
     return {
         "name": "p",
-        "inputs": {"eit_file": "does-not-need-to-exist.bin"},
+        "inputs": {"emg_file": "does-not-need-to-exist.Poly5"},
         "steps": [
-            {
-                "uses": "eit.load",
-                "with": {"file_path": "@eit_file", "vendor": "draeger"},
-            }
+            {"uses": "emg.load", "with": {"file_path": "@emg_file"}},
+            {"uses": "emg.preprocess", "with": {"channel": 0}},
         ],
     }
 
 
-def test_step_capability_state_reports_missing_for_an_eit_step():
-    assert step_capability_state("eit.load") == "missing_optional_dependency"
+def test_step_capability_state_reports_available_for_an_eit_step():
+    assert step_capability_state("eit.load") == "available"
 
 
 def test_step_capability_state_reports_missing_for_an_emg_step():
@@ -80,7 +77,7 @@ def test_describe_steps_still_returns_every_step_with_no_import_error():
 
 
 def test_describe_step_reports_capability_state_for_a_single_operation():
-    description = describe_step("eit.load")
+    description = describe_step("emg.preprocess")
     assert description.capability == "missing_optional_dependency"
 
 
@@ -117,7 +114,7 @@ def test_cli_steps_json_works_without_the_optional_packages(capsys):
 
 def test_cli_describe_reports_missing_dependency_capability(capsys):
     with pytest.raises(SystemExit) as excinfo:
-        main(["describe", "eit.load"])
+        main(["describe", "emg.preprocess"])
     assert excinfo.value.code == EXIT_SUCCESS
     payload = json.loads(capsys.readouterr().out)
     assert payload["capability"] == "missing_optional_dependency"
@@ -129,7 +126,7 @@ def test_cli_validate_readiness_succeeds_with_a_warning_diagnostic(tmp_path, cap
     # An existing (if empty) fixture file, so the only readiness diagnostic
     # is the missing-optional-dependency warning this test is about, not
     # also an unrelated missing_file error from a dummy path.
-    (tmp_path / "does-not-need-to-exist.bin").write_bytes(b"")
+    (tmp_path / "does-not-need-to-exist.Poly5").write_bytes(b"")
     spec_path = tmp_path / "spec.yaml"
     spec_path.write_text(yaml.safe_dump(_eit_emg_spec()), encoding="utf-8")
 
@@ -151,4 +148,7 @@ def test_cli_dry_run_succeeds_without_the_optional_packages(tmp_path, capsys):
         main(["run", str(spec_path), "--dry-run"])
     assert excinfo.value.code == EXIT_SUCCESS
     payload = json.loads(capsys.readouterr().out)
-    assert payload["steps"][0]["operation_id"] == "eit.load"
+    assert [step["operation_id"] for step in payload["steps"]] == [
+        "emg.load",
+        "emg.preprocess",
+    ]

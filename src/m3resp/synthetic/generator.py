@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import importlib  # noqa: F401 - re-exported so callers can patch import_module
 import json
-import os
 import sys
+from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
@@ -105,13 +105,13 @@ DEFAULT_SECOND_AXIS = 1
 def generate_synthetic_dataset(config: SyntheticGeneratorConfig) -> SyntheticDataset:
     """Generate synthetic EIT, EMG, and ventilator data from one configuration."""
 
-    output_root = os.path.abspath(os.path.normpath(config.output_dir))
+    output_root = str(Path(config.output_dir).resolve())
     output_dir = _resolve_run_output_dir(
         output_root=output_root,
         timestamp_output_dir=config.timestamp_output_dir,
         export_config=config.export,
     )
-    os.makedirs(output_dir, exist_ok=True)
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     provenance = {
         "generator": DEFAULT_GENERATOR_MODULE,
@@ -130,7 +130,7 @@ def generate_synthetic_dataset(config: SyntheticGeneratorConfig) -> SyntheticDat
     if config.generate_ventilator:
         dataset.ventilator = generate_ventilator_record(config, output_dir)
 
-    metadata_path = os.path.join(output_dir, f"{config.basename}_metadata.json")
+    metadata_path = str(Path(output_dir) / f"{config.basename}_metadata.json")
     _write_json(metadata_path, _dataset_metadata(dataset), config.export)
     provenance["metadata_path"] = metadata_path
     return dataset
@@ -152,13 +152,10 @@ def generate_eit_record(
         axis=DEFAULT_GLOBAL_IMPEDANCE_AXES
     ).astype(DEFAULT_FLOAT32_DTYPE)
 
-    npy_path = os.path.join(output_dir, f"{config.basename}_eit_pixels.npy")
-    csv_path = os.path.join(output_dir, f"{config.basename}_eit_global.csv")
-    bin_path = os.path.join(output_dir, f"{config.basename}_eit_draeger.bin")
-    components_path = os.path.join(
-        output_dir,
-        f"{config.basename}_eit_components.npz",
-    )
+    npy_path = str(Path(output_dir) / f"{config.basename}_eit_pixels.npy")
+    csv_path = str(Path(output_dir) / f"{config.basename}_eit_global.csv")
+    bin_path = str(Path(output_dir) / f"{config.basename}_eit_draeger.bin")
+    components_path = str(Path(output_dir) / f"{config.basename}_eit_components.npz")
 
     np.save(npy_path, draeger.pixel_impedance)
     np.savez(components_path, **cast(dict[str, Any], draeger.components))
@@ -331,7 +328,7 @@ def generate_ventilator_record(
         labels=labels,
         export_config=config.export,
     )
-    p_mus_path = os.path.join(output_dir, f"{config.basename}_ventilator_p_mus.npy")
+    p_mus_path = str(Path(output_dir) / f"{config.basename}_ventilator_p_mus.npy")
     np.save(p_mus_path, p_mus)
     paths["p_mus_npy"] = p_mus_path
 
@@ -421,17 +418,14 @@ def main(config_path: str | None = None) -> None:
     """Generate a synthetic dataset from YAML configuration."""
 
     if config_path is None:
-        config_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            DEFAULT_CONFIG_FILENAME,
-        )
+        config_path = str(Path(__file__).resolve().parent / DEFAULT_CONFIG_FILENAME)
 
     config = load_synthetic_generator_config(config_path)
     dataset = generate_synthetic_dataset(config)
     print(
         json.dumps(
             {
-                "config_path": os.path.abspath(os.path.normpath(config_path)),
+                "config_path": str(Path(config_path).resolve()),
                 **_dataset_metadata(dataset),
             },
             indent=config.export.metadata_indent,

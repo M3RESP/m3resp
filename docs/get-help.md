@@ -28,11 +28,11 @@ Open an issue on [GitHub](https://github.com/M3RESP/m3resp/issues) and add the l
 
 ## Report a problem
 
-Open an issue on [GitHub](https://github.com/M3RESP/m3resp/issues) with the "Bug report" form. The form asks for the versions of Python, M3Resp, `eitprocessing` and `resurfemg`. To show them:
+Open an issue on [GitHub](https://github.com/M3RESP/m3resp/issues) with the "Bug report" form. The form asks for the versions of Python, M3Resp and `resurfemg`. To show them:
 
 ```bash
 python --version
-python -m pip show m3resp eitprocessing resurfemg
+python -m pip show m3resp resurfemg
 ```
 
 :::{warning}
@@ -43,6 +43,6 @@ The run manifest of a workflow run (`run_manifest.json`) records the M3Resp vers
 
 ## Problems in the EIT or EMG processing
 
-M3Resp uses `eitprocessing` for EIT and `resurfemg` for EMG. Report a problem in these calculations on the [M3Resp issue list](https://github.com/M3RESP/m3resp/issues) too.
+M3Resp computes the EIT results with its own code and uses `resurfemg` for EMG. Report a problem in these calculations on the [M3Resp issue list](https://github.com/M3RESP/m3resp/issues) too.
 
 Continue with {doc}`cite`.

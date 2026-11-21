@@ -15,15 +15,19 @@ that conversion and what happens to a channel that holds nothing else.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 from m3resp.adapters.ventilator_adapter import (
     SENTINEL_CUTOFF,
     available_ventilator_channels,
-    ventilator_payload_from_sequence,
+    ventilator_payload_from_eit,
 )
 from m3resp.core.exceptions import UnsupportedWorkflowError
+from m3resp.data import Signal
+from m3resp.eit.io import EITFileData
 
 FS = 100.0
 N = 300
@@ -33,25 +37,32 @@ def _wave(scale: float = 1.0) -> np.ndarray:
     return scale * np.sin(2 * np.pi * 0.25 * np.arange(N) / FS)
 
 
-class _ContinuousData:
-    def __init__(self, label, values, unit):
-        self.label = label
-        self.name = label
-        self.values = np.asarray(values, dtype=float)
-        self.unit = unit
-        self.sample_frequency = FS
-        self.time = np.arange(len(self.values)) / FS
+def _recording(**channels) -> EITFileData:
+    """The data of a Draeger file with these waveforms: label -> (values, unit)."""
 
-
-class _Sequence:
-    def __init__(self, **channels):
-        self.continuous_data = {
-            label: _ContinuousData(label, values, unit)
+    time = np.arange(N) / FS
+    return EITFileData(
+        vendor="draeger",
+        paths=(Path("recording.bin"),),
+        sample_frequency=FS,
+        pixel_impedance=Signal(
+            values=np.zeros((N, 2, 2)), time=time, sample_frequency=FS
+        ),
+        signals={
+            label: Signal(
+                values=np.asarray(values, dtype=float),
+                time=time,
+                sample_frequency=FS,
+                unit=unit,
+                name=label,
+                modality="eit",
+            )
             for label, (values, unit) in channels.items()
-        }
+        },
+    )
 
 
-def _sequence(pressure=None, esophageal=None):
+def _recording_with(pressure=None, esophageal=None):
     channels = {
         "airway pressure": (
             _wave(10.0) if pressure is None else pressure,
@@ -62,7 +73,7 @@ def _sequence(pressure=None, esophageal=None):
     }
     if esophageal is not None:
         channels["esophageal pressure (pod)"] = (esophageal, "mbar")
-    return _Sequence(**channels)
+    return _recording(**channels)
 
 
 def _unmeasured(value: float = -1.7e38) -> np.ndarray:
@@ -73,7 +84,7 @@ class TestTheSentinelBecomesNaN:
     def test_a_stretch_the_device_did_not_measure_reads_as_nan(self):
         pressure = _wave(10.0)
         pressure[50:70] = -1.7e38
-        payload = ventilator_payload_from_sequence(_sequence(pressure=pressure))
+        payload = ventilator_payload_from_eit(_recording_with(pressure=pressure))
 
         row = payload["array"][0]
         assert np.all(np.isnan(row[50:70]))
@@ -83,7 +94,7 @@ class TestTheSentinelBecomesNaN:
     def test_those_samples_are_counted_as_missing(self):
         pressure = _wave(10.0)
         pressure[50:70] = -1.7e38
-        payload = ventilator_payload_from_sequence(_sequence(pressure=pressure))
+        payload = ventilator_payload_from_eit(_recording_with(pressure=pressure))
 
         assert payload["metadata"]["nan_samples"]["airway_pressure"] == 20
 
@@ -91,15 +102,15 @@ class TestTheSentinelBecomesNaN:
     def test_the_cutoff_catches_the_values_different_versions_write(self, value):
         pressure = _wave(10.0)
         pressure[10] = value
-        payload = ventilator_payload_from_sequence(_sequence(pressure=pressure))
+        payload = ventilator_payload_from_eit(_recording_with(pressure=pressure))
 
         assert np.isnan(payload["array"][0][10])
 
     def test_a_real_negative_reading_is_left_alone(self):
         # Expiratory flow is negative, and an esophageal pressure swing can sit
         # below zero throughout. Nothing physiological approaches the cutoff.
-        payload = ventilator_payload_from_sequence(
-            _sequence(pressure=_wave(10.0) - 40.0)
+        payload = ventilator_payload_from_eit(
+            _recording_with(pressure=_wave(10.0) - 40.0)
         )
 
         row = payload["array"][0]
@@ -109,11 +120,11 @@ class TestTheSentinelBecomesNaN:
 
 class TestAChannelWithNoMeasurementIsRefused:
     def test_a_pod_channel_recorded_without_a_pod_is_rejected(self):
-        sequence = _sequence(esophageal=_unmeasured())
+        recording = _recording_with(esophageal=_unmeasured())
 
         with pytest.raises(UnsupportedWorkflowError) as excinfo:
-            ventilator_payload_from_sequence(
-                sequence, channels=("airway_pressure", "esophageal_pressure")
+            ventilator_payload_from_eit(
+                recording, channels=("airway_pressure", "esophageal_pressure")
             )
 
         message = str(excinfo.value)
@@ -121,8 +132,8 @@ class TestAChannelWithNoMeasurementIsRefused:
         assert "pressure pod" in message
 
     def test_the_other_channels_still_load(self):
-        payload = ventilator_payload_from_sequence(
-            _sequence(esophageal=_unmeasured()),
+        payload = ventilator_payload_from_eit(
+            _recording_with(esophageal=_unmeasured()),
             channels=("airway_pressure", "flow", "volume"),
         )
 
@@ -134,6 +145,8 @@ class TestListingChannelsDoesNotReadThem:
     def test_an_unmeasured_channel_is_still_listed(self):
         # Listing answers "what does this recording carry", which is a header
         # question; deciding it was never measured means reading every sample.
-        available = available_ventilator_channels(_sequence(esophageal=_unmeasured()))
+        available = available_ventilator_channels(
+            _recording_with(esophageal=_unmeasured())
+        )
 
         assert "esophageal_pressure" in available

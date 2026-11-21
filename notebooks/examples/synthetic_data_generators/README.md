@@ -105,7 +105,7 @@ The notebook imports the package module, locates the default YAML beside that
 module, then loads:
 
 ```python
-config_path = os.path.join(generator_dir, "synthetic_generator_config.yaml")
+config_path = generator_dir / "synthetic_generator_config.yaml"
 config = load_synthetic_generator_config(config_path)
 dataset = generate_synthetic_dataset(config)
 ```
@@ -145,7 +145,7 @@ uv run python -m m3resp.synthetic.generator path/to/custom_config.yaml
 For the same YAML-driven run from Python:
 
 ```python
-import os
+from pathlib import Path
 
 from m3resp.synthetic import (
     generate_synthetic_dataset,
@@ -153,13 +153,7 @@ from m3resp.synthetic import (
 )
 
 config = load_synthetic_generator_config(
-    os.path.join(
-        os.getcwd(),
-        "src",
-        "m3resp",
-        "synthetic",
-        "synthetic_generator_config.yaml",
-    )
+    Path.cwd() / "src" / "m3resp" / "synthetic" / "synthetic_generator_config.yaml"
 )
 dataset = generate_synthetic_dataset(config)
 

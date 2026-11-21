@@ -70,13 +70,24 @@ These parts keep their names and their arguments, but the code inside them chang
 - The loaders in `modalities/`: they call the new readers in `eit/io/` and `emg/io/`.
 - The steps in `workflows/steps/eit/` and `workflows/steps/emg/`: they call the new code directly. The step names, their `reads` and `writes`, and their registry data stay the same.
 - The provenance data: the fields `method`, `metadata.source_package` and `metadata.source_function` name the M3Resp code. Fields named `reference_*` keep the names of the original functions, so the scientific equivalence stays traceable.
-- `session.processed["eit"]` and `processed_variants`: they hold the objects of `eitprocessing` next to the M3Resp objects. When an operation runs in M3Resp code, the M3Resp object is the only one left under the same name.
+- `session.processed["eit"]` and `processed_variants`: they held the objects of `eitprocessing` next to the M3Resp objects. When an operation runs in M3Resp code, the M3Resp object is the only one left under the same name. For EIT, every value is now an M3Resp object.
 
 ## Dependency transition
 
 - `eitprocessing`/`resurfemg` stop being a production/runtime extra. A plain `pip install m3resp` and the distributed GUI must not install or import either package.
 - The reference packages (the original external libraries, kept around only for comparison purposes) move to a development/reference-test-only extra, used solely to run an optional comparison suite (test group) against the frozen Stage 2 golden fixtures (saved, trusted example inputs/outputs used as the standard to compare new results against).
 - Stage 2 characterization fixtures (test data that pins down exactly how the old, upstream-backed behavior worked, so it can be checked for a match later) must remain runnable in Stage 3 without installing the upstream packages at all.
+
+### Status of the EIT part
+
+The EIT part of this transition is met:
+
+- `pip install m3resp` with no option reads, processes and plots EIT data. Every `eit.*` step has the status `"available"` in this install.
+- No file in `src/m3resp` imports `eitprocessing`. `tests/test_eit_without_eitprocessing.py` checks this, and runs the EIT test files, `session.preprocess_eit()`, the EIT full and multimodal full example workflows and `save_eit_figures` with `eitprocessing` hidden.
+- `eitprocessing` 1.8.7 is only in the `reference` option. The tests that use it have the marker `reference`. The CI job "Comparison with eitprocessing" runs them. The golden tests run without it.
+- `EITProcessingAdapter` and the code that builds `eitprocessing` objects are test code in `tests/reference/eitprocessing/`. `M3Session` takes a custom EIT loader as `eit_loader`. The session has no EIT adapter.
+
+The EMG part (`resurfemg`) is still open.
 
 ## GUI boundary
 
@@ -178,7 +189,7 @@ Stage 3 is done only when:
 ## Out of scope / not yet decided
 
 - The exact internal folder layout under `eit/`/`emg/` may still change during Stage 3 architecture work; the ownership boundaries (which package is responsible for which behavior) are the firm part, not the file paths.
-- Whether `EITProcessingAdapter`/`ReSurfEMGAdapter` are deleted outright or kept as a thin regression/reference-comparison harness (a minimal test setup built only to run comparisons, not part of the real product) is undecided; adapter injection (passing in a specific adapter object, typically for testing) is expected to remain available for regression tests even after production code stops calling it.
+- Whether `ReSurfEMGAdapter` is deleted outright or kept as a thin regression/reference-comparison harness (a minimal test setup built only to run comparisons, not part of the real product) is undecided. `EITProcessingAdapter` is such a harness in `tests/reference/eitprocessing/`.
 - Stage 3 does not fuse `eitprocessing`'s and `resurfemg`'s algorithms into one shared implementation, see ["What 'merging EIT and EMG' actually means"](#what-merging-eit-and-emg-actually-means) above; it ports each modality's validated behavior into its own `eit`/`emg` module, sharing only the small set of scientifically-neutral primitives listed there.
 - Whether `m3resp.processing` primitives (`filters`, `windows`, `ecg`, ...) gain a `Signal`/`TimeSeries`-accepting convenience layer, so a caller can pass one object instead of an array plus `sample_frequency` separately, is undecided. Today these stay dependency-free (no import of `m3resp.data`), since most current call sites operate on raw arrays - sometimes upstream `eitprocessing`/`resurfemg` objects - before any `Signal`/`TimeSeries` exists; revisit this once Stage 3's native EIT/EMG containers make it clearer what's actually available at each call site. If this gets built, one possible shape is a thin adapter *on top of* the existing low-level functions (e.g. `apply_to_signal(lowpass_filter, signal)` or a `signal_handler_wrapper` decorator) living in `m3resp.data`, which already depends on `m3resp.processing` - not a change to the low-level functions themselves, which would reintroduce the upward dependency this entry rules out.
 
