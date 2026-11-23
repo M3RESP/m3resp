@@ -112,47 +112,37 @@ sphinx_gallery_conf = {
 
 html_theme = "pydata_sphinx_theme"
 html_title = f"{project} documentation"
-html_show_sourcelink = False
 html_static_path = ["_static"]
-html_css_files = [
-    "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,500;0,700;1,400&family=Roboto+Mono:wght@400;500;700&display=swap",
-    "custom.css",
-]
-html_js_files = ["m3-page-toc.js", "m3-plotly-figures.js"]
-# No left sidebar. The right sidebar has the sections of the page and the
-# other pages of the same part of the documentation.
-html_sidebars = {"**": []}
+html_css_files = ["custom.css"]
+html_js_files = ["m3-plotly-figures.js"]
+pygments_style = "sphinx"
+# The landing page has no sidebars.
+html_sidebars = {"index": []}
 html_theme_options = {
-    "navbar_align": "content",
-    "navbar_end": [
-        "theme-switcher",
-        "navbar-icon-links",
-    ],
-    "header_links_before_dropdown": 5,
-    "navigation_with_keys": True,
-    "show_nav_level": 2,
-    "show_toc_level": 2,
-    # The other pages of the same folder, then the sections of this page.
-    "secondary_sidebar_items": ["section-nav", "m3-page-toc"],
-    # One footer line: the copyright at the left, the Sphinx and theme versions at the right.
-    "footer_start": ["copyright"],
-    "footer_end": ["m3-built-with"],
-    "pygments_light_style": "a11y-high-contrast-light",
-    "pygments_dark_style": "github-dark",
+    "logo": {
+        "text": "M3Resp",
+        "image_light": "_static/m3resp-logo.svg",
+        "image_dark": "_static/m3resp-logo.svg",
+    },
     "icon_links": [
         {
             "name": "GitHub",
             "url": "https://github.com/M3RESP/m3resp",
             "icon": "fa-brands fa-github",
-            "type": "fontawesome",
         },
     ],
+    "navbar_start": ["navbar-logo", "navbar-version"],
+    "navbar_align": "content",
+    "header_links_before_dropdown": 6,
+    "secondary_sidebar_items": ["page-toc", "edit-this-page", "sourcelink"],
+    "use_edit_page_button": True,
 }
 html_context = {
     "github_user": "M3RESP",
     "github_repo": "m3resp",
     "github_version": os.environ.get("READTHEDOCS_GIT_IDENTIFIER", "main"),
     "doc_path": "docs",
+    "default_mode": "light",
 }
 
 readthedocs_version = os.environ.get("READTHEDOCS_VERSION_NAME")

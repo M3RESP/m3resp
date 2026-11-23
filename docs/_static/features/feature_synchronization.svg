@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" role="img" aria-label="Three signals on one clock">
+  <g fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 36 C20 12 32 12 44 36 S68 60 80 36 S104 12 116 36 L132 36" stroke="#0b7591"/>
+    <path d="M8 74 C20 50 32 50 44 74 S68 98 80 74 S104 50 116 74 L132 74" stroke="#00c0bf"/>
+    <path d="M8 112 L20 112 L28 92 L40 92 L48 112 L64 112 L72 92 L84 92 L92 112 L132 112" stroke="#18a0b5"/>
+  </g>
+  <g stroke="#0b7591" stroke-width="2.5" stroke-dasharray="5 5">
+    <line x1="26" y1="8" x2="26" y2="132"/>
+    <line x1="70" y1="8" x2="70" y2="132"/>
+  </g>
+</svg>

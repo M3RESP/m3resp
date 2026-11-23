@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" role="img" aria-label="Noisy signal and clean signal">
+  <rect x="6" y="10" width="128" height="56" rx="6" fill="#d9f5f4"/>
+  <path d="M12 40 L18 30 L22 48 L27 24 L31 52 L36 34 L40 44 L44 14 L48 60 L53 38 L58 30 L62 46 L67 26 L71 50 L76 36 L80 42 L84 16 L88 58 L93 34 L98 28 L102 46 L107 30 L111 48 L116 36 L120 18 L124 56 L128 40" fill="none" stroke="#18a0b5" stroke-width="3" stroke-linejoin="round"/>
+  <polygon points="62,74 78,74 70,86" fill="#0b7591"/>
+  <rect x="6" y="92" width="128" height="40" rx="6" fill="#0b7591"/>
+  <path d="M12 124 C26 124 30 100 44 100 S62 124 76 124 S94 100 108 100 S122 124 128 124" fill="none" stroke="#7fdedd" stroke-width="4" stroke-linecap="round"/>
+</svg>

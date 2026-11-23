@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="M3Resp">
+  <defs>
+    <linearGradient id="m3resp-logo-fill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#00c0bf"/>
+      <stop offset="1" stop-color="#0b7591"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 4 C50 4 60 16 60 32 C60 50 48 60 32 60 C14 60 4 48 4 32 C4 14 16 4 32 4 Z" fill="url(#m3resp-logo-fill)"/>
+  <path d="M10 36 C16 36 18 20 24 20 S30 44 36 44 S42 24 48 24 S52 34 56 34" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

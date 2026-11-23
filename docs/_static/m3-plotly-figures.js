@@ -16,9 +16,9 @@ function m3ThemeColor(name) {
 }
 
 function m3ApplyThemeColors(figure) {
-  const text = m3ThemeColor("--m3-c-text");
-  const line = m3ThemeColor("--m3-c-line");
-  const lineStrong = m3ThemeColor("--m3-c-line-strong");
+  const text = m3ThemeColor("--pst-color-text-base");
+  const line = m3ThemeColor("--pst-color-border");
+  const lineStrong = m3ThemeColor("--pst-color-text-muted");
   const update = { "font.color": text };
   for (const key of Object.keys(figure._fullLayout)) {
     if (/^[xy]axis[0-9]*$/.test(key)) {
