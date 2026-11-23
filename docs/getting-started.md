@@ -1,5 +1,7 @@
 # Getting started
 
+This page shows how to install M3Resp, run a workflow file and use M3Resp from Python.
+
 ## Install M3Resp
 
 M3Resp works with Python 3.12, 3.13 and 3.14. In the M3Resp source folder, install the base package:
