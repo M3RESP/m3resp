@@ -128,7 +128,7 @@
      "respiratory_rate": 9.766419793277448
     },
     "notch_bandpass": {
-     "baseline_sum": 384.55538640701747,
+     "baseline_sum": 384.55538640701724,
      "breath_onset_indices": [
       8440,
       18157,
@@ -232,7 +232,7 @@
       118126,
       119789
      ],
-     "envelope_area_per_second": 0.003914902270304836,
+     "envelope_area_per_second": 0.0039149022703048346,
      "flow_match": {
       "extra": 2,
       "matched": 8,
@@ -242,7 +242,7 @@
      "respiratory_rate": 9.767214715936838
     },
     "notch_bandpass_gating": {
-     "baseline_sum": 389.57060226943895,
+     "baseline_sum": 389.5706022694386,
      "breath_onset_indices": [
       8440,
       18157,
@@ -342,7 +342,7 @@
       118126,
       119789
      ],
-     "envelope_area_per_second": 0.003975329399149161,
+     "envelope_area_per_second": 0.003975222992368468,
      "flow_match": {
       "extra": 2,
       "matched": 6,
@@ -352,7 +352,7 @@
      "respiratory_rate": 19.14486279514997
     },
     "notch_bandpass_wavelet": {
-     "baseline_sum": 160.8053029207949,
+     "baseline_sum": 160.8053029207952,
      "breath_onset_indices": [
       8163,
       21305,
@@ -454,7 +454,7 @@
       118126,
       119789
      ],
-     "envelope_area_per_second": 0.0016729168279385677,
+     "envelope_area_per_second": 0.001672916827938567,
      "flow_match": {
       "extra": 0,
       "matched": 9,
@@ -652,7 +652,7 @@
      "respiratory_rate": 8.771929824561404
     },
     "notch_bandpass": {
-     "baseline_sum": 475.8298007273796,
+     "baseline_sum": 475.8298007273764,
      "breath_onset_indices": [
       15836,
       28055,
@@ -750,7 +750,7 @@
       119298,
       119964
      ],
-     "envelope_area_per_second": 0.005050441217030245,
+     "envelope_area_per_second": 0.005050441217030244,
      "flow_match": {
       "extra": 0,
       "matched": 6,
@@ -760,19 +760,19 @@
      "respiratory_rate": 8.553100498930862
     },
     "notch_bandpass_gating": {
-     "baseline_sum": 480.7809072389682,
+     "baseline_sum": 480.77559756625124,
      "breath_onset_indices": [
       15818,
       28021,
       42665,
       69493,
       85667,
-      98267
+      98268
      ],
      "breath_peak_indices": [
       20777,
       33408,
-      48015,
+      48017,
       75605,
       88421,
       102527
@@ -858,7 +858,7 @@
       119298,
       119964
      ],
-     "envelope_area_per_second": 0.005016117672031339,
+     "envelope_area_per_second": 0.005018452889245903,
      "flow_match": {
       "extra": 0,
       "matched": 6,
@@ -868,7 +868,7 @@
      "respiratory_rate": 8.507018290089324
     },
     "notch_bandpass_wavelet": {
-     "baseline_sum": 228.82953201903177,
+     "baseline_sum": 228.8295320190329,
      "breath_onset_indices": [
       3873,
       16075,
@@ -974,7 +974,7 @@
       119298,
       119964
      ],
-     "envelope_area_per_second": 0.0022117355959950496,
+     "envelope_area_per_second": 0.0022117355959950465,
      "flow_match": {
       "extra": 1,
       "matched": 9,
@@ -1018,17 +1018,17 @@
   "sync": {
    "eit_off": {
     "fluxmed": {
-     "correlation": 0.9648981408195084,
+     "correlation": 0.9648981408195076,
      "offset": -4.995
     }
    },
    "eit_on": {
     "eit": {
-     "correlation": 0.9934296937038792,
+     "correlation": 0.9934296937038795,
      "offset": -0.675
     },
     "fluxmed": {
-     "correlation": 0.9674886658621167,
+     "correlation": 0.967488665862116,
      "offset": -5.038
     }
    }

@@ -2,6 +2,7 @@ data/*
 output/*
 plan/*
 .venv/*
+.venv*/*
 .conda/*
 *.lock
 **/__pycache__
@@ -21,6 +22,7 @@ tests/data/TestPS3.txt
 
 # Documentation build products
 docs/_build/
+docs/build/
 docs/api/generated/
 docs/api/backreferences/
 docs/generated/
@@ -29,3 +31,6 @@ docs/sg_execution_times.rst
 
 # agentics
 AGENTS.md
+
+
+complexipy.toml

@@ -73,7 +73,7 @@ def test_moving_average_shortens_overlong_window_like_eitprocessing():
 
 def test_resurfemg_rms_and_arv_envelopes_match_shared_windows_exactly():
     _add_sibling_checkout_to_path("ReSurfEMG")
-    pytest.importorskip("resurfemg")
+
     from resurfemg.preprocessing.envelope import (
         full_rolling_arv,
         full_rolling_rms,
@@ -101,7 +101,7 @@ def test_resurfemg_rms_and_arv_envelopes_match_shared_windows_exactly():
 
 def test_resurfemg_rolling_confidence_intervals_match_shared_windows_exactly():
     _add_sibling_checkout_to_path("ReSurfEMG")
-    pytest.importorskip("resurfemg")
+
     pytest.importorskip("scipy")
     from resurfemg.preprocessing.envelope import rolling_arv_ci as resurfemg_arv_ci
     from resurfemg.preprocessing.envelope import rolling_rms_ci as resurfemg_rms_ci

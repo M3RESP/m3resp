@@ -79,14 +79,14 @@ class TestMergeClosePeaks:
 class TestNotchBeforeBandpass:
     @staticmethod
     def _preprocess(**kwargs):
-        pytest.importorskip("resurfemg")
-        from m3resp.adapters import ReSurfEMGAdapter
+
+        from m3resp.emg import ReSurfEMG
 
         time = np.arange(int(4 * FS)) / FS
         signal = _noise(4.0) + 5.0 * np.sin(2 * np.pi * 50.0 * time)
         recording = {"array": np.asarray([signal]), "metadata": {"fs": FS}}
         settings = {"notch_base_frequency": 50.0, "notch_max_frequency": 950.0}
-        return signal, ReSurfEMGAdapter().preprocess(recording, **settings, **kwargs)
+        return signal, ReSurfEMG().preprocess(recording, **settings, **kwargs)
 
     def test_notch_first_equals_notching_the_raw_signal_then_band_passing(self):
         # `_preprocess` skips the test when resurfemg is missing, so it runs
@@ -125,7 +125,7 @@ class TestNotchBeforeBandpass:
 
 
 def test_wavelet_step_removes_the_envelope_of_the_uncleaned_signal():
-    pytest.importorskip("resurfemg")
+
     from m3resp.workflows.steps.emg.ecg_wavelet import ecg_wavelet_denoising
 
     session = M3Session()

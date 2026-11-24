@@ -25,9 +25,9 @@ class _EcgMixin:
         peak_width_samples: int | None = None,
         peak_distance_samples: int | None = None,
         bandpass_filter: bool = True,
+        apply_bandpass_filter: bool | None = None,
     ) -> np.ndarray:
-        """Detect ECG peak sample indices in `signal` (ECG or an
-        ECG-contaminated EMG channel).
+        """Detect ECG peak sample indices in `signal` (ECG or an ECG-contaminated EMG channel).
 
         Args:
             signal: ECG signals to detect the ECG peaks in.
@@ -38,10 +38,12 @@ class _EcgMixin:
             peak_distance_samples (int, optional): Minimum time between ECG peaks in samples.
             bandpass_filter (bool): Bandpass filter the ecg_raw between 1-500 Hz before
                 peak detection.
+            apply_bandpass_filter (bool, optional): Whether to apply the bandpass filter.
+                If None, the value of `bandpass_filter` is used.
 
         Returns:
-            numpy.ndarray: ECG peak indices."""
-
+            numpy.ndarray: ECG peak indices.
+        """
         try:
             from resurfemg.preprocessing.ecg_removal import detect_ecg_peaks
         except ImportError as exc:
@@ -49,6 +51,11 @@ class _EcgMixin:
 
         array = _require_1d_array("signal", signal)
         fs = _require_integer_valued_sample_frequency(sample_frequency)
+        bp_filter = (
+            bool(bandpass_filter)
+            if apply_bandpass_filter is None
+            else bool(apply_bandpass_filter)
+        )
         return np.asarray(
             detect_ecg_peaks(
                 array,
@@ -56,7 +63,7 @@ class _EcgMixin:
                 peak_fraction=peak_fraction,
                 peak_width_s=peak_width_samples,
                 peak_distance=peak_distance_samples,
-                bp_filter=bandpass_filter,
+                bp_filter=bp_filter,
             ),
             dtype=int,
         )
@@ -67,7 +74,7 @@ class _EcgMixin:
         peak_indices: Any,
         *,
         gate_width_samples: int = 205,
-        fill_method: int = 1,
+        fill_method: int = 3,
     ) -> np.ndarray:
         """Gate (remove) ECG peaks from `signal` around `peak_indices`.
 
@@ -89,7 +96,6 @@ class _EcgMixin:
         Returns:
             numpy.ndarray: The gated result.
         """
-
         try:
             from resurfemg.preprocessing.ecg_removal import gating
         except ImportError as exc:

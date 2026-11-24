@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from m3resp.core.session import M3Session
 from m3resp.data import Signal
 from m3resp.workflows.registry import StepArtifact, StepParameter, register_step
 
@@ -20,13 +19,16 @@ from ._shared import (
     require_envelope,
 )
 
+if TYPE_CHECKING:
+    from m3resp.core.session import M3Session
+
 
 @register_step(
     "emg.moving_baseline",
     reads={"session": "session", "processed_emg": "processed_emg"},
     writes=("baseline", "baseline_signal"),
     summary="Compute a moving-percentile EMG baseline.",
-    description="Compute a moving-percentile baseline of the EMG envelope via ReSurfEMGAdapter.moving_baseline.",
+    description="Compute a moving-percentile baseline of the EMG envelope via ReSurfEMG.moving_baseline.",
     category="baseline",
     modality="emg",
     optional_packages=_RESURFEMG,
@@ -209,7 +211,7 @@ def compute_moving_baseline(
         "baseline_running_std_signal",
     ),
     summary="Compute a slope-sum EMG baseline.",
-    description="Compute a slope-sum baseline of the EMG envelope via ReSurfEMGAdapter.slopesum_baseline.",
+    description="Compute a slope-sum baseline of the EMG envelope via ReSurfEMG.slopesum_baseline.",
     category="baseline",
     modality="emg",
     optional_packages=_RESURFEMG,

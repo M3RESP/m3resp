@@ -85,7 +85,6 @@ def estimated_ecg_subtraction(
     ``cleaned = bandpass(signal - estimated_ecg)``. These differ because
     bandpass filtering and subtracting the QRS template do not commute.
     """
-
     signal = _validate_input(
         values,
         sample_frequency=sample_frequency,
@@ -134,9 +133,12 @@ def estimated_ecg_subtraction(
         dtype=int,
     )
     if len(candidate_peaks) < minimum_template_beats:
-        raise ValueError(
+        msg = (
             "Estimated ECG Subtraction found too few potential QRS segments "
             f"({len(candidate_peaks)}); at least {minimum_template_beats} are needed."
+        )
+        raise ValueError(
+            msg
         )
 
     corrected_peaks, rejected_peaks, restored_peaks = _correct_qrs_periodicity(
@@ -154,9 +156,12 @@ def estimated_ecg_subtraction(
         )
     )
     if len(qrs_indices) < minimum_template_beats:
-        raise ValueError(
+        msg = (
             "Estimated ECG Subtraction found too few complete QRS templates "
             f"({len(qrs_indices)}); at least {minimum_template_beats} are needed."
+        )
+        raise ValueError(
+            msg
         )
     _validate_qrs_rate(
         qrs_indices[:, 1],
@@ -239,20 +244,26 @@ def _validate_input(
 ) -> np.ndarray:
     signal = np.asarray(values, dtype=float)
     if signal.ndim != 1:
-        raise ValueError("values must be a one-dimensional signal")
+        msg = "values must be a one-dimensional signal"
+        raise ValueError(msg)
     if signal.size < 3:
-        raise ValueError("values must contain at least three samples")
+        msg = "values must contain at least three samples"
+        raise ValueError(msg)
     if not np.all(np.isfinite(signal)):
-        raise ValueError("values must not contain NaN or infinite values")
+        msg = "values must not contain NaN or infinite values"
+        raise ValueError(msg)
     if not np.isfinite(sample_frequency) or sample_frequency <= 0:
-        raise ValueError("sample_frequency must be finite and positive")
+        msg = "sample_frequency must be finite and positive"
+        raise ValueError(msg)
     low, high = detection_band_hz
     if not (0 < low < high < sample_frequency / 2):
+        msg = "detection_band_hz must be positive, increasing, and below Nyquist"
         raise ValueError(
-            "detection_band_hz must be positive, increasing, and below Nyquist"
+            msg
         )
     if filter_order < 1:
-        raise ValueError("filter_order must be positive")
+        msg = "filter_order must be positive"
+        raise ValueError(msg)
     durations = {
         "detection_smoothing_seconds": detection_smoothing_seconds,
         "threshold_interval_seconds": threshold_interval_seconds,
@@ -261,39 +272,50 @@ def _validate_input(
     }
     for name, duration in durations.items():
         if not np.isfinite(duration) or duration <= 0:
-            raise ValueError(f"{name} must be finite and positive")
+            msg = f"{name} must be finite and positive"
+            raise ValueError(msg)
     if not 0 <= inter_qrs_tolerance < 1:
-        raise ValueError("inter_qrs_tolerance must be between 0 and 1")
+        msg = "inter_qrs_tolerance must be between 0 and 1"
+        raise ValueError(msg)
     if minimum_template_beats < 1:
-        raise ValueError("minimum_template_beats must be positive")
+        msg = "minimum_template_beats must be positive"
+        raise ValueError(msg)
     for name, interval in (
         ("minimum_qrs_interval_seconds", minimum_qrs_interval_seconds),
         ("maximum_qrs_interval_seconds", maximum_qrs_interval_seconds),
     ):
         if interval is not None and (not np.isfinite(interval) or interval <= 0):
-            raise ValueError(f"{name} must be finite and positive or None")
+            msg = f"{name} must be finite and positive or None"
+            raise ValueError(msg)
     if (
         minimum_qrs_interval_seconds is not None
         and maximum_qrs_interval_seconds is not None
         and minimum_qrs_interval_seconds >= maximum_qrs_interval_seconds
     ):
+        msg = "minimum_qrs_interval_seconds must be below maximum_qrs_interval_seconds"
         raise ValueError(
-            "minimum_qrs_interval_seconds must be below maximum_qrs_interval_seconds"
+            msg
         )
     if np.ptp(signal) <= np.finfo(float).eps:
-        raise ValueError("values must have non-zero amplitude")
+        msg = "values must have non-zero amplitude"
+        raise ValueError(msg)
     if output_bandpass_hz is not None:
         output_low, output_high = output_bandpass_hz
         if not (0 < output_low < output_high < sample_frequency / 2):
+            msg = "output_bandpass_hz must be positive, increasing, and below Nyquist"
             raise ValueError(
-                "output_bandpass_hz must be positive, increasing, and below Nyquist"
+                msg
             )
         if output_bandpass_order < 1:
-            raise ValueError("output_bandpass_order must be positive")
+            msg = "output_bandpass_order must be positive"
+            raise ValueError(msg)
         if output_bandpass_stage not in ("before_subtraction", "after_subtraction"):
-            raise ValueError(
+            msg = (
                 "output_bandpass_stage must be 'before_subtraction' or "
                 "'after_subtraction'"
+            )
+            raise ValueError(
+                msg
             )
     return signal
 
@@ -311,21 +333,27 @@ def _validate_qrs_rate(
         minimum_interval_seconds is not None
         and median_interval < minimum_interval_seconds
     ):
-        raise ValueError(
+        msg = (
             "Estimated ECG Subtraction produced an implausibly short median "
             f"QRS interval ({median_interval:.3f} s, about {estimated_rate:.1f} "
             "beats/min). Review the detection signal and threshold, or lower "
             "minimum_qrs_interval_seconds only if this rate is expected."
         )
+        raise ValueError(
+            msg
+        )
     if (
         maximum_interval_seconds is not None
         and median_interval > maximum_interval_seconds
     ):
-        raise ValueError(
+        msg = (
             "Estimated ECG Subtraction produced an implausibly long median "
             f"QRS interval ({median_interval:.3f} s, about {estimated_rate:.1f} "
             "beats/min). Review missed detections, or raise "
             "maximum_qrs_interval_seconds only if this rate is expected."
+        )
+        raise ValueError(
+            msg
         )
 
 

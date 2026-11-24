@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from m3resp.adapters.resurfemg_adapter._shared import _load_biopac_txt
+from m3resp.emg.io.loaders import _load_biopac_txt
 
 _HEADER = """Paw_EMG.gtl
 0.5 msec/sample

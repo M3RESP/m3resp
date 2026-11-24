@@ -74,7 +74,7 @@ def load(
     :class:`~m3resp.adapters.ventilator_adapter.VentilatorAdapter`, which reads
     both sources ventilator data arrives from and picks between them by file
     suffix: the multi-channel file shared with the sEMG (e.g. a Biopac export,
-    delegated to `ReSurfEMGAdapter`), and the EIT ``*.bin``, which stores
+    delegated to `ReSurfEMG`), and the EIT ``*.bin``, which stores
     ventilator waveforms beside its impedance frames.
     """
 

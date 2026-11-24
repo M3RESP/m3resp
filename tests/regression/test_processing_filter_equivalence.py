@@ -71,7 +71,7 @@ def test_butterworth_filter_reproduces_eitprocessing_lowpass_exactly():
 
 def test_resurfemg_bandpass_filter_matches_shared_bandpass_exactly():
     _add_sibling_checkout_to_path("ReSurfEMG")
-    pytest.importorskip("resurfemg")
+
     from resurfemg.preprocessing.filtering import emg_bandpass_butter
 
     fs = 1000.0
@@ -96,7 +96,7 @@ def test_resurfemg_bandpass_filter_matches_shared_bandpass_exactly():
 
 def test_resurfemg_lowpass_and_highpass_filters_match_shared_filters_exactly():
     _add_sibling_checkout_to_path("ReSurfEMG")
-    pytest.importorskip("resurfemg")
+
     from resurfemg.preprocessing.filtering import (
         emg_highpass_butter,
         emg_lowpass_butter,
@@ -127,7 +127,7 @@ def test_resurfemg_lowpass_and_highpass_filters_match_shared_filters_exactly():
 
 def test_resurfemg_notch_filter_matches_shared_notch_exactly():
     _add_sibling_checkout_to_path("ReSurfEMG")
-    pytest.importorskip("resurfemg")
+
     from resurfemg.preprocessing.filtering import notch_filter as resurfemg_notch
 
     fs = 1000.0

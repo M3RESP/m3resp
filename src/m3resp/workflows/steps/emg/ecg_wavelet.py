@@ -36,7 +36,7 @@ from ._shared import (
         "wavelet_gate_mask_result",
     ),
     summary="Remove ECG peaks from EMG by a-trous wavelet shrinkage.",
-    description="Remove ECG peaks from an EMG channel via a-trous wavelet shrinkage around each detected peak, via ReSurfEMGAdapter.wavelet_denoise_ecg.",
+    description="Remove ECG peaks from an EMG channel via a-trous wavelet shrinkage around each detected peak, via ReSurfEMG.wavelet_denoise_ecg.",
     category="preprocessing",
     modality="emg",
     optional_packages=_RESURFEMG,

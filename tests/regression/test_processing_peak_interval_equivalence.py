@@ -121,7 +121,7 @@ def test_pair_valley_peak_valley_returns_adjacent_triplets():
 
 def test_resurfemg_emg_and_ventilator_peak_primitives_match_upstream():
     _add_sibling_checkout_to_path("ReSurfEMG")
-    pytest.importorskip("resurfemg")
+
     from resurfemg.postprocessing.event_detection import (
         detect_emg_breaths,
         detect_ventilator_breath,
@@ -175,7 +175,7 @@ def test_resurfemg_emg_and_ventilator_peak_primitives_match_upstream():
 
 def test_resurfemg_interval_and_linking_primitives_match_upstream():
     _add_sibling_checkout_to_path("ReSurfEMG")
-    pytest.importorskip("resurfemg")
+
     from resurfemg.postprocessing.event_detection import (
         find_linked_peaks,
         onoffpeak_baseline_crossing,
@@ -198,7 +198,7 @@ def test_resurfemg_interval_and_linking_primitives_match_upstream():
         actual_crossing[:4], expected_crossing[:4], strict=True
     ):
         np.testing.assert_array_equal(actual, expected)
-    assert actual_crossing[4] == expected_crossing[4]
+    assert np.all(actual_crossing[4] == expected_crossing[4])
 
     expected_slope = onoffpeak_slope_extrapolation(values, fs, peaks, 5)
     actual_slope = onoff_from_slope(
@@ -209,7 +209,7 @@ def test_resurfemg_interval_and_linking_primitives_match_upstream():
     )
     for actual, expected in zip(actual_slope[:4], expected_slope[:4], strict=True):
         np.testing.assert_array_equal(actual, expected)
-    assert actual_slope[4] == expected_slope[4]
+    assert np.all(actual_slope[4] == expected_slope[4])
 
     reference = np.array([0.9, 2.1, 4.8])
     candidates = np.array([0.5, 1.1, 2.0, 5.0])
