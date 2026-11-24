@@ -1,4 +1,4 @@
-"""MDN filter: remove the heart signal from EIT data.
+"""MDN filter: remove the cardiovascular signal from EIT data.
 
 MDN stands for "multiple digital notch". The heart beat adds a small signal
 at the heart rate and at its multiples (harmonics: 2, 3, ... times the heart
@@ -7,12 +7,12 @@ rate) to the EIT data. The filter removes it in two parts:
 1. For each harmonic up to the noise frequency limit, a band-stop filter
    removes the band from (harmonic − notch distance) to (harmonic + notch
    distance). For the first harmonic, the lower edge of the band is at least
-   halfway between the breathing rate and the heart rate, so the breathing
-   signal stays.
+   halfway between the breathing rate and the heart rate, which limits the
+   removal of the signal at the breathing rate.
 2. A low-pass filter removes everything above the noise frequency limit.
 
 Each filter is a Butterworth filter of the given order, applied forwards and
-backwards (``scipy.signal.sosfiltfilt``), so the data keeps its timing.
+backwards (``scipy.signal.sosfiltfilt``), which prevents phase shifts.
 The default settings are a noise frequency limit of 220 per minute
 (3.67 Hz), a notch distance of 10 per minute (0.167 Hz) and order 10.
 

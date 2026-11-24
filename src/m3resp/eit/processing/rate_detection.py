@@ -1,7 +1,7 @@
-"""Breathing rate and heart rate from EIT images.
+"""Breathing rate and heart rate from EIT data.
 
-Both rates come from frequency spectra of the EIT images (Welch's method with
-a Hann window):
+Both rates come from frequency spectra of the EIT data, made with Welch's
+method and a Hann window:
 
 - The breathing rate is the frequency with the most power in the spectrum of
   the summed pixels, inside the breathing-rate range.
@@ -13,7 +13,7 @@ a Hann window):
   breathing signal the heart signal is relatively strong, so the heart rate
   stands out in the difference.
 
-By default each rate is refined with a parabola through the highest point of
+By default, each rate is refined with a parabola through the highest point of
 the spectrum and its two neighbours. This gives a rate between two frequency
 steps of the spectrum.
 
@@ -23,9 +23,9 @@ This sum can differ a little from the global impedance of
 precision.
 
 Use at least 30 s of data for reliable rates. The rates are most reliable
-when the end-expiratory impedance is stable, the images are not filtered and
+when the end-expiratory impedance is stable, the data is not filtered and
 both rates are steady. When a rate changes during the data, the result is
-usually an average rate.
+usually near the average rate.
 
 ---------------------------------------------------------------------------
 Provenance
