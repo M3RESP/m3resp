@@ -35,7 +35,7 @@ When a {term}`workflow` runs, each {term}`step` adds one `ProcessingStep` to `se
 | `input_keys`, `output_keys` | The names of the results that the step read and wrote |
 | `parameters` | The settings of the step |
 | `software`, `version` | `"m3resp"` and its version |
-| `optional_package_versions` | The installed version of each outside package that the step uses, for example `resurfemg` and `eitprocessing`. `None` if the package is not installed. |
+| `optional_package_versions` | The installed version of each outside package that the step uses, for example `resurfemg`. `None` if the package is not installed. |
 | `timestamp` | The time of the step |
 | `status` | `"succeeded"`, `"failed"` or `"cancelled"` |
 

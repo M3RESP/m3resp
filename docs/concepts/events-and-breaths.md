@@ -63,7 +63,7 @@ A result can point to one event with its `id`, for example with `ParameterResult
 
 ## Convert other objects
 
-`coerce_interval` and `coerce_breath_event` make an M3Resp object from a dictionary, from a `(start_time, end_time)` pair, or from an object with `start_time` and `end_time`, for example an `eitprocessing` interval. Give `name=` and `modality=` if the input does not have them.
+`coerce_interval` and `coerce_breath_event` make an M3Resp object from a dictionary, from a `(start_time, end_time)` pair, or from an object with `start_time` and `end_time`. Give `name=` and `modality=` if the input does not have them.
 
 ```python
 from m3resp import coerce_interval
@@ -74,7 +74,7 @@ interval = coerce_interval((10.0, 12.5), name="occlusion", modality="ventilator"
 - An input with the name `"breath"`, or with an extremum, becomes a `BreathEvent`.
 - An input with an extremum and another name raises `ValueError`, because an `Interval` has no extremum.
 - `coerce_breath_event` raises `ValueError` for an input with another name than `"breath"`. So an occlusion or a noisy period never becomes a breath by mistake.
-- `coerce_breath_event` reads the extremum from `extremum_time` and `extremum_index`, then from the older names `peak_time` and `peak_index` (with a `UserWarning`), then from the `middle_time` of `eitprocessing`.
+- `coerce_breath_event` reads the extremum from `extremum_time` and `extremum_index`, then from the older names `peak_time` and `peak_index` (with a `UserWarning`), then from `middle_time`.
 
 ## Values per interval or event
 

@@ -1,6 +1,6 @@
 # Coding guidelines
 
-This page has the rules for choices that come back often in the code: the return value of a function, named arguments, settings objects, the choice of a field, names, and two arguments for one value. Add a rule here when the team agrees on a new one.
+This page has the rules for choices that come back often in the code: the return value of a function, named arguments, settings objects, the choice of a field, names, two arguments for one value, and function names in the docs. Add a rule here when the team agrees on a new one.
 
 See `AGENTS.md` in the source folder for the rules for docstrings and comments.
 
@@ -42,7 +42,7 @@ A reader then sees what each value is without the order of the arguments. Two ar
 
 The settings of a function are named arguments, for example `mdn_filter(images, respiratory_rate=0.25, heart_rate=1.2, order=10)`. Values measured on the recording, such as the breathing rate and the heart rate that the MDN filter needs, are always arguments.
 
-A settings object holds the settings when they depend on each other. In `RateDetectionSettings`, `subject_type` (`"adult"` or `"neonate"`) sets the default limits of the breathing rate and the heart rate. `BreathDetectionSettings` holds the seven settings of the breath detection.
+A settings object holds the settings when they depend on each other, or when many settings go together to several functions. In `RateDetectionSettings`, `subject_type` (`"adult"` or `"neonate"`) sets the default limits of the breathing rate and the heart rate. `BreathDetectionSettings` holds the seven settings of the breath detection, and the same object goes to `find_breaths(...)`, `preprocess_eit_recording(...)` and the EIT steps that find breaths, the pixel breaths and the lung space.
 
 To use the same settings in several calls, put the named arguments in a dictionary:
 
@@ -66,7 +66,11 @@ Do not choose the field from the data while the code runs, for example from the 
 
 A shared function in `m3resp.processing` gets a name for what it calculates. A value of one modality keeps the name that the literature uses.
 
-For example, `window_integral` in `m3resp.processing.metrics` calculates the area between a signal and its baseline in each window. The EMG code uses it for the time product (ETP), with the result name `time_product` and the step `emg.time_product`. The ventilator code uses it for the pressure time product of an occlusion, `pocc_time_product`. So the shared function has a general name.
+For example, `window_integral(...)` in `m3resp.processing.metrics` calculates the area between a signal and its baseline in each window. The EMG code uses it for the time product (ETP), with the result name `time_product` and the step `emg.time_product`. The ventilator code uses it for the pressure time product of an occlusion, `pocc_time_product`. So the shared function has a general name.
+
+## Default names of results
+
+A function that makes a new `Signal` has the argument `name`. With `name=None`, the function makes the name from its input. For example, `global_impedance(images)` gives `"Global impedance (mdn_filtered)"` for images with `metadata["label"]` `"mdn_filtered"`, and `regional_impedance(images, mask=ventral)` gives `"ventral_impedance"`. Give `name` only when the result needs another name.
 
 ## Two arguments for one value
 
@@ -76,6 +80,10 @@ Some functions accept one value in two forms, for example `gate_width_seconds` a
 - If both are `None`, the function uses its default value.
 - If both are set, the function raises `ValueError`.
 
-With a default other than `None`, the function cannot tell if the caller set the value. See the step `emg.ecg_gating` and `detect_emg_breath_peaks` in `m3resp.processing.peaks` for examples.
+With a default other than `None`, the function cannot tell if the caller set the value. See the step `emg.ecg_gating` and `detect_emg_breath_peaks(...)` in `m3resp.processing.peaks` for examples.
+
+## Function names in the docs
+
+In the docs pages, write a function with `(...)`, for example `global_impedance(...)`, so that a reader sees that it is a function. Classes, attributes and constants have no brackets: `PixelMap`, `PixelMap.values`, `TIV_METHODS`.
 
 Continue with {doc}`offset-estimation`.

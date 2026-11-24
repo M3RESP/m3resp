@@ -48,7 +48,7 @@ print(np.nanmean(tiv_map))  # 1.0
 
 M3Resp raises `ValueError` for values that are not a grid of rows and columns, and `TypeError` for values that are not numbers. NumPy functions use the grid of a `PixelMap`, as in the example.
 
-The `kind` follows the types of pixel map in `eitprocessing`. A map of kind `"amplitude"`, `"perfusion"` or `"pendelluft"` with a negative value gives a warning, unless `suppress_negative_warning=True`. A map of kind `"integer"`, for example the region numbers of the watershed method, holds whole numbers only; NaN gives `TypeError`.
+A map of kind `"amplitude"`, `"perfusion"` or `"pendelluft"` with a negative value gives a warning, unless `suppress_negative_warning=True`. A map of kind `"integer"`, for example the region numbers of the watershed method, holds whole numbers only; NaN gives `TypeError`.
 
 A `PixelMap` has these methods:
 
@@ -77,7 +77,7 @@ lung = PixelMask(name="tiv_lungspace_mask", values=grid)
 print(lung.included_pixel_count)  # the pixels that are not NaN
 ```
 
-M3Resp checks the values as `eitprocessing` does:
+M3Resp checks the values:
 
 | Input | Result |
 |---|---|
@@ -104,8 +104,6 @@ Two masks of the same shape combine pixel by pixel. The name of the result comes
 
 `m3resp.eit.processing.regional_impedance(pixel_impedance, mask=lung)` sums the masked images into one value per frame. `functional_impedance` performs the same calculation for a functional lung-space mask. Both return a `Signal` with the time, sampling frequency and device source of the images, in arbitrary units (`a.u.`). The sum leaves out NaN pixels; an image with only NaNs gives 0.
 
-Masks from `eitprocessing`, and masks that M3Resp gives to `eitprocessing`, keep their values, including the zeros.
-
 ## Geometric masks
 
 `m3resp.eit.roi.geometric_mask(region, shape=(32, 32))` gives the mask of a fixed part of the image, with 1 inside and NaN outside. The rows go from ventral (top of the image) to dorsal (bottom). The anatomical right of the patient is the left side of the image.
@@ -131,7 +129,7 @@ The step `eit.geometric_mask` makes one mask (parameter `region`) with the rows 
 
 ## Functional lung space
 
-The functional lung space is the part of the image that takes part in ventilation. Three functions of `m3resp.eit.roi` find it from the EIT images and the global breaths, as the lung-space methods of `eitprocessing` 1.8.7 do. Each gives a `PixelMask` with 1 for the pixels of the lung space and NaN elsewhere.
+The functional lung space is the part of the image that takes part in ventilation. Three functions of `m3resp.eit.roi` find it from the EIT images and the global breaths. Each gives a `PixelMask` with 1 for the pixels of the lung space and NaN elsewhere.
 
 | Function | Step | A pixel is in the lung space when |
 |---|---|---|
@@ -141,7 +139,7 @@ The functional lung space is the part of the image that takes part in ventilatio
 
 Warning: the amplitude lung space can include reconstruction artefacts, so do not use it alone. The watershed method uses it together with the TIV.
 
-The watershed method works in four parts:
+The watershed method ([Somhorst et al., Physiol. Meas. 47, 02NT01 (2026)](https://doi.org/10.1088/1361-6579/ae3cf8)) works in four parts:
 
 1. It computes the TIV and the amplitude of each pixel in each breath, and keeps the breaths that have both. In practice, the first and the last breath drop out.
 2. Over these breaths, it computes the mean TIV and the mean amplitude of each pixel. The TIV mask holds the pixels with a mean TIV of at least `threshold_fraction` times the largest mean TIV. The amplitude mask holds the pixels with a mean amplitude of at least that same TIV value.
@@ -152,9 +150,9 @@ Warning: the treatment of pixels with a NaN mean amplitude in part 3 is unfinish
 
 A pixel with a low TIV because of pendelluft (air that moves between lung regions during the breath) can still be in the watershed lung space, because its amplitude is large and its region has a maximum in the TIV mask.
 
-There are two TIV masks. `tiv_lungspace` and `eit.roi_tiv_lungspace` use all breaths. The TIV mask inside the watershed method (the capture `"functional tiv mask"`) uses the breaths with both TIV and amplitude, so without the first and the last breath. For the same data and threshold, the two masks can differ by some pixels.
+The TIV mask inside the watershed method (the capture `"functional tiv mask"`) uses only the breaths with both TIV and amplitude, so without the first and the last breath. `tiv_lungspace` uses all breaths. For the same data and threshold, the two masks can differ by some pixels.
 
-The breaths are an input of the functions, given by name (`breaths=...`). The waveform `signal` of `amplitude_lungspace` and `watershed_lungspace` is optional; without it, the functions use the sum of all pixels of each image. The steps take the breaths from the optional input `breaths`; without it, they find the breaths on `timing_data` with the default `BreathDetectionSettings`, as `eitprocessing` does. `eit.roi_tiv_lungspace` takes breaths of any modality, moved to the EIT clock with the start times of the session. `eit.roi_amplitude_lungspace` and `eit.roi_watershed` take EIT breaths only, because they find the breaths of each pixel from them.
+The breaths are an input of the functions, given by name (`breaths=...`). The waveform `signal` of `amplitude_lungspace` and `watershed_lungspace` is optional; without it, the functions use the sum of all pixels of each image. The steps take the breaths from the optional input `breaths`; without it, they find the breaths on `timing_data` with the default `BreathDetectionSettings`. `eit.roi_tiv_lungspace` takes breaths of any modality, moved to the EIT clock with the start times of the session. `eit.roi_amplitude_lungspace` and `eit.roi_watershed` take EIT breaths only, because they find the breaths of each pixel from them.
 
 ```python
 from m3resp.eit.processing import BreathDetectionSettings, find_breaths
@@ -196,7 +194,7 @@ tiv_map = pixel_tiv.values[3]     # its TIV map
 
 ## Pixel breaths
 
-The breath of a pixel can start and end a little earlier or later than the global breath. `m3resp.eit.processing.find_pixel_breaths` finds the breath of each pixel between the ends of inspiration of two neighbouring global breaths, as `PixelBreath` of eitprocessing does. The first and the last global breath never have pixel breaths. The setting `phase_correction_mode` sets what happens to a pixel that is out of phase with the global waveform: `"negative amplitude"` (default) turns a pixel with a negative mean TIV upside down, `"phase shift"` moves the search windows of the pixel by its lag to the global waveform, and `"none"` makes no correction.
+The breath of a pixel can start and end a little earlier or later than the global breath. `m3resp.eit.processing.find_pixel_breaths` finds the breath of each pixel between the ends of inspiration of two neighbouring global breaths. The first and the last global breath never have pixel breaths. The setting `phase_correction_mode` sets what happens to a pixel that is out of phase with the global waveform: `"negative amplitude"` (default) turns a pixel with a negative mean TIV upside down, `"phase shift"` moves the search windows of the pixel by its lag to the global waveform, and `"none"` makes no correction.
 
 The result is a `PixelBreaths`. It holds the global breaths, and three arrays of shape (breath, row, column) in seconds: `start_time`, `extremum_time` (the end of inspiration) and `end_time`. A pixel with no breath has NaN for all three times. `metadata["skipped_pixels"]` lists the pixels that have no breaths, for four reasons: `no_tiv` (the TIV is NaN in every breath), `flat` (the impedance does not change), `no_correlation_peak` and `too_many_breaths_skipped` (more than 25 % of the breaths of the pixel are left out). A pixel breath is left out when one of its two search windows lies partly outside the data, for example when global breaths of a whole recording go with a slice of its EIT data. The search gives a warning for the pixels with no cross-correlation peak, for the pixels with too many breaths left out, and when no pixel has a breath. The waveform must be on the time axis of the images.
 
@@ -279,7 +277,7 @@ amplitude = mean_breath_image(
 
 ## Draw a pixel map
 
-`m3resp.visualization.pixel_maps.plot_pixel_map(item, ax=ax)` draws a `PixelMap` or a `PixelMask` with Matplotlib, with a colour bar, and returns the Matplotlib image. It gives the picture of `PixelMap.plotting.imshow` of `eitprocessing` 1.8.7. Each map kind has its own style: the colours, the two ends of the colour scale and the label of the colour bar.
+`m3resp.visualization.pixel_maps.plot_pixel_map(item, ax=ax)` draws a `PixelMap` or a `PixelMask` with Matplotlib, with a colour bar, and returns the Matplotlib image. Each map kind has its own style: the colours, the two ends of the colour scale and the label of the colour bar.
 
 | Kind | Colours | Ends of the colour scale |
 |---|---|---|
@@ -304,7 +302,7 @@ fig, ax = plt.subplots()
 plot_pixel_map(image, ax=ax)  # the minute image, kind "tiv"
 ```
 
-The arguments `colorbar`, `normalize`, `percentage`, `absolute`, `hide_axes` and `background` change one setting of the style for this figure. With `normalize=True`, the values are divided by the largest value, or by 1 when the largest value is below 1, as in `eitprocessing`. `style=pixel_map_style("tiv", colorbar_label="TIV (mL)")` gives a changed style. Other arguments, such as `vmin`, `vmax` and `cmap`, go to Matplotlib `imshow`.
+The arguments `colorbar`, `normalize`, `percentage`, `absolute`, `hide_axes` and `background` change one setting of the style for this figure. With `normalize=True`, the values are divided by the largest value, or by 1 when the largest value is below 1. `style=pixel_map_style("tiv", colorbar_label="TIV (mL)")` gives a changed style. Other arguments, such as `vmin`, `vmax` and `cmap`, go to Matplotlib `imshow`.
 
 `add_region_labels(regions, ax=ax)` writes the number of each region at a point inside that region, in a white box. `regions` is a map of kind `"integer"`, for example the capture `"watershed regions"`. `labels` gives other texts for some region numbers.
 

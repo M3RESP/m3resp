@@ -3,11 +3,9 @@
 ``mean_breath_image`` computes the tidal impedance variation (TIV) or the
 amplitude of each pixel for each breath that lies fully inside the window,
 and returns the mean over these breaths. With a window of 60 s
-(``duration=60``) the result is the minute image. The Prepare page of the GUI
-shows it next to the EIT image at the cursor time.
+(``duration=60``) the result is the minute image.
 
-TIV is the usual measure during controlled ventilation, and amplitude during
-assisted ventilation. The TIV uses the times of the global breaths for every
+The TIV uses the times of the global breaths for every
 pixel. The amplitude uses the breaths of each pixel, found in the "phase
 shift" mode, as the amplitude lung space does.
 """

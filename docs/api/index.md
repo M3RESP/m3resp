@@ -142,7 +142,7 @@ These functions load one recording without a session.
 
 ## Read EIT files
 
-These functions read one EIT file of a Draeger, Sentec or Timpel device. Each returns an `EITFileData` with the images, the waveforms, the marks of the device and, for Timpel, the breaths found by the device. `read_eit_file` picks the reader from the device maker, and `join_eit_file_data` joins the data of files recorded one after the other.
+These functions read one EIT file of a Draeger, Sentec or Timpel device. Each returns an `EITFileData` with the images, the waveforms, the marks of the device and, for Timpel, the breaths found by the device. `read_eit_file(...)` picks the reader from the device maker, and `join_eit_file_data(...)` joins the data of files recorded one after the other.
 
 ```{eval-rst}
 .. autosummary::
@@ -160,7 +160,7 @@ These functions read one EIT file of a Draeger, Sentec or Timpel device. Each re
 
 ## EIT calculations
 
-`global_impedance` sums the pixels of each EIT image into the global impedance waveform. `regional_impedance` and `functional_impedance` sum the pixels inside a mask. Each of these three functions returns a `Signal`. `detect_rates` finds the breathing rate and the heart rate of the EIT images, in Hz, from their frequency spectra. `find_breaths` finds the breaths of an impedance waveform and returns them as `BreathEvent`s. `RateDetectionSettings` and `BreathDetectionSettings` hold the settings of these two functions. `mdn_filter` removes the heart signal from EIT images or a waveform with the MDN (multiple digital notch) filter and returns a `Signal`; `mdn_frequency_bands` gives the frequency bands that it removes. `tidal_impedance_variation` and `end_expiratory_lung_impedance` give the TIV and the EELI of each breath of an impedance waveform, as an `IntervalData`; the breaths are `BreathEvent`s of any modality, on the time axis of the waveform. `TIV_METHODS` lists the three TIV methods. `find_pixel_breaths` finds the breaths of each pixel of EIT images from the global breaths and returns a `PixelBreaths`. `pixel_tidal_impedance_variation` and `pixel_end_expiratory_lung_impedance` give one `PixelMap` of TIV or EELI per breath, with the times of the global breaths or of the breaths of each pixel. `mean_breath_image` gives the mean pixel TIV or pixel amplitude over the breaths inside a time window, for example the minute image. `butterworth_filter_images` filters each pixel of EIT images with a Butterworth low-pass, high-pass, band-pass or band-stop filter, of order 1 to `MAX_EIT_BUTTERWORTH_ORDER` (10). `breath_intervals_to_breath_events` gives EIT breaths as a list of `BreathEvent`s, and `breaths_to_interval_data` puts them in an `IntervalData`. `preprocess_eit_recording` runs the rate detection, a filter, the breath detection, and the TIV and the EELI of each breath in one call on a loaded `EITRecording`; `M3Session.preprocess_eit` uses it.
+`global_impedance(...)` sums the pixels of each EIT image into the global impedance waveform. `regional_impedance(...)` and `functional_impedance(...)` sum the pixels inside a mask. Each of these three functions returns a `Signal`. `detect_rates(...)` finds the breathing rate and the heart rate of the EIT images, in Hz, from their frequency spectra. `find_breaths(...)` finds the breaths of an impedance waveform and returns them as `BreathEvent`s. `RateDetectionSettings` and `BreathDetectionSettings` hold the settings of these two functions. `mdn_filter(...)` removes the heart signal from EIT images or a waveform with the MDN (multiple digital notch) filter and returns a `Signal`. `tidal_impedance_variation(...)` and `end_expiratory_lung_impedance(...)` give the TIV and the EELI of each breath of an impedance waveform, as an `IntervalData`; the breaths are `BreathEvent`s of any modality, on the time axis of the waveform. `TIV_METHODS` lists the three TIV methods. `find_pixel_breaths(...)` finds the breaths of each pixel of EIT images from the global breaths and returns a `PixelBreaths`. `pixel_tidal_impedance_variation(...)` and `pixel_end_expiratory_lung_impedance(...)` give one `PixelMap` of TIV or EELI per breath, with the times of the global breaths or of the breaths of each pixel. `mean_breath_image(...)` gives the mean pixel TIV or pixel amplitude over the breaths inside a time window, for example the minute image. `butterworth_filter_images(...)` filters each pixel of EIT images with a Butterworth low-pass, high-pass, band-pass or band-stop filter, of order 1 to `MAX_EIT_BUTTERWORTH_ORDER` (10). `breath_intervals_to_breath_events(...)` gives EIT breaths as a list of `BreathEvent`s, and `breaths_to_interval_data(...)` puts them in an `IntervalData`. `preprocess_eit_recording(...)` runs the rate detection, a filter, the breath detection, and the TIV and the EELI of each breath in one call on a loaded `EITRecording`; `M3Session.preprocess_eit(...)` uses it.
 
 ```{eval-rst}
 .. autosummary::
@@ -175,7 +175,6 @@ These functions read one EIT file of a Draeger, Sentec or Timpel device. Each re
    m3resp.eit.processing.find_breaths
    m3resp.eit.processing.BreathDetectionSettings
    m3resp.eit.processing.mdn_filter
-   m3resp.eit.processing.mdn_frequency_bands
    m3resp.eit.processing.tidal_impedance_variation
    m3resp.eit.processing.end_expiratory_lung_impedance
    m3resp.eit.processing.find_pixel_breaths
@@ -194,7 +193,7 @@ These functions read one EIT file of a Draeger, Sentec or Timpel device. Each re
 
 ## EIT regions of interest
 
-These functions return a `PixelMask` with 1 for the pixels of a region and NaN for the other pixels. `geometric_mask` gives a fixed part of the image: the ventral or dorsal half, the anatomical right or left half, one of four layers or one of four quadrants (`GEOMETRIC_REGIONS` lists the 12 names). `tiv_lungspace`, `amplitude_lungspace` and `watershed_lungspace` find the functional lung space from the global breaths: the pixels with a large mean TIV, the pixels with a large mean amplitude, or both together with the watershed method. `filter_mask_by_size` keeps the groups of connected pixels of a mask that have a minimum number of pixels. See {doc}`../concepts/pixel-maps`.
+These functions return a `PixelMask` with 1 for the pixels of a region and NaN for the other pixels. `geometric_mask(...)` gives a fixed part of the image: the ventral or dorsal half, the anatomical right or left half, one of four layers or one of four quadrants (`GEOMETRIC_REGIONS` lists the 12 names). `tiv_lungspace(...)`, `amplitude_lungspace(...)` and `watershed_lungspace(...)` find the functional lung space from the global breaths: the pixels with a large mean TIV, the pixels with a large mean amplitude, or both together with the watershed method. `filter_mask_by_size(...)` keeps the groups of connected pixels of a mask that have a minimum number of pixels. See {doc}`../concepts/pixel-maps`.
 
 ```{eval-rst}
 .. autosummary::
@@ -210,7 +209,7 @@ These functions return a `PixelMask` with 1 for the pixels of a region and NaN f
 
 ## Plots
 
-These functions make figures with Matplotlib (default) or Plotly. `plot_rate_detection` makes Matplotlib figures only.
+These functions make figures with Matplotlib (default) or Plotly. `plot_rate_detection(...)` makes Matplotlib figures only.
 
 ```{eval-rst}
 .. autosummary::
@@ -225,7 +224,7 @@ These functions make figures with Matplotlib (default) or Plotly. `plot_rate_det
 
 ## Pixel map pictures
 
-`plot_pixel_map` draws a `PixelMap` or a `PixelMask` with Matplotlib, in the style of its kind, with a colour bar. `add_region_labels` writes the region numbers on a map of kind `"integer"`. `pixel_map_style` gives the style of a kind: the colours, the rule for the ends of the colour scale and the colour bar. `scale_limits` and `pixel_colors` give the ends of the colour scale and the colour of each pixel without Matplotlib. See {doc}`../concepts/pixel-maps`.
+`plot_pixel_map(...)` draws a `PixelMap` or a `PixelMask` with Matplotlib, in the style of its kind, with a colour bar. `add_region_labels(...)` writes the region numbers on a map of kind `"integer"`. `pixel_map_style(...)` gives the style of a kind: the colours, the rule for the ends of the colour scale and the colour bar. `scale_limits(...)` and `pixel_colors(...)` give the ends of the colour scale and the colour of each pixel without Matplotlib. See {doc}`../concepts/pixel-maps`.
 
 ```{eval-rst}
 .. autosummary::
@@ -243,7 +242,7 @@ These functions make figures with Matplotlib (default) or Plotly. `plot_rate_det
 
 ## Plot data for the GUI
 
-These functions give EIT results as dictionaries of numbers, text, lists and None, which `json.dumps` writes as they are. A NaN pixel is None. Each picture comes with its style.
+These functions give EIT results as dictionaries of numbers, text, lists and None, which `json.dumps(...)` writes as they are. A NaN pixel is None. Each picture comes with its style.
 
 ```{eval-rst}
 .. autosummary::

@@ -26,7 +26,7 @@ The step names show this: `*.slice_recording` slices a recording, and `*.slice_s
 - Way 5 takes the number of the first image and the number of images.
 - `slice_eit` cuts the images, waveforms, device marks and breaths of the loaded recording. `eit.slice_signal` cuts one `Signal`; any other input gives a `TypeError`.
 
-For a recording slice, device marks at the first kept image are included and marks at the final kept image are excluded. Complete device breaths can end at the final kept image. Interval bounds follow eitprocessing 1.8.7: a boundary of exactly 0 s uses the corresponding outer interval boundary. A single-frame slice at time 0 s therefore keeps all device breaths.
+For a recording slice, device marks at the first kept image are included and marks at the final kept image are excluded. Complete device breaths can end at the final kept image. For interval bounds, a boundary of exactly 0 s uses the corresponding outer interval boundary. A single-frame slice at time 0 s therefore keeps all device breaths.
 
 In time mode, `eit.slice_signal` also accepts `start_inclusive` and `end_inclusive`, both False by default. An exact start is included with either start flag. When the start falls between samples, `start_inclusive=True` keeps the preceding sample. `end_inclusive=True` keeps the first sample at or after the end time. The helper `m3resp.processing.slicing.slice_by_time` exposes the same flags and permits empty selections with `allow_empty=True`.
 
