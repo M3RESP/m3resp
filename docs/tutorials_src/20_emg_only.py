@@ -4,7 +4,7 @@ Process an EMG recording
 
 In this tutorial, we process one :term:`EMG` recording of the respiratory muscles. We load the file, remove the heart signal, find the breaths and look at the results per breath. At the end, you have the figure below.
 
-You need M3Resp with the EMG integration (``python -m pip install -e ".[emg]"``).
+You need M3Resp with the EMG integration and the interactive figures (``python -m pip install -e ".[emg,interactive]"``).
 """
 
 # %%

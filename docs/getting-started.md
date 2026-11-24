@@ -35,9 +35,9 @@ The base package reads, processes and plots EIT recordings. Install an option fo
 :sync: pip
 
 ```bash
-python -m pip install -e ".[eit]"       # interactive EIT figures (plotly)
-python -m pip install -e ".[emg]"       # EMG processing
-python -m pip install -e ".[all]"       # EMG processing and interactive figures
+python -m pip install -e ".[interactive]"  # interactive figures (plotly)
+python -m pip install -e ".[emg]"          # EMG processing
+python -m pip install -e ".[all]"          # EMG processing and interactive figures
 ```
 :::
 
@@ -45,9 +45,9 @@ python -m pip install -e ".[all]"       # EMG processing and interactive figures
 :sync: uv
 
 ```bash
-uv sync --extra eit  # interactive EIT figures (plotly)
-uv sync --extra emg  # EMG processing
-uv sync --extra all  # EMG processing and interactive figures
+uv sync --extra interactive  # interactive figures (plotly)
+uv sync --extra emg          # EMG processing
+uv sync --extra all          # EMG processing and interactive figures
 ```
 :::
 ::::

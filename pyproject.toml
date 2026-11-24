@@ -35,13 +35,14 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-eit = [
+# Interactive figures (backend="plotly").
+interactive = [
   "plotly>=6.1",
 ]
+# resurfemg.pipelines needs ipywidgets when it loads.
 emg = [
   "resurfemg @ git+https://github.com/M3RESP/ReSurfEMG.git@m3resp-integration",
   "ipywidgets",
-  "plotly>=6.1",
 ]
 all = [
   "resurfemg @ git+https://github.com/M3RESP/ReSurfEMG.git@m3resp-integration",

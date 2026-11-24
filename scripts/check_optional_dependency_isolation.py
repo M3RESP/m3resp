@@ -2,13 +2,13 @@
 
 Run once per install in `.github/workflows/tests.yml`'s ``optional-deps``
 matrix job, each in its own fresh virtualenv/extras combination (``""``,
-``eit``, ``emg``, ``all``, ``reference``). It checks the installed package
+``interactive``, ``emg``, ``all``, ``reference``). It checks the installed package
 set: eitprocessing only with ``reference``, resurfemg with ``emg`` and
 ``all``, and the capability state of every step. Every EIT step is
 "available" in every install. `tests/test_optional_dependency_absence.py`
 checks the same states in one environment with ``sys.modules[name] = None``.
 
-Usage: ``python scripts/check_optional_dependency_isolation.py base|eit|emg|all|reference``
+Usage: ``python scripts/check_optional_dependency_isolation.py base|interactive|emg|all|reference``
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "extra",
-        choices=["base", "eit", "emg", "all", "reference"],
+        choices=["base", "interactive", "emg", "all", "reference"],
         help="Which optional-dependency extra this environment was installed with.",
     )
     args = parser.parse_args()

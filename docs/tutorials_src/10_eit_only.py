@@ -4,7 +4,7 @@ Process an EIT recording
 
 In this tutorial, we process one :term:`EIT` recording from the file to the results. We load the file, filter the signal, find the breaths and save the results. At the end, you have the figure below and a folder with result files.
 
-You need M3Resp with the ``eit`` option (``python -m pip install -e ".[eit]"``) for the interactive figure. The base install does all other steps.
+You need M3Resp with the ``interactive`` option (``python -m pip install -e ".[interactive]"``) for the interactive figure. The base install does all other steps.
 """
 
 # %%

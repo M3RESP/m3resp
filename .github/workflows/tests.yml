@@ -67,7 +67,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        extra: ["", "eit", "emg", "all", "reference"]
+        extra: ["", "interactive", "emg", "all", "reference"]
 
     steps:
       - name: Check out repository

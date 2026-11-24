@@ -435,8 +435,8 @@ def _import_plotly() -> tuple[Any, Any]:
         from plotly.subplots import make_subplots
     except ImportError as exc:  # pragma: no cover - depends on local extras
         raise ImportError(
-            "Interactive figures require plotly. Install the EIT or EMG optional "
-            "dependencies, or install plotly directly."
+            "Interactive figures need plotly. Install M3Resp with the "
+            "'interactive' option: python -m pip install \"m3resp[interactive]\"."
         ) from exc
     return go, make_subplots
 
