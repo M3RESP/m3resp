@@ -20,7 +20,7 @@ from typing import Any, TypeVar
 import numpy as np
 import pandas as pd
 from prettytable import PrettyTable
-
+import warnings
 from m3resp.processing.validation import _validate_incompatible_kwargs
 
 KT = TypeVar("KT")
@@ -38,7 +38,8 @@ if platform.system() == "Windows":
         raise ImportError(msg) from e
 else:
     msg = "AdichtReader is only available on Windows."
-    raise ImportError(msg)
+    warnings.warn(msg, ImportWarning)
+    # raise ImportError(msg)
 
 
 class AdichtReader:

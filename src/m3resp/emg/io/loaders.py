@@ -323,6 +323,13 @@ def _load_adicht(
             channel_indexes are provided.
 
     """
+    if sys.platform != "win32":
+        msg = (
+            "AdichtReader is only available on Windows. "
+            "Please use a Windows machine to load .adicht files."
+        )
+        warnings.warn(msg, UserWarning, stacklevel=2)
+        return {}
     from .vendors.adinstruments import AdichtReader  # noqa: PLC0415
 
     adi_data = AdichtReader(file_path)
