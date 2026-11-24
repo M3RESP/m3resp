@@ -245,10 +245,9 @@ def remove_invalid_data(
         ValueError: If no valid value is left.
     """
 
-    data = np.asarray(data)
-    data = (
-        np.copy(data) if np.issubdtype(data.dtype, np.floating) else data.astype(float)
-    )
+    data = np.array(data, copy=True)
+    if not np.issubdtype(data.dtype, np.floating):
+        data = data.astype(float)
     data[invalid_data_indices] = np.nan
     return fill_nan_with_nearest_neighbour(data)
 

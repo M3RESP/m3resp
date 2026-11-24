@@ -138,8 +138,8 @@ def preprocess_eit_recording(
             "Enable eit.processing.outputs.breath_intervals or disable "
             "the dependent EIT outputs."
         )
-    mode = "none" if not filter_enabled else filter_mode.lower()
-    if mode not in FILTER_MODES:
+    filter_mode = "none" if not filter_enabled else filter_mode.lower()
+    if filter_mode not in FILTER_MODES:
         raise ValueError(
             "filter_mode must be one of: 'mdn', 'lowpass', 'bandpass', 'none'."
         )
@@ -153,7 +153,7 @@ def preprocess_eit_recording(
     rate_captures: dict[str, Any] = {}
     respiratory_rate_hz = None
     heart_rate_hz = None
-    if compute_rates or mode == "mdn":
+    if compute_rates or filter_mode == "mdn":
         rate_detector = RateDetectionSettings(
             subject_type, welch_window=welch_window_seconds
         )
@@ -167,7 +167,7 @@ def preprocess_eit_recording(
 
     filtered_eit, filter_captures = _filter_images(
         raw_eit,
-        mode,
+        filter_mode,
         respiratory_rate_hz=respiratory_rate_hz,
         heart_rate_hz=heart_rate_hz,
         lowpass_hz=lowpass_hz,
@@ -220,7 +220,7 @@ def preprocess_eit_recording(
         "raw_global_impedance": raw_global_impedance,
         "filtered_eit": filtered_eit if include_filtered_data else None,
         "filtered_global_impedance": filtered_global_impedance,
-        "filter_mode": mode,
+        "filter_mode": filter_mode,
         "filter_captures": filter_captures,
         "rate_detector": rate_detector,
         "rate_captures": rate_captures,
@@ -236,7 +236,7 @@ def preprocess_eit_recording(
 
 def _filter_images(
     images: Signal,
-    mode: str,
+    filter_mode: str,
     *,
     respiratory_rate_hz: float | None,
     heart_rate_hz: float | None,
@@ -244,11 +244,11 @@ def _filter_images(
     highpass_hz: float,
     order: int,
 ) -> tuple[Signal, dict[str, Any]]:
-    """Return the images after the filter of ``mode``, and the captures.
+    """Return the images after the filter of ``filter_mode``, and the captures.
 
     Args:
         images (Signal): The raw images.
-        mode (str): ``"mdn"``, ``"lowpass"``, ``"bandpass"`` or ``"none"``.
+        filter_mode (str): ``"mdn"``, ``"lowpass"``, ``"bandpass"`` or ``"none"``.
         respiratory_rate_hz (float | None): Breathing rate in Hz, for MDN.
         heart_rate_hz (float | None): Heart rate in Hz, for MDN.
         lowpass_hz (float): Low-pass cutoff, or upper band-pass cutoff, in Hz.
@@ -257,13 +257,13 @@ def _filter_images(
 
     Returns:
         tuple[Signal, dict[str, Any]]: The filtered images, with
-            ``metadata["label"]`` set to ``"<mode>_filtered"``, and the
+            ``metadata["label"]`` set to ``"<filter_mode>_filtered"``, and the
             captures of the filter. For ``"none"``, ``images`` itself and an
             empty dict.
     """
 
     captures: dict[str, Any] = {}
-    if mode == "mdn":
+    if filter_mode == "mdn":
         assert respiratory_rate_hz is not None
         assert heart_rate_hz is not None
         filtered = mdn_filter(
@@ -273,19 +273,19 @@ def _filter_images(
             name="MDN-filtered EIT data",
             captures=captures,
         )
-    elif mode in ("lowpass", "bandpass"):
+    elif filter_mode in ("lowpass", "bandpass"):
         filtered, captures = butterworth_filter_images(
             images,
-            mode=cast(Literal["lowpass", "bandpass"], mode),
+            mode=cast(Literal["lowpass", "bandpass"], filter_mode),
             cutoff_frequency=lowpass_hz
-            if mode == "lowpass"
+            if filter_mode == "lowpass"
             else (highpass_hz, lowpass_hz),
             order=order,
-            operation=f"preprocess(filter_mode={mode!r})",
+            operation=f"preprocess(filter_mode={filter_mode!r})",
         )
     else:
         return images, captures
-    filtered.metadata["label"] = f"{mode}_filtered"
+    filtered.metadata["label"] = f"{filter_mode}_filtered"
     return filtered, captures
 
 

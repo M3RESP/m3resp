@@ -54,7 +54,6 @@ Full attribution notice: see top-level NOTICE.md.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Final
 
 from m3resp.data.event_data import IntervalData
 from m3resp.data.events import BreathEvent, Interval
@@ -72,11 +71,11 @@ from m3resp.eit.processing._breath_samples import (
 )
 
 #: Name of the result.
-NAME: Final = "continuous_eelis"
-METHOD: Final = "m3resp.eit.processing.end_expiratory_lung_impedance"
+NAME = "continuous_eelis"
+METHOD = "m3resp.eit.processing.end_expiratory_lung_impedance"
 #: Name of the pixel result.
-PIXEL_NAME: Final = "pixel_eelis"
-PIXEL_METHOD: Final = "m3resp.eit.processing.pixel_end_expiratory_lung_impedance"
+PIXEL_NAME = "pixel_eelis"
+PIXEL_METHOD = "m3resp.eit.processing.pixel_end_expiratory_lung_impedance"
 
 
 def end_expiratory_lung_impedance(

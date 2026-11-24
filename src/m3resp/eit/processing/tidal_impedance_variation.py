@@ -68,7 +68,6 @@ Full attribution notice: see top-level NOTICE.md.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Final
 
 import numpy as np
 
@@ -88,13 +87,13 @@ from m3resp.eit.processing._breath_samples import (
 )
 
 #: The TIV methods.
-TIV_METHODS: Final = ("inspiratory", "expiratory", "mean")
+TIV_METHODS = ("inspiratory", "expiratory", "mean")
 #: Name of the result.
-NAME: Final = "continuous_tivs"
-METHOD: Final = "m3resp.eit.processing.tidal_impedance_variation"
+NAME = "continuous_tivs"
+METHOD = "m3resp.eit.processing.tidal_impedance_variation"
 #: Name of the pixel result.
-PIXEL_NAME: Final = "pixel_tivs"
-PIXEL_METHOD: Final = "m3resp.eit.processing.pixel_tidal_impedance_variation"
+PIXEL_NAME = "pixel_tivs"
+PIXEL_METHOD = "m3resp.eit.processing.pixel_tidal_impedance_variation"
 
 
 def tidal_impedance_variation(

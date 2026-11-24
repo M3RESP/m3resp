@@ -56,7 +56,7 @@ from __future__ import annotations
 import dataclasses
 import math
 import warnings
-from typing import Any, Final
+from typing import Any
 
 import numpy as np
 from scipy import signal as scipy_signal
@@ -64,19 +64,19 @@ from scipy import signal as scipy_signal
 from m3resp.data.signals import Signal
 from m3resp.processing.captures import capture_value
 
-MINUTE: Final = 60
+MINUTE = 60
 
 #: Default noise frequency limit in Hz (220 per minute).
-NOISE_FREQUENCY_LIMIT: Final = 220 / MINUTE
+NOISE_FREQUENCY_LIMIT = 220 / MINUTE
 #: Default notch distance in Hz (10 per minute).
-NOTCH_DISTANCE: Final = 10 / MINUTE
+NOTCH_DISTANCE = 10 / MINUTE
 #: Default Butterworth order of each filter.
-ORDER: Final = 10
+ORDER = 10
 
 #: A breathing rate above this value (85 per minute) gives a warning.
-UPPER_RESPIRATORY_RATE_LIMIT: Final = 85 / MINUTE
+UPPER_RESPIRATORY_RATE_LIMIT = 85 / MINUTE
 #: A heart rate above this value (210 per minute) gives a warning.
-UPPER_HEART_RATE_LIMIT: Final = 210 / MINUTE
+UPPER_HEART_RATE_LIMIT = 210 / MINUTE
 
 
 def mdn_filter(

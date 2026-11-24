@@ -1,4 +1,4 @@
-"""EIT calculations that m3resp runs itself.
+"""EIT calculations.
 
 ``global_impedance`` sums the pixels of each EIT image into one waveform.
 ``regional_impedance`` and ``functional_impedance`` sum only the pixels inside

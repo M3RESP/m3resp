@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Sequence
-from typing import Any, Final
+from typing import Any
 
 import numpy as np
 
@@ -25,10 +25,10 @@ from m3resp.data.signals import Signal
 from m3resp.eit.io.join import GAP_TOLERANCE_FRAMES
 
 #: Index used for a breath time that has no sample.
-NO_SAMPLE: Final = -1
+NO_SAMPLE = -1
 
 #: Categories of data that TIV and EELI accept.
-IMPEDANCE_CATEGORIES: Final = frozenset(
+IMPEDANCE_CATEGORIES = frozenset(
     ("impedance", "absolute impedance", "relative impedance", "impedance difference")
 )
 

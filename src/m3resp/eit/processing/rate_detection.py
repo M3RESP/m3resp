@@ -60,7 +60,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import KW_ONLY, dataclass
-from typing import Any, Final, Literal, cast
+from typing import Any, Literal, cast
 
 import numpy as np
 from scipy import signal
@@ -68,11 +68,11 @@ from scipy import signal
 from m3resp.data.signals import Signal
 from m3resp.processing.captures import capture_value
 
-MINUTE: Final = 60
-MIN_WELCH_WINDOW_LENGTH: Final = 10  # seconds
+MINUTE = 60
+MIN_WELCH_WINDOW_LENGTH = 10  # seconds
 
 #: Default rate limits in Hz for each subject type.
-DEFAULT_RATE_LIMITS: Final[dict[str, dict[str, float]]] = {
+DEFAULT_RATE_LIMITS: dict[str, dict[str, float]] = {
     "min_heart_rate": {"adult": 40 / MINUTE, "neonate": 90 / MINUTE},
     "max_heart_rate": {"adult": 200 / MINUTE, "neonate": 210 / MINUTE},
     "min_respiratory_rate": {"adult": 6 / MINUTE, "neonate": 15 / MINUTE},
@@ -192,7 +192,8 @@ def detect_rates(
             of the rate range. The rate is then not refined.
     """
 
-    sample_frequency = _frames_per_second(pixel_impedance)
+    _check_eit_images(pixel_impedance)
+    sample_frequency = float(cast(float, pixel_impedance.sample_frequency))
     pixels = np.asarray(pixel_impedance.values).astype(np.float32)
     summed_impedance = np.nansum(pixels, axis=(1, 2))
 
@@ -266,8 +267,16 @@ def detect_rates(
     return respiratory_rate, heart_rate
 
 
-def _frames_per_second(pixel_impedance: Signal) -> float:
-    """Return the frames per second of EIT images after checking their shape."""
+def _check_eit_images(pixel_impedance: Signal) -> None:
+    """Raise ``ValueError`` if EIT images have the wrong shape or no frame rate.
+
+    Args:
+        pixel_impedance (Signal): The EIT images.
+
+    Raises:
+        ValueError: If the values do not have the shape (frames, rows,
+            columns), or if ``sample_frequency`` is missing.
+    """
 
     values = np.asarray(pixel_impedance.values)
     if values.ndim != 3:
@@ -280,7 +289,6 @@ def _frames_per_second(pixel_impedance: Signal) -> float:
             f"detect_rates needs the frames per second of {pixel_impedance.name!r} "
             "(sample_frequency)."
         )
-    return float(pixel_impedance.sample_frequency)
 
 
 def _peak_frequency(

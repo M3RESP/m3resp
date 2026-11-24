@@ -94,7 +94,7 @@ from __future__ import annotations
 import itertools
 import warnings
 from collections.abc import Callable, Sequence
-from typing import Any, Final, Literal
+from typing import Any, Literal, get_args
 
 import numpy as np
 from scipy import signal as scipy_signal
@@ -113,20 +113,20 @@ from m3resp.eit.processing.tidal_impedance_variation import _tiv_values
 
 #: The phase correction modes. None is the same as ``"none"``.
 PhaseCorrectionMode = Literal["negative amplitude", "phase shift", "none", None]  # noqa: PYI061
-PHASE_CORRECTION_MODES: Final = ("negative amplitude", "phase shift", "none", None)
+PHASE_CORRECTION_MODES = get_args(PhaseCorrectionMode)
 #: Largest lag of the cross-correlation, in mean breath durations.
-MAX_XCORR_LAG: Final = 1
+MAX_XCORR_LAG = 1
 #: Largest part of the breaths of a pixel that can be left out.
-ALLOW_FRACTION_BREATHS_SKIPPED: Final = 0.25
+ALLOW_FRACTION_BREATHS_SKIPPED = 0.25
 #: Name of the result.
-NAME: Final = "pixel_breaths"
-METHOD: Final = "m3resp.eit.processing.find_pixel_breaths"
+NAME = "pixel_breaths"
+METHOD = "m3resp.eit.processing.find_pixel_breaths"
 
 #: The reasons a pixel has no breaths, as keys of ``metadata["skipped_pixels"]``.
-NO_TIV: Final = "no_tiv"
-FLAT: Final = "flat"
-NO_CORRELATION_PEAK: Final = "no_correlation_peak"
-TOO_MANY_BREATHS_SKIPPED: Final = "too_many_breaths_skipped"
+NO_TIV = "no_tiv"
+FLAT = "flat"
+NO_CORRELATION_PEAK = "no_correlation_peak"
+TOO_MANY_BREATHS_SKIPPED = "too_many_breaths_skipped"
 
 
 def find_pixel_breaths(
@@ -229,75 +229,131 @@ def find_pixel_breaths(
         TOO_MANY_BREATHS_SKIPPED: [],
     }
 
-    if n_breaths >= 2 and len(time):
-        middle_array = np.asarray(middle_times, dtype=float)
-        indices_breath_middles = np.searchsorted(time, middle_array)
-        middle_in_data = (middle_array >= time[0]) & (middle_array <= time[-1])
-        sign_samples = breath_samples(
-            pixels,
-            breaths=checked_sign,
-            points=("start_time", "extremum_time", "end_time"),
-            function=function,
+    if n_breaths < 2 or not len(time):
+        return _pixel_breaths_result(
+            name,
+            checked,
+            start,
+            middle,
+            end,
+            pixels=pixels,
+            signal=signal,
+            phase_correction_mode=phase_correction_mode,
+            skipped=skipped,
         )
-        mean_tiv_pixel, all_nan_mask = _mean_tiv(
-            _tiv_values(pixel_impedance, sign_samples, "inspiratory")
+
+    middle_array = np.asarray(middle_times, dtype=float)
+    indices_breath_middles = np.searchsorted(time, middle_array)
+    middle_in_data = (middle_array >= time[0]) & (middle_array <= time[-1])
+    sign_samples = breath_samples(
+        pixels,
+        breaths=checked_sign,
+        points=("start_time", "extremum_time", "end_time"),
+        function=function,
+    )
+    mean_tiv_pixel, all_nan_mask = _mean_tiv(
+        _tiv_values(pixel_impedance, sign_samples, "inspiratory")
+    )
+    allow_negative_amplitude = phase_correction_mode == "negative amplitude"
+    correct_for_phase_shift = phase_correction_mode == "phase shift"
+    if correct_for_phase_shift:
+        lags = scipy_signal.correlation_lags(len(waveform), len(waveform), mode="same")
+        detrended = scipy_signal.detrend(np.copy(waveform), type="linear")
+        max_lag = MAX_XCORR_LAG * np.mean(np.diff(indices_breath_middles))
+        lag_range = (lags >= -max_lag) & (lags <= max_lag)
+
+    for row, column in itertools.product(range(n_rows), range(n_columns)):
+        if all_nan_mask[row, column]:
+            skipped[NO_TIV].append([row, column])
+            continue
+        pixel = pixel_impedance[:, row, column]
+        if np.std(pixel) == 0:
+            skipped[FLAT].append([row, column])
+            continue
+
+        lagged_indices_breath_middles = indices_breath_middles
+        if allow_negative_amplitude and mean_tiv_pixel[row, column] < 0:
+            start_function, middle_function = np.argmax, np.argmin
+        else:
+            start_function, middle_function = np.argmin, np.argmax
+            if correct_for_phase_shift:
+                lag = _correlation_lag(detrended, pixel, lags, lag_range)
+                if lag is None:
+                    skipped[NO_CORRELATION_PEAK].append([row, column])
+                    continue
+                lagged_indices_breath_middles = indices_breath_middles - lag
+
+        found, starts, middles, ends = _pixel_breath_indices(
+            pixel,
+            lagged_indices_breath_middles,
+            middle_in_data,
+            start_function,
+            middle_function,
         )
-        allow_negative_amplitude = phase_correction_mode == "negative amplitude"
-        correct_for_phase_shift = phase_correction_mode == "phase shift"
-        if correct_for_phase_shift:
-            lags = scipy_signal.correlation_lags(
-                len(waveform), len(waveform), mode="same"
-            )
-            detrended = scipy_signal.detrend(np.copy(waveform), type="linear")
-            max_lag = MAX_XCORR_LAG * np.mean(np.diff(indices_breath_middles))
-            lag_range = (lags >= -max_lag) & (lags <= max_lag)
+        n_left_out = int((~found).sum())
+        if n_left_out > len(found) * ALLOW_FRACTION_BREATHS_SKIPPED:
+            skipped[TOO_MANY_BREATHS_SKIPPED].append([row, column])
+            continue
 
-        for row, column in itertools.product(range(n_rows), range(n_columns)):
-            if all_nan_mask[row, column]:
-                skipped[NO_TIV].append([row, column])
-                continue
-            pixel = pixel_impedance[:, row, column]
-            if np.std(pixel) == 0:
-                skipped[FLAT].append([row, column])
-                continue
-
-            lagged_indices_breath_middles = indices_breath_middles
-            if allow_negative_amplitude and mean_tiv_pixel[row, column] < 0:
-                start_function, middle_function = np.argmax, np.argmin
-            else:
-                start_function, middle_function = np.argmin, np.argmax
-                if correct_for_phase_shift:
-                    lag = _correlation_lag(detrended, pixel, lags, lag_range)
-                    if lag is None:
-                        skipped[NO_CORRELATION_PEAK].append([row, column])
-                        continue
-                    lagged_indices_breath_middles = indices_breath_middles - lag
-
-            found, starts, middles, ends = _pixel_breath_indices(
-                pixel,
-                lagged_indices_breath_middles,
-                middle_in_data,
-                start_function,
-                middle_function,
-            )
-            n_left_out = int((~found).sum())
-            if n_left_out > len(found) * ALLOW_FRACTION_BREATHS_SKIPPED:
-                skipped[TOO_MANY_BREATHS_SKIPPED].append([row, column])
-                continue
-
-            # Pixel breath i belongs to global breath i + 1: the first and
-            # the last global breath have no pixel breath.
-            keep = np.flatnonzero(found)
-            start[keep + 1, row, column] = time[starts[keep]]
-            middle[keep + 1, row, column] = time[middles[keep]]
-            end[keep + 1, row, column] = time[ends[keep]]
+        # Pixel breath i belongs to global breath i + 1: the first and
+        # the last global breath have no pixel breath.
+        keep = np.flatnonzero(found)
+        start[keep + 1, row, column] = time[starts[keep]]
+        middle[keep + 1, row, column] = time[middles[keep]]
+        end[keep + 1, row, column] = time[ends[keep]]
 
     _warn_for_skipped_pixels(skipped, function=function)
-    if n_breaths > 2 and len(time) and np.isnan(start).all():
+    if n_breaths > 2 and np.isnan(start).all():
         _warn_for_no_pixel_breaths(skipped, function=function)
+    return _pixel_breaths_result(
+        name,
+        checked,
+        start,
+        middle,
+        end,
+        pixels=pixels,
+        signal=signal,
+        phase_correction_mode=phase_correction_mode,
+        skipped=skipped,
+    )
+
+
+def _pixel_breaths_result(
+    name: str,
+    breaths: list[BreathEvent],
+    start: np.ndarray,
+    middle: np.ndarray,
+    end: np.ndarray,
+    *,
+    pixels: Signal,
+    signal: Signal,
+    phase_correction_mode: PhaseCorrectionMode,
+    skipped: dict[str, list[list[int]]],
+) -> PixelBreaths:
+    """Return the ``PixelBreaths`` of ``find_pixel_breaths``.
+
+    Args:
+        name (str): Name of the result.
+        breaths (list[BreathEvent]): The checked global breaths.
+        start (np.ndarray): Start time of each pixel breath, in seconds,
+            shape (breath, row, column).
+        middle (np.ndarray): End of inspiration of each pixel breath, in
+            seconds, same shape.
+        end (np.ndarray): End time of each pixel breath, in seconds, same
+            shape.
+        pixels (Signal): The EIT images, for the modality.
+        signal (Signal): The impedance waveform, for its name.
+        phase_correction_mode (PhaseCorrectionMode): The phase correction mode.
+        skipped (dict[str, list[list[int]]]): For each reason, the
+            ``[row, column]`` of the left-out pixels.
+
+    Returns:
+        PixelBreaths: The pixel breaths with their metadata.
+    """
+
     return PixelBreaths(
         name=name,
-        breaths=checked,
+        breaths=breaths,
         start_time=start,
         extremum_time=middle,
         end_time=end,
@@ -306,7 +362,7 @@ def find_pixel_breaths(
         metadata={
             "phase_correction_mode": phase_correction_mode,
             "signal_name": signal.name,
-            **breath_source_metadata(checked),
+            **breath_source_metadata(breaths),
             "skipped_pixels": skipped,
         },
     )
