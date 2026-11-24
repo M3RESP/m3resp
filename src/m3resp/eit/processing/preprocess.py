@@ -60,7 +60,7 @@ def preprocess_eit_recording(
     filter_order: int = 4,
     breath_min_duration_seconds: float = 2 / 3,
     compute_rates: bool = True,
-    compute_breath_intervals: bool = True,
+    detect_breaths: bool = True,
     compute_continuous_tiv: bool = True,
     compute_eeli: bool = True,
     compute_pixel_tiv: bool = True,
@@ -95,7 +95,7 @@ def preprocess_eit_recording(
         breath_min_duration_seconds (float): Shortest expected breath, in
             seconds.
         compute_rates (bool): Find the breathing rate and the heart rate.
-        compute_breath_intervals (bool): Find the breaths.
+        detect_breaths (bool): Find the breaths.
         compute_continuous_tiv (bool): Compute the TIV of each breath.
         compute_eeli (bool): Compute the EELI of each breath.
         compute_pixel_tiv (bool): Compute one map of TIV per breath.
@@ -127,16 +127,16 @@ def preprocess_eit_recording(
             asked for without the breaths.
     """
 
-    if not compute_breath_intervals and (
+    if not detect_breaths and (
         compute_continuous_tiv
         or compute_eeli
         or compute_pixel_tiv
         or compute_pixel_eeli
     ):
         raise ValueError(
-            "EIT TIV, EELI, pixel TIV and pixel EELI require breath intervals. "
-            "Enable eit.processing.outputs.breath_intervals or disable "
-            "the dependent EIT outputs."
+            "TIV, EELI, pixel TIV and pixel EELI need the breaths. Set "
+            "detect_breaths=True, or set compute_continuous_tiv, compute_eeli, "
+            "compute_pixel_tiv and compute_pixel_eeli to False."
         )
     filter_mode = "none" if not filter_enabled else filter_mode.lower()
     if filter_mode not in FILTER_MODES:
@@ -177,19 +177,19 @@ def preprocess_eit_recording(
 
     filtered_global_impedance = raw_global_impedance
     if filtered_eit is not raw_eit and include_global_impedance:
-        filtered_global_impedance = _global_impedance_of(filtered_eit)
+        filtered_global_impedance = global_impedance(filtered_eit)
 
     breath_intervals = None
     continuous_tiv = None
     eeli = None
     pixel_tiv = None
     pixel_eeli = None
-    if compute_breath_intervals:
+    if detect_breaths:
         if filtered_global_impedance is None:
             filtered_global_impedance = (
                 recording.raw_global_impedance
                 if filtered_eit is raw_eit
-                else _global_impedance_of(filtered_eit)
+                else global_impedance(filtered_eit)
             )
         breaths = find_breaths(
             filtered_global_impedance,
@@ -287,19 +287,3 @@ def _filter_images(
         return images, captures
     filtered.metadata["label"] = f"{filter_mode}_filtered"
     return filtered, captures
-
-
-def _global_impedance_of(filtered_eit: Signal) -> Signal:
-    """Return the global impedance of filtered images.
-
-    Args:
-        filtered_eit (Signal): Filtered images with their label in
-            ``metadata["label"]``.
-
-    Returns:
-        Signal: The sum of the pixels of each image, named
-            ``"Global impedance (<label>)"``.
-    """
-
-    label = filtered_eit.metadata["label"]
-    return global_impedance(filtered_eit, name=f"Global impedance ({label})")
