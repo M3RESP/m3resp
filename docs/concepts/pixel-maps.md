@@ -44,7 +44,7 @@ print(np.nanmean(tiv_map))  # 1.0
 | `modality` | The device: `"eit"` by default |
 | `category`, `unit` | The physical quantity and the unit |
 | `method`, `metadata` | The calculation and other details |
-| `kind` | What the numbers are: `"tiv"`, `"amplitude"`, `"odcl"`, `"difference"`, `"perfusion"`, `"pendelluft"`, `"signed_pendelluft"` or `"integer"`, or None for a plain map |
+| `kind` | What the numbers are: `"tiv"`, `"amplitude"`, `"odcl"`, `"difference"`, `"perfusion"`, `"pendelluft"`, `"signed_pendelluft"` or `"integer"`, or `None` for a plain map |
 
 M3Resp raises `ValueError` for values that are not a grid of rows and columns, and `TypeError` for values that are not numbers. NumPy functions use the grid of a `PixelMap`, as in the example.
 

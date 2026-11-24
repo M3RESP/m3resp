@@ -165,7 +165,7 @@ class PixelMap:
     - ``"signed_pendelluft"``: pendelluft size, with a sign for early or late
       inflation.
     - ``"integer"``: whole numbers, such as region numbers, in every pixel.
-    - None: a plain map.
+    - ``None``: a plain map.
 
     A map of kind ``"amplitude"``, ``"perfusion"`` or ``"pendelluft"`` with
     a negative value gives a warning, unless

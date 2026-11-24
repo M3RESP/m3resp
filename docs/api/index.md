@@ -210,7 +210,7 @@ These functions return a `PixelMask` with 1 for the pixels of a region and NaN f
 
 ## Plots
 
-These functions make figures with Matplotlib.
+These functions make figures with Matplotlib (default) or Plotly. `plot_rate_detection` makes Matplotlib figures only.
 
 ```{eval-rst}
 .. autosummary::

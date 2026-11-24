@@ -54,7 +54,7 @@ Map of the mean tidal impedance variation (TIV) of each EIT pixel
 :::
 
 :::{image} _static/miniatures/eit_pixel_tiv_map.png
-:alt: Map of the mean TIV of each EIT pixel, with the two lungs in bright colours.
+:alt: Map of the mean TIV of each EIT pixel, with the two lungs in light blue and white.
 :::
 :::::
 

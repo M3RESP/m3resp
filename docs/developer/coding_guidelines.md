@@ -42,7 +42,7 @@ A reader then sees what each value is without the order of the arguments. Two ar
 
 The settings of a function are named arguments, for example `mdn_filter(images, respiratory_rate=0.25, heart_rate=1.2, order=10)`. Values measured on the recording, such as the breathing rate and the heart rate that the MDN filter needs, are always arguments.
 
-A settings object holds the settings when they depend on each other. In `RateDetectionSettings`, `subject_type` (`"adult"` or `"neonate"`) sets the default limits of the breathing rate and the heart rate. `BreathDetectionSettings` holds the seven settings of the breath detection, as in eitprocessing.
+A settings object holds the settings when they depend on each other. In `RateDetectionSettings`, `subject_type` (`"adult"` or `"neonate"`) sets the default limits of the breathing rate and the heart rate. `BreathDetectionSettings` holds the seven settings of the breath detection.
 
 To use the same settings in several calls, put the named arguments in a dictionary:
 
