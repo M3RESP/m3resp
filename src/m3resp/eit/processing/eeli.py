@@ -7,7 +7,7 @@ so they can come from ``find_breaths``, from the EIT device, or from another
 modality.
 
 ``pixel_end_expiratory_lung_impedance`` gives one map of EELI values per
-breath, one value for each pixel of EIT images: the impedance of the pixel at
+breath, one value for each pixel: the impedance of the pixel at
 the end of the global breath, or at the end of its own breath
 (``PixelBreaths``). It is m3resp code, with no eitprocessing version.
 
@@ -70,11 +70,9 @@ from m3resp.eit.processing._breath_samples import (
     values_at,
 )
 
-#: Name of the result.
-NAME = "continuous_eelis"
+#: Public name of the function, stored as the method of each result.
 METHOD = "m3resp.eit.processing.end_expiratory_lung_impedance"
-#: Name of the pixel result.
-PIXEL_NAME = "pixel_eelis"
+#: Public name of the pixel function, stored as the method of each result.
 PIXEL_METHOD = "m3resp.eit.processing.pixel_end_expiratory_lung_impedance"
 
 
@@ -82,7 +80,7 @@ def end_expiratory_lung_impedance(
     signal: Signal,
     *,
     breaths: Sequence[BreathEvent],
-    name: str = NAME,
+    name: str = "continuous_eelis",
 ) -> IntervalData:
     """Return the end-expiratory lung impedance (EELI) of each breath.
 
@@ -135,12 +133,12 @@ def pixel_end_expiratory_lung_impedance(
     pixels: Signal,
     *,
     breaths: Sequence[BreathEvent] | PixelBreaths,
-    name: str = PIXEL_NAME,
+    name: str = "pixel_eelis",
 ) -> IntervalData:
     """Return the EELI of each pixel, as one map per breath.
 
     Args:
-        pixels (Signal): EIT images, values with shape (time, row, column),
+        pixels (Signal): Pixel impedance, values with shape (time, row, column),
             with time in seconds. Its ``category`` must be None or an
             impedance category.
         breaths (Sequence[BreathEvent] | PixelBreaths): The breaths, with

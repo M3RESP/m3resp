@@ -185,7 +185,7 @@ def _pixel_breath_timing(
     """Return the breaths of each pixel for the 'pixel' timing.
 
     Args:
-        pixels (Signal): The EIT images.
+        pixels (Signal): The pixel impedance.
         signal (Any): The impedance waveform of the global breaths.
         pixel_breaths (Any): The ``PixelBreaths`` of ``eit.pixel_breaths``,
             or None to find them here.
@@ -203,7 +203,7 @@ def _pixel_breath_timing(
 
     Raises:
         TypeError: If ``pixel_breaths`` is not a ``PixelBreaths``, or if an
-            input of images or of a waveform is not a ``Signal``.
+            input of pixel impedance or of a waveform is not a ``Signal``.
         ValueError: If no breaths are given and ``breath_detector`` is None,
             or the given breaths are not EIT breaths.
     """
@@ -253,8 +253,8 @@ def _pixel_values(
         calculate (Callable[[Signal, list[BreathEvent] | PixelBreaths],
             IntervalData]): ``pixel_tidal_impedance_variation`` or
             ``pixel_end_expiratory_lung_impedance`` with its settings, taking
-            the images and the breaths.
-        eit_data (Any): The EIT images, a ``Signal``.
+            the pixel impedance and the breaths.
+        eit_data (Any): The pixel impedance, a ``Signal``.
         signal (Any): The impedance waveform of the global breaths.
         timing (str): ``"continuous"`` or ``"pixel"``.
         timing_name (str): Name of the timing parameter, for the messages.
@@ -432,7 +432,7 @@ def pixel_tiv(
     maps whose pixels are all missing.
 
     Args:
-        eit_data (Any): EIT images to measure, as a ``Signal``, with time,
+        eit_data (Any): Pixel impedance to measure, as a ``Signal``, with time,
             row and column axes.
         signal (Any): Global or regional waveform of the global breaths.
         session (M3Session): Session that stores the per-breath maps and
@@ -464,7 +464,7 @@ def pixel_tiv(
 
     Raises:
         TypeError: If ``pixel_breaths`` is not a ``PixelBreaths``, or if an
-            input of images or of a waveform is not a ``Signal``.
+            input of pixel impedance or of a waveform is not a ``Signal``.
         ValueError: If ``tiv_timing`` is unknown, no breaths are given and
             ``breath_detector`` is None, or the ``'pixel'`` timing gets
             breaths of another modality than EIT.
@@ -553,7 +553,7 @@ def pixel_eeli(
     recorded in the session's history.
 
     Args:
-        eit_data (Any): EIT images to measure, as a ``Signal``, with time,
+        eit_data (Any): Pixel impedance to measure, as a ``Signal``, with time,
             row and column axes.
         signal (Any): Global or regional waveform of the global breaths.
         session (M3Session): Session that stores the per-breath maps and
@@ -580,7 +580,7 @@ def pixel_eeli(
 
     Raises:
         TypeError: If ``pixel_breaths`` is not a ``PixelBreaths``, or if an
-            input of images or of a waveform is not a ``Signal``.
+            input of pixel impedance or of a waveform is not a ``Signal``.
         ValueError: If ``eeli_timing`` is unknown, no breaths are given and
             ``breath_detector`` is None, or the ``'pixel'`` timing gets
             breaths of another modality than EIT.
@@ -723,7 +723,7 @@ def pixel_breaths(
     global breath.
 
     Args:
-        eit_data (Any): EIT images as a ``Signal``, with time, row and
+        eit_data (Any): Pixel impedance as a ``Signal``, with time, row and
             column axes.
         timing_data (Any): Global or regional waveform of the global breaths,
             a ``Signal``.

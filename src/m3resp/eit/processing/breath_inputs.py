@@ -14,6 +14,7 @@ from m3resp.data import IntervalData, Signal
 from m3resp.data.events import BreathEvent, coerce_breath_events
 from m3resp.eit.processing._breath_samples import check_breaths
 from m3resp.eit.processing.breath_detection import (
+    METHOD,
     BreathDetectionSettings,
     find_breaths,
 )
@@ -99,7 +100,7 @@ def breaths_to_interval_data(
         modality="eit",
         intervals=list(breaths),
         category="breath",
-        method="m3resp.eit.processing.find_breaths",
+        method=METHOD,
     )
 
 

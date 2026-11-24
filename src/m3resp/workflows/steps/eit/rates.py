@@ -9,6 +9,7 @@ from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult
 from m3resp.eit.processing import RateDetectionSettings
 from m3resp.eit.processing import detect_rates as detect_rates_of
+from m3resp.eit.processing.rate_detection import METHOD as RATE_FUNCTION
 from m3resp.eit.processing.rate_detection import SUBJECT_TYPES, SubjectType
 from m3resp.workflows.registry import (
     StepArtifact,
@@ -35,7 +36,7 @@ from ._shared import (
         "heart_rate_result",
     ),
     summary="Estimate respiratory and heart rate from an EIT signal.",
-    description="Estimate respiratory and heart rate from the frequency spectra of EIT images (m3resp.eit.processing.detect_rates).",
+    description="Estimate respiratory and heart rate from the frequency spectra of the pixel impedance (m3resp.eit.processing.detect_rates).",
     category="detection",
     modality="eit",
     session_writes=("session.parameter_results",),
@@ -44,7 +45,7 @@ from ._shared import (
             name="signal",
             artifact_type="eit_pixel_signal",
             default_context_key="selected_eit",
-            description="EIT images (pixel impedance), typically the detection-window slice, to estimate rates from.",
+            description="Pixel impedance, typically the detection-window slice, to estimate rates from.",
         ),
         _SESSION_ARTIFACT,
     ),
@@ -180,13 +181,13 @@ def detect_rates(
     max_heart_rate_hz: float | None = None,
     capture: bool = False,
 ) -> dict[str, Any]:
-    """Find the breathing rate and the heart rate of EIT images.
+    """Find the breathing rate and the heart rate of the pixel impedance.
 
     The rates come from ``m3resp.eit.processing.detect_rates``. Both rates go
     to ``session.parameter_results``.
 
     Args:
-        signal (Any): EIT images as a ``Signal``, time in seconds.
+        signal (Any): Pixel impedance as a ``Signal``, time in seconds.
         session (M3Session): Session that stores the rates.
         subject_type (SubjectType | None): ``"adult"`` or ``"neonate"``
             sets the default rate ranges. With None, give all four limits.
@@ -252,7 +253,7 @@ def detect_rates(
             )
 
     metadata = _step_provenance(
-        source_function="m3resp.eit.processing.detect_rates",
+        source_function=RATE_FUNCTION,
         operation="eit.detect_rates",
         parameters={
             "subject_type": subject_type,
@@ -271,7 +272,7 @@ def detect_rates(
         value=respiratory_rate_hz,
         modality="eit",
         unit="Hz",
-        method="m3resp.eit.processing.detect_rates",
+        method=RATE_FUNCTION,
         metadata=dict(metadata),
     )
     heart_rate_result = ParameterResult(
@@ -279,7 +280,7 @@ def detect_rates(
         value=heart_rate_hz,
         modality="eit",
         unit="Hz",
-        method="m3resp.eit.processing.detect_rates",
+        method=RATE_FUNCTION,
         metadata=dict(metadata),
     )
     session.parameter_results.add(respiratory_rate_result)

@@ -112,7 +112,7 @@ class TestSignal:
         assert row["modality"] == "eit"
         assert row["source"] == "subject.eit"
 
-    def test_eit_images_with_missing_pixels_are_equal(self):
+    def test_eit_pixels_with_missing_values_are_equal(self):
         frames = np.full((3, 2, 2), np.nan)
         frames[:, 0, 0] = [1.0, 2.0, 3.0]
 

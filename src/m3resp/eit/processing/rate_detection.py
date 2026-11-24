@@ -50,10 +50,10 @@ Portions of this module are derived from eitprocessing.
 
 Modified for M3RESP:
     - The settings are the record `RateDetectionSettings`; the calculation is
-      the function `detect_rates`, with the EIT images as a `Signal`.
+      the function `detect_rates`, with the pixel impedance as a `Signal`.
     - A rate limit of 0 Hz is kept as given; only a missing limit (None) is
       replaced by the default limit of the subject type.
-    - A ValueError when the images have no frames per second, when they do
+    - A ValueError when the pixel impedance has no frames per second, when it does
       not have three axes, or when no frequency of the spectrum lies inside
       a rate range.
     - The subject type can be None; then all four rate limits must be given.
@@ -78,6 +78,9 @@ from scipy import signal
 
 from m3resp.data.signals import Signal
 from m3resp.processing.captures import capture_value
+
+#: Public name of the function, stored as the method of each result.
+METHOD = "m3resp.eit.processing.detect_rates"
 
 MINUTE = 60
 MIN_WELCH_WINDOW_LENGTH = 10  # seconds
@@ -187,14 +190,14 @@ def detect_rates(
     suppress_length_warnings: bool = False,
     suppress_edge_case_warning: bool = False,
 ) -> tuple[float, float]:
-    """Return the breathing rate and the heart rate of EIT images, in Hz.
+    """Return the breathing rate and the heart rate of the pixel impedance, in Hz.
 
     Multiply by 60 to get breaths or beats per minute. The method is from
     Wisse et al., Physiol. Meas. 45, 055010 (2024),
     https://doi.org/10.1088/1361-6579/ad46e3. See the module docstring.
 
     Args:
-        pixel_impedance (Signal): EIT images, values with shape (frames,
+        pixel_impedance (Signal): Pixel impedance, values with shape (frames,
             rows, columns), with the number of frames per second in
             ``sample_frequency``.
         settings (RateDetectionSettings): The settings.
@@ -223,7 +226,7 @@ def detect_rates(
             of the rate range. The rate is then not refined.
     """
 
-    _check_eit_images(pixel_impedance)
+    _check_eit_pixels(pixel_impedance)
     sample_frequency = float(cast(float, pixel_impedance.sample_frequency))
     pixels = np.asarray(pixel_impedance.values).astype(np.float32)
     summed_impedance = np.nansum(pixels, axis=(1, 2))
@@ -298,11 +301,11 @@ def detect_rates(
     return respiratory_rate, heart_rate
 
 
-def _check_eit_images(pixel_impedance: Signal) -> None:
-    """Raise ``ValueError`` if EIT images have the wrong shape or no frame rate.
+def _check_eit_pixels(pixel_impedance: Signal) -> None:
+    """Raise ``ValueError`` if the pixel impedance has the wrong shape or no frame rate.
 
     Args:
-        pixel_impedance (Signal): The EIT images.
+        pixel_impedance (Signal): The pixel impedance.
 
     Raises:
         ValueError: If the values do not have the shape (frames, rows,
@@ -312,7 +315,7 @@ def _check_eit_images(pixel_impedance: Signal) -> None:
     values = np.asarray(pixel_impedance.values)
     if values.ndim != 3:
         raise ValueError(
-            "detect_rates needs EIT images with shape (frames, rows, columns); "
+            "detect_rates needs pixel impedance with shape (frames, rows, columns); "
             f"{pixel_impedance.name!r} has shape {values.shape}."
         )
     if pixel_impedance.sample_frequency is None:

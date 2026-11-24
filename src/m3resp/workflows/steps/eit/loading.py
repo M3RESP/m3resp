@@ -37,7 +37,7 @@ _LOAD_OUTPUTS = (
     StepArtifact(
         name="raw_eit",
         artifact_type="eit_pixel_signal",
-        description="Raw EIT images (pixel impedance) as a Signal with values of shape (frames, rows, columns).",
+        description="Raw pixel impedance as a Signal with values of shape (frames, rows, columns).",
     ),
     StepArtifact(
         name="raw_global_impedance",
@@ -66,7 +66,7 @@ _LOAD_OUTPUTS = (
     reads={"session": "session"},
     writes=_LOAD_WRITES,
     summary="Load an EIT recording into the session.",
-    description="Load a Draeger, Sentec or Timpel EIT recording file and give the raw images (pixel impedance) and the raw global impedance as Signals.",
+    description="Load a Draeger, Sentec or Timpel EIT recording file and give the raw pixel impedance and the raw global impedance as Signals.",
     category="loading",
     modality="eit",
     session_writes=_LOAD_SESSION_WRITES,
@@ -153,7 +153,7 @@ def load(
 
     Returns:
         dict[str, Any]: ``raw_eit`` (also ``raw_pixel_impedance_signal``),
-            the raw images as a Signal with time, row and column axes, and
+            the raw pixel impedance as a Signal with time, row and column axes, and
             ``raw_global_impedance`` (also ``raw_global_impedance_signal``),
             the raw global impedance as a Signal. The Signals keep the times,
             sampling rate and impedance unit of the recording.

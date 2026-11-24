@@ -123,6 +123,6 @@ def test_result_fields():
     assert result.method == "m3resp.eit.processing.global_impedance"
 
 
-def test_needs_images():
+def test_needs_pixels():
     with pytest.raises(ValueError, match="shape \\(frames, rows, columns\\)"):
         global_impedance(Signal(values=np.zeros(3), time=np.arange(3.0), name="flat"))

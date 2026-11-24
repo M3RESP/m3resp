@@ -45,7 +45,7 @@ Portions of this module are derived from eitprocessing.
 
 Modified for M3RESP:
     - The class `WatershedLungspace` and its method `apply` are one function,
-      `watershed_lungspace`, with the EIT images and the waveform as
+      `watershed_lungspace`, with the pixel impedance and the waveform as
       `Signal`s. As in eitprocessing, the waveform (`timing_data`) is the
       sum of the pixels by default. The global breaths are an input
       (eitprocessing runs `BreathDetection` with the default settings on the
@@ -104,7 +104,7 @@ from m3resp.eit.roi._shared import (
 )
 from m3resp.eit.roi.amplitude import pixel_amplitude_per_breath
 
-NAME = "watershed_lungspace_mask"
+#: Public name of the function, stored as the method of each result.
 METHOD = "m3resp.eit.roi.watershed_lungspace"
 
 
@@ -114,13 +114,13 @@ def watershed_lungspace(
     breaths: Sequence[BreathEvent],
     signal: Signal | None = None,
     threshold_fraction: float = 0.15,
-    name: str = NAME,
+    name: str = "watershed_lungspace_mask",
     captures: dict[str, Any] | None = None,
 ) -> PixelMask:
     """Return the functional lung space found with the watershed method.
 
     Args:
-        pixels (Signal): EIT images, values with shape (time, row, column),
+        pixels (Signal): Pixel impedance, values with shape (time, row, column),
             with time in seconds.
         breaths (Sequence[BreathEvent]): The global breaths of ``signal``.
         signal (Signal | None): The waveform of the breaths, for example the
@@ -156,8 +156,8 @@ def watershed_lungspace(
         ValueError: If ``threshold_fraction`` is not between 0 and 1, no
             breath has TIV or amplitude values, no breath has both, no local
             maximum lies inside the TIV mask, or ``signal`` is None and the
-            images are masked. The errors of the pixel
-            TIV and the pixel amplitude (for example images that are not
+            the pixel impedance is masked. The errors of the pixel
+            TIV and the pixel amplitude (for example pixel impedance that is not
             (time, row, column)) are raised as they are.
 
     Warns:

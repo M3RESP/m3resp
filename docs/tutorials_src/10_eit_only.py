@@ -38,7 +38,7 @@ print("Sampling rate:", global_impedance.sample_frequency, "Hz")
 print("Number of samples:", len(global_impedance.values))
 
 # %%
-# The recording is 60 s long, with 20 EIT images per second.
+# The recording is 60 s long, with 20 EIT frames per second.
 #
 # Filter the signal
 # -----------------

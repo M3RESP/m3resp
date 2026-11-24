@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from reference.eitprocessing import (
-    butterworth_filter_images as adapter_butterworth_filter_images,
+    butterworth_filter_pixels as adapter_butterworth_filter_pixels,
 )
 
 from m3resp.data import BreathEvent, Signal
@@ -21,7 +21,7 @@ from m3resp.eit.processing.breath_inputs import (
 )
 from m3resp.eit.processing.butterworth import (
     MAX_EIT_BUTTERWORTH_ORDER,
-    butterworth_filter_images,
+    butterworth_filter_pixels,
 )
 from m3resp.processing.filters import butterworth_filter
 
@@ -77,12 +77,12 @@ def _images() -> Signal:
 @pytest.mark.parametrize(
     ("mode", "cutoff"), [("lowpass", 1.0), ("bandpass", (0.05, 1.0))]
 )
-def test_the_filter_gives_the_images_of_the_step_filter(mode, cutoff) -> None:
+def test_the_filter_gives_the_pixels_of_the_step_filter(mode, cutoff) -> None:
     images = _images()
-    filtered, captures = butterworth_filter_images(
+    filtered, captures = butterworth_filter_pixels(
         images, mode=mode, cutoff_frequency=cutoff, order=4, operation="test"
     )
-    expected, expected_captures = adapter_butterworth_filter_images(
+    expected, expected_captures = adapter_butterworth_filter_pixels(
         images,
         mode=mode,
         cutoff_frequency=cutoff,
@@ -93,7 +93,7 @@ def test_the_filter_gives_the_images_of_the_step_filter(mode, cutoff) -> None:
     np.testing.assert_array_equal(filtered.values, expected.values)
     np.testing.assert_array_equal(filtered.time, expected.time)
     assert filtered.name == expected.name == f"{mode.title()}-filtered EIT data"
-    assert filtered.method == "m3resp.processing.filters.butterworth_filter"
+    assert filtered.method == "m3resp.eit.processing.butterworth_filter_pixels"
     assert filtered.processing_state == "intermediate"
     assert filtered.metadata == images.metadata
     assert np.isnan(filtered.values[:, 0, 0]).all()
@@ -105,7 +105,7 @@ def test_the_filter_gives_the_images_of_the_step_filter(mode, cutoff) -> None:
 @pytest.mark.parametrize("order", [0, -1])
 def test_an_order_below_1_is_refused(order) -> None:
     with pytest.raises(ValueError, match="must be 1 or more"):
-        butterworth_filter_images(
+        butterworth_filter_pixels(
             _images(),
             mode="lowpass",
             cutoff_frequency=1.0,
@@ -118,7 +118,7 @@ def test_an_order_above_10_gives_a_warning_and_filters() -> None:
     images = _images()
     order = MAX_EIT_BUTTERWORTH_ORDER + 1
     with pytest.warns(UserWarning, match="Butterworth order of 11 is above 10"):
-        filtered, _ = butterworth_filter_images(
+        filtered, _ = butterworth_filter_pixels(
             images,
             mode="lowpass",
             cutoff_frequency=1.0,

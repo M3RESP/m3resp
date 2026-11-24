@@ -1,4 +1,4 @@
-"""Cut EIT images, waveforms, device marks and device breaths together.
+"""Cut pixel impedance, waveforms, device marks and device breaths together.
 
 Provenance
 ----------
@@ -155,7 +155,7 @@ def slice_intervals(
 def slice_file_data(data: EITFileData, start_index: int, end_index: int) -> EITFileData:
     """Keep frames ``start_index`` up to the frame before ``end_index``.
 
-    The waveforms are cut at the same frames as the images. Device marks
+    The waveforms are cut at the same frames as the pixel impedance. Device marks
     are kept from the time of the first kept frame up to the time of the
     last kept frame; a mark at that last time is left out. A complete
     device breath may end at the last kept frame. For device intervals, a
@@ -163,7 +163,7 @@ def slice_file_data(data: EITFileData, start_index: int, end_index: int) -> EITF
     are copied; times keep their original values.
 
     Args:
-        data (EITFileData): The recording: images, waveforms, marks and
+        data (EITFileData): The recording: pixel impedance, waveforms, marks and
             device breaths.
         start_index (int): Index of the first frame to keep.
         end_index (int): Index after the last frame to keep.
@@ -174,7 +174,7 @@ def slice_file_data(data: EITFileData, start_index: int, end_index: int) -> EITF
 
     Raises:
         ValueError: If no frame is kept, if a waveform has a different
-            number of samples from the images, or if the mark times are
+            number of samples from the pixel impedance, or if the mark times are
             not in increasing order.
     """
 
@@ -184,7 +184,7 @@ def slice_file_data(data: EITFileData, start_index: int, end_index: int) -> EITF
     for key, signal in data.signals.items():
         if len(signal) != len(data.pixel_impedance):
             raise ValueError(
-                f"EIT waveform {key!r} has {len(signal)} samples; the images "
+                f"EIT waveform {key!r} has {len(signal)} samples; the pixel impedance "
                 f"have {len(data.pixel_impedance)} frames."
             )
     first, last = float(pixels.time[0]), float(pixels.time[-1])

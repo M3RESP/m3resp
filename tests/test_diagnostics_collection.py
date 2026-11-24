@@ -400,7 +400,7 @@ def _artifact_type_diagnostics(producer: str, consumer: str) -> list[Any]:
     return collect_diagnostics(spec)
 
 
-def test_a_signal_input_accepts_eit_images_and_impedance_waveforms(
+def test_a_signal_input_accepts_eit_pixels_and_impedance_waveforms(
     _artifact_type_steps,
 ):
     assert _artifact_type_diagnostics("produce_images", "consume_signal") == []

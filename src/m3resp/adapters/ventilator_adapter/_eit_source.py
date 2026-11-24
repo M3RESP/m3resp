@@ -1,7 +1,7 @@
 """Read ventilator waveforms from EIT recordings.
 
 Draeger stores ventilator channels in its Medibus fields and Timpel in text
-columns next to the EIT images. The channel keys of EITRecording.signals or
+columns next to the pixel values. The channel keys of EITRecording.signals or
 EITFileData.signals are their vendor labels.
 
 Channel labels are resolved to airway_pressure, flow, volume and the

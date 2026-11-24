@@ -23,11 +23,11 @@ class EITFileData:
         paths (tuple[Path, ...]): The files that were read, in recording
             order: one file, or several after a join.
         sample_frequency (float): Frames per second, in Hz.
-        pixel_impedance (Signal): The EIT images, with values of shape
+        pixel_impedance (Signal): The pixel impedance, with values of shape
             (frames, rows, columns) and time in seconds.
         signals (dict[str, Signal]): Waveforms with one value per frame: the
             global impedance and the waveforms the device stores next to the
-            images (airway pressure, flow, volume, ...).
+            pixel impedance (airway pressure, flow, volume, ...).
         events (dict[str, EventData]): Marks at single times, such as the
             breath minima and maxima found by the device and the event
             markers set by the user.

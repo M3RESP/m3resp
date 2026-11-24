@@ -134,7 +134,7 @@ def masked_metadata(metadata: dict[str, Any], *, mask_name: str) -> dict[str, An
     """Return a copy of ``metadata`` with ``mask_name`` added to the masks.
 
     Args:
-        metadata (dict[str, Any]): The metadata of the images before masking.
+        metadata (dict[str, Any]): The metadata of the pixel impedance before masking.
         mask_name (str): The name of the mask that is applied.
 
     Returns:
@@ -851,7 +851,7 @@ class PixelMask:
         """Multiply each pixel of ``data`` by its mask value.
 
         The mask applies to the last two axes of the data, so it works on one
-        image and on a series of images alike. A NaN in the mask makes the
+        image and on pixel impedance over time alike. A NaN in the mask makes the
         pixel NaN; a weight scales the pixel.
 
         Args:

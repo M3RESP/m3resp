@@ -66,6 +66,9 @@ from scipy import signal as scipy_signal
 from m3resp.data.signals import Signal
 from m3resp.processing.captures import capture_value
 
+#: Public name of the function, stored as the method of each result.
+METHOD = "m3resp.eit.processing.mdn_filter"
+
 MINUTE = 60
 
 #: Default noise frequency limit in Hz (220 per minute).
@@ -92,7 +95,7 @@ def mdn_filter(
     name: str | None = None,
     captures: dict[str, Any] | None = None,
 ) -> Signal:
-    """Remove the heart signal from EIT images or an impedance waveform.
+    """Remove the heart signal from the pixel impedance or an impedance waveform.
 
     Band-stop filters remove the harmonics of the heart rate (N times the
     heart rate, with N = 1, 2, 3, ...) up to ``noise_frequency_limit``, and a
@@ -101,7 +104,7 @@ def mdn_filter(
     https://doi.org/10.1088/1361-6579/ad46e3.
 
     Args:
-        signal (Signal): EIT images (frames, rows, columns) or one waveform,
+        signal (Signal): Pixel impedance (frames, rows, columns) or one waveform,
             with time along the first axis and the samples per second in
             ``sample_frequency``.
         respiratory_rate (float): Breathing rate in Hz, above 0 and below
@@ -189,7 +192,7 @@ def mdn_filter(
         name=signal.name if name is None else name,
         metadata=dict(signal.metadata),
         processing_state="intermediate",
-        method="m3resp.eit.processing.mdn_filter",
+        method=METHOD,
     )
     capture_value(captures, "filtered_data", result)
     return result

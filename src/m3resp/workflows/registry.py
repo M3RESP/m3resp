@@ -62,7 +62,7 @@ _RESERVED_OUTPUT_NAMES = frozenset(("session",))
 #: type check for a value on whichever side declares it.
 ANY_ARTIFACT_TYPE = "any"
 
-#: Artifact types of a ``Signal`` with a known content: EIT images
+#: Artifact types of a ``Signal`` with a known content: pixel impedance
 #: (frames, rows, columns) and an impedance waveform (one value per frame).
 #: A step input of type ``"signal"`` accepts each of them; an input of one of
 #: these types accepts only that type.

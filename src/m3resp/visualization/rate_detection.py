@@ -1,4 +1,4 @@
-"""Figure of the breathing-rate and heart-rate detection of EIT images.
+"""Figure of the breathing-rate and heart-rate detection of the pixel impedance.
 
 Three panels share the rate axis, in breaths or beats per minute:
 

@@ -30,11 +30,11 @@ Portions of this module are derived from eitprocessing.
 
 Modified for M3RESP:
     - `load_from_single_path` is `read_sentec`. It returns an `EITFileData`
-      with the images as a `Signal`.
+      with the pixel impedance as a `Signal`.
     - Docstrings and comments are reworded.
     - Bug fix: each image is stored at its place after `first_frame`
       (`index - first_frame`). The image store has room for `max_frames`
-      images, and the original stores each image at `index`, which also
+      frames, and the original stores each image at `index`, which also
       counts the skipped frames. So with `first_frame` above 0 and
       `max_frames` both given, eitprocessing 1.8.7 stops with an IndexError
       once `index` reaches `max_frames`. The fix gives the frames
@@ -92,7 +92,7 @@ def read_sentec(
             ``None`` reads up to the end of the file.
 
     Returns:
-        EITFileData: The images (``pixel_impedance``), with time in seconds
+        EITFileData: The pixel impedance (``pixel_impedance``), with time in seconds
             from the clock of the device. ``signals``, ``events`` and
             ``intervals`` are empty.
 
@@ -116,15 +116,15 @@ def read_sentec(
         reader = BinReader(fh, endian="little")
         version = reader.uint8()
 
-        max_n_images = int(file_length / 32 / 32 / 4)
+        max_n_frames = int(file_length / 32 / 32 / 4)
         if max_frames is not None:
-            max_n_images = min(max_n_images, max_frames)
+            max_n_frames = min(max_n_frames, max_frames)
 
-        image = np.full(shape=(max_n_images, 32, 32), fill_value=np.nan)
+        image = np.full(shape=(max_n_frames, 32, 32), fill_value=np.nan)
 
         # Read records until the end of the file, or until enough time
         # stamps are read.
-        while fh.tell() < file_length and (len(time) < max_n_images):
+        while fh.tell() < file_length and (len(time) < max_n_frames):
             _ = reader.uint64()  # the time stamp of the record is not used
             domain_id = reader.uint8()
             number_data_fields = reader.uint8()
@@ -200,10 +200,10 @@ def _read_data_field(
     Args:
         reader (BinReader): The reader, at the start of the data field.
         domain_id (int): The domain number of the record.
-        index (int): The number of images found so far, skipped ones
+        index (int): The number of frames found so far, skipped ones
             included.
         first_frame (int): The index of the first frame to keep. Time stamps
-            and images before it are skipped.
+            and frames before it are skipped.
         fh (mmap.mmap): The open file, used to skip data.
         time (list[float]): Time stamps in microseconds; a new one is added
             here.

@@ -23,11 +23,11 @@ EITLoader = Callable[..., EITFileData]
 
 @dataclass
 class EITRecording:
-    """A loaded EIT recording: images, waveforms, marks and breaths of the device.
+    """A loaded EIT recording: pixel impedance, waveforms, marks and device breaths.
 
     ``paths`` lists the files read, in recording order: one file, or several
-    files joined into this recording. ``pixel_impedance`` holds the images
-    (frames, rows, columns), ``signals`` the waveforms of the device (one
+    files joined into this recording. ``pixel_impedance`` holds the pixel
+    impedance (frames, rows, columns), ``signals`` the waveforms of the device (one
     value per frame), ``events`` the marks of the device and ``intervals``
     the breaths found by the device (Timpel). The keys are the labels of the
     file readers, for example ``"global_impedance_(raw)"``.
@@ -66,7 +66,7 @@ class EITRecording:
         return recording
 
     def set_file_data(self, file_data: EITFileData) -> None:
-        """Replace the images, waveforms, marks and breaths with those of ``file_data``.
+        """Replace the pixel impedance, waveforms, marks and breaths with ``file_data``.
 
         Args:
             file_data (EITFileData): The new data, for example a time window
@@ -312,8 +312,8 @@ def keep_frames(recording: EITRecording, start_index: int, end_index: int) -> No
     """Keep frames `start_index` up to (not including) `end_index` of an EIT
     recording, in place.
 
-    Images and waveforms are cut by frame index. Device marks and breaths
-    are selected by the times of the kept frames. Original times and
+    The pixel impedance and the waveforms are cut by frame index. Device marks
+    and breaths are selected by the times of the kept frames. Original times and
     collection keys are kept.
 
     Args:

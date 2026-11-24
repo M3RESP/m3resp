@@ -288,7 +288,7 @@ def test_detect_rates_reports_a_missing_rate_as_such(rate_name, monkeypatch):
     ],
     ids=["eit.detect_rates", "eit.mdn_filter", "eit.butterworth_filter"],
 )
-def test_image_steps_refuse_images_that_are_not_a_signal(step):
+def test_pixel_steps_refuse_pixels_that_are_not_a_signal(step):
     images = SimpleNamespace(pixel_impedance=np.ones((4, 2, 2)), time=np.arange(4.0))
 
     with pytest.raises(TypeError, match="'signal' must be an m3resp Signal"):
@@ -340,7 +340,7 @@ def test_mdn_filter_step_refuses_a_rate_that_is_not_above_zero(rate):
         ({}, "none"),
     ],
 )
-def test_the_filter_mode_of_a_workflow_comes_from_the_filtered_images(
+def test_the_filter_mode_of_a_workflow_comes_from_the_filtered_pixels(
     metadata: dict, mode: str
 ):
     filtered = SimpleNamespace(metadata=metadata)
@@ -458,7 +458,7 @@ def test_eeli_step_gives_nan_for_breaths_outside_the_data(fixed_breaths):
     )
 
 
-def _breathing_images() -> tuple[Signal, Signal]:
+def _breathing_pixels() -> tuple[Signal, Signal]:
     """EIT images of 2 x 2 pixels and their waveform: 40 s at 20 Hz, one
     breath every 4 s. Pixel (1, 0) goes down during inspiration, pixel (1, 1)
     is NaN."""
@@ -509,7 +509,7 @@ def _assert_same_pixel_times(result: PixelBreaths, expected: PixelBreaths) -> No
 
 def test_pixel_tiv_step_gives_one_pixel_map_per_global_breath():
     session = M3Session()
-    pixels, waveform = _breathing_images()
+    pixels, waveform = _breathing_pixels()
 
     result = pixel_tiv(
         eit_data=pixels,
@@ -548,7 +548,7 @@ def test_pixel_tiv_accepts_unfiltered_pixel_data():
 
 def test_pixel_tiv_keeps_the_given_global_breaths():
     session = M3Session()
-    pixels, waveform = _breathing_images()
+    pixels, waveform = _breathing_pixels()
     breaths = _default_breaths(waveform)
 
     result = pixel_tiv(
@@ -562,7 +562,7 @@ def test_pixel_tiv_keeps_the_given_global_breaths():
 
 
 def test_pixel_timing_with_and_without_pixel_breaths_gives_the_same_values():
-    pixels, waveform = _breathing_images()
+    pixels, waveform = _breathing_pixels()
     session = M3Session()
     found = pixel_breaths(eit_data=pixels, timing_data=waveform, session=session)
 
@@ -590,7 +590,7 @@ def test_pixel_timing_with_and_without_pixel_breaths_gives_the_same_values():
 
 
 def test_the_continuous_timing_leaves_pixel_breaths_unused():
-    pixels, waveform = _breathing_images()
+    pixels, waveform = _breathing_pixels()
     session = M3Session()
     found = pixel_breaths(eit_data=pixels, timing_data=waveform, session=session)
     breaths = _default_breaths(waveform)
@@ -612,7 +612,7 @@ def test_the_continuous_timing_leaves_pixel_breaths_unused():
 
 
 def test_pixel_tiv_refuses_pixel_breaths_of_another_type():
-    pixels, waveform = _breathing_images()
+    pixels, waveform = _breathing_pixels()
     session = M3Session()
     found = pixel_breaths(eit_data=pixels, timing_data=waveform, session=session)
 
@@ -627,7 +627,7 @@ def test_pixel_tiv_refuses_pixel_breaths_of_another_type():
 
 
 def test_pixel_timing_finds_pixel_breaths_from_eit_breaths_only():
-    pixels, waveform = _breathing_images()
+    pixels, waveform = _breathing_pixels()
     emg_breaths = [
         dataclasses.replace(breath, modality="emg")
         for breath in _default_breaths(waveform)
@@ -645,7 +645,7 @@ def test_pixel_timing_finds_pixel_breaths_from_eit_breaths_only():
 
 @pytest.mark.parametrize("step", [pixel_tiv, pixel_eeli])
 def test_pixel_steps_need_breaths(step):
-    pixels, waveform = _breathing_images()
+    pixels, waveform = _breathing_pixels()
 
     with pytest.raises(ValueError, match="needs the breaths"):
         step(eit_data=pixels, signal=waveform, session=M3Session())
@@ -655,7 +655,7 @@ def test_pixel_steps_need_breaths(step):
     "step,timing", [(pixel_tiv, "tiv_timing"), (pixel_eeli, "eeli_timing")]
 )
 def test_pixel_steps_refuse_an_unknown_timing(step, timing):
-    pixels, waveform = _breathing_images()
+    pixels, waveform = _breathing_pixels()
 
     with pytest.raises(ValueError, match=f"'{timing}' must be one of"):
         step(
@@ -670,7 +670,7 @@ def test_pixel_steps_refuse_an_unknown_timing(step, timing):
 @pytest.mark.parametrize("timing", ["continuous", "pixel"])
 def test_pixel_eeli_step_gives_the_impedance_of_each_pixel_at_the_breath_end(timing):
     session = M3Session()
-    pixels, waveform = _breathing_images()
+    pixels, waveform = _breathing_pixels()
 
     result = pixel_eeli(
         eit_data=pixels,
@@ -699,7 +699,7 @@ def test_pixel_eeli_step_gives_the_impedance_of_each_pixel_at_the_breath_end(tim
 def test_pixel_breaths_accepts_the_empty_phase_correction_mode():
     """`null` in a spec / `None` from Python is a real option, not a mistake."""
 
-    pixels, waveform = _breathing_images()
+    pixels, waveform = _breathing_pixels()
 
     result = pixel_breaths(
         eit_data=pixels,
@@ -713,7 +713,7 @@ def test_pixel_breaths_accepts_the_empty_phase_correction_mode():
 
 
 def test_pixel_breaths_rejects_an_unknown_phase_correction_mode():
-    pixels, waveform = _breathing_images()
+    pixels, waveform = _breathing_pixels()
 
     with pytest.raises(ValueError, match="Unknown phase correction mode"):
         pixel_breaths(
@@ -726,7 +726,7 @@ def test_pixel_breaths_rejects_an_unknown_phase_correction_mode():
 
 def test_pixel_breaths_step_gives_pixel_breaths_and_their_time_grids():
     session = M3Session()
-    pixels, waveform = _breathing_images()
+    pixels, waveform = _breathing_pixels()
     stored_first_breath = _default_breaths(waveform)[0]
     session.add_events("eit_breaths", [stored_first_breath])
 
@@ -757,7 +757,7 @@ def test_pixel_breaths_step_gives_pixel_breaths_and_their_time_grids():
 
 
 def test_pixel_breaths_step_output_gives_breath_events_per_pixel():
-    pixels, waveform = _breathing_images()
+    pixels, waveform = _breathing_pixels()
     timing = pixel_breaths(eit_data=pixels, timing_data=waveform, session=M3Session())[
         "pixel_breath_timing_result"
     ]
@@ -774,7 +774,7 @@ def test_pixel_breaths_step_output_gives_breath_events_per_pixel():
 
 
 def test_pixel_breaths_step_uses_the_given_eit_breaths():
-    pixels, waveform = _breathing_images()
+    pixels, waveform = _breathing_pixels()
     breaths = _default_breaths(waveform)[:-2]
 
     result = pixel_breaths(
@@ -786,7 +786,7 @@ def test_pixel_breaths_step_uses_the_given_eit_breaths():
 
 
 def test_pixel_breaths_step_refuses_breaths_of_another_modality():
-    pixels, waveform = _breathing_images()
+    pixels, waveform = _breathing_pixels()
     breaths = [
         dataclasses.replace(breath, modality="ventilator")
         for breath in _default_breaths(waveform)
@@ -802,7 +802,7 @@ def test_pixel_breaths_step_takes_the_sign_from_the_default_breaths():
     """eitprocessing takes the sign of each pixel from the breaths found with
     the default settings, also when 'minimum_duration_seconds' differs."""
 
-    pixels, waveform = _breathing_images()
+    pixels, waveform = _breathing_pixels()
 
     result = pixel_breaths(
         eit_data=pixels,
@@ -883,7 +883,7 @@ def test_tiv_and_eeli_steps_refuse_a_breath_detector_of_another_type():
         )
 
 
-def _lungspace_images() -> tuple[Signal, Signal]:
+def _lungspace_pixels() -> tuple[Signal, Signal]:
     """8 x 8 EIT images, 60 s at 20 Hz, one breath every 4 s, with the
     largest breathing amplitude at the centre and a NaN corner pixel; and
     their global impedance."""
@@ -923,7 +923,7 @@ _LUNGSPACE_STEPS = [
 @pytest.mark.parametrize("step_func,step_name,threshold_name", _LUNGSPACE_STEPS)
 def test_roi_lungspace_steps_give_an_m3resp_mask(step_func, step_name, threshold_name):
     session = M3Session()
-    pixels, waveform = _lungspace_images()
+    pixels, waveform = _lungspace_pixels()
 
     result = step_func(
         eit_data=pixels, timing_data=waveform, session=session, **{threshold_name: 0.15}
@@ -953,7 +953,7 @@ def test_roi_lungspace_steps_with_eit_breaths_equal_the_steps_without(
     """Breaths found with the default settings and given through 'breaths'
     give the same mask as the breaths the step finds itself."""
 
-    pixels, waveform = _lungspace_images()
+    pixels, waveform = _lungspace_pixels()
     breaths = find_breaths(waveform, settings=BreathDetectionSettings())
 
     found = step_func(eit_data=pixels, timing_data=waveform, session=M3Session())
@@ -972,7 +972,7 @@ def test_roi_lungspace_steps_with_eit_breaths_equal_the_steps_without(
     ids=["amplitude", "watershed"],
 )
 def test_amplitude_and_watershed_steps_refuse_breaths_of_another_modality(step_func):
-    pixels, waveform = _lungspace_images()
+    pixels, waveform = _lungspace_pixels()
     breaths = [
         dataclasses.replace(breath, modality="ventilator")
         for breath in find_breaths(waveform, settings=BreathDetectionSettings())
@@ -988,7 +988,7 @@ def test_tiv_lungspace_step_takes_breaths_of_another_modality():
     """Breaths of another modality are moved to the EIT clock."""
 
     session = M3Session()
-    pixels, waveform = _lungspace_images()
+    pixels, waveform = _lungspace_pixels()
     breaths = find_breaths(waveform, settings=BreathDetectionSettings())
     session.start_times["eit"] = 0.0
     session.start_times["ventilator"] = 1.0
@@ -1018,7 +1018,7 @@ def test_tiv_lungspace_step_takes_breaths_of_another_modality():
 
 @pytest.mark.parametrize("bad_threshold", [0.0, 1.0, -0.1, 1.5])
 def test_roi_lungspace_steps_reject_out_of_range_threshold(bad_threshold):
-    pixels, waveform = _lungspace_images()
+    pixels, waveform = _lungspace_pixels()
 
     with pytest.raises(ValueError, match="between 0 and 1"):
         roi_tiv_lungspace(
@@ -1169,7 +1169,7 @@ def test_output_renaming_lets_the_same_roi_step_run_twice():
             },
         ],
     }
-    pixels, waveform = _lungspace_images()
+    pixels, waveform = _lungspace_pixels()
 
     result = run_workflow(
         spec,

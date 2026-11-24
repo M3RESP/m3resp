@@ -120,7 +120,7 @@ def _upstream(signal: Signal, captures: dict | None = None, **settings) -> np.nd
 
 
 @pytest.mark.parametrize("dataset", DATASETS)
-def test_filtered_images_and_captures_match_golden(dataset: str, images: dict) -> None:
+def test_filtered_pixels_and_captures_match_golden(dataset: str, images: dict) -> None:
     rates = _golden(dataset, "rates")
     golden = _golden(dataset, "mdn_filter")
     captures: dict = {}

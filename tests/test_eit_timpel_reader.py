@@ -106,7 +106,7 @@ class TestGoldenFile:
     def ours(self):
         return read_timpel(TIMPEL_FILE)
 
-    def test_images_time_and_sample_frequency(self, ours, golden):
+    def test_pixels_time_and_sample_frequency(self, ours, golden):
         assert ours.vendor == str(golden["vendor"])
         assert ours.sample_frequency == float(golden["sample_frequency"])
         np.testing.assert_array_equal(ours.pixel_impedance.time, golden["time"])

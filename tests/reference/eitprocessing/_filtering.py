@@ -13,7 +13,7 @@ from m3resp.processing.filters import ButterworthFilterType
 from ._signals import EITPROCESSING_FIELDS, eitprocessing_fields
 
 
-def butterworth_filter_images(
+def butterworth_filter_pixels(
     images: Signal,
     *,
     mode: ButterworthFilterType,
@@ -25,7 +25,7 @@ def butterworth_filter_images(
     """Filter EIT images with ``m3resp.eit.processing.butterworth``.
 
     The result is that of
-    ``m3resp.eit.processing.butterworth.butterworth_filter_images``, with
+    ``m3resp.eit.processing.butterworth.butterworth_filter_pixels``, with
     the label, name and description for an eitprocessing ``Sequence`` added
     to ``metadata["eitprocessing_fields"]`` of the filtered images.
 
@@ -51,7 +51,7 @@ def butterworth_filter_images(
             among otherwise present samples, or if the cutoffs are invalid.
     """
 
-    filtered, captures = butterworth.butterworth_filter_images(
+    filtered, captures = butterworth.butterworth_filter_pixels(
         images,
         mode=mode,
         cutoff_frequency=cutoff_frequency,

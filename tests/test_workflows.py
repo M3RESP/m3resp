@@ -298,7 +298,7 @@ def fixed_eit_detections(monkeypatch):
     )
     monkeypatch.setattr(
         eit_filter_steps,
-        "mdn_filter_images",
+        "mdn_filter_pixels",
         lambda signal, **kwargs: dataclasses.replace(
             signal, name=kwargs["name"], metadata=dict(signal.metadata)
         ),

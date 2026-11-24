@@ -179,7 +179,7 @@ class TestApplyMdn:
         assert filtered.method == "m3resp.eit.processing.mdn_filter"
         assert result["filter_captures"]["filtered_data"] is filtered
 
-    def test_the_eitprocessing_images_equal_mdn_filter_of_eitprocessing(
+    def test_the_eitprocessing_pixels_equal_mdn_filter_of_eitprocessing(
         self, loaded_chain: dict[str, Any]
     ):
         from eitprocessing.filters.mdn import MDNFilter

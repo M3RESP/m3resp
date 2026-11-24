@@ -58,6 +58,9 @@ import numpy as np
 
 from m3resp.data import PixelMask
 
+#: Public name of the function, stored as the method of each result.
+METHOD = "m3resp.eit.roi.geometric_mask"
+
 #: The full names of the 12 regions, in the order of the table above.
 GEOMETRIC_REGIONS = (
     "ventral",
@@ -138,7 +141,7 @@ def geometric_mask(region: str, *, shape: tuple[int, int] = (32, 32)) -> PixelMa
         name=name,
         values=values,
         modality="eit",
-        method="m3resp.eit.roi.geometric_mask",
+        method=METHOD,
         metadata={"region": name, "shape": [height, width]},
     )
 

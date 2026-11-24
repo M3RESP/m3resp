@@ -1,6 +1,6 @@
-"""Butterworth filter of EIT images, one pixel at a time along time.
+"""Butterworth filter of the EIT pixel impedance, one pixel at a time along time.
 
-``butterworth_filter_images`` filters each pixel of EIT images with
+``butterworth_filter_pixels`` filters each pixel of the pixel impedance along time with
 ``m3resp.processing.filters.butterworth_filter``, forwards and backwards.
 A pixel without any value stays without value. The order must be 1 or more.
 An order above ``MAX_EIT_BUTTERWORTH_ORDER`` (10) gives a warning; eitprocessing
@@ -19,12 +19,15 @@ import numpy as np
 from m3resp.data.signals import Signal
 from m3resp.processing.filters import ButterworthFilterType, butterworth_filter
 
-#: Highest Butterworth order of EIT images without a warning, as in eitprocessing.
+#: Public name of the function, stored as the method of each result.
+METHOD = "m3resp.eit.processing.butterworth_filter_pixels"
+
+#: Highest Butterworth order without a warning, as in eitprocessing.
 MAX_EIT_BUTTERWORTH_ORDER = 10
 
 
 def check_eit_butterworth_order(order: int) -> None:
-    """Check the Butterworth order of a filter of EIT images.
+    """Check the Butterworth order of a filter of the EIT pixel impedance.
 
     The filter runs forwards and backwards, so the effective order is twice
     the given order. An order above 10 can give unstable or wrong results.
@@ -41,7 +44,7 @@ def check_eit_butterworth_order(order: int) -> None:
 
     if order < 1:
         raise ValueError(
-            "The order of a Butterworth filter of EIT images must be 1 or more, "
+            "The order of a Butterworth filter of EIT pixels must be 1 or more, "
             f"got {order}."
         )
     if order > MAX_EIT_BUTTERWORTH_ORDER:
@@ -75,16 +78,16 @@ def filter_pixels_preserving_gaps(
     without new values in the gap, so it gives a ValueError.
 
     Args:
-        pixel_impedance (Any): EIT images, time along the first axis.
+        pixel_impedance (Any): Pixel impedance, time along the first axis.
         operation (str): Name of the calling step or function, for messages.
         apply (Callable[[numpy.ndarray], Any]): The filter, applied to the
-            images along time.
+            pixels along time.
         captures (dict[str, Any] | None): The captures that ``apply``
-            writes. Arrays in it with the shape of the images get NaN at the
+            writes. Arrays in it with the shape of ``pixel_impedance`` get NaN at the
             unmeasured pixels too.
 
     Returns:
-        numpy.ndarray: The filtered images, NaN at the unmeasured pixels.
+        numpy.ndarray: The filtered pixel impedance, NaN at the unmeasured pixels.
 
     Raises:
         ValueError: If a pixel has NaN for part of the recording only.
@@ -119,7 +122,7 @@ def filter_pixels_preserving_gaps(
     filtered = np.array(apply(placeholder), dtype=float, copy=True)
     filtered[:, unmeasured] = np.nan
 
-    # The 0 values are also in the captured images before and after the
+    # The 0 values are also in the captured pixel impedance before and after the
     # filter; set the unmeasured pixels to NaN there too.
     for key, captured in list((captures or {}).items()):
         recorded = np.asarray(captured)
@@ -131,22 +134,22 @@ def filter_pixels_preserving_gaps(
     return filtered
 
 
-def butterworth_filter_images(
-    images: Signal,
+def butterworth_filter_pixels(
+    pixel_impedance: Signal,
     *,
     mode: ButterworthFilterType,
     cutoff_frequency: float | Sequence[float],
     order: int,
     operation: str,
 ) -> tuple[Signal, dict[str, Any]]:
-    """Filter each pixel of EIT images along time with a Butterworth filter.
+    """Filter each pixel of the pixel impedance along time with a Butterworth filter.
 
     The filter is ``m3resp.processing.filters.butterworth_filter``, run
     forwards and backwards. A pixel without any value stays without value.
 
     Args:
-        images (Signal): EIT images (frames, rows, columns), time along the
-            first axis, frames per second in ``sample_frequency``.
+        pixel_impedance (Signal): Pixel impedance (frames, rows, columns),
+            time along the first axis, frames per second in ``sample_frequency``.
         mode (ButterworthFilterType): ``"lowpass"``, ``"highpass"``,
             ``"bandpass"`` or ``"bandstop"``.
         cutoff_frequency (float | Sequence[float]): One cutoff in Hz for
@@ -156,13 +159,14 @@ def butterworth_filter_images(
         operation (str): Name of the calling step or function, for messages.
 
     Returns:
-        tuple[Signal, dict[str, Any]]: The filtered images and the captures.
-            The images are named ``"<Mode>-filtered EIT data"``, with
+        tuple[Signal, dict[str, Any]]: The filtered pixel impedance and the
+            captures. The result is named ``"<Mode>-filtered EIT data"``, with
             processing state ``"intermediate"`` and method
-            ``"m3resp.processing.filters.butterworth_filter"``; the metadata
-            of ``images`` is copied. The captures hold ``sample_frequency``,
-            the cutoffs in Hz, and the images before and after the filter as
-            ``unfiltered_data`` and ``filtered_data``.
+            ``"m3resp.eit.processing.butterworth_filter_pixels"``; the
+            metadata of ``pixel_impedance`` is copied. The captures hold
+            ``sample_frequency``, the cutoffs in Hz, and the pixel impedance
+            before and after the filter as ``unfiltered_data`` and
+            ``filtered_data``.
 
     Raises:
         ValueError: If the order is below 1, if a pixel has gaps among
@@ -175,13 +179,13 @@ def butterworth_filter_images(
     check_eit_butterworth_order(order)
     captures: dict[str, Any] = {}
     filtered_pixels = filter_pixels_preserving_gaps(
-        images.values,
+        pixel_impedance.values,
         operation=operation,
         apply=lambda pixels: butterworth_filter(
             pixels,
             filter_type=mode,
             cutoff_frequency=cutoff_frequency,
-            sample_frequency=float(images.sample_frequency or 0.0),
+            sample_frequency=float(pixel_impedance.sample_frequency or 0.0),
             order=order,
             axis=0,
             captures=captures,
@@ -190,14 +194,14 @@ def butterworth_filter_images(
     )
     name = f"{mode.title()}-filtered EIT data"
     filtered = dataclasses.replace(
-        images,
+        pixel_impedance,
         values=filtered_pixels,
-        time=np.copy(images.time),
+        time=np.copy(pixel_impedance.time),
         name=name,
-        metadata=dict(images.metadata),
+        metadata=dict(pixel_impedance.metadata),
         processing_state="intermediate",
-        method="m3resp.processing.filters.butterworth_filter",
+        method=METHOD,
     )
-    captures["unfiltered_data"] = images
+    captures["unfiltered_data"] = pixel_impedance
     captures["filtered_data"] = filtered
     return filtered, captures

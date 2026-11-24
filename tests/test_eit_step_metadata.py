@@ -179,7 +179,7 @@ _WAVEFORM_ARTIFACTS = {
 }
 
 
-def test_eit_images_and_impedance_waveforms_have_their_own_labels():
+def test_eit_pixels_and_impedance_waveforms_have_their_own_labels():
     labels = {}
     for name in _EIT_STEP_NAMES:
         description = describe_step(name)

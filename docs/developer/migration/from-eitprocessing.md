@@ -20,21 +20,21 @@ session.load_eit("recording.bin", vendor="draeger")
 
 `m3resp.io.load_eit(path, vendor=...)` loads a recording without a session. A list of paths loads files recorded one after the other as one recording.
 
-The `loader` argument selects the reader: `"vendor"` uses the M3Resp reader of the device maker in `vendor`, `"custom"` uses your own loader, and `"auto"` (default) uses your loader if the session has one. Give your loader as `M3Session(eit_loader=my_loader)`, or to `run_workflow` and `run_spec` as `eit_loader=my_loader`. M3Resp calls it as `my_loader(path, vendor=...)`, and it must return an `m3resp.eit.io.EITFileData` with the images as a `Signal` (frames, rows, columns), the vendor, the paths and the sample frequency in Hz. Any other return value gives a `TypeError`. To use a reader of `eitprocessing`, change its `Sequence` into an `EITFileData` in your loader.
+The `loader` argument selects the reader: `"vendor"` uses the M3Resp reader of the device maker in `vendor`, `"custom"` uses your own loader, and `"auto"` (default) uses your loader if the session has one. Give your loader as `M3Session(eit_loader=my_loader)`, or to `run_workflow` and `run_spec` as `eit_loader=my_loader`. M3Resp calls it as `my_loader(path, vendor=...)`, and it must return an `m3resp.eit.io.EITFileData` with the pixel impedance as a `Signal` (frames, rows, columns), the vendor, the paths and the sample frequency in Hz. Any other return value gives a `TypeError`. To use a reader of `eitprocessing`, change its `Sequence` into an `EITFileData` in your loader.
 
 The recording in `session.eit` holds native data:
 
 | Field | Data |
 |---|---|
-| `pixel_impedance` | EIT images as a `Signal`, with shape (frames, rows, columns) |
+| `pixel_impedance` | Pixel impedance as a `Signal`, with shape (frames, rows, columns) |
 | `signals` | Recorded global impedance and device waveforms, keyed by vendor label |
 | `events` | Device marks as `EventData`, including marker values and text |
 | `intervals` | Device breaths as `IntervalData`; Timpel breaths are `BreathEvent`s with a turning point |
-| `raw_global_impedance` | Recorded global waveform, or the sum of the native images |
+| `raw_global_impedance` | Recorded global waveform, or the sum of the native pixel impedance |
 
-The raw EIT Signals identify the vendor in `source`. `eit.load` and `eit.slice_recording` give the native images as `raw_eit` and the global waveform as `raw_global_impedance`. The steps give and take M3Resp objects only. Their older `*_signal` output names refer to the same objects. Device marks and breaths are available through the recording fields above.
+The raw EIT Signals identify the vendor in `source`. `eit.load` and `eit.slice_recording` give the native pixel impedance as `raw_eit` and the global waveform as `raw_global_impedance`. The steps give and take M3Resp objects only. Their older `*_signal` output names refer to the same objects. Device marks and breaths are available through the recording fields above.
 
-`session.slice_eit(start, end)` cuts native images, waveforms, marks and breaths using seconds from the first image. See {doc}`../../concepts/slicing` for boundary rules. Ventilator waveforms can be read from the native recording or an `EITFileData` with `ventilator_payload_from_eit` in `m3resp.adapters.ventilator_adapter`.
+`session.slice_eit(start, end)` cuts the native pixel impedance, waveforms, marks and breaths using seconds from the first frame. See {doc}`../../concepts/slicing` for boundary rules. Ventilator waveforms can be read from the native recording or an `EITFileData` with `ventilator_payload_from_eit` in `m3resp.adapters.ventilator_adapter`.
 
 ## Find the rates and the breaths
 
@@ -60,7 +60,7 @@ respiratory_rate, heart_rate = detect_rates(raw_eit, settings=RateDetectionSetti
 breaths = find_breaths(global_impedance, settings=BreathDetectionSettings(minimum_duration=2 / 3))
 ```
 
-`raw_eit` is a `Signal` with the EIT images (frames, rows, columns), and `global_impedance` is a `Signal` with one value per frame. Both rates are in Hz. `find_breaths` returns a list of `BreathEvent`s. The `middle_time` of an eitprocessing `Breath` is the `extremum_time` of a `BreathEvent`.
+`raw_eit` is a `Signal` with the pixel impedance (frames, rows, columns), and `global_impedance` is a `Signal` with one value per frame. Both rates are in Hz. `find_breaths` returns a list of `BreathEvent`s. The `middle_time` of an eitprocessing `Breath` is the `extremum_time` of a `BreathEvent`.
 
 `detect_rates(..., captures={})` fills the dictionary with the spectra under the keys of eitprocessing (`frequencies`, `normalized_total_power`, `average_normalized_pixel_power`, `diff_total_averaged_power`, `estimated_respiratory_rate`, `estimated_heart_rate`). `m3resp.visualization.plot_rate_detection(settings, **captures)` draws the figure of `RateDetection.plotting.plot`.
 
@@ -82,13 +82,13 @@ from m3resp.eit.processing import mdn_filter
 filtered = mdn_filter(raw_eit, respiratory_rate=0.25, heart_rate=1.2)
 ```
 
-`raw_eit` is a `Signal` with the EIT images (frames, rows, columns) or one waveform; the result is a new `Signal` with the same shape, unit and time. `noise_frequency_limit` (default 220 per minute), `notch_distance` (default 10 per minute) and `order` (default 10) have the names of eitprocessing. The capture `"frequency_bands"` holds the removed bands.
+`raw_eit` is a `Signal` with the pixel impedance (frames, rows, columns) or one waveform; the result is a new `Signal` with the same shape, unit and time. `noise_frequency_limit` (default 220 per minute), `notch_distance` (default 10 per minute) and `order` (default 10) have the names of eitprocessing. The capture `"frequency_bands"` holds the removed bands.
 
-`mdn_filter(..., captures={})` fills the dictionary with the keys of eitprocessing: `low_pass_frequency`, `n_harmonics`, `frequency_bands`, and the images before and after the filter as `Signal`s in `unfiltered_data` and `filtered_data`. A pixel with NaN at some samples becomes NaN at every sample, as in eitprocessing; M3Resp also gives a warning that names these pixels.
+`mdn_filter(..., captures={})` fills the dictionary with the keys of eitprocessing: `low_pass_frequency`, `n_harmonics`, `frequency_bands`, and the pixel impedance before and after the filter as `Signal`s in `unfiltered_data` and `filtered_data`. A pixel with NaN at some samples becomes NaN at every sample, as in eitprocessing; M3Resp also gives a warning that names these pixels.
 
-The Butterworth filters of eitprocessing (`ButterworthFilter`) are `m3resp.processing.filters.butterworth_filter`, a function with the filter type, the cutoff, the sample frequency and the order as arguments. It gives the same numbers. `m3resp.eit.processing.butterworth_filter_images` filters each pixel of EIT images with it. The order must be 1 or more. An order above 10 gives a warning, where eitprocessing needs `ignore_max_order=True`.
+The Butterworth filters of eitprocessing (`ButterworthFilter`) are `m3resp.processing.filters.butterworth_filter`, a function with the filter type, the cutoff, the sample frequency and the order as arguments. It gives the same numbers. `m3resp.eit.processing.butterworth_filter_pixels` filters each pixel of the pixel impedance with it. The order must be 1 or more. An order above 10 gives a warning, where eitprocessing needs `ignore_max_order=True`.
 
-The steps `eit.mdn_filter` and `eit.butterworth_filter` run these functions. `eit.mdn_filter` has the settings `noise_frequency_limit_hz`, `notch_distance_hz` and `order`. Both steps give the filtered images as a `Signal` and keep the captures under `filter_captures`.
+The steps `eit.mdn_filter` and `eit.butterworth_filter` run these functions. `eit.mdn_filter` has the settings `noise_frequency_limit_hz`, `notch_distance_hz` and `order`. Both steps give the filtered pixel impedance as a `Signal` and keep the captures under `filter_captures`.
 
 ## TIV and EELI
 
@@ -161,7 +161,7 @@ With the breaths of `find_breaths`, the pixel breaths and the pixel TIV are the 
 | `PixelBreath` finds the global breaths with its own `BreathDetection` | `find_pixel_breaths` takes the global breaths as input |
 | An `IntervalData` with a (row, column) grid of `Breath` or `None` per global breath | A `PixelBreaths` with three (breath, row, column) arrays of times, NaN for no breath; `pixel(row, column)` gives the breaths of one pixel as `BreathEvent`s |
 | A pixel TIV with `tiv_timing="pixel"` finds the pixel breaths again, always in the mode "negative amplitude" | `pixel_tidal_impedance_variation` takes the `PixelBreaths` of any mode |
-| A `SparseData` of pixel TIV with no unit; with missing pixel breaths, its `time` values are out of step with the values | An `IntervalData` of one `PixelMap` per global breath, in the unit of the images |
+| A `SparseData` of pixel TIV with no unit; with missing pixel breaths, its `time` values are out of step with the values | An `IntervalData` of one `PixelMap` per global breath, in the unit of the pixel impedance |
 | One warning for each pixel with no cross-correlation peak or with too many breaths left out; the text says "more than half", the limit is 25 % | One warning for each of the two reasons, with the number of pixels and their positions; `metadata["skipped_pixels"]` lists them |
 | Fewer than 2 global breaths: `ValueError` | Fewer than 2 global breaths: no pixel breaths |
 
@@ -259,7 +259,7 @@ The GUI reads the maps, masks, EIT images, lung-space captures and rate spectra 
 
 ## Filter and detect breaths
 
-`session.preprocess_eit()` runs rate detection, filter, breath detection, TIV, EELI and pixel TIV in one call, and pixel EELI with `compute_pixel_eeli=True`. It calls `m3resp.eit.processing.preprocess_eit_recording`, which you can also call on a loaded recording without a session. The images and waveforms in `session.processed["eit"]` are `Signal`s. Each part has settings in `preprocess_eit`:
+`session.preprocess_eit()` runs rate detection, filter, breath detection, TIV, EELI and pixel TIV in one call, and pixel EELI with `compute_pixel_eeli=True`. It calls `m3resp.eit.processing.preprocess_eit_recording`, which you can also call on a loaded recording without a session. The pixel impedance and waveforms in `session.processed["eit"]` are `Signal`s. Each part has settings in `preprocess_eit`:
 
 | `eitprocessing` | Settings of `preprocess_eit` |
 |---|---|

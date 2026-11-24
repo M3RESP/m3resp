@@ -189,7 +189,7 @@ def test_step_gives_the_function_mask_and_stores_it(region):
     assert session.pixel_masks.for_name(region) == [mask]
 
 
-def test_step_takes_the_shape_of_the_images():
+def test_step_takes_the_shape_of_the_pixels():
     result = geometric_mask_step(
         eit_data=_images((8, 4)), session=M3Session(), region="quadrant 3"
     )
@@ -200,7 +200,7 @@ def test_step_takes_the_shape_of_the_images():
     )
 
 
-def test_step_refuses_data_that_are_not_images():
+def test_step_refuses_data_that_are_not_pixels():
     signal = dataclasses.replace(_images(), values=np.ones((5, 32)))
 
     with pytest.raises(ValueError, match="time, row and column"):

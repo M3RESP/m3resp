@@ -22,7 +22,7 @@ A waveform inside a mask is regional. The regional waveform of the ventilated (f
 
 `eit.regional_impedance` and `eit.functional_impedance` do the same calculation. Both store the waveform as a {term}`signal` in `session.signals`, with the result name as its `channel`.
 
-Each of the three waveforms is a {term}`signal` with the artifact type `eit_impedance_waveform`. The steps for breath detection, TIV, EELI, pixel TIV, pixel breaths and the lung space masks accept each of them as input. The EIT images have the artifact type `eit_pixel_signal`.
+Each of the three waveforms is a {term}`signal` with the artifact type `eit_impedance_waveform`. The steps for breath detection, TIV, EELI, pixel TIV, pixel breaths and the lung space masks accept each of them as input. The pixel impedance has the artifact type `eit_pixel_signal`.
 
 ## Pixel maps
 
@@ -102,7 +102,7 @@ Two masks of the same shape combine pixel by pixel. The name of the result comes
 
 `lung.apply(data)` multiplies the last two axes of a NumPy array, a `Signal` or a `PixelMap` by the mask and returns the same kind of object. A masked `Signal` or `PixelMap` keeps its other fields. The image size must match the mask size.
 
-`m3resp.eit.processing.regional_impedance(pixel_impedance, mask=lung)` sums the masked images into one value per frame. `functional_impedance` performs the same calculation for a functional lung-space mask. Both return a `Signal` with the time, sampling frequency and device source of the images, in arbitrary units (`a.u.`). The sum leaves out NaN pixels; an image with only NaNs gives 0.
+`m3resp.eit.processing.regional_impedance(pixel_impedance, mask=lung)` sums the masked pixel impedance into one value per frame. `functional_impedance` performs the same calculation for a functional lung-space mask. Both return a `Signal` with the time, sampling frequency and device source of the pixel impedance, in arbitrary units (`a.u.`). The sum leaves out NaN pixels; an image with only NaNs gives 0.
 
 ## Geometric masks
 
@@ -129,7 +129,7 @@ The step `eit.geometric_mask` makes one mask (parameter `region`) with the rows 
 
 ## Functional lung space
 
-The functional lung space is the part of the image that takes part in ventilation. Three functions of `m3resp.eit.roi` find it from the EIT images and the global breaths. Each gives a `PixelMask` with 1 for the pixels of the lung space and NaN elsewhere.
+The functional lung space is the part of the image that takes part in ventilation. Three functions of `m3resp.eit.roi` find it from the pixel impedance and the global breaths. Each gives a `PixelMask` with 1 for the pixels of the lung space and NaN elsewhere.
 
 | Function | Step | A pixel is in the lung space when |
 |---|---|---|
@@ -196,7 +196,7 @@ tiv_map = pixel_tiv.values[3]     # its TIV map
 
 The breath of a pixel can start and end a little earlier or later than the global breath. `m3resp.eit.processing.find_pixel_breaths` finds the breath of each pixel between the ends of inspiration of two neighbouring global breaths. The first and the last global breath never have pixel breaths. The setting `phase_correction_mode` sets what happens to a pixel that is out of phase with the global waveform: `"negative amplitude"` (default) turns a pixel with a negative mean TIV upside down, `"phase shift"` moves the search windows of the pixel by its lag to the global waveform, and `"none"` makes no correction.
 
-The result is a `PixelBreaths`. It holds the global breaths, and three arrays of shape (breath, row, column) in seconds: `start_time`, `extremum_time` (the end of inspiration) and `end_time`. A pixel with no breath has NaN for all three times. `metadata["skipped_pixels"]` lists the pixels that have no breaths, for four reasons: `no_tiv` (the TIV is NaN in every breath), `flat` (the impedance does not change), `no_correlation_peak` and `too_many_breaths_skipped` (more than 25 % of the breaths of the pixel are left out). A pixel breath is left out when one of its two search windows lies partly outside the data, for example when global breaths of a whole recording go with a slice of its EIT data. The search gives a warning for the pixels with no cross-correlation peak, for the pixels with too many breaths left out, and when no pixel has a breath. The waveform must be on the time axis of the images.
+The result is a `PixelBreaths`. It holds the global breaths, and three arrays of shape (breath, row, column) in seconds: `start_time`, `extremum_time` (the end of inspiration) and `end_time`. A pixel with no breath has NaN for all three times. `metadata["skipped_pixels"]` lists the pixels that have no breaths, for four reasons: `no_tiv` (the TIV is NaN in every breath), `flat` (the impedance does not change), `no_correlation_peak` and `too_many_breaths_skipped` (more than 25 % of the breaths of the pixel are left out). A pixel breath is left out when one of its two search windows lies partly outside the data, for example when global breaths of a whole recording go with a slice of its EIT data. The search gives a warning for the pixels with no cross-correlation peak, for the pixels with too many breaths left out, and when no pixel has a breath. The waveform must be on the time axis of the pixel impedance.
 
 ```python
 from m3resp.eit.processing import find_breaths, find_pixel_breaths
@@ -321,7 +321,7 @@ The GUI draws the EIT results in the browser. The functions of `m3resp.visualiza
 | `lungspace_plot_data(captures, mask=...)` | The captures of a lung-space method: mean maps, masks, watershed regions with the point of each region label, and peaks |
 | `rate_spectrum_plot_data(captures, settings=settings)` | The spectra of `detect_rates`, in Hz, and the breathing rate and heart rate |
 
-A time outside the time axis of the images gives `ValueError`. An infinite value gives `ValueError`, because JSON has no infinite numbers.
+A time outside the time axis of the pixel impedance gives `ValueError`. An infinite value gives `ValueError`, because JSON has no infinite numbers.
 
 ```python
 import json

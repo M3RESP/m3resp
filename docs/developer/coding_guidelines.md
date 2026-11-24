@@ -21,7 +21,7 @@ Do not add a True/False argument that changes the return type, for example from 
 
 ## Arguments after the data go by name
 
-The first argument of a function is the data it works on, for example the EIT images or a waveform. Put `*` after it, so the caller gives every other argument by name:
+The first argument of a function is the data it works on, for example the pixel impedance or a waveform. Put `*` after it, so the caller gives every other argument by name:
 
 ```python
 def amplitude_lungspace(
@@ -40,7 +40,7 @@ A reader then sees what each value is without the order of the arguments. Two ar
 
 ## Named arguments or a settings object
 
-The settings of a function are named arguments, for example `mdn_filter(images, respiratory_rate=0.25, heart_rate=1.2, order=10)`. Values measured on the recording, such as the breathing rate and the heart rate that the MDN filter needs, are always arguments.
+The settings of a function are named arguments, for example `mdn_filter(pixels, respiratory_rate=0.25, heart_rate=1.2, order=10)`. Values measured on the recording, such as the breathing rate and the heart rate that the MDN filter needs, are always arguments.
 
 A settings object holds the settings when they depend on each other, or when many settings go together to several functions. In `RateDetectionSettings`, `subject_type` (`"adult"` or `"neonate"`) sets the default limits of the breathing rate and the heart rate. `BreathDetectionSettings` holds the seven settings of the breath detection, and the same object goes to `find_breaths(...)`, `preprocess_eit_recording(...)` and the EIT steps that find breaths, the pixel breaths and the lung space.
 
@@ -48,7 +48,7 @@ To use the same settings in several calls, put the named arguments in a dictiona
 
 ```python
 mdn_options = {"notch_distance": 0.2, "order": 8}  # notch_distance in Hz
-filtered = mdn_filter(images, respiratory_rate=rate, heart_rate=heart, **mdn_options)
+filtered = mdn_filter(pixels, respiratory_rate=rate, heart_rate=heart, **mdn_options)
 ```
 
 In a workflow file, each step takes its settings as parameters, also when the function behind the step has a settings object.
@@ -70,7 +70,7 @@ For example, `window_integral(...)` in `m3resp.processing.metrics` calculates th
 
 ## Default names of results
 
-A function that makes a new `Signal` has the argument `name`. With `name=None`, the function makes the name from its input. For example, `global_impedance(images)` gives `"Global impedance (mdn_filtered)"` for images with `metadata["label"]` `"mdn_filtered"`, and `regional_impedance(images, mask=ventral)` gives `"ventral_impedance"`. Give `name` only when the result needs another name.
+A function that makes a new `Signal` has the argument `name`. With `name=None`, the function makes the name from its input. For example, `global_impedance(pixels)` gives `"Global impedance (mdn_filtered)"` for pixel impedance with `metadata["label"]` `"mdn_filtered"`, and `regional_impedance(pixel impedance, mask=ventral)` gives `"ventral_impedance"`. Give `name` only when the result needs another name.
 
 ## Two arguments for one value
 

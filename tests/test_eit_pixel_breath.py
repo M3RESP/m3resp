@@ -383,7 +383,7 @@ def test_the_input_is_left_unchanged() -> None:
 # Breaths at the edges of the data
 
 
-def _breathing_images(duration: float) -> tuple[Signal, Signal]:
+def _breathing_pixels(duration: float) -> tuple[Signal, Signal]:
     """2 x 2 images at 20 Hz with one breath every 3 s, and their sum."""
 
     time = np.arange(int(duration * 20)) / 20.0
@@ -404,7 +404,7 @@ def test_breaths_after_the_end_of_the_data_have_no_pixel_breaths() -> None:
     """The last two global breaths end after the data, as for the breaths of
     a whole recording on a slice of its EIT data."""
 
-    pixels, waveform = _breathing_images(42.0)
+    pixels, waveform = _breathing_pixels(42.0)
     breaths = _breaths(waveform)
     middles = [breath.extremum_time for breath in breaths]
     n_samples = int(np.searchsorted(pixels.time, (middles[-3] + middles[-2]) / 2))
@@ -433,7 +433,7 @@ def test_breaths_after_the_end_of_the_data_have_no_pixel_breaths() -> None:
 
 
 def test_a_pixel_with_every_breath_left_out_is_listed_with_a_warning() -> None:
-    pixels, waveform = _breathing_images(30.0)
+    pixels, waveform = _breathing_pixels(30.0)
     values = pixels.values.copy()
     values[:, 1, 1] = 1.0
     values[100, 1, 1] = 5.0
@@ -448,7 +448,7 @@ def test_a_pixel_with_every_breath_left_out_is_listed_with_a_warning() -> None:
 
 
 def test_no_pixel_breaths_give_a_warning_with_the_reasons() -> None:
-    pixels, waveform = _breathing_images(30.0)
+    pixels, waveform = _breathing_pixels(30.0)
 
     with pytest.warns(RuntimeWarning, match="no pixel has a breath") as caught:
         result = find_pixel_breaths(
@@ -465,7 +465,7 @@ def test_no_pixel_breaths_give_a_warning_with_the_reasons() -> None:
 
 
 def test_warnings_about_the_sign_breaths_name_find_pixel_breaths() -> None:
-    pixels, waveform = _breathing_images(30.0)
+    pixels, waveform = _breathing_pixels(30.0)
     breaths = _breaths(waveform)
     late = BreathEvent("eit", 28.0, 31.0, extremum_time=29.5)
     expected = f"find_pixel_breaths: 1 of {len(breaths) + 1} breaths"
@@ -499,10 +499,10 @@ def test_wrong_input_is_refused() -> None:
     with pytest.raises(ValueError, match="one value per sample"):
         find_pixel_breaths(pixels, signal=pixels, breaths=breaths)
     half = len(waveform.time) // 2
-    with pytest.raises(ValueError, match="on the time axis of the EIT images"):
+    with pytest.raises(ValueError, match="on the time axis of the pixel impedance"):
         find_pixel_breaths(pixels, signal=_sliced(waveform, half), breaths=breaths)
     later = _signal(waveform.values, waveform.time + 1.0, name="global")
-    with pytest.raises(ValueError, match="on the time axis of the EIT images"):
+    with pytest.raises(ValueError, match="on the time axis of the pixel impedance"):
         find_pixel_breaths(pixels, signal=later, breaths=breaths)
     with pytest.raises(TypeError, match="needs BreathEvent objects"):
         find_pixel_breaths(pixels, signal=waveform, breaths=[(0.0, 1.0, 2.0)])  # type: ignore[list-item]

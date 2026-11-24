@@ -28,7 +28,7 @@ Portions of this module are derived from eitprocessing.
 
 Modified for M3RESP:
     - The checks and the joins work on `EITFileData`: `Signal`s for the
-      images and waveforms, `EventData` for the marks and `IntervalData`
+      pixel impedance and the waveforms, `EventData` for the marks and `IntervalData`
       for the breaths.
     - The check compares vendor, sample frequency, image size, the keys of
       each group, and the unit, category and sample frequency of each item.

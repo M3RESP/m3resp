@@ -27,7 +27,7 @@ Portions of this module are derived from eitprocessing.
 
 Modified for M3RESP:
     - The class `AmplitudeLungspace` and its method `apply` are one function,
-      `amplitude_lungspace`, with the EIT images and the waveform as
+      `amplitude_lungspace`, with the pixel impedance and the waveform as
       `Signal`s. As in eitprocessing, the waveform (`timing_data`) is the
       sum of the pixels by default. The global breaths are an input
       (eitprocessing runs `BreathDetection` with the default settings on the
@@ -62,7 +62,7 @@ from m3resp.eit.processing import (
 from m3resp.eit.roi._shared import breath_waveform, check_threshold, finish_mask
 from m3resp.eit.roi.tiv import mean_map_and_mask
 
-NAME = "amplitude_lungspace_mask"
+#: Public name of the function, stored as the method of each result.
 METHOD = "m3resp.eit.roi.amplitude_lungspace"
 
 
@@ -72,13 +72,13 @@ def amplitude_lungspace(
     breaths: Sequence[BreathEvent],
     signal: Signal | None = None,
     threshold: float = 0.15,
-    name: str = NAME,
+    name: str = "amplitude_lungspace_mask",
     captures: dict[str, Any] | None = None,
 ) -> PixelMask:
     """Return the pixels whose mean amplitude is at least a fraction of the largest.
 
     Args:
-        pixels (Signal): EIT images, values with shape (time, row, column),
+        pixels (Signal): Pixel impedance, values with shape (time, row, column),
             with time in seconds.
         breaths (Sequence[BreathEvent]): The global breaths of ``signal``.
         signal (Signal | None): The waveform of the breaths, for example the
@@ -102,7 +102,7 @@ def amplitude_lungspace(
         TypeError: If ``threshold`` is not a float.
         ValueError: If ``threshold`` is not between 0 and 1, there are no
             breaths, every amplitude value is NaN, or ``signal`` is None and
-            the images are masked; also the errors of
+            the pixel impedance is masked; also the errors of
             :func:`~m3resp.eit.processing.find_pixel_breaths`.
 
     Warns:
@@ -138,7 +138,7 @@ def pixel_amplitude_per_breath(
     """Return the amplitude of each pixel in each global breath.
 
     Args:
-        pixels (Signal): EIT images (time, row, column).
+        pixels (Signal): Pixel impedance (time, row, column).
         signal (Signal): The waveform of the breaths.
         breaths (Sequence[BreathEvent]): The global breaths of ``signal``.
 

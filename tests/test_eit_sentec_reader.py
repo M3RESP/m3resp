@@ -108,7 +108,7 @@ class TestGoldenFile:
         with np.load(GOLDEN_READER) as stored:
             return dict(stored)
 
-    def test_images_time_and_sample_frequency(self, golden):
+    def test_pixels_time_and_sample_frequency(self, golden):
         ours = read_sentec(SENTEC_FILE)
 
         assert ours.vendor == str(golden["vendor"])
@@ -257,7 +257,7 @@ class TestChecks:
             read_sentec(path)
 
 
-def test_images_are_tagged():
+def test_pixels_are_tagged():
     ours = read_sentec(SENTEC_FILE)
 
     assert ours.pixel_impedance.channel == "pixel_impedance"

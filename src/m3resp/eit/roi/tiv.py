@@ -19,7 +19,7 @@ Portions of this module are derived from eitprocessing.
 
 Modified for M3RESP:
     - The class `TIVLungspace` and its method `apply` are one function,
-      `tiv_lungspace`, with the EIT images as a `Signal`. The global breaths
+      `tiv_lungspace`, with the pixel impedance as a `Signal`. The global breaths
       are an input, given by name (eitprocessing runs `BreathDetection` with
       the default settings on the timing data).
     - The TIV per breath comes from `pixel_tidal_impedance_variation`
@@ -52,7 +52,7 @@ from m3resp.eit.roi._shared import (
     pixel_maps_of,
 )
 
-NAME = "tiv_lungspace_mask"
+#: Public name of the function, stored as the method of each result.
 METHOD = "m3resp.eit.roi.tiv_lungspace"
 
 
@@ -61,13 +61,13 @@ def tiv_lungspace(
     *,
     breaths: Sequence[BreathEvent],
     threshold: float = 0.15,
-    name: str = NAME,
+    name: str = "tiv_lungspace_mask",
     captures: dict[str, Any] | None = None,
 ) -> PixelMask:
     """Return the pixels whose mean TIV is at least a fraction of the largest.
 
     Args:
-        pixels (Signal): EIT images, values with shape (time, row, column),
+        pixels (Signal): Pixel impedance, values with shape (time, row, column),
             with time in seconds.
         breaths (Sequence[BreathEvent]): The global breaths, with times on
             the time axis of ``pixels``, for example the breaths of the

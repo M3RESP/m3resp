@@ -76,7 +76,7 @@ def _upstream(signal: Signal, mode: str, order: int) -> tuple[np.ndarray, dict]:
 @pytest.mark.parametrize("order", [1, 4, 10])
 @pytest.mark.parametrize("mode", ["lowpass", "highpass", "bandpass", "bandstop"])
 @pytest.mark.parametrize("dataset", DATASETS)
-def test_the_step_gives_the_images_and_captures_of_eitprocessing(
+def test_the_step_gives_the_pixels_and_captures_of_eitprocessing(
     dataset: str, mode: str, order: int, images: dict
 ) -> None:
     signal = images[dataset]
@@ -104,7 +104,7 @@ def test_the_result_describes_the_filter(images: dict) -> None:
     assert filtered.name == "Bandpass-filtered EIT data"
     assert filtered.source == "sentec"
     assert filtered.processing_state == "intermediate"
-    assert filtered.method == "m3resp.processing.filters.butterworth_filter"
+    assert filtered.method == "m3resp.eit.processing.butterworth_filter_pixels"
     assert filtered.metadata["source_package"] == "m3resp"
     assert filtered.metadata["parameters"]["mode"] == "bandpass"
     assert _infer_filter_mode(filtered) == "bandpass"
@@ -176,7 +176,7 @@ def test_the_order_parameter_has_the_lowest_value_1_and_no_highest() -> None:
 
 
 @pytest.mark.parametrize("mode", ["lowpass", "bandpass"])
-def test_preprocess_gives_the_eitprocessing_images_and_signal_captures(
+def test_preprocess_gives_the_eitprocessing_pixels_and_signal_captures(
     mode: str,
 ) -> None:
     from eitprocessing.filters.butterworth_filters import ButterworthFilter

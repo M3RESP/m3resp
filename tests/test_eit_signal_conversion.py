@@ -192,7 +192,7 @@ def test_global_impedance_signal_gives_its_category_and_name():
     assert data.derived_from == []
 
 
-def test_signal_to_eit_data_needs_images():
+def test_signal_to_eit_data_needs_pixels():
     signal = Signal(
         values=np.zeros(3), time=np.arange(3.0), source="draeger", name="flat"
     )

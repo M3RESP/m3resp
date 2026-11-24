@@ -26,6 +26,7 @@ from m3resp.eit.processing.tidal_impedance_variation import (
     pixel_tidal_impedance_variation,
 )
 
+#: Public name of the function, stored as the method of each result.
 METHOD = "m3resp.eit.processing.mean_breath_image"
 #: The two quantities that ``mean_breath_image`` averages.
 MEAN_BREATH_QUANTITIES = ("tiv", "amplitude")
@@ -56,7 +57,7 @@ def mean_breath_image(
     180 s.
 
     Args:
-        pixels (Signal): EIT images, values with shape (time, row, column),
+        pixels (Signal): Pixel impedance, values with shape (time, row, column),
             with time in seconds.
         breaths (Sequence[BreathEvent]): The global breaths, with times on
             the time axis of ``pixels``, for example the breaths of the
@@ -90,7 +91,7 @@ def mean_breath_image(
         ValueError: If ``quantity`` is unknown, ``pixels`` has no samples,
             both ``end`` and ``duration`` are set, ``duration`` is negative,
             ``start`` is after the end of the window, ``signal`` is set with
-            ``quantity="tiv"``, ``signal`` is None and the images are masked,
+            ``quantity="tiv"``, ``signal`` is None and the pixel impedance is masked,
             no breath lies inside the window, or every breath inside has a NaN
             value in all pixels; also the errors of
             :func:`~m3resp.eit.processing.pixel_tidal_impedance_variation`
@@ -181,7 +182,9 @@ def _window(
 
     time = np.asarray(pixels.time, dtype=float)
     if time.size == 0:
-        raise ValueError("mean_breath_image needs EIT images with at least one sample.")
+        raise ValueError(
+            "mean_breath_image needs pixel impedance with at least one sample."
+        )
     if end is not None and duration is not None:
         raise ValueError(
             "mean_breath_image: give end or duration, not both; "

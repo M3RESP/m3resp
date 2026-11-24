@@ -27,6 +27,7 @@ from m3resp.eit.roi import (
 )
 from m3resp.eit.roi import amplitude as _amplitude
 from m3resp.eit.roi import filter_by_size as _filter_by_size
+from m3resp.eit.roi import geometric as _geometric
 from m3resp.eit.roi import geometric_mask as _geometric_mask
 from m3resp.eit.roi import tiv as _tiv
 from m3resp.eit.roi import watershed as _watershed
@@ -247,7 +248,7 @@ def roi_tiv_lungspace(
     are recorded in the session's history.
 
     Args:
-        eit_data (Any): EIT images as a ``Signal``, with time, row and
+        eit_data (Any): Pixel impedance as a ``Signal``, with time, row and
             column axes.
         timing_data (Any): Global or regional impedance waveform. Without
             ``breaths``, the breaths are found on it with the default
@@ -268,7 +269,7 @@ def roi_tiv_lungspace(
             and NaN elsewhere.
 
     Raises:
-        TypeError: If an input of images or of a waveform is not a
+        TypeError: If an input of pixel impedance or of a waveform is not a
             ``Signal``, or a given breath is not a ``BreathEvent``.
         ValueError: If the threshold is outside the open interval (0, 1),
             there are no breaths, or every TIV value is NaN.
@@ -363,7 +364,7 @@ def roi_amplitude_lungspace(
     recorded in the session's history.
 
     Args:
-        eit_data (Any): EIT images as a ``Signal``, with time, row and
+        eit_data (Any): Pixel impedance as a ``Signal``, with time, row and
             column axes.
         timing_data (Any): Global or regional impedance waveform, for the
             phase lag of each pixel. Without ``breaths``, the breaths are
@@ -383,7 +384,7 @@ def roi_amplitude_lungspace(
             column) with 1 for included pixels and NaN elsewhere.
 
     Raises:
-        TypeError: If an input of images or of a waveform is not a
+        TypeError: If an input of pixel impedance or of a waveform is not a
             ``Signal``, or a given breath is not a ``BreathEvent``.
         ValueError: If the threshold is outside the open interval (0, 1),
             a given breath has another modality than EIT, there are no
@@ -485,7 +486,7 @@ def roi_watershed(
     processing settings are recorded in the session's history.
 
     Args:
-        eit_data (Any): EIT images as a ``Signal``, with time, row and
+        eit_data (Any): Pixel impedance as a ``Signal``, with time, row and
             column axes.
         timing_data (Any): Global or regional impedance waveform, for the
             phase lag of each pixel. Without ``breaths``, the breaths are
@@ -505,7 +506,7 @@ def roi_watershed(
             column) with 1 for included pixels and NaN elsewhere.
 
     Raises:
-        TypeError: If an input of images or of a waveform is not a
+        TypeError: If an input of pixel impedance or of a waveform is not a
             ``Signal``, or a given breath is not a ``BreathEvent``.
         ValueError: If the threshold is outside the open interval (0, 1),
             a given breath has another modality than EIT, no breath has
@@ -744,7 +745,7 @@ def geometric_mask(
     recorded in the session's history.
 
     Args:
-        eit_data: EIT images as a ``Signal``, with time, row and column
+        eit_data: Pixel impedance as a ``Signal``, with time, row and column
             axes. Only the number of rows and columns is used.
         session: Session that stores the mask and processing history.
         region: One of the 12 region names of
@@ -756,7 +757,7 @@ def geometric_mask(
 
     Raises:
         TypeError: If ``eit_data`` is not a ``Signal``.
-        ValueError: If ``region`` is unknown, the images are not (time, row,
+        ValueError: If ``region`` is unknown, the pixel impedance is not (time, row,
             column), or their rows or columns do not divide into the parts
             of the region.
     """
@@ -765,12 +766,12 @@ def geometric_mask(
     values = np.asarray(pixels.values)
     if values.ndim != 3:
         raise ValueError(
-            "eit.geometric_mask needs EIT images with time, row and column "
+            "eit.geometric_mask needs pixel impedance with time, row and column "
             f"axes, got {values.ndim} axes."
         )
     mask = _geometric_mask(region, shape=(values.shape[1], values.shape[2]))
     metadata = _step_provenance(
-        source_function="m3resp.eit.roi.geometric_mask",
+        source_function=_geometric.METHOD,
         operation="eit.geometric_mask",
         parameters={"region": region},
         source_package="m3resp",

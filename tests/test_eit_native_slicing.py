@@ -185,7 +185,7 @@ def test_partial_intervals_are_trimmed_when_enabled():
 def test_waveforms_with_a_different_sample_count_are_refused():
     original = _device_data()
     original.signals["pressure"] = Signal(time=[0.0], values=[1.0])
-    with pytest.raises(ValueError, match="samples; the images"):
+    with pytest.raises(ValueError, match="samples; the pixel impedance"):
         slice_file_data(original, 1, 5)
 
 
@@ -287,7 +287,7 @@ def test_sentec_loading_sums_native_pixels(monkeypatch):
     )
 
 
-def test_custom_sequence_keeps_interval_values_extra_images_and_waveforms():
+def test_custom_sequence_keeps_interval_values_extra_pixels_and_waveforms():
     pytest.importorskip("eitprocessing")
     from dataclasses import replace
 

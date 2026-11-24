@@ -132,7 +132,7 @@ def slice_signal(
     writes=("eit_slice", *_LOAD_WRITES),
     replaces=_LOAD_WRITES,
     summary="Keep only a time window of the loaded EIT recording.",
-    description="Keep a time window of the EIT images, waveforms, device marks and breaths. A ventilator recording from the same EIT file is cut at the same frames. The outputs have the same names as eit.load (raw_eit, raw_global_impedance, ...), and the cut raw Signals replace the full ones in session.signals. Run before preprocessing.",
+    description="Keep a time window of the pixel impedance, waveforms, device marks and breaths. A ventilator recording from the same EIT file is cut at the same frames. The outputs have the same names as eit.load (raw_eit, raw_global_impedance, ...), and the cut raw Signals replace the full ones in session.signals. Run before preprocessing.",
     category="preprocessing",
     modality="eit",
     session_reads=("session.raw.eit",),

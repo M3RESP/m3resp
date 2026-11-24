@@ -33,7 +33,7 @@ Portions of this module are derived from eitprocessing.
 
 Modified for M3RESP:
     - `load_from_single_path` is `read_draeger`. It returns an
-      `EITFileData` of m3resp types: the images and the waveforms are
+      `EITFileData` of m3resp types: the pixel impedance and the waveforms are
       `Signal`s, the breath minima and maxima and the event markers are
       `EventData`. The dictionary keys are the eitprocessing labels.
     - An event marker is an `Event` with the text as `label` and the number
@@ -100,7 +100,7 @@ def read_draeger(
             ``None`` reads up to the end of the file.
 
     Returns:
-        EITFileData: The images, the global impedance, the Medibus
+        EITFileData: The pixel impedance, the global impedance, the Medibus
             waveforms, the breath minima and maxima found by the device and
             the event markers. Time is in seconds of the day.
 

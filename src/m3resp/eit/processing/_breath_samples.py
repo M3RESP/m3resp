@@ -63,7 +63,7 @@ def check_pixel_impedance(signal: Signal, *, function: str) -> np.ndarray:
     """Return the values of EIT pixel impedance, after the checks.
 
     Args:
-        signal (Signal): EIT images, values with shape (time, row, column).
+        signal (Signal): Pixel impedance, values with shape (time, row, column).
             Its ``category`` must be None or an impedance category
             (``IMPEDANCE_CATEGORIES``).
         function (str): Name of the calling function, for the messages.
@@ -80,7 +80,7 @@ def check_pixel_impedance(signal: Signal, *, function: str) -> np.ndarray:
     values = _check_impedance(signal, function=function)
     if values.ndim != 3:
         raise ValueError(
-            f"{function} needs EIT images with shape (time, row, column); "
+            f"{function} needs pixel impedance with shape (time, row, column); "
             f"{signal.name!r} has shape {values.shape}."
         )
     return values
@@ -144,7 +144,7 @@ def check_pixel_breaths(
         breaths (Sequence[Any] | PixelBreaths): A list of ``BreathEvent``s
             (the same times for every pixel) or a ``PixelBreaths`` (the
             times of each pixel).
-        data (np.ndarray): The EIT images, shape (time, row, column).
+        data (np.ndarray): The pixel impedance, shape (time, row, column).
         function (str): Name of the calling function, for the messages.
 
     Returns:
@@ -156,14 +156,14 @@ def check_pixel_breaths(
     Raises:
         TypeError: If an item of a list is not a ``BreathEvent``.
         ValueError: If the grid of ``PixelBreaths`` differs from the grid of
-            the images.
+            the pixel impedance.
     """
 
     if isinstance(breaths, PixelBreaths):
         if breaths.grid_shape != data.shape[1:]:
             raise ValueError(
                 f"{function}: the pixel breaths are on a {breaths.grid_shape[0]} x "
-                f"{breaths.grid_shape[1]} grid, the images on a {data.shape[1]} x "
+                f"{breaths.grid_shape[1]} grid, the pixel impedance on a {data.shape[1]} x "
                 f"{data.shape[2]} grid."
             )
         return breaths, list(breaths.breaths), "pixel"
@@ -312,7 +312,7 @@ def _pixel_breath_samples(
     """Return the nearest sample of each pixel breath time.
 
     Args:
-        signal (Signal): The EIT images; its ``time`` gives the sample times.
+        signal (Signal): The pixel impedance; its ``time`` gives the sample times.
         breaths (PixelBreaths): The breaths of each pixel, on the time axis
             of ``signal``.
         points (Sequence[str]): The breath times to look up:
@@ -357,7 +357,7 @@ def values_at(data: np.ndarray, indices: np.ndarray) -> np.ndarray:
 
     Args:
         data (np.ndarray): Values with time on the first axis: shape (time,)
-            for a waveform, or (time, row, column) for EIT images.
+            for a waveform, or (time, row, column) for pixel impedance.
         indices (np.ndarray): Sample indices from ``breath_samples``: shape
             (breath,) for one time per breath, or (breath, row, column) for
             the times of each pixel. ``NO_SAMPLE`` means no sample.
@@ -396,7 +396,7 @@ def pixel_maps_per_breath(
     Args:
         values (np.ndarray): One grid per breath, shape (breath, row,
             column).
-        pixels (Signal): The EIT images the values come from; they give the
+        pixels (Signal): The pixel impedance the values come from; it gives the
             modality and the unit.
         breaths (list[BreathEvent]): The global breaths, one per grid.
         name (str): Name of the result and of each ``PixelMap``.

@@ -819,7 +819,7 @@ class M3Session:
         part runs from the first frame at or after `start_seconds` up to,
         but not including, the first frame at or after `end_seconds`.
 
-        m3resp cuts the images, waveforms, device marks and breaths
+        m3resp cuts the pixel impedance, waveforms, device marks and breaths
         together. A ventilator recording from the same EIT file is cut at
         those frames too, so it stays lined up with the EIT. EIT frame times keep their original values; the EIT
         start time in `session.start_times` moves later by the part cut off

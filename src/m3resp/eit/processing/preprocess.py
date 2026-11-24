@@ -2,8 +2,8 @@
 
 ``preprocess_eit_recording`` runs the EIT calculations of
 ``m3resp.eit.processing`` in a fixed order: the breathing rate and the heart
-rate, a filter of the images (MDN, Butterworth low-pass or band-pass, or
-none), the global impedance of the filtered images, the breaths, and the TIV
+rate, a filter of the pixel impedance (MDN, Butterworth low-pass or band-pass, or
+none), the global impedance of the filtered pixel impedance, the breaths, and the TIV
 and the EELI of each breath, for the whole waveform and for each pixel.
 ``M3Session.preprocess_eit`` calls it.
 """
@@ -18,7 +18,7 @@ from m3resp.eit.processing.breath_detection import (
     find_breaths,
 )
 from m3resp.eit.processing.breath_inputs import breaths_to_interval_data
-from m3resp.eit.processing.butterworth import butterworth_filter_images
+from m3resp.eit.processing.butterworth import butterworth_filter_pixels
 from m3resp.eit.processing.eeli import (
     end_expiratory_lung_impedance,
     pixel_end_expiratory_lung_impedance,
@@ -76,18 +76,18 @@ def preprocess_eit_recording(
     include_filtered_data: bool = True,
     include_global_impedance: bool = True,
 ) -> dict[str, Any]:
-    """Filter the EIT images of a recording and compute the breath results.
+    """Filter the pixel impedance of a recording and compute the breath results.
 
     The MDN filter needs the breathing rate and the heart rate, so the rates
     are found for ``filter_mode="mdn"`` even when ``compute_rates`` is False.
-    The breaths are found on the global impedance of the filtered images.
+    The breaths are found on the global impedance of the filtered pixel impedance.
     Without a filter, this is the raw global impedance of the recording (the
     waveform of the file for Draeger and Timpel, the sum of the pixels for
     Sentec).
 
     Args:
         recording (_Recording): The loaded recording, an ``EITRecording``
-            (``session.eit``), with the raw images in ``pixel_impedance`` and
+            (``session.eit``), with the raw pixel impedance in ``pixel_impedance`` and
             the raw global impedance in ``raw_global_impedance``.
         subject_type (SubjectType | None): ``"adult"`` or ``"neonate"`` sets
             the default rate ranges of the rate detection. With None, give
@@ -117,17 +117,17 @@ def preprocess_eit_recording(
         compute_eeli (bool): Compute the EELI of each breath.
         compute_pixel_tiv (bool): Compute one map of TIV per breath.
         compute_pixel_eeli (bool): Compute one map of EELI per breath.
-        include_filtered_data (bool): Return the filtered images under
+        include_filtered_data (bool): Return the filtered pixel impedance under
             ``filtered_eit``.
         include_global_impedance (bool): Return the raw global impedance and
-            the global impedance of the filtered images. The breath
+            the global impedance of the filtered pixel impedance. The breath
             calculations use the global impedance also when this is False.
 
     Returns:
-        dict[str, Any]: ``raw_eit`` (the raw images, a ``Signal``),
+        dict[str, Any]: ``raw_eit`` (the raw pixel impedance, a ``Signal``),
             ``raw_global_impedance`` and ``filtered_global_impedance``
             (``Signal`` objects, times in seconds), ``filtered_eit`` (the filtered
-            images, with the label of the filter in ``metadata["label"]``),
+            pixel impedance, with the label of the filter in ``metadata["label"]``),
             ``filter_mode``, ``filter_captures`` (the in-between results of
             the filter), ``rate_detector`` (``RateDetectionSettings``),
             ``rate_captures`` (the spectra), ``respiratory_rate_hz`` and
@@ -191,7 +191,7 @@ def preprocess_eit_recording(
             suppress_length_warnings=True,
         )
 
-    filtered_eit, filter_captures = _filter_images(
+    filtered_eit, filter_captures = _filter_pixels(
         raw_eit,
         filter_mode,
         respiratory_rate_hz=respiratory_rate_hz,
@@ -260,8 +260,8 @@ def preprocess_eit_recording(
     }
 
 
-def _filter_images(
-    images: Signal,
+def _filter_pixels(
+    pixel_impedance: Signal,
     filter_mode: str,
     *,
     respiratory_rate_hz: float | None,
@@ -270,10 +270,10 @@ def _filter_images(
     highpass_hz: float,
     order: int,
 ) -> tuple[Signal, dict[str, Any]]:
-    """Return the images after the filter of ``filter_mode``, and the captures.
+    """Return the pixel impedance after the filter of ``filter_mode``, and the captures.
 
     Args:
-        images (Signal): The raw images.
+        pixel_impedance (Signal): The raw pixel impedance.
         filter_mode (str): ``"mdn"``, ``"lowpass"``, ``"bandpass"`` or ``"none"``.
         respiratory_rate_hz (float | None): Breathing rate in Hz, for MDN.
         heart_rate_hz (float | None): Heart rate in Hz, for MDN.
@@ -282,10 +282,10 @@ def _filter_images(
         order (int): Butterworth order of the low-pass and band-pass filters.
 
     Returns:
-        tuple[Signal, dict[str, Any]]: The filtered images, with
+        tuple[Signal, dict[str, Any]]: The filtered pixel impedance, with
             ``metadata["label"]`` set to ``"<filter_mode>_filtered"``, and the
-            captures of the filter. For ``"none"``, ``images`` itself and an
-            empty dict.
+            captures of the filter. For ``"none"``, ``pixel_impedance``
+            itself and an empty dict.
     """
 
     captures: dict[str, Any] = {}
@@ -293,15 +293,15 @@ def _filter_images(
         assert respiratory_rate_hz is not None
         assert heart_rate_hz is not None
         filtered = mdn_filter(
-            images,
+            pixel_impedance,
             respiratory_rate=respiratory_rate_hz,
             heart_rate=heart_rate_hz,
             name="MDN-filtered EIT data",
             captures=captures,
         )
     elif filter_mode in ("lowpass", "bandpass"):
-        filtered, captures = butterworth_filter_images(
-            images,
+        filtered, captures = butterworth_filter_pixels(
+            pixel_impedance,
             mode=cast(Literal["lowpass", "bandpass"], filter_mode),
             cutoff_frequency=lowpass_hz
             if filter_mode == "lowpass"
@@ -310,6 +310,6 @@ def _filter_images(
             operation=f"preprocess(filter_mode={filter_mode!r})",
         )
     else:
-        return images, captures
+        return pixel_impedance, captures
     filtered.metadata["label"] = f"{filter_mode}_filtered"
     return filtered, captures

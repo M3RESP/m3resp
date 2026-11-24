@@ -3,15 +3,15 @@
 ``global_impedance`` sums the pixels of each EIT image into one waveform.
 ``regional_impedance`` and ``functional_impedance`` sum only the pixels inside
 a ``PixelMask``. ``detect_rates`` finds the breathing rate and the heart rate
-of EIT images, and ``find_breaths`` finds the breaths of an impedance
+of the pixel impedance, and ``find_breaths`` finds the breaths of an impedance
 waveform. ``mdn_filter`` removes the heart signal from EIT data.
 ``tidal_impedance_variation`` and ``end_expiratory_lung_impedance`` give the
 TIV and the EELI of each breath of an impedance waveform, and
 ``pixel_tidal_impedance_variation`` and ``pixel_end_expiratory_lung_impedance``
-give one map of TIV or EELI values per breath for the pixels of EIT images.
+give one map of TIV or EELI values per breath, one value for each pixel.
 ``find_pixel_breaths`` finds the breaths of each pixel from the global
 breaths. ``mean_breath_image`` gives the mean pixel TIV or pixel amplitude over
-the breaths in a time window, for example the minute image. ``butterworth_filter_images`` filters each pixel of EIT images with a
+the breaths in a time window, for example the minute image. ``butterworth_filter_pixels`` filters each pixel of the pixel impedance along time with a
 Butterworth filter. ``breath_intervals_to_breath_events`` and
 ``breaths_to_interval_data`` change EIT breaths between a list of
 ``BreathEvent`` objects and an ``IntervalData``. ``preprocess_eit_recording`` runs
@@ -28,7 +28,7 @@ from m3resp.eit.processing.breath_inputs import (
 )
 from m3resp.eit.processing.butterworth import (
     MAX_EIT_BUTTERWORTH_ORDER,
-    butterworth_filter_images,
+    butterworth_filter_pixels,
 )
 from m3resp.eit.processing.eeli import (
     end_expiratory_lung_impedance,
@@ -60,7 +60,7 @@ __all__ = [
     "RateDetectionSettings",
     "breath_intervals_to_breath_events",
     "breaths_to_interval_data",
-    "butterworth_filter_images",
+    "butterworth_filter_pixels",
     "detect_rates",
     "end_expiratory_lung_impedance",
     "find_breaths",

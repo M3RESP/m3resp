@@ -52,6 +52,7 @@ from scipy import ndimage
 from m3resp.data import PixelMap, PixelMask
 from m3resp.eit.roi._shared import finish_mask
 
+#: Public name of the function, stored as the method of each result.
 METHOD = "m3resp.eit.roi.filter_mask_by_size"
 
 

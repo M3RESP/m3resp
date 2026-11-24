@@ -23,6 +23,10 @@ from m3resp.eit.processing.breath_inputs import (
     breaths_to_interval_data,
 )
 from m3resp.eit.processing.eeli import METHOD as EELI_FUNCTION
+from m3resp.eit.processing.impedance import GLOBAL_METHOD as GLOBAL_IMPEDANCE_FUNCTION
+from m3resp.eit.processing.impedance import (
+    REGIONAL_METHOD as REGIONAL_IMPEDANCE_FUNCTION,
+)
 from m3resp.eit.processing.tidal_impedance_variation import METHOD as TIV_FUNCTION
 from m3resp.workflows.registry import (
     ANY_ARTIFACT_TYPE,
@@ -54,7 +58,7 @@ from ._shared import (
             name="signal",
             artifact_type="eit_pixel_signal",
             default_context_key="filtered_eit",
-            description="Filtered EIT images (pixel impedance) to sum.",
+            description="Filtered pixel impedance to sum.",
         ),
     ),
     output_artifacts=(
@@ -70,11 +74,11 @@ def global_impedance(signal: Any) -> dict[str, Any]:
 
     The sum is ``m3resp.eit.processing.global_impedance``. The waveform is
     named ``"Global impedance (<label>)"``, where ``<label>`` is
-    ``metadata["label"]`` of the images (the ``label`` of the filter steps),
-    else their name.
+    ``metadata["label"]`` of the pixel impedance (the ``label`` of the filter
+    steps), else its name.
 
     Args:
-        signal: EIT images as a ``Signal``, with time, row and column axes.
+        signal: Pixel impedance as a ``Signal``, with time, row and column axes.
 
     Returns:
         dict[str, Any]: ``global_impedance``, the waveform as a ``Signal``
@@ -89,7 +93,7 @@ def global_impedance(signal: Any) -> dict[str, Any]:
     summed = summed_pixels(pixels)
     summed.metadata.update(
         _step_provenance(
-            source_function="m3resp.eit.processing.global_impedance",
+            source_function=GLOBAL_IMPEDANCE_FUNCTION,
             operation="eit.global_impedance",
             parameters={},
             source_package="m3resp",
@@ -164,7 +168,7 @@ def _impedance_in_mask(
     region = _as_mask(mask)
     native = regional_impedance_of(pixels, mask=region, name=output, channel=output)
     metadata = _step_provenance(
-        source_function="m3resp.eit.processing.regional_impedance",
+        source_function=REGIONAL_IMPEDANCE_FUNCTION,
         operation=step,
         parameters={"mask": mask.name if isinstance(mask, PixelMask) else None},
         source_package="m3resp",
@@ -179,7 +183,7 @@ _PIXEL_SIGNAL_TO_SUM = StepArtifact(
     name="signal",
     artifact_type="eit_pixel_signal",
     default_context_key="filtered_eit",
-    description="Filtered EIT images (pixel impedance) to sum.",
+    description="Filtered pixel impedance to sum.",
 )
 
 
@@ -238,7 +242,7 @@ def regional_impedance(
     history.
 
     Args:
-        signal: EIT images as a ``Signal``, with time, row and column axes.
+        signal: Pixel impedance as a ``Signal``, with time, row and column axes.
         mask: An m3resp ``PixelMask``, or a 2D grid with NaN for pixels
             outside the region; its shape must match the image.
         session: Session that stores the waveform and processing history.
@@ -313,7 +317,7 @@ def functional_impedance(
     the same as ``eit.regional_impedance``.
 
     Args:
-        signal: EIT images as a ``Signal``, with time, row and column axes.
+        signal: Pixel impedance as a ``Signal``, with time, row and column axes.
         mask: Functional lung-space mask (an m3resp ``PixelMask``, or a 2D
             grid with NaN outside the lung space).
         session: Session that stores the waveform and processing history.

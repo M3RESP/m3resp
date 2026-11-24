@@ -515,7 +515,7 @@ SYNTHETIC_CASES = [
 @pytest.mark.parametrize("method", ["tiv", "amplitude", "watershed"])
 @pytest.mark.parametrize("case", SYNTHETIC_CASES)
 @pytest.mark.parametrize("seed", [1, 2])
-def test_synthetic_images_equal_eitprocessing(seed, case, method, value) -> None:
+def test_synthetic_pixels_equal_eitprocessing(seed, case, method, value) -> None:
     _assert_same_as_upstream(method, (str(seed), case), _synthetic(seed, case), value)
 
 
@@ -756,7 +756,7 @@ def test_default_signal_is_the_sum_of_the_pixels(function: Any, dataset: str) ->
 
 
 @pytest.mark.parametrize("function", [amplitude_lungspace, watershed_lungspace])
-def test_default_signal_of_masked_images_is_an_error(function: Any) -> None:
+def test_default_signal_of_masked_pixels_is_an_error(function: Any) -> None:
     pixels = _file_data(DATASETS[0], "raw")[0]
     breaths = find_breaths(global_impedance(pixels), settings=BreathDetectionSettings())
     shape = pixels.values.shape[1:]

@@ -301,7 +301,7 @@ def _maybe_assemble_eit(result: WorkflowResult) -> None:
 
 
 def _infer_filter_mode(filtered_eit: Any) -> str:
-    """Return the filter that made the filtered EIT images.
+    """Return the filter that made the filtered pixel impedance.
 
     Args:
         filtered_eit (Any): The ``filtered_eit`` output of a workflow: a

@@ -23,8 +23,8 @@ The step names show this: `*.slice_recording` slices a recording, and `*.slice_s
 
 - Ways 1 to 4 keep the samples from `start` up to the sample before `end`.
 - Ways 1 to 3 keep all samples from `start` to the end of the recording if you leave out `end`. `eit.slice_signal` always needs `end`.
-- Way 5 takes the number of the first image and the number of images.
-- `slice_eit` cuts the images, waveforms, device marks and breaths of the loaded recording. `eit.slice_signal` cuts one `Signal`; any other input gives a `TypeError`.
+- Way 5 takes the number of the first frame and the number of frames.
+- `slice_eit` cuts the pixel impedance, waveforms, device marks and breaths of the loaded recording. `eit.slice_signal` cuts one `Signal`; any other input gives a `TypeError`.
 
 For a recording slice, device marks at the first kept image are included and marks at the final kept image are excluded. Complete device breaths can end at the final kept image. For interval bounds, a boundary of exactly 0 s uses the corresponding outer interval boundary. A single-frame slice at time 0 s therefore keeps all device breaths.
 
@@ -48,7 +48,7 @@ The file of the ventilator data gives its clock, so it also gives the way to sli
 - A slice removes the samples outside the time window from the loaded recording. Load the file again to get them back.
 - In a workflow, the steps after a slice use the sliced recording. `eit.slice_recording` gives it under the names of `eit.load` (`raw_eit`, `raw_global_impedance` and the two raw signals). `emg.slice_recording` gives it under the names of `emg.load` (`emg_recording`, `raw_emg_signals`). The raw signals of the sliced recording replace the full ones in `session.signals`.
 - `eit.slice_signal` with `mode: time` uses the time values of the signal. An EIT file can have the time of day as its times: a Dräger file can start at 36528.6 s. The `slice_recording` steps always use seconds from the start.
-- `slice_eit` selects the images by their times. The times of a device can be a little uneven, so 100 s can hold a slightly different number of images than the image rate × 100 s.
+- `slice_eit` selects the frames by their times. The times of a device can be a little uneven, so 100 s can hold a slightly different number of frames than the frame rate × 100 s.
 - The older step names still work: `emg.slice` runs `emg.slice_recording`, and `eit.slice` runs `eit.slice_signal`.
 
 ## Example: slice two recordings to the same time
@@ -99,7 +99,7 @@ Slice the global impedance for a breath detection window, and keep the recording
 |---|---|
 | The session methods `slice_emg`, `slice_eit` and `slice_ventilator` | `src/m3resp/core/session.py` |
 | The slice of one recording | `src/m3resp/modalities/emg.py`, `eit.py`, `ventilator.py` (`sample_window`, `frame_window`, `keep_samples`, `keep_frames`), and `TimeWindow` in `modalities/time_window.py` |
-| EIT images, waveforms, device marks and breaths | `src/m3resp/eit/processing/slicing.py` (`slice_file_data`) |
+| Pixel impedance, waveforms, device marks and breaths | `src/m3resp/eit/processing/slicing.py` (`slice_file_data`) |
 | The slice of one signal | `src/m3resp/processing/slicing.py` (`slice_by_index`, `slice_by_time`) |
 | The workflow steps | `src/m3resp/workflows/steps/emg/slicing.py`, `eit/slicing.py`, `ventilator/slicing.py` |
 | Start times | `src/m3resp/synchronization/start_times.py` |

@@ -62,7 +62,7 @@ from ._file_data import (
     recording_to_sequence,
     sequence_to_file_data,
 )
-from ._filtering import butterworth_filter_images
+from ._filtering import butterworth_filter_pixels
 from ._joining import eit_file_paths, join_eit_sequences
 from ._shared import (
     MAX_EIT_BUTTERWORTH_ORDER,
@@ -107,7 +107,7 @@ __all__ = [
     "breath_intervals_to_breath_events",
     "breaths_to_eitprocessing",
     "breaths_to_interval_data",
-    "butterworth_filter_images",
+    "butterworth_filter_pixels",
     "check_eit_butterworth_order",
     "continuous_data_fields",
     "continuous_data_to_signal",
@@ -1187,7 +1187,7 @@ class EITProcessingAdapter:
                 if butterworth_filter_type == "lowpass"
                 else (highpass_hz, lowpass_hz)
             )
-            filtered_images, filter_captures = butterworth_filter_images(
+            filtered_images, filter_captures = butterworth_filter_pixels(
                 as_signal(raw_eit),
                 mode=butterworth_filter_type,
                 cutoff_frequency=cutoff_frequency,

@@ -50,7 +50,7 @@ def images() -> dict[str, Signal]:
     }
 
 
-def _synthetic_images(
+def _synthetic_pixels(
     breathing_hz: float = 0.25, heart_hz: float = 1.2, seconds: float = 60.0
 ) -> Signal:
     """Images of 8 x 8 pixels: a large breathing signal and a small heart signal.
@@ -78,7 +78,7 @@ def _synthetic_images(
         values=values,
         time=time,
         sample_frequency=fs,
-        name="synthetic_images",
+        name="synthetic_pixels",
         modality="eit",
         source="draeger",
     )
@@ -183,7 +183,7 @@ def test_rates_equal_eitprocessing(
 def test_settings_give_the_rates_of_eitprocessing(
     refine: bool, welch_overlap: float
 ) -> None:
-    signal = _synthetic_images()
+    signal = _synthetic_pixels()
     expected = _upstream_rates(
         signal,
         subject_type="adult",
@@ -205,14 +205,14 @@ def test_settings_give_the_rates_of_eitprocessing(
 
 def test_synthetic_rates_are_found() -> None:
     respiratory_rate, heart_rate = detect_rates(
-        _synthetic_images(), settings=RateDetectionSettings("adult", welch_window=20.0)
+        _synthetic_pixels(), settings=RateDetectionSettings("adult", welch_window=20.0)
     )
     assert respiratory_rate == pytest.approx(0.25, abs=0.01)
     assert heart_rate == pytest.approx(1.2, abs=0.01)
 
 
 def test_data_shorter_than_the_window_warns_as_eitprocessing() -> None:
-    signal = _synthetic_images(seconds=15.0)
+    signal = _synthetic_pixels(seconds=15.0)
     with pytest.warns(UserWarning, match="longer than the data"):
         expected = _upstream_rates(signal, subject_type="adult", welch_window=30.0)
     with pytest.warns(UserWarning, match="longer than the data"):
@@ -232,7 +232,7 @@ def test_data_shorter_than_the_window_warns_as_eitprocessing() -> None:
 
 def test_peak_at_the_edge_of_the_range_warns_as_eitprocessing() -> None:
     # The breathing rate (0.5 Hz) lies above the highest allowed rate.
-    signal = _synthetic_images(breathing_hz=0.5)
+    signal = _synthetic_pixels(breathing_hz=0.5)
     limits = {"min_respiratory_rate": 0.1, "max_respiratory_rate": 0.3}
     with pytest.warns(RuntimeWarning, match="edge"):
         expected = _upstream_rates(signal, subject_type="adult", **limits)
@@ -253,7 +253,7 @@ def test_peak_at_the_edge_of_the_range_warns_as_eitprocessing() -> None:
 
 
 def test_peak_at_the_edge_of_the_range_warns_also_without_refinement() -> None:
-    signal = _synthetic_images(breathing_hz=0.5)
+    signal = _synthetic_pixels(breathing_hz=0.5)
     settings = RateDetectionSettings(
         "adult",
         min_respiratory_rate=0.1,
@@ -270,7 +270,7 @@ def test_rates_inside_the_range_give_no_edge_warning() -> None:
         warnings.simplefilter("error", RuntimeWarning)
         for refine in (True, False):
             detect_rates(
-                _synthetic_images(),
+                _synthetic_pixels(),
                 settings=RateDetectionSettings(
                     "adult", refine_estimated_frequency=refine
                 ),
@@ -320,7 +320,7 @@ def test_without_a_subject_type_the_four_limits_are_used() -> None:
     for name, value in limits.items():
         assert getattr(settings, name) == value
 
-    respiratory_rate, heart_rate = detect_rates(_synthetic_images(), settings=settings)
+    respiratory_rate, heart_rate = detect_rates(_synthetic_pixels(), settings=settings)
     assert respiratory_rate == pytest.approx(0.25, abs=1 / 60)
     assert heart_rate == pytest.approx(1.2, abs=1 / 60)
 
@@ -351,7 +351,7 @@ def test_preprocess_passes_the_rate_limits_and_shows_the_edge_warning() -> None:
 
     from m3resp.eit.processing import preprocess_eit_recording
 
-    images = _synthetic_images()
+    images = _synthetic_pixels()
     recording = SimpleNamespace(pixel_impedance=images, raw_global_impedance=None)
     # The breathing rate (0.25 Hz) lies below the given breathing range.
     with pytest.warns(RuntimeWarning, match="breathing-rate .* edge of the range"):
@@ -390,11 +390,11 @@ def test_a_range_without_any_frequency_is_refused() -> None:
         "adult", welch_window=20.0, min_respiratory_rate=0.26, max_respiratory_rate=0.27
     )
     with pytest.raises(ValueError, match="breathing-rate range 15.6 to 16.2"):
-        detect_rates(_synthetic_images(), settings=settings)
+        detect_rates(_synthetic_pixels(), settings=settings)
 
 
-def test_images_without_three_axes_or_frame_rate_are_refused() -> None:
-    signal = _synthetic_images()
+def test_pixels_without_three_axes_or_frame_rate_are_refused() -> None:
+    signal = _synthetic_pixels()
     waveform = Signal(
         values=signal.values[:, 0, 0], time=signal.time, sample_frequency=20.0
     )
@@ -405,8 +405,8 @@ def test_images_without_three_axes_or_frame_rate_are_refused() -> None:
         detect_rates(no_rate, settings=RateDetectionSettings("adult"))
 
 
-def test_no_captures_store_nothing_and_leave_the_images_unchanged() -> None:
-    signal = _synthetic_images()
+def test_no_captures_store_nothing_and_leave_the_pixels_unchanged() -> None:
+    signal = _synthetic_pixels()
     before = signal.values.copy()
     captures: dict = {}
     with_captures = detect_rates(
@@ -439,7 +439,7 @@ def test_rate_figure_draws_the_picture_of_eitprocessing(subject_type: str) -> No
     captures: dict = {}
     # The synthetic breathing rate (15 /min) is at the lowest neonate rate.
     detect_rates(
-        _synthetic_images(),
+        _synthetic_pixels(),
         settings=settings,
         captures=captures,
         suppress_edge_case_warning=True,

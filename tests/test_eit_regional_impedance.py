@@ -150,7 +150,7 @@ def test_a_mask_of_another_type_is_refused(mask, type_name):
 
 
 @pytest.mark.parametrize("step", ["eit.regional_impedance", "eit.functional_impedance"])
-def test_images_that_are_not_a_signal_are_refused(step):
+def test_pixels_that_are_not_a_signal_are_refused(step):
     images = SimpleNamespace(pixel_impedance=PIXELS.copy(), time=np.arange(3) / FS)
     mask = PixelMask(name="all", values=np.ones((2, 2)))
 
@@ -306,7 +306,7 @@ class TestPixelMaskApply:
 
         assert masked.metadata["masks"] == ["m", "right"]
 
-    def test_global_impedance_refuses_masked_images(self):
+    def test_global_impedance_refuses_masked_pixels(self):
         signal = Signal(
             values=PIXELS, time=np.arange(PIXELS.shape[0]) / FS, name="images"
         )
@@ -322,7 +322,7 @@ class TestPixelMaskApply:
         assert regional_impedance(signal, mask=ventral, name="top").name == "top"
         assert regional_impedance(signal, mask=ventral).channel == "regional_impedance"
 
-    def test_masked_images_are_summed_without_the_mask(self):
+    def test_masked_pixels_are_summed_without_the_mask(self):
         signal = Signal(
             values=PIXELS, time=np.arange(PIXELS.shape[0]) / FS, name="images"
         )
@@ -346,17 +346,17 @@ class TestPixelMaskApply:
         with pytest.raises(ValueError, match="masked already with 'm'"):
             regional_impedance(self.MASK.apply(signal), mask=self.MASK)
 
-    def test_images_without_a_mask_need_the_mask(self):
+    def test_pixels_without_a_mask_need_the_mask(self):
         signal = Signal(
             values=PIXELS, time=np.arange(PIXELS.shape[0]) / FS, name="images"
         )
 
-        with pytest.raises(ValueError, match="are not masked"):
+        with pytest.raises(ValueError, match="is not masked"):
             regional_impedance(signal)
-        with pytest.raises(ValueError, match="are not masked"):
+        with pytest.raises(ValueError, match="is not masked"):
             functional_impedance(signal)
 
-    def test_global_impedance_is_named_after_the_label_of_the_images(self):
+    def test_global_impedance_is_named_after_the_label_of_the_pixels(self):
         signal = Signal(
             values=PIXELS, time=np.arange(PIXELS.shape[0]) / FS, name="images"
         )
@@ -371,7 +371,7 @@ class TestPixelMaskApply:
         assert global_impedance(labelled).name == "Global impedance (mdn_filtered)"
         assert global_impedance(signal, name="sum").name == "sum"
 
-    def test_global_impedance_of_unmasked_images_is_the_sum(self):
+    def test_global_impedance_of_unmasked_pixels_is_the_sum(self):
         signal = Signal(values=PIXELS, time=np.arange(PIXELS.shape[0]) / FS)
 
         result = global_impedance(signal)

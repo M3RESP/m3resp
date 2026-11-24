@@ -4,9 +4,8 @@
 waveform, for example the global impedance. The breaths are given as
 ``BreathEvent``s, so they can come from ``find_breaths``, from the EIT
 device, or from another modality. ``pixel_tidal_impedance_variation``
-gives one map of TIV values per breath, one value for each pixel of EIT
-images. Each pixel uses the times of the global breaths, or the times of its
-own breaths (``PixelBreaths``). Three methods are available:
+gives one map of TIV values per breath, one value for each pixel. Each
+pixel uses the times of the global breaths, or the times of its own breaths (``PixelBreaths``). Three methods are available:
 
 - ``"inspiratory"`` (default): impedance at the end of inspiration
   (``extremum_time``) minus impedance at the start of the breath.
@@ -39,7 +38,7 @@ Modified for M3RESP:
       and the breaths as a list of `BreathEvent`s. The function finds no
       breaths itself (eitprocessing runs its own `BreathDetection`).
     - `compute_pixel_parameter` is the function
-      `pixel_tidal_impedance_variation`, with the EIT images as a `Signal`.
+      `pixel_tidal_impedance_variation`, with the pixel impedance as a `Signal`.
       The breaths are a list of `BreathEvent`s (eitprocessing
       `tiv_timing="continuous"`) or a `PixelBreaths` (eitprocessing
       `tiv_timing="pixel"`, which runs its own `PixelBreath`). The function
@@ -88,11 +87,9 @@ from m3resp.eit.processing._breath_samples import (
 
 #: The TIV methods.
 TIV_METHODS = ("inspiratory", "expiratory", "mean")
-#: Name of the result.
-NAME = "continuous_tivs"
+#: Public name of the function, stored as the method of each result.
 METHOD = "m3resp.eit.processing.tidal_impedance_variation"
-#: Name of the pixel result.
-PIXEL_NAME = "pixel_tivs"
+#: Public name of the pixel function, stored as the method of each result.
 PIXEL_METHOD = "m3resp.eit.processing.pixel_tidal_impedance_variation"
 
 
@@ -101,7 +98,7 @@ def tidal_impedance_variation(
     *,
     breaths: Sequence[BreathEvent],
     method: str = "inspiratory",
-    name: str = NAME,
+    name: str = "continuous_tivs",
 ) -> IntervalData:
     """Return the tidal impedance variation (TIV) of each breath.
 
@@ -167,12 +164,12 @@ def pixel_tidal_impedance_variation(
     *,
     breaths: Sequence[BreathEvent] | PixelBreaths,
     method: str = "inspiratory",
-    name: str = PIXEL_NAME,
+    name: str = "pixel_tivs",
 ) -> IntervalData:
     """Return the TIV of each pixel, as one map per breath.
 
     Args:
-        pixels (Signal): EIT images, values with shape (time, row, column),
+        pixels (Signal): Pixel impedance, values with shape (time, row, column),
             with time in seconds. Its ``category`` must be None or an
             impedance category.
         breaths (Sequence[BreathEvent] | PixelBreaths): The breaths, with
@@ -261,7 +258,7 @@ def _tiv_values(
 
     Args:
         data (np.ndarray): The impedance, shape (time,) for a waveform or
-            (time, row, column) for EIT images.
+            (time, row, column) for pixel impedance.
         samples (dict[str, np.ndarray]): The sample indices of
             ``"start_time"``, ``"extremum_time"`` and ``"end_time"``, from
             ``breath_samples``.
@@ -269,7 +266,7 @@ def _tiv_values(
 
     Returns:
         np.ndarray: One TIV per breath, shape (breath,) for a waveform or
-            (breath, row, column) for EIT images, in the unit of ``data``.
+            (breath, row, column) for pixel impedance, in the unit of ``data``.
     """
 
     start = values_at(data, samples["start_time"])

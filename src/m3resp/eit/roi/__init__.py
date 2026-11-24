@@ -1,4 +1,4 @@
-"""Regions of interest (ROI) of EIT images, as ``PixelMask`` objects.
+"""Regions of interest (ROI) of the EIT image, as ``PixelMask`` objects.
 
 ``geometric_mask`` gives a fixed part of the image: the ventral or dorsal
 half, the anatomical right or left half, one of four layers, or one of four

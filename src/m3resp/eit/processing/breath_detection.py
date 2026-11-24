@@ -75,6 +75,7 @@ from m3resp.processing.peaks import (
 )
 from m3resp.processing.windows import moving_average
 
+#: Public name of the function, stored as the method of each result.
 METHOD = "m3resp.eit.processing.find_breaths"
 
 #: One breath as sample indices: (start valley, peak, end valley).

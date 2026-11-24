@@ -171,7 +171,7 @@ def eit_image_plot_data(
     """Return the EIT image at the sample nearest to a time.
 
     Args:
-        pixels (Signal): EIT images, values with shape (time, row, column),
+        pixels (Signal): Pixel impedance, values with shape (time, row, column),
             with time in seconds.
         time (float): The time in seconds, between the first and the last
             sample. Of two samples at the same distance, the first is taken.
@@ -184,7 +184,7 @@ def eit_image_plot_data(
             ``style`` with the scale of this image.
 
     Raises:
-        ValueError: If ``pixels`` does not hold images, the time axis does
+        ValueError: If ``pixels`` does not have three axes, the time axis does
             not rise, ``time`` lies outside the time axis, or a value is
             infinite.
     """
@@ -220,7 +220,7 @@ def eit_images_plot_data(
     scale, set by the values of all of them.
 
     Args:
-        pixels (Signal): EIT images, values with shape (time, row, column),
+        pixels (Signal): Pixel impedance, values with shape (time, row, column),
             with time in seconds.
         start (float): First time in seconds.
         end (float): Last time in seconds, at or after ``start``.
@@ -234,7 +234,7 @@ def eit_images_plot_data(
             ``images`` (one grid per time) and ``style``.
 
     Raises:
-        ValueError: If ``pixels`` does not hold images, the time axis does
+        ValueError: If ``pixels`` does not have three axes, the time axis does
             not rise, ``step`` is not above 0, ``start`` is after ``end``, a
             time lies outside the time axis, or a value is infinite.
     """
@@ -499,7 +499,7 @@ def _point_inside_region(region: np.ndarray) -> tuple[float, float]:
 
 
 def _images(pixels: Signal, *, function: str) -> tuple[np.ndarray, np.ndarray]:
-    """The (time, row, column) values and the rising time axis of EIT images.
+    """The (time, row, column) values and the rising time axis of the pixel impedance.
 
     The values keep their number type; the caller turns the chosen images
     into floats.
@@ -511,7 +511,7 @@ def _images(pixels: Signal, *, function: str) -> tuple[np.ndarray, np.ndarray]:
     times = np.asarray(pixels.time, dtype=float)
     if images.ndim != 3 or images.shape[0] == 0:
         raise ValueError(
-            f"{function} needs EIT images with shape (time, row, column), got "
+            f"{function} needs pixel impedance with shape (time, row, column), got "
             f"shape {images.shape}."
         )
     if np.any(np.diff(times) <= 0):

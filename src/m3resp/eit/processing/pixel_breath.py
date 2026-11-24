@@ -47,7 +47,7 @@ Portions of this module are derived from eitprocessing.
 
 Modified for M3RESP:
     - The class `PixelBreath` and its method `find_pixel_breaths` are one
-      function, `find_pixel_breaths`, with the EIT images and the waveform
+      function, `find_pixel_breaths`, with the pixel impedance and the waveform
       as `Signal`s. The global breaths are an input (eitprocessing runs its
       own `BreathDetection`). The result is a `PixelBreaths`, with NaN times
       for a pixel with no breath (eitprocessing: an `IntervalData` of
@@ -80,7 +80,7 @@ Modified for M3RESP:
       reasons, and counts global breaths that are no pixel breaths. A pixel
       with every breath left out is listed under
       ``"too_many_breaths_skipped"`` (eitprocessing: no warning).
-    - New: the waveform must be on the time axis of the images.
+    - New: the waveform must be on the time axis of the pixel impedance.
     - New: a warning when no pixel has a breath.
     - Docstrings and error texts are reworded.
 
@@ -118,8 +118,7 @@ PHASE_CORRECTION_MODES = get_args(PhaseCorrectionMode)
 MAX_XCORR_LAG = 1
 #: Largest part of the breaths of a pixel that can be left out.
 ALLOW_FRACTION_BREATHS_SKIPPED = 0.25
-#: Name of the result.
-NAME = "pixel_breaths"
+#: Public name of the function, stored as the method of each result.
 METHOD = "m3resp.eit.processing.find_pixel_breaths"
 
 #: The reasons a pixel has no breaths, as keys of ``metadata["skipped_pixels"]``.
@@ -135,13 +134,13 @@ def find_pixel_breaths(
     signal: Signal,
     breaths: Sequence[BreathEvent],
     phase_correction_mode: PhaseCorrectionMode = "negative amplitude",
-    name: str = NAME,
+    name: str = "pixel_breaths",
     sign_breaths: Sequence[BreathEvent] | None = None,
 ) -> PixelBreaths:
-    """Return the breaths of each pixel of EIT images.
+    """Return the breaths of each pixel of the EIT pixel impedance.
 
     Args:
-        pixels (Signal): EIT images, values with shape (time, row, column),
+        pixels (Signal): Pixel impedance, values with shape (time, row, column),
             with time in seconds. Its ``category`` must be None or an
             impedance category.
         signal (Signal): The impedance waveform the global breaths were
@@ -341,7 +340,7 @@ def _pixel_breaths_result(
             seconds, same shape.
         end (np.ndarray): End time of each pixel breath, in seconds, same
             shape.
-        pixels (Signal): The EIT images, for the modality.
+        pixels (Signal): The pixel impedance, for the modality.
         signal (Signal): The impedance waveform, for its name.
         phase_correction_mode (PhaseCorrectionMode): The phase correction mode.
         skipped (dict[str, list[list[int]]]): For each reason, the
@@ -391,13 +390,13 @@ def _mean_tiv(tiv: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 def _check_same_time_axis(
     time: np.ndarray, signal_time: np.ndarray, signal_name: str | None, *, function: str
 ) -> None:
-    """Raise ``ValueError`` if the waveform is not on the time axis of the images.
+    """Raise ``ValueError`` if the waveform is not on the time axis of the pixels.
 
     The two time axes must have the same number of samples, and each pair of
     sample times must differ by less than half a sample.
 
     Args:
-        time (np.ndarray): Sample times of the EIT images, in seconds.
+        time (np.ndarray): Sample times of the pixel impedance, in seconds.
         signal_time (np.ndarray): Sample times of the waveform, in seconds.
         signal_name (str | None): Name of the waveform, for the message.
         function (str): Name of the calling function, for the message.
@@ -414,8 +413,8 @@ def _check_same_time_axis(
     if not same:
         raise ValueError(
             f"{function} needs the waveform {signal_name!r} on the time axis of "
-            f"the EIT images. The waveform has {len(signal_time)} samples "
-            f"({_time_text(signal_time)}), the images {len(time)} samples "
+            f"the pixel impedance. The waveform has {len(signal_time)} samples "
+            f"({_time_text(signal_time)}), the pixel impedance {len(time)} samples "
             f"({_time_text(time)})."
         )
 

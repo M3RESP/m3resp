@@ -31,7 +31,7 @@ Portions of this module are derived from eitprocessing.
 
 Modified for M3RESP:
     - `load_from_single_path` is `read_timpel`. It returns an
-      `EITFileData` of m3resp types: the images and the waveforms are
+      `EITFileData` of m3resp types: the pixel impedance and the waveforms are
       `Signal`s, the minima, maxima and QRS complexes are `EventData`, and
       the breaths are `BreathEvent`s in an `IntervalData`. The dictionary
       keys are the eitprocessing labels.
@@ -99,7 +99,7 @@ def read_timpel(
             ``None`` reads up to the end of the file.
 
     Returns:
-        EITFileData: The images, the global impedance, the airway pressure,
+        EITFileData: The pixel impedance, the global impedance, the airway pressure,
             flow and volume, the minima, maxima and QRS complexes found by
             the device, and the breaths made from the minima and maxima.
             Time is in seconds from the first line of the file.

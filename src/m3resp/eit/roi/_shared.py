@@ -15,7 +15,7 @@ def breath_waveform(pixels: Signal, *, signal: Signal | None, function: str) -> 
     """Return ``signal``, or the sum of all pixels of each image when it is None.
 
     Args:
-        pixels (Signal): EIT images, values with shape (time, row, column).
+        pixels (Signal): Pixel impedance, values with shape (time, row, column).
         signal (Signal | None): The waveform of the breaths, or None.
         function (str): Name of the function, for the error message.
 
@@ -23,7 +23,7 @@ def breath_waveform(pixels: Signal, *, signal: Signal | None, function: str) -> 
         Signal: ``signal``, or the global impedance of ``pixels``.
 
     Raises:
-        ValueError: If ``signal`` is None and the images are masked
+        ValueError: If ``signal`` is None and the pixel impedance is masked
             (``metadata["masks"]``).
     """
 
@@ -31,9 +31,9 @@ def breath_waveform(pixels: Signal, *, signal: Signal | None, function: str) -> 
         return signal
     if pixels.metadata.get(MASKS_KEY):
         raise ValueError(
-            f"{function}: the images {pixels.name!r} are masked, so their sum is "
+            f"{function}: the pixel impedance {pixels.name!r} is masked, so its sum is "
             "not the global impedance. Give the waveform of the breaths as "
-            "signal=..., for example the global impedance of the images before "
+            "signal=..., for example the global impedance of the pixel impedance before "
             "masking."
         )
     return global_impedance(pixels)
