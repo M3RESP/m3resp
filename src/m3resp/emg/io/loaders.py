@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
-
+import platform
 from m3resp.core.exceptions import OptionalDependencyError
 
 
@@ -323,7 +323,7 @@ def _load_adicht(
             channel_indexes are provided.
 
     """
-    if sys.platform != "win32":
+    if platform.system() != "Windows":
         msg = (
             "AdichtReader is only available on Windows. "
             "Please use a Windows machine to load .adicht files."
