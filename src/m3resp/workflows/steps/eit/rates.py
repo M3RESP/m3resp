@@ -215,17 +215,17 @@ def detect_rates(
         ValueError: If a setting is invalid, or if a rate is NaN.
     """
 
+    # Without a window length, the settings keep their own default.
+    window: dict[str, Any] = {}
+    if welch_window_seconds is not None:
+        window["welch_window"] = welch_window_seconds
     settings = RateDetectionSettings(
         subject_type,
-        **(
-            {}
-            if welch_window_seconds is None
-            else {"welch_window": welch_window_seconds}
-        ),
         min_respiratory_rate=min_respiratory_rate_hz,
         max_respiratory_rate=max_respiratory_rate_hz,
         min_heart_rate=min_heart_rate_hz,
         max_heart_rate=max_heart_rate_hz,
+        **window,
     )
     captures: dict[str, Any] = {}
     respiratory_rate_hz, heart_rate_hz = detect_rates_of(
