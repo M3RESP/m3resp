@@ -86,7 +86,7 @@ filtered = mdn_filter(raw_eit, respiratory_rate=0.25, heart_rate=1.2)
 
 `mdn_filter(..., captures={})` fills the dictionary with the keys of eitprocessing: `low_pass_frequency`, `n_harmonics`, `frequency_bands`, and the images before and after the filter as `Signal`s in `unfiltered_data` and `filtered_data`. A pixel with NaN at some samples becomes NaN at every sample, as in eitprocessing; M3Resp also gives a warning that names these pixels.
 
-The Butterworth filters of eitprocessing (`ButterworthFilter`) are `m3resp.processing.filters.butterworth_filter`, a function with the filter type, the cutoff, the sample frequency and the order as arguments. It gives the same numbers. `m3resp.eit.processing.butterworth_filter_images` filters each pixel of EIT images with it. The order is 1 to 10, as in eitprocessing.
+The Butterworth filters of eitprocessing (`ButterworthFilter`) are `m3resp.processing.filters.butterworth_filter`, a function with the filter type, the cutoff, the sample frequency and the order as arguments. It gives the same numbers. `m3resp.eit.processing.butterworth_filter_images` filters each pixel of EIT images with it. The order must be 1 or more. An order above 10 gives a warning, where eitprocessing needs `ignore_max_order=True`.
 
 The steps `eit.mdn_filter` and `eit.butterworth_filter` run these functions. `eit.mdn_filter` has the settings `noise_frequency_limit_hz`, `notch_distance_hz` and `order`. Both steps give the filtered images as a `Signal` and keep the captures under `filter_captures`.
 

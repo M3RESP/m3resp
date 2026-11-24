@@ -80,10 +80,12 @@ Some step outputs have a new form:
 
 `session.preprocess_eit()` also stores the breaths in the eitprocessing `Sequence` under `"eit_breaths"`, in the form of eitprocessing. `m3resp.visualization.plot_rate_detection` draws the figure of the rate detection (`rate_detection.png`), with the same look as the eitprocessing figure.
 
-Three cases give a different result from eitprocessing 1.8.7:
+Five cases give a different result from eitprocessing 1.8.7:
 
 - A rate limit of 0 Hz stays 0 Hz. eitprocessing replaces it by the default limit of the subject type.
 - When no frequency of the spectrum lies inside a rate range, `detect_rates` gives a ValueError that names the range in breaths per minute. eitprocessing stops with a numpy error.
+- `subject_type` can be None, for example for children or animals. Then all four rate limits must be given. `eit.detect_rates` and `session.preprocess_eit()` take the four limits as `min_respiratory_rate_hz`, `max_respiratory_rate_hz`, `min_heart_rate_hz` and `max_heart_rate_hz`.
+- A rate at the edge of its range always gives a RuntimeWarning, also when the rate is not refined, and also in `eit.detect_rates` with `capture=True` and in `session.preprocess_eit()`. eitprocessing warns only when it refines the rate.
 - When the first and the last valley are removed and no valley is left, `find_breaths` gives no breaths. eitprocessing stops with an IndexError.
 
 ### m3resp filters the EIT data
@@ -96,7 +98,7 @@ Changes that a user can see:
 - `apply_mdn` returns the filtered images as a `Signal`. Before, it returned an eitprocessing `EITData`.
 - In `filter_captures` of both steps and of `session.preprocess_eit()`, `unfiltered_data` and `filtered_data` are the images before and after the filter as `Signal`s. Before, they were eitprocessing `EITData` objects (MDN) or arrays (Butterworth).
 - The filtered images have the device maker in `source` and the filter function in `method`. The provenance of both steps names m3resp.
-- The Butterworth order of EIT images is 1 to 10 in `eit.butterworth_filter` and in `session.preprocess_eit()`. Before, `session.preprocess_eit()` accepted a higher order.
+- The Butterworth order of EIT images must be 1 or more in `eit.butterworth_filter` and in `session.preprocess_eit()`. An order above 10 gives a UserWarning and the filter runs. eitprocessing refuses an order above 10 unless `ignore_max_order=True`.
 - A pixel with NaN at some samples becomes NaN at every sample of the MDN result, as in eitprocessing. M3Resp also gives a warning that names these pixels.
 
 ### m3resp computes TIV and EELI, also on breaths of another modality

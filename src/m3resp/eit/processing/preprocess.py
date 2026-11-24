@@ -25,7 +25,11 @@ from m3resp.eit.processing.eeli import (
 )
 from m3resp.eit.processing.impedance import global_impedance
 from m3resp.eit.processing.mdn_filter import mdn_filter
-from m3resp.eit.processing.rate_detection import RateDetectionSettings, detect_rates
+from m3resp.eit.processing.rate_detection import (
+    RateDetectionSettings,
+    SubjectType,
+    detect_rates,
+)
 from m3resp.eit.processing.tidal_impedance_variation import (
     pixel_tidal_impedance_variation,
     tidal_impedance_variation,
@@ -51,8 +55,12 @@ class _Recording(Protocol):
 def preprocess_eit_recording(
     recording: _Recording,
     *,
-    subject_type: Literal["adult", "neonate"] = "adult",
+    subject_type: SubjectType | None = "adult",
     welch_window_seconds: float = 30.0,
+    min_respiratory_rate_hz: float | None = None,
+    max_respiratory_rate_hz: float | None = None,
+    min_heart_rate_hz: float | None = None,
+    max_heart_rate_hz: float | None = None,
     filter_mode: str = "mdn",
     filter_enabled: bool = True,
     lowpass_hz: float = 1.0,
@@ -81,17 +89,26 @@ def preprocess_eit_recording(
         recording (_Recording): The loaded recording, an ``EITRecording``
             (``session.eit``), with the raw images in ``pixel_impedance`` and
             the raw global impedance in ``raw_global_impedance``.
-        subject_type (Literal["adult", "neonate"]): Sets the rate ranges of
-            the rate detection.
+        subject_type (SubjectType | None): ``"adult"`` or ``"neonate"`` sets
+            the default rate ranges of the rate detection. With None, give
+            all four rate limits.
         welch_window_seconds (float): Length of one Welch window of the rate
             detection, in seconds.
+        min_respiratory_rate_hz (float | None): Lowest breathing rate in Hz.
+            None gives the default of ``subject_type``.
+        max_respiratory_rate_hz (float | None): Highest breathing rate in Hz.
+            None gives the default of ``subject_type``.
+        min_heart_rate_hz (float | None): Lowest heart rate in Hz. None gives
+            the default of ``subject_type``.
+        max_heart_rate_hz (float | None): Highest heart rate in Hz. None
+            gives the default of ``subject_type``.
         filter_mode (str): ``"mdn"``, ``"lowpass"``, ``"bandpass"`` or
             ``"none"`` (upper or lower case).
         filter_enabled (bool): False gives ``filter_mode="none"``.
         lowpass_hz (float): Low-pass cutoff, or upper band-pass cutoff, in Hz.
         highpass_hz (float): Lower band-pass cutoff, in Hz.
         filter_order (int): Butterworth order of the low-pass and band-pass
-            filters, 1 to 10.
+            filters, 1 or more. An order above 10 gives a warning.
         breath_min_duration_seconds (float): Shortest expected breath, in
             seconds.
         compute_rates (bool): Find the breathing rate and the heart rate.
@@ -123,8 +140,13 @@ def preprocess_eit_recording(
 
     Raises:
         ValueError: If the filter mode is unknown, if the Butterworth order is
-            outside 1 to 10, or if TIV, EELI, pixel TIV or pixel EELI is
-            asked for without the breaths.
+            below 1, if TIV, EELI, pixel TIV or pixel EELI is
+            asked for without the breaths, or if ``subject_type`` is None and
+            a rate limit is missing.
+
+    Warns:
+        RuntimeWarning: When a rate is at the edge of its range. Such a rate
+            is usually wrong.
     """
 
     if not detect_breaths and (
@@ -155,14 +177,18 @@ def preprocess_eit_recording(
     heart_rate_hz = None
     if compute_rates or filter_mode == "mdn":
         rate_detector = RateDetectionSettings(
-            subject_type, welch_window=welch_window_seconds
+            subject_type,
+            welch_window=welch_window_seconds,
+            min_respiratory_rate=min_respiratory_rate_hz,
+            max_respiratory_rate=max_respiratory_rate_hz,
+            min_heart_rate=min_heart_rate_hz,
+            max_heart_rate=max_heart_rate_hz,
         )
         respiratory_rate_hz, heart_rate_hz = detect_rates(
             raw_eit,
             settings=rate_detector,
             captures=rate_captures,
             suppress_length_warnings=True,
-            suppress_edge_case_warning=True,
         )
 
     filtered_eit, filter_captures = _filter_images(

@@ -2,13 +2,15 @@
 
 ``butterworth_filter_images`` filters each pixel of EIT images with
 ``m3resp.processing.filters.butterworth_filter``, forwards and backwards.
-A pixel without any value stays without value. The order must be from 1 to
-``MAX_EIT_BUTTERWORTH_ORDER`` (10), as in eitprocessing 1.8.7.
+A pixel without any value stays without value. The order must be 1 or more.
+An order above ``MAX_EIT_BUTTERWORTH_ORDER`` (10) gives a warning; eitprocessing
+1.8.7 refuses such an order unless ``ignore_max_order=True``.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import warnings
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -17,28 +19,39 @@ import numpy as np
 from m3resp.data.signals import Signal
 from m3resp.processing.filters import ButterworthFilterType, butterworth_filter
 
-#: Highest order of a Butterworth filter of EIT images, as in eitprocessing.
+#: Highest Butterworth order of EIT images without a warning, as in eitprocessing.
 MAX_EIT_BUTTERWORTH_ORDER = 10
 
 
 def check_eit_butterworth_order(order: int) -> None:
-    """Refuse a Butterworth order outside 1 to 10 for EIT images.
+    """Check the Butterworth order of a filter of EIT images.
 
     The filter runs forwards and backwards, so the effective order is twice
-    the given order. Higher orders can give unstable or wrong results.
+    the given order. An order above 10 can give unstable or wrong results.
 
     Args:
         order (int): The order of the filter.
 
     Raises:
-        ValueError: If ``order`` is below 1 or above 10.
+        ValueError: If ``order`` is below 1.
+
+    Warns:
+        UserWarning: If ``order`` is above 10.
     """
 
-    if not 1 <= order <= MAX_EIT_BUTTERWORTH_ORDER:
+    if order < 1:
         raise ValueError(
-            "The order of a Butterworth filter of EIT images must be from 1 to "
-            f"{MAX_EIT_BUTTERWORTH_ORDER}, got {order}. Higher orders can give "
-            "unstable results."
+            "The order of a Butterworth filter of EIT images must be 1 or more, "
+            f"got {order}."
+        )
+    if order > MAX_EIT_BUTTERWORTH_ORDER:
+        warnings.warn(
+            f"A Butterworth order of {order} is above {MAX_EIT_BUTTERWORTH_ORDER}. "
+            f"The filter runs forwards and backwards, so the effective order is "
+            f"{2 * order}, which can give unstable results. Check the filtered "
+            "data.",
+            UserWarning,
+            stacklevel=3,
         )
 
 
@@ -139,7 +152,7 @@ def butterworth_filter_images(
         cutoff_frequency (float | Sequence[float]): One cutoff in Hz for
             ``"lowpass"`` and ``"highpass"``; (low, high) in Hz for the two
             band modes.
-        order (int): Butterworth order, 1 to 10.
+        order (int): Butterworth order, 1 or more. Above 10 gives a warning.
         operation (str): Name of the calling step or function, for messages.
 
     Returns:
@@ -152,8 +165,11 @@ def butterworth_filter_images(
             ``unfiltered_data`` and ``filtered_data``.
 
     Raises:
-        ValueError: If the order is outside 1 to 10, if a pixel has gaps
-            among otherwise present samples, or if the cutoffs are invalid.
+        ValueError: If the order is below 1, if a pixel has gaps among
+            otherwise present samples, or if the cutoffs are invalid.
+
+    Warns:
+        UserWarning: If the order is above 10.
     """
 
     check_eit_butterworth_order(order)

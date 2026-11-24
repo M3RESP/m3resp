@@ -141,27 +141,38 @@ def test_a_pixel_missing_at_some_samples_is_refused(images: dict) -> None:
         _run_step(gap)
 
 
-@pytest.mark.parametrize("order", [0, 11])
-def test_an_order_outside_1_to_10_is_refused_by_the_step_and_preprocess(
-    order: int, images: dict
-) -> None:
+def test_an_order_below_1_is_refused_by_the_step_and_preprocess(images: dict) -> None:
     signal = images["draeger_synthetic_20Hz"]
-    with pytest.raises(ValueError, match="from 1 to 10"):
-        _run_step(signal, order=order)
+    with pytest.raises(ValueError, match="must be 1 or more"):
+        _run_step(signal, order=0)
 
     session = M3Session()
     entry = MANIFEST["inputs"]["draeger_synthetic_20Hz"]
     session.load_eit(os.path.join(REPO_ROOT, entry["file"]), entry["vendor"])
-    with pytest.raises(ValueError, match="from 1 to 10"):
-        session.preprocess_eit(filter_mode="lowpass", filter_order=order)
+    with pytest.raises(ValueError, match="must be 1 or more"):
+        session.preprocess_eit(filter_mode="lowpass", filter_order=0)
 
 
-def test_the_order_parameter_has_the_limits_1_and_10() -> None:
+def test_an_order_above_10_gives_a_warning_in_the_step_and_preprocess(
+    images: dict,
+) -> None:
+    signal = images["draeger_synthetic_20Hz"]
+    with pytest.warns(UserWarning, match="order of 11 is above 10"):
+        _run_step(signal, order=11)
+
+    session = M3Session()
+    entry = MANIFEST["inputs"]["draeger_synthetic_20Hz"]
+    session.load_eit(os.path.join(REPO_ROOT, entry["file"]), entry["vendor"])
+    with pytest.warns(UserWarning, match="order of 11 is above 10"):
+        session.preprocess_eit(filter_mode="lowpass", filter_order=11)
+
+
+def test_the_order_parameter_has_the_lowest_value_1_and_no_highest() -> None:
     order = next(
         p for p in get_step("eit.butterworth_filter").parameters if p.name == "order"
     )
 
-    assert (order.minimum, order.maximum) == (1, 10)
+    assert (order.minimum, order.maximum) == (1, None)
 
 
 @pytest.mark.parametrize("mode", ["lowpass", "bandpass"])

@@ -229,6 +229,43 @@ def test_detect_rates_step_works_without_eitprocessing_and_matches_declared_writ
     assert {"respiratory_rate", "heart_rate"} <= names
 
 
+def test_detect_rates_step_passes_the_rate_limits(monkeypatch):
+    seen = {}
+
+    def fake_detect_rates(signal, *, settings, **kwargs):
+        seen["settings"] = settings
+        return 0.3, 1.2
+
+    monkeypatch.setattr(
+        "m3resp.workflows.steps.eit.rates.detect_rates_of", fake_detect_rates
+    )
+    detect_rates(
+        _images(4, rows=1, columns=1),
+        session=M3Session(),
+        subject_type=None,
+        min_respiratory_rate_hz=0.1,
+        max_respiratory_rate_hz=0.4,
+        min_heart_rate_hz=0.9,
+        max_heart_rate_hz=1.5,
+    )
+    settings = seen["settings"]
+    assert settings.subject_type is None
+    assert (settings.min_respiratory_rate, settings.max_respiratory_rate) == (0.1, 0.4)
+    assert (settings.min_heart_rate, settings.max_heart_rate) == (0.9, 1.5)
+
+
+def test_detect_rates_step_without_subject_type_needs_the_four_limits():
+    with pytest.raises(ValueError, match="Missing: max_heart_rate"):
+        detect_rates(
+            _images(4, rows=1, columns=1),
+            session=M3Session(),
+            subject_type=None,
+            min_respiratory_rate_hz=0.1,
+            max_respiratory_rate_hz=0.4,
+            min_heart_rate_hz=0.9,
+        )
+
+
 @pytest.mark.parametrize("rate_name", ["respiratory_rate_hz", "heart_rate_hz"])
 def test_detect_rates_reports_a_missing_rate_as_such(rate_name, monkeypatch):
     """NaN means no rate could be estimated; the message says so."""

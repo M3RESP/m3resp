@@ -13,7 +13,7 @@ To select the filter, set `filter_mode`:
 | `"bandpass"` | A Butterworth band-pass filter from `highpass_hz` (default 0.05 Hz) to `lowpass_hz` (default 1.0 Hz). |
 | `"none"` | No filter. |
 
-`filter_order` sets the order of the low-pass and band-pass filters (default 4, from 1 to 10).
+`filter_order` sets the order of the low-pass and band-pass filters (default 4, 1 or more). An order above 10 gives a warning, because such a high order can give unstable results.
 
 ```python
 session.preprocess_eit(filter_mode="bandpass", highpass_hz=0.05, lowpass_hz=1.0)
@@ -21,7 +21,9 @@ session.preprocess_eit(filter_mode="bandpass", highpass_hz=0.05, lowpass_hz=1.0)
 
 ## Change the rate detection
 
-M3Resp finds the respiratory rate and the heart rate in the raw EIT data. If the patient is a neonate, set `subject_type="neonate"` (default `"adult"`). To change the length of the analysis window, set `welch_window_seconds` (default 30.0 s).
+M3Resp finds the respiratory rate and the heart rate in the raw EIT data. If the patient is a neonate, set `subject_type="neonate"` (default `"adult"`). For other subjects, for example children or animals, set `subject_type=None` and give the four rate limits in Hz: `min_respiratory_rate_hz`, `max_respiratory_rate_hz`, `min_heart_rate_hz` and `max_heart_rate_hz`. With `"adult"` or `"neonate"`, a limit that you give replaces the default of the subject type. To change the length of the analysis window, set `welch_window_seconds` (default 30.0 s).
+
+A rate at the lowest or the highest limit of its range gives a warning, because such a rate is usually wrong. Check the data, or change the range.
 
 ## Change the breath detection
 

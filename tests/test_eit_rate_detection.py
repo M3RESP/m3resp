@@ -252,6 +252,31 @@ def test_peak_at_the_edge_of_the_range_warns_as_eitprocessing() -> None:
         )
 
 
+def test_peak_at_the_edge_of_the_range_warns_also_without_refinement() -> None:
+    signal = _synthetic_images(breathing_hz=0.5)
+    settings = RateDetectionSettings(
+        "adult",
+        min_respiratory_rate=0.1,
+        max_respiratory_rate=0.3,
+        refine_estimated_frequency=False,
+    )
+    with pytest.warns(RuntimeWarning, match=r"breathing-rate .* edge of the range"):
+        respiratory_rate, _ = detect_rates(signal, settings=settings)
+    assert respiratory_rate in (pytest.approx(0.1), pytest.approx(0.3))
+
+
+def test_rates_inside_the_range_give_no_edge_warning() -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        for refine in (True, False):
+            detect_rates(
+                _synthetic_images(),
+                settings=RateDetectionSettings(
+                    "adult", refine_estimated_frequency=refine
+                ),
+            )
+
+
 @pytest.mark.parametrize(
     ("settings", "message"),
     [
@@ -282,6 +307,74 @@ def test_missing_limits_take_the_default_of_the_subject_type(
     assert settings.max_heart_rate == 3.0
     for name in ("min_heart_rate", "min_respiratory_rate", "max_respiratory_rate"):
         assert getattr(settings, name) == DEFAULT_RATE_LIMITS[name][subject_type]
+
+
+def test_without_a_subject_type_the_four_limits_are_used() -> None:
+    limits = {
+        "min_respiratory_rate": 0.1,
+        "max_respiratory_rate": 0.4,
+        "min_heart_rate": 0.9,
+        "max_heart_rate": 1.5,
+    }
+    settings = RateDetectionSettings(None, **limits)
+    for name, value in limits.items():
+        assert getattr(settings, name) == value
+
+    respiratory_rate, heart_rate = detect_rates(_synthetic_images(), settings=settings)
+    assert respiratory_rate == pytest.approx(0.25, abs=1 / 60)
+    assert heart_rate == pytest.approx(1.2, abs=1 / 60)
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        "min_respiratory_rate",
+        "max_respiratory_rate",
+        "min_heart_rate",
+        "max_heart_rate",
+    ],
+)
+def test_without_a_subject_type_a_missing_limit_is_refused(missing: str) -> None:
+    limits = {
+        "min_respiratory_rate": 0.1,
+        "max_respiratory_rate": 0.4,
+        "min_heart_rate": 0.9,
+        "max_heart_rate": 1.5,
+    }
+    del limits[missing]
+    with pytest.raises(ValueError, match=f"Missing: {missing}\\."):
+        RateDetectionSettings(None, **limits)
+
+
+def test_preprocess_passes_the_rate_limits_and_shows_the_edge_warning() -> None:
+    from types import SimpleNamespace
+
+    from m3resp.eit.processing import preprocess_eit_recording
+
+    images = _synthetic_images()
+    recording = SimpleNamespace(pixel_impedance=images, raw_global_impedance=None)
+    # The breathing rate (0.25 Hz) lies below the given breathing range.
+    with pytest.warns(RuntimeWarning, match="breathing-rate .* edge of the range"):
+        result = preprocess_eit_recording(
+            recording,
+            subject_type=None,
+            min_respiratory_rate_hz=0.3,
+            max_respiratory_rate_hz=0.5,
+            min_heart_rate_hz=0.9,
+            max_heart_rate_hz=1.5,
+            filter_mode="none",
+            detect_breaths=False,
+            compute_continuous_tiv=False,
+            compute_eeli=False,
+            compute_pixel_tiv=False,
+            include_global_impedance=False,
+        )
+    settings = result["rate_detector"]
+    assert settings.subject_type is None
+    assert (settings.min_respiratory_rate, settings.max_respiratory_rate) == (0.3, 0.5)
+    assert (settings.min_heart_rate, settings.max_heart_rate) == (0.9, 1.5)
+    assert result["respiratory_rate_hz"] == pytest.approx(0.3)
+    assert result["heart_rate_hz"] == pytest.approx(1.2, abs=1 / 60)
 
 
 def test_a_limit_of_zero_is_kept() -> None:
@@ -344,7 +437,13 @@ def test_rate_figure_draws_the_picture_of_eitprocessing(subject_type: str) -> No
 
     settings = RateDetectionSettings(subject_type, welch_window=20.0)
     captures: dict = {}
-    detect_rates(_synthetic_images(), settings=settings, captures=captures)
+    # The synthetic breathing rate (15 /min) is at the lowest neonate rate.
+    detect_rates(
+        _synthetic_images(),
+        settings=settings,
+        captures=captures,
+        suppress_edge_case_warning=True,
+    )
 
     def pixels(figure) -> np.ndarray:
         figure.canvas.draw()

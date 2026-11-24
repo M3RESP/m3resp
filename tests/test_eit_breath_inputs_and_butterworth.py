@@ -23,6 +23,7 @@ from m3resp.eit.processing.butterworth import (
     MAX_EIT_BUTTERWORTH_ORDER,
     butterworth_filter_images,
 )
+from m3resp.processing.filters import butterworth_filter
 
 
 def _breaths() -> list[BreathEvent]:
@@ -101,9 +102,9 @@ def test_the_filter_gives_the_images_of_the_step_filter(mode, cutoff) -> None:
     assert captures["unfiltered_data"] is images
 
 
-@pytest.mark.parametrize("order", [0, MAX_EIT_BUTTERWORTH_ORDER + 1])
-def test_an_order_outside_1_to_10_is_refused(order) -> None:
-    with pytest.raises(ValueError, match="from 1 to 10"):
+@pytest.mark.parametrize("order", [0, -1])
+def test_an_order_below_1_is_refused(order) -> None:
+    with pytest.raises(ValueError, match="must be 1 or more"):
         butterworth_filter_images(
             _images(),
             mode="lowpass",
@@ -111,3 +112,25 @@ def test_an_order_outside_1_to_10_is_refused(order) -> None:
             order=order,
             operation="test",
         )
+
+
+def test_an_order_above_10_gives_a_warning_and_filters() -> None:
+    images = _images()
+    order = MAX_EIT_BUTTERWORTH_ORDER + 1
+    with pytest.warns(UserWarning, match="Butterworth order of 11 is above 10"):
+        filtered, _ = butterworth_filter_images(
+            images,
+            mode="lowpass",
+            cutoff_frequency=1.0,
+            order=order,
+            operation="test",
+        )
+    expected = butterworth_filter(
+        np.asarray(images.values)[:, 1, 1],
+        filter_type="lowpass",
+        cutoff_frequency=1.0,
+        sample_frequency=20.0,
+        order=order,
+    )
+    np.testing.assert_array_equal(filtered.values[:, 1, 1], expected)
+    assert np.isnan(filtered.values[:, 0, 0]).all()

@@ -10,10 +10,7 @@ import dataclasses
 from typing import Any, get_args
 
 from m3resp.core.session import M3Session
-from m3resp.eit.processing.butterworth import (
-    MAX_EIT_BUTTERWORTH_ORDER,
-    butterworth_filter_images,
-)
+from m3resp.eit.processing.butterworth import butterworth_filter_images
 from m3resp.eit.processing.mdn_filter import (
     NOISE_FREQUENCY_LIMIT,
     NOTCH_DISTANCE,
@@ -262,8 +259,7 @@ def mdn_filter(
             value_type="integer",
             default=4,
             minimum=1,
-            maximum=MAX_EIT_BUTTERWORTH_ORDER,
-            description="Butterworth filter order, 1 to 10.",
+            description="Butterworth filter order, 1 or more. An order above 10 gives a warning.",
         ),
         StepParameter(
             name="label",
@@ -323,7 +319,8 @@ def butterworth_filter(
         highpass_hz (float): Lower cutoff in Hz. Defaults to 0.05; used for
             highpass, bandpass and bandstop modes. Both band cutoffs must be
             positive, ordered and below half the sampling rate.
-        order (int): Butterworth order, 1 to 10. Defaults to 4.
+        order (int): Butterworth order, 1 or more. Defaults to 4. An order
+            above 10 gives a warning.
         label (str): Short name of the filtered images. Defaults to
             "filtered".
 
@@ -338,8 +335,8 @@ def butterworth_filter(
     Raises:
         TypeError: If ``signal`` is not a ``Signal``.
         ValueError: If a pixel has gaps among otherwise present samples, if
-            the order is outside 1 to 10, or if the other filter parameters
-            are invalid.
+            the order is below 1, or if the other filter parameters are
+            invalid.
     """
 
     # One edge for the single-sided modes, both edges (low, high) for the

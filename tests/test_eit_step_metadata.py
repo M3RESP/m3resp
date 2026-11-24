@@ -87,16 +87,18 @@ def test_eit_slice_mode_choices_match_slice_signal_by_mode():
 
 
 def test_eit_detect_rates_subject_type_choices_match_function_signature():
-    from typing import get_type_hints
+    from typing import get_args, get_type_hints
 
     from m3resp.workflows.steps.eit import detect_rates
 
     # `from __future__ import annotations` makes annotations strings at
-    # runtime; get_type_hints() resolves the real Literal[...] object.
+    # runtime; get_type_hints() resolves the real Literal[...] | None object.
     annotation = get_type_hints(detect_rates)["subject_type"]
+    literal, none_type = get_args(annotation)
+    assert none_type is type(None)
     description = describe_step("eit.detect_rates")
     subject_type = next(p for p in description.parameters if p.name == "subject_type")
-    assert set(subject_type.choices or ()) == set(annotation.__args__)
+    assert set(subject_type.choices or ()) == set(get_args(literal))
 
 
 def test_eit_pixel_breaths_phase_correction_choices_match_allowed_set():

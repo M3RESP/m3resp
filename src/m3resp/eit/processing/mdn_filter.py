@@ -1,13 +1,15 @@
 """MDN filter: remove the cardiovascular signal from EIT data.
 
-The multiple digital notch (MDN) filter removes the heart rate and its
-harmonics in two parts:
+The multiple digital notch (MDN) filter removes the harmonics of the heart
+rate in two parts. The N-th harmonic is N times the heart rate, with N a whole
+number (1, 2, 3, ...). The first harmonic (N = 1) is the heart rate itself.
 
-1. For each harmonic up to the noise frequency limit, a band-stop filter
-   removes the band from (harmonic − notch distance) to (harmonic + notch
-   distance). For the first harmonic, the lower edge of the band is at least
-   halfway between the breathing rate and the heart rate, which limits the
-   removal of the signal at the breathing rate.
+1. For N = 1, 2, 3, ..., a band-stop filter removes the band from
+   (N × heart rate − notch distance) to (N × heart rate + notch distance).
+   This continues as long as the band starts below the noise frequency
+   limit. For N = 1, the lower edge of the band is at least halfway between
+   the breathing rate and the heart rate, which limits the removal of the
+   signal at the breathing rate.
 2. A low-pass filter removes everything above the noise frequency limit.
 
 Each filter is a Butterworth filter of the given order, applied forwards and
@@ -92,9 +94,10 @@ def mdn_filter(
 ) -> Signal:
     """Remove the heart signal from EIT images or an impedance waveform.
 
-    Band-stop filters remove the heart rate and its harmonics up to
-    ``noise_frequency_limit``, and a low-pass filter removes everything above
-    it. The method is from Wisse et al., Physiol. Meas. 45, 055010 (2024),
+    Band-stop filters remove the harmonics of the heart rate (N times the
+    heart rate, with N = 1, 2, 3, ...) up to ``noise_frequency_limit``, and a
+    low-pass filter removes everything above it. The method is from Wisse et
+    al., Physiol. Meas. 45, 055010 (2024),
     https://doi.org/10.1088/1361-6579/ad46e3.
 
     Args:

@@ -5,27 +5,35 @@ method and a Hann window:
 
 - The breathing rate is the frequency with the most power in the spectrum of
   the summed pixels, inside the breathing-rate range.
-- For the heart rate, the spectrum of each pixel is divided by its total
-  power, and these spectra are averaged over the pixels. The spectrum of the
-  summed pixels, also divided by its total power, is subtracted from this
-  average. The heart rate is the frequency with the most power in this
-  difference, inside the heart-rate range. In many pixels with a small
-  breathing signal the heart signal is relatively strong, so the heart rate
-  stands out in the difference.
+- For the heart rate, the power spectrum of each pixel is normalized by
+  dividing it by its total power. The power spectrum of the sum of all pixels
+  is also normalized, and it is subtracted from the average normalized pixel
+  spectrum. The heart rate is the frequency with the most power in this
+  difference, inside the heart-rate range.
+
+The heart rate stands out in this difference because the heart signal is
+relatively strong in many pixels with a small breathing signal.
 
 By default, each rate is refined with a parabola through the highest point of
 the spectrum and its two neighbours. This gives a rate between two frequency
 steps of the spectrum.
 
-The pixels are summed in single precision (float32), as in eitprocessing.
-This sum can differ a little from the global impedance of
-``m3resp.eit.processing.global_impedance``, which is summed in double
-precision.
+The pixels are converted to single precision (float32) before the spectra
+are made, as in eitprocessing, so both packages give the same rates. On the
+three test files, double precision changes the rates by less than 1e-6 of
+their value. The sum of the pixels can differ a little from the global
+impedance of ``m3resp.eit.processing.global_impedance``, which is summed in
+double precision.
 
 Use at least 30 s of data for reliable rates. The rates are most reliable
 when the end-expiratory impedance is stable, the data is not filtered and
 both rates are steady. When a rate changes during the data, the result is
 usually near the average rate.
+
+Reference: J. J. Wisse, P. Somhorst, J. Behr, A. R. van Nieuw Amerongen,
+D. Gommers and A. H. Jonkman, "Improved filtering methods to suppress
+cardiovascular contamination in electrical impedance tomography recordings",
+Physiol. Meas. 45, 055010 (2024), https://doi.org/10.1088/1361-6579/ad46e3.
 
 ---------------------------------------------------------------------------
 Provenance
@@ -48,6 +56,9 @@ Modified for M3RESP:
     - A ValueError when the images have no frames per second, when they do
       not have three axes, or when no frequency of the spectrum lies inside
       a rate range.
+    - The subject type can be None; then all four rate limits must be given.
+    - A rate at the edge of its range gives a warning also when the rate is
+      not refined.
     - The rates are returned as Python floats.
     - Docstrings and warning texts are reworded.
 
@@ -60,7 +71,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import KW_ONLY, dataclass
-from typing import Any, Literal, cast
+from typing import Any, Literal, cast, get_args
 
 import numpy as np
 from scipy import signal
@@ -80,6 +91,8 @@ DEFAULT_RATE_LIMITS: dict[str, dict[str, float]] = {
 }
 
 SubjectType = Literal["adult", "neonate"]
+#: The subject types with default rate limits.
+SUBJECT_TYPES: tuple[str, ...] = get_args(SubjectType)
 
 
 @dataclass(frozen=True)
@@ -87,22 +100,27 @@ class RateDetectionSettings:
     """Settings of the breathing-rate and heart-rate detection.
 
     Attributes:
-        subject_type (str): ``"adult"`` or ``"neonate"``. It sets the default
-            rate limits (``DEFAULT_RATE_LIMITS``): adult breathing 6 to 60
-            and heart 40 to 200 per minute, neonate breathing 15 to 85 and
-            heart 90 to 210 per minute.
+        subject_type (str | None): ``"adult"``, ``"neonate"`` or None. It
+            sets the default rate limits (``DEFAULT_RATE_LIMITS``): adult
+            breathing 6 to 60 and heart 40 to 200 per minute, neonate
+            breathing 15 to 85 and heart 90 to 210 per minute. With None, for
+            example for children or animals, give all four rate limits.
         welch_window (float): Length of one Welch window in seconds, at least
             10 s. When the data is shorter, the window is the whole data.
         welch_overlap (float): Part of a Welch window that overlaps the next
             window, from 0 up to but not including 1. 0.5 is half a window.
         min_heart_rate (float | None): Lowest heart rate in Hz. None gives
-            the default of the subject type.
+            the default of the subject type; required when ``subject_type``
+            is None.
         max_heart_rate (float | None): Highest heart rate in Hz. None gives
-            the default of the subject type.
+            the default of the subject type; required when ``subject_type``
+            is None.
         min_respiratory_rate (float | None): Lowest breathing rate in Hz.
-            None gives the default of the subject type.
+            None gives the default of the subject type; required when
+            ``subject_type`` is None.
         max_respiratory_rate (float | None): Highest breathing rate in Hz.
-            None gives the default of the subject type.
+            None gives the default of the subject type; required when
+            ``subject_type`` is None.
         refine_estimated_frequency (bool): If True, refine each rate with a
             parabola through the highest point of the spectrum and its two
             neighbours. If False, each rate is the frequency of the highest
@@ -110,11 +128,12 @@ class RateDetectionSettings:
 
     Raises:
         ValueError: If ``welch_overlap`` is below 0 or 1 or more, if
-            ``welch_window`` is shorter than 10 s, or if ``subject_type`` is
-            not ``"adult"`` or ``"neonate"``.
+            ``welch_window`` is shorter than 10 s, if ``subject_type`` is
+            not ``"adult"``, ``"neonate"`` or None, or if ``subject_type`` is
+            None and a rate limit is missing.
     """
 
-    subject_type: SubjectType
+    subject_type: SubjectType | None
     _: KW_ONLY
     welch_window: float = 30.0
     welch_overlap: float = 0.5
@@ -140,10 +159,20 @@ class RateDetectionSettings:
                 f"welch_window must be at least {MIN_WELCH_WINDOW_LENGTH} s, "
                 f"got {self.welch_window} s."
             )
-        if self.subject_type not in ("adult", "neonate"):
+        if self.subject_type is None:
+            missing = [
+                name for name in DEFAULT_RATE_LIMITS if getattr(self, name) is None
+            ]
+            if missing:
+                raise ValueError(
+                    "Without a subject type, give all four rate limits in Hz. "
+                    f"Missing: {', '.join(missing)}."
+                )
+            return
+        if self.subject_type not in SUBJECT_TYPES:
             raise ValueError(
-                f"Invalid subject type: {self.subject_type!r}. Must be 'adult' "
-                "or 'neonate'."
+                f"Invalid subject type: {self.subject_type!r}. Must be 'adult', "
+                "'neonate' or None."
             )
         for name, limits in DEFAULT_RATE_LIMITS.items():
             if getattr(self, name) is None:
@@ -160,7 +189,9 @@ def detect_rates(
 ) -> tuple[float, float]:
     """Return the breathing rate and the heart rate of EIT images, in Hz.
 
-    Multiply by 60 to get breaths or beats per minute.
+    Multiply by 60 to get breaths or beats per minute. The method is from
+    Wisse et al., Physiol. Meas. 45, 055010 (2024),
+    https://doi.org/10.1088/1361-6579/ad46e3. See the module docstring.
 
     Args:
         pixel_impedance (Signal): EIT images, values with shape (frames,
@@ -332,17 +363,17 @@ def _peak_frequency(
     power_range = power[in_range]
     index_max_power = int(np.argmax(power_range))
 
-    if not refine:
-        return float(frequency_range[index_max_power])
-
-    if index_max_power in (0, len(power_range) - 1):
-        if not suppress_edge_case_warning:
-            warnings.warn(
-                f"The highest power of the {what}-rate spectrum is at the edge "
-                "of the range, so the rate is not refined.",
-                RuntimeWarning,
-                stacklevel=3,
-            )
+    at_edge = index_max_power in (0, len(power_range) - 1)
+    if at_edge and not suppress_edge_case_warning:
+        warnings.warn(
+            f"The highest power of the {what}-rate spectrum is at the edge of "
+            f"the range ({min_rate * MINUTE:g} to {max_rate * MINUTE:g} per "
+            "minute), so the rate is probably wrong. Check the data or the "
+            "range. A rate at the edge is not refined.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+    if not refine or at_edge:
         return float(frequency_range[index_max_power])
 
     y0, y1, y2 = power_range[index_max_power - 1 : index_max_power + 2]

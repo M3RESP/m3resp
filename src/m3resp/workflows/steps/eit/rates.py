@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Literal
+from typing import Any
 
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult
 from m3resp.eit.processing import RateDetectionSettings
 from m3resp.eit.processing import detect_rates as detect_rates_of
+from m3resp.eit.processing.rate_detection import SUBJECT_TYPES, SubjectType
 from m3resp.workflows.registry import (
     StepArtifact,
     StepParameter,
@@ -52,8 +53,12 @@ from ._shared import (
             name="subject_type",
             value_type="choice",
             default="adult",
-            choices=("adult", "neonate"),
-            description="Subject type; changes the expected respiratory/heart rate search bands.",
+            choices=SUBJECT_TYPES,
+            description=(
+                "Subject type; sets the default ranges of the breathing rate "
+                "and the heart rate. Set it to null (for example for children "
+                "or animals) and give all four rate limits."
+            ),
         ),
         StepParameter(
             name="welch_window_seconds",
@@ -65,6 +70,54 @@ from ._shared import (
             description=(
                 "Welch power-spectrum window length. Left unset, it is 30 s; "
                 "the shortest allowed window is 10 s."
+            ),
+        ),
+        StepParameter(
+            name="min_respiratory_rate_hz",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="Hz",
+            minimum=0,
+            description=(
+                "Lowest breathing rate in Hz (per minute / 60). Left unset, the "
+                "default of subject_type."
+            ),
+        ),
+        StepParameter(
+            name="max_respiratory_rate_hz",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="Hz",
+            minimum=0,
+            description=(
+                "Highest breathing rate in Hz (per minute / 60). Left unset, the "
+                "default of subject_type."
+            ),
+        ),
+        StepParameter(
+            name="min_heart_rate_hz",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="Hz",
+            minimum=0,
+            description=(
+                "Lowest heart rate in Hz (per minute / 60). Left unset, the "
+                "default of subject_type."
+            ),
+        ),
+        StepParameter(
+            name="max_heart_rate_hz",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="Hz",
+            minimum=0,
+            description=(
+                "Highest heart rate in Hz (per minute / 60). Left unset, the "
+                "default of subject_type."
             ),
         ),
         StepParameter(
@@ -119,8 +172,12 @@ def detect_rates(
     signal: Any,
     *,
     session: M3Session,
-    subject_type: Literal["adult", "neonate"] = "adult",
+    subject_type: SubjectType | None = "adult",
     welch_window_seconds: float | None = None,
+    min_respiratory_rate_hz: float | None = None,
+    max_respiratory_rate_hz: float | None = None,
+    min_heart_rate_hz: float | None = None,
+    max_heart_rate_hz: float | None = None,
     capture: bool = False,
 ) -> dict[str, Any]:
     """Find the breathing rate and the heart rate of EIT images.
@@ -131,12 +188,20 @@ def detect_rates(
     Args:
         signal (Any): EIT images as a ``Signal``, time in seconds.
         session (M3Session): Session that stores the rates.
-        subject_type (Literal["adult", "neonate"]): Sets the rate ranges.
+        subject_type (SubjectType | None): ``"adult"`` or ``"neonate"``
+            sets the default rate ranges. With None, give all four limits.
         welch_window_seconds (float | None): Length of one Welch window in
             seconds. None gives 30 s.
+        min_respiratory_rate_hz (float | None): Lowest breathing rate in Hz.
+            None gives the default of ``subject_type``.
+        max_respiratory_rate_hz (float | None): Highest breathing rate in Hz.
+            None gives the default of ``subject_type``.
+        min_heart_rate_hz (float | None): Lowest heart rate in Hz. None gives
+            the default of ``subject_type``.
+        max_heart_rate_hz (float | None): Highest heart rate in Hz. None
+            gives the default of ``subject_type``.
         capture (bool): If True, also return the spectra for the rate figure
-            and give no warnings about short data or a rate at the edge of
-            its range.
+            and give no warning about data shorter than the Welch window.
 
     Returns:
         dict[str, Any]: ``respiratory_rate_hz`` and ``heart_rate_hz`` in Hz,
@@ -149,10 +214,17 @@ def detect_rates(
         ValueError: If a setting is invalid, or if a rate is NaN.
     """
 
-    settings = (
-        RateDetectionSettings(subject_type)
-        if welch_window_seconds is None
-        else RateDetectionSettings(subject_type, welch_window=welch_window_seconds)
+    settings = RateDetectionSettings(
+        subject_type,
+        **(
+            {}
+            if welch_window_seconds is None
+            else {"welch_window": welch_window_seconds}
+        ),
+        min_respiratory_rate=min_respiratory_rate_hz,
+        max_respiratory_rate=max_respiratory_rate_hz,
+        min_heart_rate=min_heart_rate_hz,
+        max_heart_rate=max_heart_rate_hz,
     )
     captures: dict[str, Any] = {}
     respiratory_rate_hz, heart_rate_hz = detect_rates_of(
@@ -160,7 +232,6 @@ def detect_rates(
         settings=settings,
         captures=captures if capture else None,
         suppress_length_warnings=capture,
-        suppress_edge_case_warning=capture,
     )
     for name, value in (
         ("respiratory_rate_hz", respiratory_rate_hz),
@@ -177,7 +248,7 @@ def detect_rates(
                 "returned NaN, which happens when the power spectrum has no "
                 "measured pixels in the frequency band being searched. Check "
                 "that the signal covers enough breaths and that the subject "
-                "type matches the expected rate range."
+                "type or the rate limits match the expected rates."
             )
 
     metadata = _step_provenance(
@@ -186,6 +257,10 @@ def detect_rates(
         parameters={
             "subject_type": subject_type,
             "welch_window_seconds": welch_window_seconds,
+            "min_respiratory_rate_hz": min_respiratory_rate_hz,
+            "max_respiratory_rate_hz": max_respiratory_rate_hz,
+            "min_heart_rate_hz": min_heart_rate_hz,
+            "max_heart_rate_hz": max_heart_rate_hz,
             "capture": capture,
         },
         source_package="m3resp",
