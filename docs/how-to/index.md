@@ -8,6 +8,7 @@ Each guide shows how to do one task. The guides are for users who know the basic
 eit-processing-settings
 emg-processing-settings
 synchronize-recordings
+read-a-ventilator-file
 compare-breath-timing
 export-results
 write-a-workflow

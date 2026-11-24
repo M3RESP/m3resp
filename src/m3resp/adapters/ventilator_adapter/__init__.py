@@ -11,7 +11,8 @@ The ventilator adapter processes ventilator channels with m3resp code
   to the impedance frames, read with the m3resp EIT loader (see
   `_eit_source`);
 - a file in another format, read by a function registered with
-  `register_ventilator_loader` (see `_loaders`).
+  `register_ventilator_loader`. The docs guide "How to read a ventilator
+  file in another format" shows such a function for a CSV file.
 
 The file extension selects the source. A loader given to one adapter replaces
 the built-in loader of that adapter. A registered loader applies to every
