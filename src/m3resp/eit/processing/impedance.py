@@ -12,10 +12,12 @@ impedance is the regional impedance of the functional (ventilated) lung space.
 
 The usual order of the steps is: filter the images, make a mask, then apply the
 mask to the images (``PixelMask.apply``) and use the masked images in the next
-steps. ``regional_impedance`` and ``functional_impedance`` apply the mask and
-sum the pixels in one call. ``PixelMask.apply`` lists the mask under
-``metadata["masks"]`` of the result. ``global_impedance`` raises an error for
-such images, because their sum covers only the region of the mask.
+steps. ``PixelMask.apply`` lists the name of the mask under
+``metadata["masks"]`` of the result. ``regional_impedance(masked_images)``
+sums the pixels of masked images. ``regional_impedance(images, mask=mask)``
+applies the mask and sums the pixels in one call. ``global_impedance`` raises
+an error for masked images, because their sum covers only the region of the
+mask.
 
 ---------------------------------------------------------------------------
 Provenance
@@ -37,8 +39,10 @@ Modified for M3RESP:
     - The result keeps the device maker of the images in `source` and names
       this function in `method`.
     - `regional_impedance` and `functional_impedance` join
-      `PixelMask.apply` and the sum in one function.
-    - `global_impedance` raises an error for masked images.
+      `PixelMask.apply` and the sum in one function, and also sum images
+      that are already masked.
+    - `global_impedance` raises an error for masked images, and names the
+      result after the label of the images.
     - Docstrings are reworded.
 
 The original copyright and license notices are retained per Apache-2.0 §4.
@@ -53,18 +57,19 @@ from m3resp.data.pixel_maps import MASKS_KEY, PixelMask
 from m3resp.data.signals import Signal
 
 
-def global_impedance(
-    pixel_impedance: Signal, *, name: str = "global_impedance"
-) -> Signal:
+def global_impedance(pixel_impedance: Signal, *, name: str | None = None) -> Signal:
     """Return the global impedance: the sum of all pixels of each image.
 
     Args:
         pixel_impedance (Signal): EIT images, values with shape (frames,
             rows, columns) and time in seconds.
-        name (str): The name of the result.
+        name (str | None): The name of the result. None gives
+            ``"Global impedance (<label>)"``, with the label of the images in
+            ``metadata["label"]`` (for example ``"mdn_filtered"``), else the
+            name of the images.
 
     Returns:
-        Signal: One value per frame, in arbitrary units (``"a.u."``), with a
+        Signal: One value per frame, in arbitrary units (``"AU"``), with a
             copy of the time of ``pixel_impedance`` and its frames per
             second, device maker (``source``) and processing state. Modality
             ``"eit"``, category ``"impedance"``, channel
@@ -72,16 +77,20 @@ def global_impedance(
 
     Raises:
         ValueError: If the values of ``pixel_impedance`` do not have three
-            axes, or if the images are masked (``metadata["masks"]``).
+            axes, or if the images are masked (``metadata["masks"]``). Use
+            ``regional_impedance`` for masked images.
     """
 
     masks = pixel_impedance.metadata.get(MASKS_KEY)
     if masks:
         raise ValueError(
             f"global_impedance: the images {pixel_impedance.name!r} are masked "
-            f"with {masks}, so their sum is a regional impedance. Use "
-            "regional_impedance(images, mask=mask) on the images before masking."
+            f"with {masks}, so their sum covers only the region of the mask. "
+            "Use regional_impedance(images) for masked images."
         )
+    if name is None:
+        label = pixel_impedance.metadata.get("label", pixel_impedance.name)
+        name = f"Global impedance ({label})"
     return _summed(
         pixel_impedance,
         np.asarray(pixel_impedance.values),
@@ -94,42 +103,51 @@ def global_impedance(
 def regional_impedance(
     pixel_impedance: Signal,
     *,
-    mask: PixelMask,
+    mask: PixelMask | None = None,
     name: str | None = None,
     channel: str = "regional_impedance",
 ) -> Signal:
     """Return the regional impedance: the sum of the pixels inside a mask.
 
-    Each pixel is multiplied by its mask value (``PixelMask.apply``): a NaN
-    pixel of the mask leaves the pixel out of the sum and a weight from 0 to 1
-    counts it partly. Then the pixels of each image are summed.
+    With ``mask``, each pixel is first multiplied by its mask value
+    (``PixelMask.apply``): a NaN pixel of the mask leaves the pixel out of the
+    sum and a weight from 0 to 1 counts it partly. Without ``mask``, the
+    images are masked already with ``PixelMask.apply`` and their pixels are
+    summed as they are.
 
     Args:
         pixel_impedance (Signal): EIT images, values with shape (frames,
             rows, columns) and time in seconds.
-        mask (PixelMask): The region, with the shape (rows, columns) of the
-            images.
+        mask (PixelMask | None): The region, with the shape (rows, columns)
+            of the images. None for images that are masked already.
         name (str | None): The name of the result. None gives
-            ``"{mask.name}_impedance"``, for example ``"ventral_impedance"``.
+            ``"<mask name>_impedance"``, for example ``"ventral_impedance"``.
+            For masked images without ``mask``, the names of their masks are
+            joined with ``"_"``.
         channel (str): The channel of the result.
 
     Returns:
-        Signal: One value per frame, in arbitrary units (``"a.u."``), with a
+        Signal: One value per frame, in arbitrary units (``"AU"``), with a
             copy of the time of ``pixel_impedance`` and its frames per
             second, device maker (``source``) and processing state. Modality
             ``"eit"``, category ``"impedance"``.
 
     Raises:
         ValueError: If the values of ``pixel_impedance`` do not have three
-            axes, or if the image size differs from the mask size.
+            axes, if the image size differs from the mask size, if ``mask``
+            is None and the images are not masked, or if the images are
+            masked already with a mask of the same name as ``mask``.
     """
 
     values = np.asarray(pixel_impedance.values)
     _check_images(pixel_impedance, values, function="regional_impedance")
+    masked, mask_name = _masked(
+        pixel_impedance, values, mask, function="regional_impedance"
+    )
     return _summed(
         pixel_impedance,
-        mask.apply(values),
-        name=name if name is not None else f"{mask.name}_impedance",
+        masked,
+        name=name if name is not None else f"{mask_name}_impedance",
         channel=channel,
         function="regional_impedance",
     )
@@ -138,20 +156,22 @@ def regional_impedance(
 def functional_impedance(
     pixel_impedance: Signal,
     *,
-    lung_space: PixelMask,
+    lung_space: PixelMask | None = None,
     name: str = "functional_impedance",
 ) -> Signal:
     """Return the functional impedance: the sum of the pixels in the lung space.
 
     This is ``regional_impedance`` with the mask of the functional
     (ventilated) lung space, for example the result of
-    ``eit.roi_tiv_lungspace``.
+    ``eit.roi_tiv_lungspace``. Without ``lung_space``, the images are masked
+    already with the lung space (``PixelMask.apply``).
 
     Args:
         pixel_impedance (Signal): EIT images, values with shape (frames,
             rows, columns) and time in seconds.
-        lung_space (PixelMask): The functional lung space, with the shape
-            (rows, columns) of the images.
+        lung_space (PixelMask | None): The functional lung space, with the
+            shape (rows, columns) of the images. None for images that are
+            masked already.
         name (str): The name of the result.
 
     Returns:
@@ -159,15 +179,17 @@ def functional_impedance(
             ``"functional_impedance"``.
 
     Raises:
-        ValueError: If the values of ``pixel_impedance`` do not have three
-            axes, or if the image size differs from the mask size.
+        ValueError: As ``regional_impedance``.
     """
 
     values = np.asarray(pixel_impedance.values)
     _check_images(pixel_impedance, values, function="functional_impedance")
+    masked, _ = _masked(
+        pixel_impedance, values, lung_space, function="functional_impedance"
+    )
     return _summed(
         pixel_impedance,
-        lung_space.apply(values),
+        masked,
         name=name,
         channel="functional_impedance",
         function="functional_impedance",
@@ -184,6 +206,51 @@ def _check_images(
             f"{function} needs EIT images with shape (frames, rows, "
             f"columns); {pixel_impedance.name!r} has shape {values.shape}."
         )
+
+
+def _masked(
+    pixel_impedance: Signal,
+    values: np.ndarray,
+    mask: PixelMask | None,
+    *,
+    function: str,
+) -> tuple[np.ndarray, str]:
+    """Return the masked pixels and the name of the mask.
+
+    Args:
+        pixel_impedance (Signal): The EIT images, with the names of the masks
+            applied to them in ``metadata["masks"]``.
+        values (numpy.ndarray): The pixels of ``pixel_impedance``.
+        mask (PixelMask | None): The mask to apply, or None for images that
+            are masked already.
+        function (str): The name of the calling function, for the errors.
+
+    Returns:
+        tuple[numpy.ndarray, str]: The masked pixels, and the name of
+            ``mask``, or the names of the masks of the images joined with
+            ``"_"``.
+
+    Raises:
+        ValueError: If ``mask`` is None and the images are not masked, or if
+            the images are masked already with a mask of the name of ``mask``.
+    """
+
+    applied = list(pixel_impedance.metadata.get(MASKS_KEY, []))
+    if mask is None:
+        if not applied:
+            raise ValueError(
+                f"{function}: the images {pixel_impedance.name!r} are not "
+                "masked. Give the mask, or mask the images with "
+                "PixelMask.apply first."
+            )
+        return values, "_".join(applied)
+    if mask.name in applied:
+        raise ValueError(
+            f"{function}: the images {pixel_impedance.name!r} are masked "
+            f"already with {mask.name!r}. Use {function}(images) without a "
+            "mask to sum them."
+        )
+    return mask.apply(values), mask.name
 
 
 def _summed(

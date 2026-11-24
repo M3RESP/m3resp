@@ -69,8 +69,9 @@ def global_impedance(signal: Any) -> dict[str, Any]:
     """Sum the pixels of each image into one waveform.
 
     The sum is ``m3resp.eit.processing.global_impedance``. The waveform is
-    named ``"summed <label>"``, where ``<label>`` is ``metadata["label"]`` of
-    the images (the ``label`` of the filter steps), else their name.
+    named ``"Global impedance (<label>)"``, where ``<label>`` is
+    ``metadata["label"]`` of the images (the ``label`` of the filter steps),
+    else their name.
 
     Args:
         signal: EIT images as a ``Signal``, with time, row and column axes.
@@ -85,8 +86,7 @@ def global_impedance(signal: Any) -> dict[str, Any]:
     """
 
     pixels = _as_signal(signal, name="signal", step="eit.global_impedance")
-    label = pixels.metadata.get("label", pixels.name)
-    summed = summed_pixels(pixels, name=f"summed {label}")
+    summed = summed_pixels(pixels)
     summed.metadata.update(
         _step_provenance(
             source_function="m3resp.eit.processing.global_impedance",
