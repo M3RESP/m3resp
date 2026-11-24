@@ -1,8 +1,7 @@
 """MDN filter: remove the cardiovascular signal from EIT data.
 
-MDN stands for "multiple digital notch". The heart beat adds a small signal
-at the heart rate and at its multiples (harmonics: 2, 3, ... times the heart
-rate) to the EIT data. The filter removes it in two parts:
+The multiple digital notch (MDN) filter removes the heart rate and its
+harmonics in two parts:
 
 1. For each harmonic up to the noise frequency limit, a band-stop filter
    removes the band from (harmonic − notch distance) to (harmonic + notch
@@ -14,14 +13,16 @@ rate) to the EIT data. The filter removes it in two parts:
 Each filter is a Butterworth filter of the given order, applied forwards and
 backwards (``scipy.signal.sosfiltfilt``), which prevents phase shifts.
 The default settings are a noise frequency limit of 220 per minute
-(3.67 Hz), a notch distance of 10 per minute (0.167 Hz) and order 10.
+(3.67 Hz), a notch distance of 10 per minute (0.167 Hz) and order 10. All
+rates and frequencies are in Hz.
 
-The filter was made for EIT data and tested in a limited number of cases. It
-can work less well for other data, other patient groups or other forms of
-ventilation.
+The filter was tested on EIT data in a limited number of cases. It can work
+less well for other data, other patient groups or other forms of ventilation.
 
-All rates and frequencies are in Hz. Divide a rate per minute by 60 to get
-Hz.
+Reference: J. J. Wisse, P. Somhorst, J. Behr, A. R. van Nieuw Amerongen,
+D. Gommers and A. H. Jonkman, "Improved filtering methods to suppress
+cardiovascular contamination in electrical impedance tomography recordings",
+Physiol. Meas. 45, 055010 (2024), https://doi.org/10.1088/1361-6579/ad46e3.
 
 ---------------------------------------------------------------------------
 Provenance
@@ -43,7 +44,6 @@ Modified for M3RESP:
       the output `Signal`.
     - New: a warning when a pixel has no value (NaN) at some samples. The
       filter gives NaN at every sample of such a pixel, as upstream.
-    - New: `mdn_frequency_bands` gives the bands without filtering.
     - Docstrings and warning texts are reworded.
 
 The original copyright and license notices are retained per Apache-2.0 §4.
@@ -91,6 +91,11 @@ def mdn_filter(
     captures: dict[str, Any] | None = None,
 ) -> Signal:
     """Remove the heart signal from EIT images or an impedance waveform.
+
+    Band-stop filters remove the heart rate and its harmonics up to
+    ``noise_frequency_limit``, and a low-pass filter removes everything above
+    it. The method is from Wisse et al., Physiol. Meas. 45, 055010 (2024),
+    https://doi.org/10.1088/1361-6579/ad46e3.
 
     Args:
         signal (Signal): EIT images (frames, rows, columns) or one waveform,
@@ -185,44 +190,6 @@ def mdn_filter(
     )
     capture_value(captures, "filtered_data", result)
     return result
-
-
-def mdn_frequency_bands(
-    *,
-    respiratory_rate: float,
-    heart_rate: float,
-    noise_frequency_limit: float = NOISE_FREQUENCY_LIMIT,
-    notch_distance: float = NOTCH_DISTANCE,
-) -> list[tuple[float, float]]:
-    """Return the bands that ``mdn_filter`` removes, without filtering.
-
-    The number of bands is the number of removed harmonics of the heart rate.
-
-    Args:
-        respiratory_rate (float): Breathing rate in Hz, above 0 and below
-            ``heart_rate``.
-        heart_rate (float): Heart rate in Hz, above 0.
-        noise_frequency_limit (float): Low-pass edge of the filter in Hz.
-        notch_distance (float): Half the width of each band, in Hz.
-
-    Returns:
-        list[tuple[float, float]]: One (low, high) pair in Hz per harmonic,
-            from the first harmonic up. Empty when the heart rate is above the
-            noise frequency limit plus the notch distance.
-
-    Raises:
-        ValueError: If a rate is NaN, infinite, or 0 or below, or if the
-            breathing rate is equal to or higher than the heart rate.
-
-    Warns:
-        UserWarning: When the breathing rate is above 85 per minute or the
-            heart rate is above 210 per minute.
-    """
-
-    _check_rates(respiratory_rate, heart_rate)
-    return _frequency_bands(
-        respiratory_rate, heart_rate, noise_frequency_limit, notch_distance
-    )
 
 
 def _frequency_bands(

@@ -15,7 +15,7 @@ import pytest
 
 from m3resp.data import Signal
 from m3resp.eit.io import read_eit_file
-from m3resp.eit.processing import mdn_filter, mdn_frequency_bands
+from m3resp.eit.processing import mdn_filter
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GOLDEN_DIR = os.path.join(REPO_ROOT, "tests", "regression", "golden", "eit")
@@ -116,12 +116,6 @@ def _upstream(signal: Signal, captures: dict | None = None, **settings) -> np.nd
     )
 
 
-def _band_settings(settings: dict) -> dict:
-    """The settings that ``mdn_frequency_bands`` takes (all except the order)."""
-
-    return {key: value for key, value in settings.items() if key != "order"}
-
-
 # Golden files
 
 
@@ -197,22 +191,18 @@ def test_no_captures_give_the_same_result() -> None:
 
 
 def test_the_first_band_starts_halfway_between_the_rates_when_they_are_close() -> None:
-    bands = mdn_frequency_bands(respiratory_rate=1.0, heart_rate=1.2)
-
-    assert bands[0] == pytest.approx((1.1, 1.2 + 10 / MINUTE))
-    assert bands[1] == pytest.approx((2.4 - 10 / MINUTE, 2.4 + 10 / MINUTE))
-
-
-@pytest.mark.parametrize("case", sorted(SETTINGS))
-def test_frequency_bands_are_the_bands_the_filter_removes(case: str) -> None:
-    settings = SETTINGS[case]
     captures: dict = {}
 
-    mdn_filter(_synthetic((3, 3)), captures=captures, **settings)
-
-    assert (
-        mdn_frequency_bands(**_band_settings(settings)) == captures["frequency_bands"]
+    mdn_filter(
+        _synthetic((3, 3), heart_hz=1.2),
+        respiratory_rate=1.0,
+        heart_rate=1.2,
+        captures=captures,
     )
+
+    bands = captures["frequency_bands"]
+    assert bands[0] == pytest.approx((1.1, 1.2 + 10 / MINUTE))
+    assert bands[1] == pytest.approx((2.4 - 10 / MINUTE, 2.4 + 10 / MINUTE))
 
 
 def test_a_heart_rate_above_the_limit_removes_no_harmonic() -> None:
@@ -230,8 +220,6 @@ def test_a_heart_rate_above_the_limit_removes_no_harmonic() -> None:
     assert captures["n_harmonics"] == expected_captures["n_harmonics"] == 0
     assert "frequency_bands" not in captures
     assert "frequency_bands" not in expected_captures
-    with pytest.warns(UserWarning):
-        assert mdn_frequency_bands(**settings) == []
 
 
 # Missing values
@@ -320,8 +308,6 @@ def test_wrong_rates_are_refused_as_by_eitprocessing(settings: dict) -> None:
         _upstream(signal, **settings)
     with pytest.raises(ValueError, match="rate"):
         mdn_filter(signal, **settings)
-    with pytest.raises(ValueError, match="rate"):
-        mdn_frequency_bands(**settings)
 
 
 @pytest.mark.parametrize(
@@ -338,8 +324,6 @@ def test_a_rate_that_is_not_a_finite_number_is_refused(settings: dict) -> None:
 
     with pytest.raises(ValueError, match="must be a finite number"):
         mdn_filter(signal, **settings)
-    with pytest.raises(ValueError, match="must be a finite number"):
-        mdn_frequency_bands(**settings)
 
 
 def test_a_too_low_sample_frequency_is_refused_as_by_eitprocessing() -> None:

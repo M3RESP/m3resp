@@ -4,8 +4,7 @@
 ``regional_impedance`` and ``functional_impedance`` sum only the pixels inside
 a ``PixelMask``. ``detect_rates`` finds the breathing rate and the heart rate
 of EIT images, and ``find_breaths`` finds the breaths of an impedance
-waveform. ``mdn_filter`` removes the heart signal from EIT data, and
-``mdn_frequency_bands`` gives the bands it removes.
+waveform. ``mdn_filter`` removes the heart signal from EIT data.
 ``tidal_impedance_variation`` and ``end_expiratory_lung_impedance`` give the
 TIV and the EELI of each breath of an impedance waveform, and
 ``pixel_tidal_impedance_variation`` and ``pixel_end_expiratory_lung_impedance``
@@ -40,7 +39,7 @@ from m3resp.eit.processing.impedance import (
     global_impedance,
     regional_impedance,
 )
-from m3resp.eit.processing.mdn_filter import mdn_filter, mdn_frequency_bands
+from m3resp.eit.processing.mdn_filter import mdn_filter
 from m3resp.eit.processing.mean_breath_image import mean_breath_image
 from m3resp.eit.processing.pixel_breath import find_pixel_breaths
 from m3resp.eit.processing.preprocess import preprocess_eit_recording
@@ -69,7 +68,6 @@ __all__ = [
     "functional_impedance",
     "global_impedance",
     "mdn_filter",
-    "mdn_frequency_bands",
     "mean_breath_image",
     "pixel_end_expiratory_lung_impedance",
     "pixel_tidal_impedance_variation",

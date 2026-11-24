@@ -21,7 +21,8 @@ The EIT functions take their data as the first argument and every other argument
 Install options:
 
 - `matplotlib>=3.9` is a main dependency, for the EIT figures.
-- `eit` installs `plotly`, for the interactive EIT figures.
+- `interactive` installs `plotly`, for the interactive figures (`backend="plotly"`).
+- `emg` installs `resurfemg` and `ipywidgets`, which `resurfemg.pipelines` needs when it loads.
 - `all` installs `resurfemg`, `ipywidgets` and `plotly`.
 - The new `reference` option installs `eitprocessing==1.8.7` from PyPI, for the comparison tests. These tests have the pytest marker `reference` and skip without eitprocessing. The CI job "Comparison with eitprocessing" runs them.
 
@@ -87,7 +88,7 @@ Three cases give a different result from eitprocessing 1.8.7:
 
 ### m3resp filters the EIT data
 
-`eit.mdn_filter`, `EITProcessingAdapter.apply_mdn` and `session.preprocess_eit()` (filter `"mdn"`) remove the heart signal with `m3resp.eit.processing.mdn_filter`. The function is copied from `MDNFilter` of eitprocessing 1.8.7 and gives the same numbers, with the same settings and defaults. `mdn_frequency_bands` gives the bands that the filter removes. `eit.butterworth_filter` and `session.preprocess_eit()` (filters `"lowpass"` and `"bandpass"`) run `m3resp.processing.filters.butterworth_filter`, which gives the same numbers as eitprocessing's `ButterworthFilter`.
+`eit.mdn_filter`, `EITProcessingAdapter.apply_mdn` and `session.preprocess_eit()` (filter `"mdn"`) remove the heart signal with `m3resp.eit.processing.mdn_filter`. The function is copied from `MDNFilter` of eitprocessing 1.8.7 and gives the same numbers, with the same settings and defaults. `eit.butterworth_filter` and `session.preprocess_eit()` (filters `"lowpass"` and `"bandpass"`) run `m3resp.processing.filters.butterworth_filter`, which gives the same numbers as eitprocessing's `ButterworthFilter`.
 
 Changes that a user can see:
 

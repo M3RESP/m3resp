@@ -82,7 +82,7 @@ from m3resp.eit.processing import mdn_filter
 filtered = mdn_filter(raw_eit, respiratory_rate=0.25, heart_rate=1.2)
 ```
 
-`raw_eit` is a `Signal` with the EIT images (frames, rows, columns) or one waveform; the result is a new `Signal` with the same shape, unit and time. `noise_frequency_limit` (default 220 per minute), `notch_distance` (default 10 per minute) and `order` (default 10) have the names of eitprocessing. `mdn_frequency_bands(respiratory_rate=..., heart_rate=...)` gives the removed bands without filtering.
+`raw_eit` is a `Signal` with the EIT images (frames, rows, columns) or one waveform; the result is a new `Signal` with the same shape, unit and time. `noise_frequency_limit` (default 220 per minute), `notch_distance` (default 10 per minute) and `order` (default 10) have the names of eitprocessing. The capture `"frequency_bands"` holds the removed bands.
 
 `mdn_filter(..., captures={})` fills the dictionary with the keys of eitprocessing: `low_pass_frequency`, `n_harmonics`, `frequency_bands`, and the images before and after the filter as `Signal`s in `unfiltered_data` and `filtered_data`. A pixel with NaN at some samples becomes NaN at every sample, as in eitprocessing; M3Resp also gives a warning that names these pixels.
 
