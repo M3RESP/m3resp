@@ -484,8 +484,9 @@ def test_mask_fields(dataset: str) -> None:
     assert mask.name == "lung"
     assert mask.method == "m3resp.eit.roi.watershed_lungspace"
     assert mask.metadata["threshold_fraction"] == 0.15
-    assert mask.metadata["included_pixel_count"] == included.sum()
-    assert mask.metadata["included_pixel_fraction"] == included.mean()
+    assert mask.included_pixel_count == included.sum()
+    assert mask.included_pixel_fraction == included.mean()
+    assert "included_pixel_count" not in mask.metadata
     # The first and the last breath have no amplitude.
     assert mask.metadata["breath_count"] == len(_breaths(data)) - 2
 

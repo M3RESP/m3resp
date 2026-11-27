@@ -18,6 +18,9 @@ Modified for M3RESP:
       vendor check, the `first_frame` check, the check that the file
       exists, and the call to the reader of the vendor. It returns an
       `EITFileData`. Several files are joined by the caller.
+    - The `first_frame` check raises only for a negative value. A check
+      that `max_frames` is at least 1 is added, with the same error for
+      all three vendors.
     - The vendor is a text: ``"draeger"``, ``"sentec"`` or ``"timpel"``
       (or an object whose ``value`` is one of these, such as the
       eitprocessing ``Vendor``).
@@ -80,14 +83,14 @@ def read_eit_file(
 
     Raises:
         NotImplementedError: If there is no reader for ``vendor``.
-        TypeError: If ``first_frame`` is not a whole number.
-        ValueError: If ``first_frame`` is negative. The vendor readers raise
-            more errors, see ``read_draeger``, ``read_sentec`` and
-            ``read_timpel``.
+        ValueError: If ``first_frame`` is negative, or ``max_frames`` is 0
+            or negative. The vendor readers raise more errors, see
+            ``read_draeger``, ``read_sentec`` and ``read_timpel``.
         FileNotFoundError: If the file does not exist.
     """
     reader = _reader_for(vendor)
     first_frame = _check_first_frame(first_frame)
+    _check_max_frames(max_frames)
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), str(path))
@@ -99,25 +102,29 @@ def read_eit_file(
     )
 
 
-def _check_first_frame(first_frame: Any) -> int:
-    """Return ``first_frame`` as an int; ``None`` gives 0.
+def _check_first_frame(first_frame: int | None) -> int:
+    """Return ``first_frame``; ``None`` gives 0.
 
     Raises:
-        TypeError: If ``first_frame`` is not a whole number.
         ValueError: If ``first_frame`` is negative.
     """
     if first_frame is None:
-        first_frame = 0
-    if int(first_frame) != first_frame:
-        msg = (
-            f"`first_frame` must be an int, but was given as {first_frame} "
-            f"(type: {type(first_frame)})"
-        )
-        raise TypeError(msg)
+        return 0
     if first_frame < 0:
         msg = f"`first_frame` can not be negative, but was given as {first_frame}"
         raise ValueError(msg)
-    return int(first_frame)
+    return first_frame
+
+
+def _check_max_frames(max_frames: int | None) -> None:
+    """Check that ``max_frames`` is ``None`` or at least 1.
+
+    Raises:
+        ValueError: If ``max_frames`` is 0 or negative.
+    """
+    if max_frames is not None and max_frames < 1:
+        msg = f"`max_frames` must be at least 1, but was given as {max_frames}"
+        raise ValueError(msg)
 
 
 def _reader_for(vendor: Any) -> Callable[..., EITFileData]:

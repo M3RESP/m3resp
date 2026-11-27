@@ -99,10 +99,11 @@ from m3resp.eit.processing import pixel_tidal_impedance_variation
 from m3resp.eit.roi._shared import (
     breath_waveform,
     check_per_breath,
-    check_threshold,
     finish_mask,
 )
 from m3resp.eit.roi.amplitude import pixel_amplitude_per_breath
+from m3resp.processing._checks import check_fraction
+from m3resp.processing.captures import capture_value
 
 #: Public name of the function, stored as the method of each result.
 METHOD = "m3resp.eit.roi.watershed_lungspace"
@@ -147,9 +148,8 @@ def watershed_lungspace(
 
     Returns:
         PixelMask: 1 for the pixels of the lung space, NaN elsewhere.
-            ``metadata`` holds ``threshold_fraction``, ``breath_count`` (the
-            breaths with TIV and amplitude), ``included_pixel_count`` and
-            ``included_pixel_fraction``.
+            ``metadata`` holds ``threshold_fraction`` and ``breath_count``
+            (the breaths with TIV and amplitude).
 
     Raises:
         TypeError: If ``threshold_fraction`` is not a float.
@@ -168,7 +168,7 @@ def watershed_lungspace(
         RuntimeWarning: The warnings of the pixel breath search.
     """
 
-    check_threshold(
+    check_fraction(
         threshold_fraction, name="threshold_fraction", function="watershed_lungspace"
     )
     signal = breath_waveform(pixels, signal=signal, function="watershed_lungspace")
@@ -208,8 +208,8 @@ def watershed_lungspace(
         name="functional tiv mask",
         captures=tiv_threshold,
     )
-    _capture(captures, "mean TIV of shared breaths", mean_tiv)
-    _capture(captures, "functional tiv mask", tiv_mask)
+    capture_value(captures, "mean TIV of shared breaths", mean_tiv)
+    capture_value(captures, "functional tiv mask", tiv_mask)
 
     mean_amplitude = PixelMap.from_aggregate(
         amplitude_grids[shared],
@@ -223,8 +223,8 @@ def watershed_lungspace(
         fraction_of_max=False,
         name="functional amplitude mask",
     )
-    _capture(captures, "mean amplitude of shared breaths", mean_amplitude)
-    _capture(captures, "functional amplitude mask", amplitude_mask)
+    capture_value(captures, "mean amplitude of shared breaths", mean_amplitude)
+    capture_value(captures, "functional amplitude mask", amplitude_mask)
 
     # Local maxima of the mean amplitude, border included, among the pixels
     # with a mean amplitude. Neighbouring maxima get one number; these
@@ -252,7 +252,7 @@ def watershed_lungspace(
     markers = PixelMap(
         name="markers", values=np.where(peak_numbers == 0, np.nan, peak_numbers)
     )
-    _capture(captures, "local peaks", local_peaks)
+    capture_value(captures, "local peaks", local_peaks)
 
     markers_in_tiv_mask = tiv_mask.apply(markers).values
     included_markers = markers_in_tiv_mask[~np.isnan(markers_in_tiv_mask)]
@@ -261,36 +261,35 @@ def watershed_lungspace(
             "No local maximum of the mean amplitude lies inside the TIV mask, "
             "so no functional lung space can be found."
         )
-    _capture(captures, "included marker indices", included_markers)
+    capture_value(captures, "included marker indices", included_markers)
 
     regions = segmentation.watershed(
         image=-image, markers=markers.to_integer_array(), mask=has_amplitude
     )
     is_included = np.isin(regions, included_markers)
     included_region = PixelMask(name="included region", values=is_included)
-    _capture(captures, "included region", included_region)
+    capture_value(captures, "included region", included_region)
 
-    if captures is not None:
-        included_peak_numbers = np.isin(peak_numbers, included_markers)
-        _capture(
-            captures,
-            "watershed regions",
-            PixelMap(name="watershed regions", values=regions, kind="integer"),
-        )
-        _capture(captures, "included peaks", np.argwhere(included_peak_numbers))
-        _capture(
-            captures,
-            "excluded peaks",
-            np.argwhere(is_peak & ~included_peak_numbers),
-        )
-        _capture(
-            captures,
-            "included watershed regions",
-            PixelMap(
-                name="included watershed regions",
-                values=np.where(is_included, regions, np.nan),
-            ),
-        )
+    included_peak_numbers = np.isin(peak_numbers, included_markers)
+    capture_value(
+        captures,
+        "watershed regions",
+        PixelMap(name="watershed regions", values=regions, kind="integer"),
+    )
+    capture_value(captures, "included peaks", np.argwhere(included_peak_numbers))
+    capture_value(
+        captures,
+        "excluded peaks",
+        np.argwhere(is_peak & ~included_peak_numbers),
+    )
+    capture_value(
+        captures,
+        "included watershed regions",
+        PixelMap(
+            name="included watershed regions",
+            values=np.where(is_included, regions, np.nan),
+        ),
+    )
 
     return finish_mask(
         included_region * amplitude_mask,
@@ -301,8 +300,3 @@ def watershed_lungspace(
             "breath_count": int(shared.sum()),
         },
     )
-
-
-def _capture(captures: dict[str, Any] | None, key: str, value: Any) -> None:
-    if captures is not None:
-        captures[key] = value

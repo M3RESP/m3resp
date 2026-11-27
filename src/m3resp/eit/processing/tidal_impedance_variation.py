@@ -67,6 +67,7 @@ Full attribution notice: see top-level NOTICE.md.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Literal, get_args
 
 import numpy as np
 
@@ -86,7 +87,8 @@ from m3resp.eit.processing._breath_samples import (
 )
 
 #: The TIV methods.
-TIV_METHODS = ("inspiratory", "expiratory", "mean")
+TivMethod = Literal["inspiratory", "expiratory", "mean"]
+TIV_METHODS = get_args(TivMethod)
 #: Public name of the function, stored as the method of each result.
 METHOD = "m3resp.eit.processing.tidal_impedance_variation"
 #: Public name of the pixel function, stored as the method of each result.
@@ -97,7 +99,7 @@ def tidal_impedance_variation(
     signal: Signal,
     *,
     breaths: Sequence[BreathEvent],
-    method: str = "inspiratory",
+    method: TivMethod = "inspiratory",
     name: str = "continuous_tivs",
 ) -> IntervalData:
     """Return the tidal impedance variation (TIV) of each breath.
@@ -108,7 +110,7 @@ def tidal_impedance_variation(
             category.
         breaths (Sequence[BreathEvent]): The breaths, with times on the time
             axis of ``signal``. Each time is read at the nearest sample.
-        method (str): ``"inspiratory"``, ``"expiratory"`` or ``"mean"`` (see
+        method (TivMethod): ``"inspiratory"``, ``"expiratory"`` or ``"mean"`` (see
             the module text).
         name (str): Name of the result.
 
@@ -163,7 +165,7 @@ def pixel_tidal_impedance_variation(
     pixels: Signal,
     *,
     breaths: Sequence[BreathEvent] | PixelBreaths,
-    method: str = "inspiratory",
+    method: TivMethod = "inspiratory",
     name: str = "pixel_tivs",
 ) -> IntervalData:
     """Return the TIV of each pixel, as one map per breath.
@@ -178,7 +180,7 @@ def pixel_tidal_impedance_variation(
             breaths of the global impedance). A ``PixelBreaths`` gives each
             pixel the times of its own breaths. Each time is read at the
             nearest sample.
-        method (str): ``"inspiratory"``, ``"expiratory"`` or ``"mean"`` (see
+        method (TivMethod): ``"inspiratory"``, ``"expiratory"`` or ``"mean"`` (see
             the module text).
         name (str): Name of the result and of each ``PixelMap``.
 
@@ -252,7 +254,7 @@ def _check_method(method: str) -> None:
 
 
 def _tiv_values(
-    data: np.ndarray, samples: dict[str, np.ndarray], method: str
+    data: np.ndarray, samples: dict[str, np.ndarray], method: TivMethod
 ) -> np.ndarray:
     """Return the TIV at the samples of each breath, NaN where there is no sample.
 

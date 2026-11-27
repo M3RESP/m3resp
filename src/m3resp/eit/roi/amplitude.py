@@ -59,8 +59,9 @@ from m3resp.eit.processing import (
     find_pixel_breaths,
     pixel_tidal_impedance_variation,
 )
-from m3resp.eit.roi._shared import breath_waveform, check_threshold, finish_mask
+from m3resp.eit.roi._shared import breath_waveform, finish_mask
 from m3resp.eit.roi.tiv import mean_map_and_mask
+from m3resp.processing._checks import check_fraction
 
 #: Public name of the function, stored as the method of each result.
 METHOD = "m3resp.eit.roi.amplitude_lungspace"
@@ -95,8 +96,7 @@ def amplitude_lungspace(
 
     Returns:
         PixelMask: 1 for the pixels of the lung space, NaN elsewhere.
-            ``metadata`` holds ``threshold``, ``breath_count``,
-            ``included_pixel_count`` and ``included_pixel_fraction``.
+            ``metadata`` holds ``threshold`` and ``breath_count``.
 
     Raises:
         TypeError: If ``threshold`` is not a float.
@@ -110,7 +110,7 @@ def amplitude_lungspace(
         RuntimeWarning: The warnings of the pixel breath search.
     """
 
-    check_threshold(threshold, name="threshold", function="amplitude_lungspace")
+    check_fraction(threshold, name="threshold", function="amplitude_lungspace")
     signal = breath_waveform(pixels, signal=signal, function="amplitude_lungspace")
     amplitude_per_breath = pixel_amplitude_per_breath(
         pixels, signal=signal, breaths=breaths

@@ -47,10 +47,11 @@ from m3resp.data import BreathEvent, IntervalData, PixelMap, PixelMask, Signal
 from m3resp.eit.processing import pixel_tidal_impedance_variation
 from m3resp.eit.roi._shared import (
     check_per_breath,
-    check_threshold,
     finish_mask,
     pixel_maps_of,
 )
+from m3resp.processing._checks import check_fraction
+from m3resp.processing.captures import capture_value
 
 #: Public name of the function, stored as the method of each result.
 METHOD = "m3resp.eit.roi.tiv_lungspace"
@@ -64,7 +65,7 @@ def tiv_lungspace(
     name: str = "tiv_lungspace_mask",
     captures: dict[str, Any] | None = None,
 ) -> PixelMask:
-    """Return the pixels whose mean TIV is at least a fraction of the largest.
+    """Return the pixels whose mean TIV is at least a fraction of the largest mean TIV.
 
     Args:
         pixels (Signal): Pixel impedance, values with shape (time, row, column),
@@ -81,8 +82,7 @@ def tiv_lungspace(
 
     Returns:
         PixelMask: 1 for the pixels of the lung space, NaN elsewhere.
-            ``metadata`` holds ``threshold``, ``breath_count``,
-            ``included_pixel_count`` and ``included_pixel_fraction``.
+            ``metadata`` holds ``threshold`` and ``breath_count``.
 
     Raises:
         TypeError: If ``threshold`` is not a float.
@@ -91,7 +91,7 @@ def tiv_lungspace(
             :func:`~m3resp.eit.processing.pixel_tidal_impedance_variation`.
     """
 
-    check_threshold(threshold, name="threshold", function="tiv_lungspace")
+    check_fraction(threshold, name="threshold", function="tiv_lungspace")
     tiv_per_breath = pixel_tidal_impedance_variation(pixels, breaths=breaths)
     _, mask = mean_map_and_mask(
         tiv_per_breath,
@@ -138,8 +138,7 @@ def mean_map_and_mask(
     """
 
     grids = check_per_breath(per_breath, quantity=quantity)
-    if captures is not None:
-        captures[f"{quantity} per breath"] = per_breath
+    capture_value(captures, f"{quantity} per breath", per_breath)
     first = pixel_maps_of(per_breath)[0]
     mean = PixelMap.from_aggregate(
         grids,
@@ -151,6 +150,5 @@ def mean_map_and_mask(
         kind="tiv" if quantity == "TIV" else "amplitude",
         suppress_negative_warning=quantity == "TIV",
     )
-    if captures is not None:
-        captures[f"mean {quantity}"] = mean
+    capture_value(captures, f"mean {quantity}", mean)
     return mean, mean.create_mask_from_threshold(threshold, fraction_of_max=True)

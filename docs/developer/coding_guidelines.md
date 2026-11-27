@@ -1,6 +1,6 @@
 # Coding guidelines
 
-This page has the rules for choices that come back often in the code: the return value of a function, named arguments, settings objects, the choice of a field, names, two arguments for one value, and function names in the docs. Add a rule here when the team agrees on a new one.
+This page has the rules for choices that come back often in the code: the return value of a function, named arguments, settings objects, the choice of a field, names, two arguments for one value, checks of argument values, the registration of workflow steps, module docstrings, and function names in the docs. Add a rule here when the team agrees on a new one.
 
 See `AGENTS.md` in the source folder for the rules for docstrings and comments.
 
@@ -81,6 +81,18 @@ Some functions accept one value in two forms, for example `gate_width_seconds` a
 - If both are set, the function raises `ValueError`.
 
 With a default other than `None`, the function cannot tell if the caller set the value. See the step `emg.ecg_gating` and `detect_emg_breath_peaks(...)` in `m3resp.processing.peaks` for examples.
+
+## Checks of argument values
+
+The workflow checks the type and the limits of each step setting before the step runs, so the GUI gives a clear message for a wrong value. A function trusts its type hints. It checks only the values that would otherwise give a wrong result or an unclear error, for example a negative `first_frame` or a `max_frames` below 1 in `read_eit_file(...)`.
+
+## Settings of a workflow step
+
+Write the inputs, outputs and parameters of a step in its `@register_step(...)` decorator, so a reader finds them in one place. Use a constant only for a block that two or more steps share, and name these steps in a comment above it. For example, `_PIXEL_INPUTS` in `m3resp.workflows.steps.eit.pixel` holds the inputs of both `eit.pixel_tiv` and `eit.pixel_eeli`, so the two steps read the same inputs.
+
+## Module docstrings
+
+The API pages show the docstrings of functions and classes, so a user reads what a function does there. A module docstring has one line on what the module holds, and the provenance block when the code comes from another package. Put the steps of a method, the settings and the reference into the docstring of the function. Put longer background, for example the orientation of the EIT image, on a concepts page.
 
 ## Function names in the docs
 

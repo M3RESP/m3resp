@@ -109,20 +109,21 @@ class TestReadEitFile:
         with pytest.raises(KeyError):
             _upstream_load(TEST_FILES["draeger"], vendor="simulated")
 
-    @pytest.mark.parametrize(
-        ("first_frame", "error"),
-        [(1.5, TypeError), ("2", TypeError), (-1, ValueError)],
-    )
-    def test_wrong_first_frame_raises(self, first_frame, error):
-        with pytest.raises(error, match="`first_frame`"):
-            read_eit_file(TEST_FILES["draeger"], "draeger", first_frame=first_frame)
-        with pytest.raises(error, match="`first_frame`"):
-            _upstream_load(
-                TEST_FILES["draeger"], vendor="draeger", first_frame=first_frame
-            )
+    @pytest.mark.parametrize("vendor", sorted(TEST_FILES))
+    def test_negative_first_frame_raises(self, vendor):
+        with pytest.raises(ValueError, match="`first_frame` can not be negative"):
+            read_eit_file(TEST_FILES[vendor], vendor, first_frame=-1)
+        with pytest.raises(ValueError, match="`first_frame`"):
+            _upstream_load(TEST_FILES[vendor], vendor=vendor, first_frame=-1)
 
-    @pytest.mark.parametrize("first_frame", [None, 2.0])
-    def test_first_frame_as_none_or_whole_float(self, first_frame):
+    @pytest.mark.parametrize("vendor", sorted(TEST_FILES))
+    @pytest.mark.parametrize("max_frames", [0, -3])
+    def test_max_frames_below_one_raises(self, vendor, max_frames):
+        with pytest.raises(ValueError, match="`max_frames` must be at least 1"):
+            read_eit_file(TEST_FILES[vendor], vendor, max_frames=max_frames)
+
+    @pytest.mark.parametrize("first_frame", [None, 2])
+    def test_first_frame_none_is_zero(self, first_frame):
         result = read_eit_file(
             TEST_FILES["draeger"], "draeger", first_frame=first_frame, max_frames=10
         )

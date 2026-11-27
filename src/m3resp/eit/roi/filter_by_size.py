@@ -51,6 +51,7 @@ from scipy import ndimage
 
 from m3resp.data import PixelMap, PixelMask
 from m3resp.eit.roi._shared import finish_mask
+from m3resp.processing.captures import capture_value
 
 #: Public name of the function, stored as the method of each result.
 METHOD = "m3resp.eit.roi.filter_mask_by_size"
@@ -82,9 +83,8 @@ def filter_mask_by_size(
 
     Returns:
         PixelMask: 1 for the pixels of the kept groups, NaN elsewhere.
-            ``metadata`` holds ``min_region_size``, ``connectivity``,
-            ``source_mask``, ``included_pixel_count`` and
-            ``included_pixel_fraction``.
+            ``metadata`` holds ``min_region_size``, ``connectivity`` and
+            ``source_mask``.
 
     Raises:
         TypeError: If ``mask`` is not a ``PixelMask``.
@@ -102,14 +102,13 @@ def filter_mask_by_size(
     labels, count = ndimage.label(~np.isnan(mask.values), structure=structure)
     sizes = np.bincount(labels.ravel(), minlength=count + 1)[1:].tolist()
     kept = [
-        number
-        for number, size in zip(range(1, count + 1), sizes, strict=True)
-        if size >= min_region_size
+        number for number, size in enumerate(sizes, start=1) if size >= min_region_size
     ]
-    if captures is not None:
-        captures["regions"] = PixelMap(name="regions", values=labels, kind="integer")
-        captures["region sizes"] = sizes
-        captures["kept regions"] = kept
+    capture_value(
+        captures, "regions", PixelMap(name="regions", values=labels, kind="integer")
+    )
+    capture_value(captures, "region sizes", sizes)
+    capture_value(captures, "kept regions", kept)
     if not kept:
         raise RuntimeError(
             f"No group of connected pixels has {min_region_size} pixels or "

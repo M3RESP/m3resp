@@ -1,5 +1,6 @@
-"""EIT code that m3resp runs itself.
+"""Read and analyse EIT data.
 
-``m3resp.eit.io`` holds the tools that read EIT files from disk, and
-``m3resp.eit.processing`` the calculations on the pixel impedance.
+``m3resp.eit.io`` reads EIT files from disk, ``m3resp.eit.processing`` holds
+the calculations on the pixel impedance, and ``m3resp.eit.roi`` gives the
+regions of interest (ROI) of the EIT image.
 """

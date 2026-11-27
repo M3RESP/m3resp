@@ -503,8 +503,10 @@ class PixelMap:
         actual_threshold = (
             threshold * np.nanmax(compare_values) if fraction_of_max else threshold
         )
-        if captures is not None:
-            captures["actual threshold"] = actual_threshold
+        # Imported here: m3resp.processing imports m3resp.data.
+        from m3resp.processing.captures import capture_value
+
+        capture_value(captures, "actual threshold", actual_threshold)
         return PixelMask(
             name=name if name is not None else f"{self.name}_mask",
             values=comparator(compare_values, actual_threshold),
@@ -779,6 +781,12 @@ class PixelMask:
         """Return the count of pixels that are not NaN, weight 0 included."""
 
         return int(np.count_nonzero(~np.isnan(self.values)))
+
+    @property
+    def included_pixel_fraction(self) -> float:
+        """Return the fraction of all pixels that are not NaN, weight 0 included."""
+
+        return self.included_pixel_count / self.values.size if self.values.size else 0.0
 
     @property
     def is_weighted(self) -> bool:

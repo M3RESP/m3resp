@@ -1,4 +1,4 @@
-"""Breathing rate and heart rate from EIT data.
+"""Estimate breathing rate and heart rate from EIT data.
 
 Both rates come from frequency spectra of the EIT data, made with Welch's
 method and a Hann window:

@@ -128,6 +128,8 @@ _PIXELS = StepArtifact(
     description="Filtered EIT pixel signal to find the lung space in.",
 )
 
+# The inputs of eit.roi_tiv_lungspace, eit.roi_amplitude_lungspace and
+# eit.roi_watershed.
 _LUNGSPACE_READS: dict[str, str | None] = {
     "eit_data": "filtered_eit",
     "timing_data": "global_impedance",
