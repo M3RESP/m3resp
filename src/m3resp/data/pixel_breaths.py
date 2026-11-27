@@ -30,6 +30,8 @@ PIXEL_BREATH_POINTS = ("start_time", "extremum_time", "end_time")
 #: Metadata key of ``PixelBreaths.to_interval_data`` with the number of rows
 #: and columns of the image, also when there are no breaths.
 GRID_SHAPE_KEY = "grid_shape"
+#: The axes of each grid of ``PixelBreaths.to_interval_data``.
+GRID_AXES = ("row", "column", "landmark")
 
 
 @dataclass(eq=False, kw_only=True)
@@ -194,7 +196,9 @@ class PixelBreaths:
                 in seconds (NaN for no breath). ``name``, ``modality``,
                 ``method`` and a copy of ``metadata`` come from this object;
                 the unit is ``'s'``. ``metadata["grid_shape"]`` holds the
-                number of rows and columns.
+                number of rows and columns, ``metadata["axes"]`` the axes of
+                each grid (row, column, landmark) and
+                ``metadata["landmarks"]`` the names of the three times.
         """
 
         grids = np.stack(
@@ -207,7 +211,12 @@ class PixelBreaths:
             values=list(grids),
             unit="s",
             method=self.method,
-            metadata={**self.metadata, GRID_SHAPE_KEY: list(self.grid_shape)},
+            metadata={
+                **self.metadata,
+                GRID_SHAPE_KEY: list(self.grid_shape),
+                "axes": list(GRID_AXES),
+                "landmarks": list(PIXEL_BREATH_POINTS),
+            },
         )
 
     @classmethod
@@ -224,7 +233,8 @@ class PixelBreaths:
         Returns:
             PixelBreaths: The same breaths and times. ``name``, ``modality``,
                 ``method`` and a copy of ``metadata`` come from ``data``,
-                without ``"grid_shape"``. With no breaths, the grid has the
+                without ``"grid_shape"``, ``"axes"`` and ``"landmarks"``.
+                With no breaths, the grid has the
                 rows and columns of ``metadata["grid_shape"]`` (0 x 0 when it
                 is missing).
 
@@ -253,6 +263,8 @@ class PixelBreaths:
             )
         metadata = dict(data.metadata)
         grid_shape = metadata.pop(GRID_SHAPE_KEY, None)
+        metadata.pop("axes", None)
+        metadata.pop("landmarks", None)
         if grids:
             times = np.stack(grids)
             if grid_shape is not None and list(grid_shape) != list(times.shape[1:3]):

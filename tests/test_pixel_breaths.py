@@ -230,6 +230,8 @@ class TestIntervalDataForm:
         data = pixel_breaths.to_interval_data()
 
         assert data.unit == "s"
+        assert data.metadata["axes"] == ["row", "column", "landmark"]
+        assert data.metadata["landmarks"] == ["start_time", "extremum_time", "end_time"]
         assert data.intervals == pixel_breaths.breaths
         np.testing.assert_array_equal(
             data.values[0], [[[0.1, 1.6, 4.1], [0.3, 1.8, 4.2]]]

@@ -10,6 +10,7 @@ data, and a pixel with every breath left out (see
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import json
 import os
@@ -508,3 +509,22 @@ def test_wrong_input_is_refused() -> None:
         find_pixel_breaths(pixels, signal=waveform, breaths=[(0.0, 1.0, 2.0)])  # type: ignore[list-item]
     with pytest.raises(TypeError, match="needs BreathEvent objects"):
         find_pixel_breaths(pixels, signal=waveform, breaths=breaths, sign_breaths=[1.0])  # type: ignore[list-item]
+
+
+@pytest.mark.parametrize("modality", ["emg", "ventilator"])
+def test_breaths_of_another_modality_are_refused(modality: str) -> None:
+    """The search windows lie between the ends of inspiration of EIT breaths,
+    so breaths on the clock of another device give an error."""
+
+    pixels, waveform = _golden_data(DATASETS[0], "filtered")
+    breaths = _breaths(waveform)
+    other = [dataclasses.replace(breath, modality=modality) for breath in breaths]
+
+    with pytest.raises(
+        ValueError, match=f"EIT breaths only; got breaths of {modality}"
+    ):
+        find_pixel_breaths(pixels, signal=waveform, breaths=other)
+    with pytest.raises(
+        ValueError, match=f"EIT breaths only; got breaths of {modality}"
+    ):
+        find_pixel_breaths(pixels, signal=waveform, breaths=breaths, sign_breaths=other)

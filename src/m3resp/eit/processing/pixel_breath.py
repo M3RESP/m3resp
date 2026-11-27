@@ -109,6 +109,7 @@ from m3resp.eit.processing._breath_samples import (
     check_impedance_waveform,
     check_pixel_impedance,
 )
+from m3resp.eit.processing.breath_inputs import check_eit_breaths
 from m3resp.eit.processing.tidal_impedance_variation import _tiv_values
 
 #: The phase correction modes. None is the same as ``"none"``.
@@ -149,11 +150,11 @@ def find_pixel_breaths(
             number of samples, each sample time less than half a sample
             from the time of ``pixels``). The "phase shift" mode
             cross-correlates it with each pixel.
-        breaths (Sequence[BreathEvent]): The global breaths, in time order.
-            Their ``extremum_time`` (end of inspiration) sets the search
-            windows; each is read at the first sample at or after it. An
-            ``extremum_time`` outside the time axis of ``pixels`` gives no
-            search window.
+        breaths (Sequence[BreathEvent]): The global EIT breaths, in time
+            order, with modality ``"eit"``. Their ``extremum_time`` (end of
+            inspiration) sets the search windows; each is read at the first
+            sample at or after it. An ``extremum_time`` outside the time
+            axis of ``pixels`` gives no search window.
         phase_correction_mode (PhaseCorrectionMode): ``"negative
             amplitude"``, ``"phase shift"``, ``"none"`` or None (see the
             module text).
@@ -180,8 +181,9 @@ def find_pixel_breaths(
             breath is not a ``BreathEvent``.
         ValueError: If the phase correction mode is unknown, a category is
             not an impedance category, the values do not have the expected
-            shapes, ``signal`` is not on the time axis of ``pixels``, or a
-            global breath has no ``extremum_time``.
+            shapes, ``signal`` is not on the time axis of ``pixels``, a
+            breath has another modality than EIT, or a global breath has no
+            ``extremum_time``.
 
     Warns:
         RuntimeWarning: Once when pixels have no cross-correlation peak, and
@@ -204,6 +206,7 @@ def find_pixel_breaths(
     time = np.asarray(pixels.time)
     _check_same_time_axis(time, np.asarray(signal.time), signal.name, function=function)
     checked = check_breaths(breaths, function=function)
+    check_eit_breaths(checked, function=function)
     middle_times = [breath.extremum_time for breath in checked]
     if any(middle_time is None for middle_time in middle_times):
         raise ValueError(
@@ -215,6 +218,7 @@ def find_pixel_breaths(
         if sign_breaths is None
         else check_breaths(sign_breaths, function=function)
     )
+    check_eit_breaths(checked_sign, function=function)
 
     n_breaths = len(checked)
     _, n_rows, n_columns = pixel_impedance.shape

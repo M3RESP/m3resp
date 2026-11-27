@@ -18,16 +18,17 @@ import numpy as np
 
 from m3resp.core.session import M3Session
 from m3resp.data import BreathEvent, IntervalData, PixelBreaths, Signal
-from m3resp.data.pixel_breaths import PIXEL_BREATH_POINTS
 from m3resp.eit.processing import (
     TIV_METHODS,
     BreathDetectionSettings,
-    find_breaths,
     find_pixel_breaths,
     pixel_end_expiratory_lung_impedance,
     pixel_tidal_impedance_variation,
 )
-from m3resp.eit.processing.breath_inputs import given_breath_events
+from m3resp.eit.processing.breath_inputs import (
+    check_eit_breaths,
+    given_breath_events,
+)
 from m3resp.eit.processing.eeli import PIXEL_METHOD as PIXEL_EELI_FUNCTION
 from m3resp.eit.processing.pixel_breath import METHOD as PIXEL_BREATH_FUNCTION
 from m3resp.eit.processing.pixel_breath import (
@@ -37,7 +38,6 @@ from m3resp.eit.processing.pixel_breath import (
 from m3resp.eit.processing.tidal_impedance_variation import (
     PIXEL_METHOD as PIXEL_TIV_FUNCTION,
 )
-from m3resp.modalities.names import normalize_modality
 from m3resp.workflows.registry import (
     BREATHS_ARTIFACT_TYPE,
     PIXEL_BREATHS_ARTIFACT_TYPE,
@@ -53,7 +53,6 @@ from ._shared import (
     _per_breath_values,
     _sign_breaths_used_by,
     _step_provenance,
-    _use_stored_eit_breaths,
 )
 
 #: Timing of the pixel TIV and the pixel EELI: the global breaths
@@ -161,14 +160,7 @@ def _eit_breaths(breaths: Any, *, action: str) -> list[BreathEvent]:
     """
 
     given = given_breath_events(breaths, function=action)
-    others = sorted({normalize_modality(breath.modality) for breath in given} - {"eit"})
-    if others:
-        raise ValueError(
-            f"{action} finds the pixel breaths from EIT breaths only; got "
-            f"breaths of {', '.join(others)}. The search windows of the pixel "
-            "breaths lie between the ends of inspiration of the impedance "
-            "breaths."
-        )
+    check_eit_breaths(given, function=action)
     return given
 
 
@@ -354,6 +346,8 @@ def _add_map_metadata(
     )
 
 
+# The inputs of eit.pixel_tiv and eit.pixel_eeli. The two steps read the same
+# inputs and need one of the three breath inputs.
 _PIXEL_INPUTS: dict[str, str | None] = {
     "eit_data": "filtered_eit",
     "signal": "global_impedance",
@@ -760,9 +754,7 @@ def pixel_breaths(
     sign_breaths = None
     if breaths is None:
         settings = BreathDetectionSettings(minimum_duration=minimum_duration_seconds)
-        global_breaths = _use_stored_eit_breaths(
-            find_breaths(waveform, settings=settings), session
-        )
+        global_breaths = _breaths_used_by(settings, waveform, session)
         sign_breaths = _sign_breaths_used_by(settings, waveform, session)
     else:
         global_breaths = _eit_breaths(breaths, action="eit.pixel_breaths")
@@ -788,16 +780,7 @@ def pixel_breaths(
         },
     )
     result.metadata.update(provenance)
-    valid = result.has_breath
     pixel_breath_timing_result = result.to_interval_data()
-    pixel_breath_timing_result.metadata.update(
-        {
-            "axes": ["row", "column", "landmark"],
-            "landmarks": list(PIXEL_BREATH_POINTS),
-            "valid_pixel_breath_count": int(valid.sum()),
-            "valid_pixel_breath_fraction": float(valid.mean()) if valid.size else 0.0,
-        }
-    )
     session.interval_data.add(pixel_breath_timing_result)
 
     return {

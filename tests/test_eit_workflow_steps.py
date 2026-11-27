@@ -157,12 +157,12 @@ def test_load_step_works_without_eitprocessing_and_matches_declared_writes(
     result = load(session, file_path="fake.bin", vendor="draeger")
 
     assert set(get_step("eit.load").writes) <= set(result)
-    assert result["raw_global_impedance_signal"].modality == "eit"
+    assert result["raw_global_impedance"].modality == "eit"
     assert session.signals.for_modality("eit")
 
     # Both impedances are signals from the moment the file is read, and the
     # channel is what tells them apart.
-    pixel_signal = result["raw_pixel_impedance_signal"]
+    pixel_signal = result["raw_eit"]
     assert pixel_signal.modality == "eit"
     assert pixel_signal.category == "impedance"
     assert pixel_signal.channel == "pixel_impedance"
@@ -210,7 +210,7 @@ def _fixed_rates(monkeypatch, respiratory_rate_hz: float, heart_rate_hz: float) 
     """Make ``eit.detect_rates`` find the given rates."""
 
     monkeypatch.setattr(
-        "m3resp.workflows.steps.eit.rates.detect_rates_of",
+        "m3resp.workflows.steps.eit.rates.eit_processing.detect_rates",
         lambda *args, **kwargs: (respiratory_rate_hz, heart_rate_hz),
     )
 
@@ -237,7 +237,8 @@ def test_detect_rates_step_passes_the_rate_limits(monkeypatch):
         return 0.3, 1.2
 
     monkeypatch.setattr(
-        "m3resp.workflows.steps.eit.rates.detect_rates_of", fake_detect_rates
+        "m3resp.workflows.steps.eit.rates.eit_processing.detect_rates",
+        fake_detect_rates,
     )
     detect_rates(
         _images(4, rows=1, columns=1),
@@ -308,8 +309,7 @@ def test_mdn_filter_step_matches_declared_writes():
     )
 
     assert set(get_step("eit.mdn_filter").writes) <= set(result)
-    assert result["filtered_eit_signal"].channel == "pixel_impedance"
-    assert result["filtered_eit"] is result["filtered_eit_signal"]
+    assert result["filtered_eit"].channel == "pixel_impedance"
     assert result["filtered_eit"].metadata["operation"] == "eit.mdn_filter"
     assert result["filtered_eit"].metadata["source_package"] == "m3resp"
     assert result["filtered_eit"].metadata["label"] == "mdn_filtered"
@@ -364,9 +364,8 @@ def test_butterworth_filter_step_supports_every_mode_and_matches_declared_writes
 
     assert set(get_step("eit.butterworth_filter").writes) <= set(result)
     # Same native signal and session bookkeeping the MDN filter produces.
-    assert result["filtered_eit_signal"].channel == "pixel_impedance"
+    assert result["filtered_eit"].channel == "pixel_impedance"
     assert session.signals.for_modality("eit")
-    assert result["filtered_eit"] is result["filtered_eit_signal"]
 
 
 def test_butterworth_filter_step_accepts_an_already_filtered_signal():
@@ -752,7 +751,6 @@ def test_pixel_breaths_step_gives_pixel_breaths_and_their_time_grids():
     assert np.isnan(grids[:, 1, 1]).all()  # the NaN pixel has no breaths
     assert found.metadata["skipped_pixels"]["no_tiv"] == [[1, 1]]
     assert timing.metadata["landmarks"] == ["start_time", "extremum_time", "end_time"]
-    assert timing.metadata["valid_pixel_breath_count"] == int(found.has_breath.sum())
     assert list(session.interval_data) == [timing]
 
 

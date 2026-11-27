@@ -2,12 +2,14 @@
 
 ``breath_intervals_to_breath_events`` and ``given_breath_events`` return
 breaths as a list of ``BreathEvent`` objects, ``breaths_to_interval_data`` holds
-EIT breaths in an ``IntervalData``, and ``pixel_sign_breaths`` gives the
-breaths that set the sign of each pixel in the pixel breath search.
+EIT breaths in an ``IntervalData``, ``check_eit_breaths`` checks that breaths
+are EIT breaths, and ``pixel_sign_breaths`` gives the breaths that set the
+sign of each pixel in the pixel breath search.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from m3resp.data import IntervalData, Signal
@@ -18,6 +20,7 @@ from m3resp.eit.processing.breath_detection import (
     BreathDetectionSettings,
     find_breaths,
 )
+from m3resp.modalities.names import normalize_modality
 
 
 def breath_intervals_to_breath_events(breath_intervals: Any) -> list[BreathEvent]:
@@ -71,6 +74,32 @@ def given_breath_events(breaths: Any, *, function: str) -> list[BreathEvent]:
         f"{function} needs a list of BreathEvent objects or an m3resp "
         f"IntervalData of them, got {_type_name(breaths)}."
     )
+
+
+def check_eit_breaths(breaths: Sequence[BreathEvent], *, function: str) -> None:
+    """Raise an error when a breath has another modality than EIT.
+
+    The pixel breath search and the watershed lung space use the ends of
+    inspiration of the breaths as times on the EIT clock.
+
+    Args:
+        breaths (Sequence[BreathEvent]): The breaths to check.
+        function (str): Name of the calling function or step, for the message.
+
+    Raises:
+        ValueError: If a breath has another modality than EIT.
+    """
+
+    others = sorted(
+        {normalize_modality(breath.modality) for breath in breaths} - {"eit"}
+    )
+    if others:
+        raise ValueError(
+            f"{function} finds the pixel breaths from EIT breaths only; got "
+            f"breaths of {', '.join(others)}. The search windows of the pixel "
+            "breaths lie between the ends of inspiration of the impedance "
+            "breaths."
+        )
 
 
 def _type_name(value: Any) -> str:
