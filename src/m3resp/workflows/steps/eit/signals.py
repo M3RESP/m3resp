@@ -27,6 +27,7 @@ from m3resp.eit.processing.impedance import (
     REGIONAL_METHOD as REGIONAL_IMPEDANCE_FUNCTION,
 )
 from m3resp.eit.processing.tidal_impedance_variation import METHOD as TIV_FUNCTION
+from m3resp.eit.processing.tidal_impedance_variation import TivMethod
 from m3resp.workflows.registry import (
     ANY_ARTIFACT_TYPE,
     StepArtifact,
@@ -498,7 +499,7 @@ def continuous_tiv(
     session: M3Session,
     breath_detector: Any = None,
     breaths: Any = None,
-    tiv_method: str = "inspiratory",
+    tiv_method: TivMethod = "inspiratory",
 ) -> dict[str, Any]:
     """Compute the tidal impedance variation (TIV) of each breath.
 

@@ -128,9 +128,14 @@ def _figure_global_impedance(
         if breath_intervals is not None
         else []
     )
-    if breaths:
-        start = np.array([b.start_time - t0 for b in breaths], dtype=float)
-        mid = np.array([b.extremum_time - t0 for b in breaths], dtype=float)
+    # Start and end of inspiration of each breath that has an end of
+    # inspiration.
+    peak_breaths = [
+        (b.start_time, b.extremum_time) for b in breaths if b.extremum_time is not None
+    ]
+    if peak_breaths:
+        start = np.array([s for s, _ in peak_breaths], dtype=float) - t0
+        mid = np.array([e for _, e in peak_breaths], dtype=float) - t0
         peak_idx = np.clip(np.searchsorted(t, mid), 0, t.size - 1)
         start_idx = np.clip(np.searchsorted(t, start), 0, t.size - 1)
         peak_y = values[peak_idx]

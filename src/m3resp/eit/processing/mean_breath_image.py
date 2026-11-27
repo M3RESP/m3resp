@@ -23,6 +23,7 @@ from m3resp.data.pixel_maps import PixelMap
 from m3resp.data.signals import Signal
 from m3resp.eit.processing.pixel_breath import find_pixel_breaths
 from m3resp.eit.processing.tidal_impedance_variation import (
+    TivMethod,
     pixel_tidal_impedance_variation,
 )
 
@@ -41,7 +42,7 @@ def mean_breath_image(
     end_time: float | None = None,
     duration: float | None = None,
     signal: Signal | None = None,
-    tiv_method: str = "inspiratory",
+    tiv_method: TivMethod = "inspiratory",
     name: str | None = None,
 ) -> PixelMap:
     """Return the mean pixel TIV or pixel amplitude over the breaths in a window.
@@ -75,7 +76,7 @@ def mean_breath_image(
         signal (Signal | None): For ``quantity="amplitude"`` only: the
             waveform of the breaths, for example the global impedance. None
             uses the sum of all pixels of each image.
-        tiv_method (str): ``"inspiratory"``, ``"expiratory"`` or ``"mean"``
+        tiv_method (TivMethod): ``"inspiratory"``, ``"expiratory"`` or ``"mean"``
             (see :func:`~m3resp.eit.processing.pixel_tidal_impedance_variation`),
             for both quantities.
         name (str | None): Name of the map. None gives ``"mean_breath_tiv"``

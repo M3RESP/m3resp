@@ -38,6 +38,7 @@ from m3resp.eit.processing.pixel_breath import (
 from m3resp.eit.processing.tidal_impedance_variation import (
     PIXEL_METHOD as PIXEL_TIV_FUNCTION,
 )
+from m3resp.eit.processing.tidal_impedance_variation import TivMethod
 from m3resp.workflows.registry import (
     BREATHS_ARTIFACT_TYPE,
     PIXEL_BREATHS_ARTIFACT_TYPE,
@@ -416,7 +417,7 @@ def pixel_tiv(
     breaths: Any = None,
     pixel_breaths: PixelBreaths | None = None,
     tiv_timing: PixelTiming = "continuous",
-    tiv_method: str = "inspiratory",
+    tiv_method: TivMethod = "inspiratory",
     result_label: str = "pixel_tivs",
 ) -> dict[str, Any]:
     """Compute one pixel map of tidal impedance variation (TIV) per breath.
@@ -447,7 +448,7 @@ def pixel_tiv(
         tiv_timing (PixelTiming): ``'continuous'`` uses the times of the
             global breaths; ``'pixel'`` uses the times of the breaths of each
             pixel.
-        tiv_method (str): ``"inspiratory"``, ``"expiratory"`` or ``"mean"``.
+        tiv_method (TivMethod): ``"inspiratory"``, ``"expiratory"`` or ``"mean"``.
         result_label (str): Name of the result.
 
     Returns:
