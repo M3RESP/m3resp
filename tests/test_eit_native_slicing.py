@@ -263,8 +263,7 @@ def test_workflow_raw_signals_record_the_vendor_source(recording):
     outputs = _loaded_recording_outputs(session)
     assert outputs["raw_eit"].source == data.vendor
     assert outputs["raw_global_impedance"].source == data.vendor
-    assert outputs["raw_eit"] is outputs["raw_pixel_impedance_signal"]
-    assert outputs["raw_global_impedance"] is outputs["raw_global_impedance_signal"]
+    assert set(outputs) == {"raw_eit", "raw_global_impedance"}
 
 
 def test_sentec_loading_sums_native_pixels(monkeypatch):

@@ -70,7 +70,7 @@ def test_regional_impedance_sums_the_pixels_inside_the_mask():
     np.testing.assert_allclose(result["regional_impedance"].values, expected)
     np.testing.assert_allclose(result["regional_impedance"].time, np.arange(3) / FS)
 
-    native = result["regional_impedance_signal"]
+    native = result["regional_impedance"]
     np.testing.assert_allclose(native.values, expected)
     assert native.channel == "regional_impedance"
     assert native.category == "impedance"
@@ -94,7 +94,7 @@ def test_functional_impedance_keeps_weight_zero_apart_from_nan():
 
     expected = PIXELS[:, 0, 0] + PIXELS[:, 1, 0]
     np.testing.assert_allclose(result["functional_impedance"].values, expected)
-    assert result["functional_impedance_signal"].channel == "functional_impedance"
+    assert result["functional_impedance"].channel == "functional_impedance"
     assert session.provenance[-1].action == "eit.functional_impedance"
 
 
@@ -105,14 +105,14 @@ def test_functional_impedance_reads_the_tiv_lung_space_mask_by_default():
     assert mask_input.default_context_key == "tiv_lungspace_result"
 
 
-def test_both_outputs_can_feed_the_waveform_steps():
+def test_the_output_can_feed_the_waveform_steps():
     for step, output in (
         ("eit.regional_impedance", "regional_impedance"),
         ("eit.functional_impedance", "functional_impedance"),
     ):
         outputs = {a.name: a for a in describe_step(step).output_artifacts}
+        assert set(outputs) == {output}
         assert outputs[output].artifact_type == "eit_impedance_waveform"
-        assert outputs[f"{output}_signal"].artifact_type == "eit_impedance_waveform"
 
 
 def test_mask_with_the_wrong_shape_is_refused():

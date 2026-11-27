@@ -46,7 +46,7 @@ def test_eit_load_reads_with_the_vendor_reader_when_a_custom_loader_is_set():
 
     result = load(session, file_path=DRAEGER_PATH, vendor="draeger", max_frames=50)
 
-    assert result["raw_pixel_impedance_signal"].values.shape[0] == 50
+    assert result["raw_eit"].values.shape[0] == 50
 
 
 def test_eit_load_custom_without_a_loader_explains_how_to_set_one():
@@ -71,7 +71,7 @@ def test_eit_load_custom_passes_its_options_to_the_loader():
 
     assert calls == [(DRAEGER_PATH, {"vendor": None, "max_frames": 20})]
     assert set(get_step("eit.load_custom").writes) <= set(result)
-    assert result["raw_pixel_impedance_signal"].values.shape[0] == 20
+    assert result["raw_eit"].values.shape[0] == 20
 
 
 def test_both_steps_give_the_same_outputs_for_the_same_file():
@@ -82,12 +82,12 @@ def test_both_steps_give_the_same_outputs_for_the_same_file():
     from_custom = load_custom(custom_session, file_path=DRAEGER_PATH)
 
     np.testing.assert_array_equal(
-        from_vendor["raw_pixel_impedance_signal"].values,
-        from_custom["raw_pixel_impedance_signal"].values,
+        from_vendor["raw_eit"].values,
+        from_custom["raw_eit"].values,
     )
     np.testing.assert_array_equal(
-        from_vendor["raw_global_impedance_signal"].values,
-        from_custom["raw_global_impedance_signal"].values,
+        from_vendor["raw_global_impedance"].values,
+        from_custom["raw_global_impedance"].values,
     )
 
 
@@ -99,7 +99,7 @@ def test_custom_loader_workflow_takes_the_loader_from_run_workflow():
 
     result = run_workflow(spec, eit_loader=_read_draeger)
 
-    assert result.value("raw_pixel_impedance_signal") is not None
+    assert result.value("raw_eit") is not None
     actions = [entry.action for entry in result.session.provenance]
     assert actions.count("eit.load_custom") == 1
 

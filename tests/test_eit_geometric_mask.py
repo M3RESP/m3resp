@@ -233,7 +233,7 @@ def test_ventral_impedance_in_a_workflow():
                 uses="eit.regional_impedance",
                 id="ventral_impedance",
                 inputs={"mask": "ventral_mask"},
-                outputs={"regional_impedance_signal": "ventral_impedance"},
+                outputs={"regional_impedance": "ventral_impedance"},
             ),
         ),
     )

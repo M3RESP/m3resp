@@ -100,7 +100,6 @@ def test_the_result_describes_the_filter(images: dict) -> None:
     output = _run_step(signal, mode="bandpass", label="band", **CUTOFFS)
 
     filtered = output["filtered_eit"]
-    assert filtered is output["filtered_eit_signal"]
     assert filtered.name == "Bandpass-filtered EIT data"
     assert filtered.source == "sentec"
     assert filtered.processing_state == "intermediate"

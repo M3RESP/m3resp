@@ -124,7 +124,7 @@ def test_workflow_resolves_a_list_of_relative_paths(two_halves, tmp_path):
 
     result = run_workflow(load_spec(spec_path))
 
-    assert result.value("raw_pixel_impedance_signal").values.shape[0] == 1200
+    assert result.value("raw_eit").values.shape[0] == 1200
     assert result.session.eit.paths == tuple(Path(p).resolve() for p in two_halves)
 
 

@@ -10,6 +10,7 @@ import dataclasses
 from typing import Any, get_args
 
 from m3resp.core.session import M3Session
+from m3resp.eit import processing as eit_processing
 from m3resp.eit.processing.butterworth import METHOD as BUTTERWORTH_FUNCTION
 from m3resp.eit.processing.butterworth import butterworth_filter_pixels
 from m3resp.eit.processing.mdn_filter import METHOD as MDN_FUNCTION
@@ -18,7 +19,6 @@ from m3resp.eit.processing.mdn_filter import (
     NOTCH_DISTANCE,
     ORDER,
 )
-from m3resp.eit.processing.mdn_filter import mdn_filter as mdn_filter_pixels
 from m3resp.processing.filters import ButterworthFilterType
 from m3resp.workflows.registry import (
     StepArtifact,
@@ -41,7 +41,7 @@ from ._shared import (
         "heart_rate_hz": "heart_rate_hz",
         "session": "session",
     },
-    writes=("filtered_eit", "filter_captures", "filtered_eit_signal"),
+    writes=("filtered_eit", "filter_captures"),
     summary="Remove the heart signal from the pixel impedance with the MDN filter.",
     description=(
         "Remove the heart signal from the pixel impedance with the MDN (multiple digital "
@@ -122,11 +122,6 @@ from ._shared import (
                 "filter as Signals (unfiltered_data, filtered_data)."
             ),
         ),
-        StepArtifact(
-            name="filtered_eit_signal",
-            artifact_type="eit_pixel_signal",
-            description="The same Signal as 'filtered_eit'.",
-        ),
     ),
     record=True,
 )
@@ -161,9 +156,9 @@ def mdn_filter(
         label (str): Short name of the filtered pixel impedance.
 
     Returns:
-        dict[str, Any]: ``filtered_eit`` and ``filtered_eit_signal``, the
-            same filtered ``Signal``, and ``filter_captures``, the in-between
-            results of the filter.
+        dict[str, Any]: ``filtered_eit``, the filtered pixel impedance as a
+            ``Signal``, and ``filter_captures``, the in-between results of the
+            filter.
 
     Raises:
         TypeError: If ``signal`` is not a ``Signal``.
@@ -173,7 +168,7 @@ def mdn_filter(
     """
 
     captures: dict[str, Any] = {}
-    filtered_eit_signal = mdn_filter_pixels(
+    filtered_eit = eit_processing.mdn_filter(
         _as_signal(signal, name="signal", step="eit.mdn_filter"),
         respiratory_rate=respiratory_rate_hz,
         heart_rate=heart_rate_hz,
@@ -183,7 +178,7 @@ def mdn_filter(
         name=f"MDN-filtered EIT data ({label})",
         captures=captures,
     )
-    filtered_eit_signal.metadata["label"] = label
+    filtered_eit.metadata["label"] = label
 
     metadata = _step_provenance(
         source_package="m3resp",
@@ -199,13 +194,12 @@ def mdn_filter(
             "label": label,
         },
     )
-    filtered_eit_signal.metadata.update(metadata)
-    session.signals.add(filtered_eit_signal)
+    filtered_eit.metadata.update(metadata)
+    session.signals.add(filtered_eit)
 
     return {
-        "filtered_eit": filtered_eit_signal,
+        "filtered_eit": filtered_eit,
         "filter_captures": captures,
-        "filtered_eit_signal": filtered_eit_signal,
         "_provenance": metadata,
     }
 
@@ -213,7 +207,7 @@ def mdn_filter(
 @register_step(
     "eit.butterworth_filter",
     reads={"signal": None, "session": "session"},
-    writes=("filtered_eit", "filter_captures", "filtered_eit_signal"),
+    writes=("filtered_eit", "filter_captures"),
     summary="Apply a Butterworth filter to EIT pixel data.",
     description="Apply a lowpass, highpass, bandpass or bandstop Butterworth filter to EIT pixel impedance (m3resp.processing.filters.butterworth_filter), as an alternative to eit.mdn_filter.",
     category="preprocessing",
@@ -235,9 +229,10 @@ def mdn_filter(
             default="lowpass",
             choices=get_args(ButterworthFilterType),
             description=(
-                "Filter type. 'lowpass' uses 'lowpass_hz', 'highpass' uses "
-                "'highpass_hz', and 'bandpass'/'bandstop' use both as the "
-                "band edges ('highpass_hz', 'lowpass_hz')."
+                "Filter type. 'lowpass' keeps the frequencies below "
+                "'lowpass_hz', 'highpass' keeps those above 'highpass_hz'. "
+                "'bandpass' keeps and 'bandstop' removes the band from "
+                "'highpass_hz' (lower edge) to 'lowpass_hz' (upper edge)."
             ),
         ),
         StepParameter(
@@ -246,7 +241,7 @@ def mdn_filter(
             default=1.0,
             unit="Hz",
             minimum=0,
-            description="Upper band edge; used by every mode except 'highpass'.",
+            description="Cutoff of 'lowpass', and the upper edge of the band of 'bandpass' and 'bandstop'.",
         ),
         StepParameter(
             name="highpass_hz",
@@ -254,7 +249,7 @@ def mdn_filter(
             default=0.05,
             unit="Hz",
             minimum=0,
-            description="Lower band edge; used by every mode except 'lowpass'.",
+            description="Cutoff of 'highpass', and the lower edge of the band of 'bandpass' and 'bandstop'.",
         ),
         StepParameter(
             name="order",
@@ -286,11 +281,6 @@ def mdn_filter(
                 "(unfiltered_data, filtered_data)."
             ),
         ),
-        StepArtifact(
-            name="filtered_eit_signal",
-            artifact_type="eit_pixel_signal",
-            description="The same Signal as 'filtered_eit'.",
-        ),
     ),
     record=True,
 )
@@ -316,19 +306,21 @@ def butterworth_filter(
         session (M3Session): Session receiving the filtered Signal and provenance.
         mode (ButterworthFilterType): "lowpass", "highpass", "bandpass", or
             "bandstop". Defaults to "lowpass".
-        lowpass_hz (float): Upper cutoff in Hz. Defaults to 1.0; used for lowpass,
-            bandpass and bandstop modes.
-        highpass_hz (float): Lower cutoff in Hz. Defaults to 0.05; used for
-            highpass, bandpass and bandstop modes. Both band cutoffs must be
-            positive, ordered and below half the sampling rate.
+        lowpass_hz (float): Cutoff of the lowpass mode, and the upper edge
+            of the band of the bandpass and bandstop modes, in Hz. Defaults
+            to 1.0.
+        highpass_hz (float): Cutoff of the highpass mode, and the lower edge
+            of the band of the bandpass and bandstop modes, in Hz. Defaults
+            to 0.05. Both band edges must be positive, ``highpass_hz`` below
+            ``lowpass_hz``, and below half the sampling rate.
         order (int): Butterworth order, 1 or more. Defaults to 4. An order
             above 10 gives a warning.
         label (str): Short name of the filtered pixel impedance. Defaults to
             "filtered".
 
     Returns:
-        dict[str, Any]: ``filtered_eit`` and ``filtered_eit_signal``, the same
-            filtered ``Signal``, and ``filter_captures``, the filter
+        dict[str, Any]: ``filtered_eit``, the filtered pixel impedance as a
+            ``Signal``, and ``filter_captures``, the filter
             diagnostics (the pixel impedance before and after the filter as
             ``Signal``s in ``unfiltered_data`` and ``filtered_data``). Values
             keep their shape, units and time. Pixels with only missing
@@ -341,21 +333,23 @@ def butterworth_filter(
             invalid.
     """
 
-    # One edge for the single-sided modes, both edges (low, high) for the
-    # two-sided ones.
+    # One cutoff for lowpass and highpass. For bandpass and bandstop the band
+    # is (lower edge, upper edge) = (highpass_hz, lowpass_hz) in both modes.
     single_sided = {"lowpass": lowpass_hz, "highpass": highpass_hz}
-    filtered_eit_signal, captures = butterworth_filter_pixels(
+    captures: dict[str, Any] = {}
+    filtered_eit = butterworth_filter_pixels(
         _as_signal(signal, name="signal", step="eit.butterworth_filter"),
         mode=mode,
         cutoff_frequency=single_sided.get(mode, (highpass_hz, lowpass_hz)),
         order=order,
         operation="eit.butterworth_filter",
+        captures=captures,
     )
-    filtered_eit_signal = dataclasses.replace(
-        filtered_eit_signal,
-        metadata={**filtered_eit_signal.metadata, "label": label},
+    filtered_eit = dataclasses.replace(
+        filtered_eit,
+        metadata={**filtered_eit.metadata, "label": label},
     )
-    captures["filtered_data"] = filtered_eit_signal
+    captures["filtered_data"] = filtered_eit
 
     metadata = _step_provenance(
         source_package="m3resp",
@@ -370,12 +364,11 @@ def butterworth_filter(
             "label": label,
         },
     )
-    filtered_eit_signal.metadata.update(metadata)
-    session.signals.add(filtered_eit_signal)
+    filtered_eit.metadata.update(metadata)
+    session.signals.add(filtered_eit)
 
     return {
-        "filtered_eit": filtered_eit_signal,
+        "filtered_eit": filtered_eit,
         "filter_captures": captures,
-        "filtered_eit_signal": filtered_eit_signal,
         "_provenance": metadata,
     }

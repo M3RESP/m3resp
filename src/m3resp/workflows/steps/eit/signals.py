@@ -9,6 +9,7 @@ import numpy as np
 from m3resp.core.exceptions import UnsupportedWorkflowError
 from m3resp.core.session import M3Session
 from m3resp.data import PixelMask
+from m3resp.eit import processing as eit_processing
 from m3resp.eit.processing import (
     TIV_METHODS,
     BreathDetectionSettings,
@@ -16,8 +17,6 @@ from m3resp.eit.processing import (
     find_breaths,
     tidal_impedance_variation,
 )
-from m3resp.eit.processing import global_impedance as summed_pixels
-from m3resp.eit.processing import regional_impedance as regional_impedance_of
 from m3resp.eit.processing.breath_inputs import (
     breath_intervals_to_breath_events,
     breaths_to_interval_data,
@@ -90,7 +89,7 @@ def global_impedance(signal: Any) -> dict[str, Any]:
     """
 
     pixels = _as_signal(signal, name="signal", step="eit.global_impedance")
-    summed = summed_pixels(pixels)
+    summed = eit_processing.global_impedance(pixels)
     summed.metadata.update(
         _step_provenance(
             source_function=GLOBAL_IMPEDANCE_FUNCTION,
@@ -166,7 +165,9 @@ def _impedance_in_mask(
 
     pixels = _as_signal(signal, name="signal", step=step)
     region = _as_mask(mask)
-    native = regional_impedance_of(pixels, mask=region, name=output, channel=output)
+    native = eit_processing.regional_impedance(
+        pixels, mask=region, name=output, channel=output
+    )
     metadata = _step_provenance(
         source_function=REGIONAL_IMPEDANCE_FUNCTION,
         operation=step,
@@ -176,7 +177,7 @@ def _impedance_in_mask(
     )
     native.metadata.update(metadata)
     session.signals.add(native)
-    return {output: native, f"{output}_signal": native, "_provenance": metadata}
+    return {output: native, "_provenance": metadata}
 
 
 _PIXEL_SIGNAL_TO_SUM = StepArtifact(
@@ -194,7 +195,7 @@ _PIXEL_SIGNAL_TO_SUM = StepArtifact(
         "mask": None,
         "session": "session",
     },
-    writes=("regional_impedance", "regional_impedance_signal"),
+    writes=("regional_impedance",),
     summary="Sum pixel impedance inside a mask into a regional impedance waveform.",
     description="Multiply each pixel by its mask value and sum the pixels per frame, giving the regional impedance waveform of any region (a layer, a quadrant, the lung space).",
     category="preprocessing",
@@ -220,11 +221,6 @@ _PIXEL_SIGNAL_TO_SUM = StepArtifact(
             artifact_type="eit_impedance_waveform",
             description="Regional impedance: the sum of the pixels inside the mask, as a Signal.",
         ),
-        StepArtifact(
-            name="regional_impedance_signal",
-            artifact_type="eit_impedance_waveform",
-            description="The same Signal as 'regional_impedance'.",
-        ),
     ),
     record=True,
 )
@@ -248,8 +244,7 @@ def regional_impedance(
         session: Session that stores the waveform and processing history.
 
     Returns:
-        dict[str, Any]: ``regional_impedance`` and
-            ``regional_impedance_signal``, the same waveform as a ``Signal``
+        dict[str, Any]: ``regional_impedance``, the waveform as a ``Signal``
             with the time axis of ``signal``, in arbitrary units (AU), also
             added to ``session.signals``.
     """
@@ -270,7 +265,7 @@ def regional_impedance(
         "mask": "tiv_lungspace_result",
         "session": "session",
     },
-    writes=("functional_impedance", "functional_impedance_signal"),
+    writes=("functional_impedance",),
     summary="Sum pixel impedance inside the functional lung space (functional impedance).",
     description="Regional impedance of the functional (ventilated) lung space: each pixel is multiplied by its lung-space mask value and the pixels are summed per frame.",
     category="preprocessing",
@@ -296,11 +291,6 @@ def regional_impedance(
             artifact_type="eit_impedance_waveform",
             description="Functional impedance: the sum of the pixels inside the functional lung space, as a Signal.",
         ),
-        StepArtifact(
-            name="functional_impedance_signal",
-            artifact_type="eit_impedance_waveform",
-            description="The same Signal as 'functional_impedance'.",
-        ),
     ),
     record=True,
 )
@@ -323,8 +313,7 @@ def functional_impedance(
         session: Session that stores the waveform and processing history.
 
     Returns:
-        dict[str, Any]: ``functional_impedance`` and
-            ``functional_impedance_signal``, the same waveform as a ``Signal``
+        dict[str, Any]: ``functional_impedance``, the waveform as a ``Signal``
             with the time axis of ``signal``, in arbitrary units (AU), also
             added to ``session.signals``.
     """

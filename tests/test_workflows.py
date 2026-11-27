@@ -294,11 +294,13 @@ def fixed_eit_detections(monkeypatch):
     import m3resp.workflows.steps.eit.signals as eit_signal_steps
 
     monkeypatch.setattr(
-        eit_rate_steps, "detect_rates_of", lambda *args, **kwargs: (0.25, 1.5)
+        eit_rate_steps.eit_processing,
+        "detect_rates",
+        lambda *args, **kwargs: (0.25, 1.5),
     )
     monkeypatch.setattr(
-        eit_filter_steps,
-        "mdn_filter_pixels",
+        eit_filter_steps.eit_processing,
+        "mdn_filter",
         lambda signal, **kwargs: dataclasses.replace(
             signal, name=kwargs["name"], metadata=dict(signal.metadata)
         ),

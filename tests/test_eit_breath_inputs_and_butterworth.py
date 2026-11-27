@@ -79,8 +79,14 @@ def _images() -> Signal:
 )
 def test_the_filter_gives_the_pixels_of_the_step_filter(mode, cutoff) -> None:
     images = _images()
-    filtered, captures = butterworth_filter_pixels(
-        images, mode=mode, cutoff_frequency=cutoff, order=4, operation="test"
+    captures: dict = {}
+    filtered = butterworth_filter_pixels(
+        images,
+        mode=mode,
+        cutoff_frequency=cutoff,
+        order=4,
+        operation="test",
+        captures=captures,
     )
     expected, expected_captures = adapter_butterworth_filter_pixels(
         images,
@@ -118,7 +124,7 @@ def test_an_order_above_10_gives_a_warning_and_filters() -> None:
     images = _images()
     order = MAX_EIT_BUTTERWORTH_ORDER + 1
     with pytest.warns(UserWarning, match="Butterworth order of 11 is above 10"):
-        filtered, _ = butterworth_filter_pixels(
+        filtered = butterworth_filter_pixels(
             images,
             mode="lowpass",
             cutoff_frequency=1.0,

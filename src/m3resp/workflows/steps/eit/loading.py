@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Any
 
 from m3resp.core.session import M3Session
+from m3resp.data import Signal
 from m3resp.workflows.registry import (
     StepArtifact,
     StepParameter,
@@ -18,11 +19,11 @@ from ._shared import (
     _step_provenance,
 )
 
+# The outputs of eit.load, eit.load_custom and eit.slice_recording. The three
+# steps give the same names, so the next steps work after each of them.
 _LOAD_WRITES = (
     "raw_eit",
     "raw_global_impedance",
-    "raw_global_impedance_signal",
-    "raw_pixel_impedance_signal",
 )
 
 _LOAD_SESSION_WRITES = (
@@ -47,16 +48,6 @@ _LOAD_OUTPUTS = (
             "(Draeger, Timpel), or the sum of all pixels of each raw image "
             "(Sentec)."
         ),
-    ),
-    StepArtifact(
-        name="raw_global_impedance_signal",
-        artifact_type="eit_impedance_waveform",
-        description="The same Signal as 'raw_global_impedance'.",
-    ),
-    StepArtifact(
-        name="raw_pixel_impedance_signal",
-        artifact_type="eit_pixel_signal",
-        description="The same Signal as 'raw_eit'.",
     ),
 )
 
@@ -152,9 +143,8 @@ def load(
         max_frames: Maximum number of frames to read; ``None`` reads to the end.
 
     Returns:
-        dict[str, Any]: ``raw_eit`` (also ``raw_pixel_impedance_signal``),
-            the raw pixel impedance as a Signal with time, row and column axes, and
-            ``raw_global_impedance`` (also ``raw_global_impedance_signal``),
+        dict[str, Any]: ``raw_eit``, the raw pixel impedance as a Signal
+            with time, row and column axes, and ``raw_global_impedance``,
             the raw global impedance as a Signal. The Signals keep the times,
             sampling rate and impedance unit of the recording.
 
@@ -301,22 +291,25 @@ def _loaded_recording_outputs(
             )
         ]
 
-    # Copies with their own metadata, so a step that adds metadata to an
-    # output leaves the recording as it is.
-    global_impedance = recording.raw_global_impedance
-    raw_global_impedance_signal = replace(
-        global_impedance, metadata=dict(global_impedance.metadata)
-    )
-    pixels = recording.pixel_impedance
-    raw_pixel_impedance_signal = replace(pixels, metadata=dict(pixels.metadata))
-    session.signals.add(raw_global_impedance_signal)
+    raw_global_impedance = _with_own_metadata(recording.raw_global_impedance)
+    raw_pixel_impedance = _with_own_metadata(recording.pixel_impedance)
+    session.signals.add(raw_global_impedance)
     # The pixel impedance has the same category as the global impedance (both
     # are impedances) and is told apart by its channel.
-    session.signals.add(raw_pixel_impedance_signal)
+    session.signals.add(raw_pixel_impedance)
 
     return {
-        "raw_eit": raw_pixel_impedance_signal,
-        "raw_global_impedance": raw_global_impedance_signal,
-        "raw_global_impedance_signal": raw_global_impedance_signal,
-        "raw_pixel_impedance_signal": raw_pixel_impedance_signal,
+        "raw_eit": raw_pixel_impedance,
+        "raw_global_impedance": raw_global_impedance,
     }
+
+
+def _with_own_metadata(signal: Signal) -> Signal:
+    """Return a copy of ``signal`` with its own ``metadata`` dictionary.
+
+    The values and the time axis are shared with ``signal``. The copy goes
+    into ``session.signals`` and the step outputs, so metadata that a later
+    step adds to it leaves the Signal of ``session.eit`` as it was.
+    """
+
+    return replace(signal, metadata=dict(signal.metadata))

@@ -300,7 +300,7 @@ def _filter_pixels(
             captures=captures,
         )
     elif filter_mode in ("lowpass", "bandpass"):
-        filtered, captures = butterworth_filter_pixels(
+        filtered = butterworth_filter_pixels(
             pixel_impedance,
             mode=cast(Literal["lowpass", "bandpass"], filter_mode),
             cutoff_frequency=lowpass_hz
@@ -308,6 +308,7 @@ def _filter_pixels(
             else (highpass_hz, lowpass_hz),
             order=order,
             operation=f"preprocess(filter_mode={filter_mode!r})",
+            captures=captures,
         )
     else:
         return pixel_impedance, captures

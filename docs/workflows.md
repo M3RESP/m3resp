@@ -224,7 +224,7 @@ Two steps load EIT data:
 | `eit.load` | A Dräger, Sentec or Timpel file, with the M3Resp readers of `m3resp.eit.io`. `vendor` is required. `sample_frequency`, `first_frame` and `max_frames` are optional. |
 | `eit.load_custom` | Any other file, with a loader that you write in Python. M3Resp calls it as `loader(file_path, vendor=None, **loader_options)`, and it returns an `m3resp.eit.io.EITFileData`. Any other return value gives a `TypeError`. |
 
-Both steps give the same results (`raw_eit`, `raw_global_impedance_signal`, `raw_pixel_impedance_signal`, ...), so the next steps work with both. Give the loader to the run, or to the session as `M3Session(eit_loader=my_loader)`:
+Both steps give the same results (`raw_eit` and `raw_global_impedance`), so the next steps work with both. Give the loader to the run, or to the session as `M3Session(eit_loader=my_loader)`:
 
 ```python
 from m3resp.workflows import run_workflow

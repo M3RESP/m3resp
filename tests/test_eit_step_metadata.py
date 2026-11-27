@@ -151,11 +151,10 @@ def test_roi_threshold_parameters_are_bounded_zero_to_one():
 
 _IMAGE_ARTIFACTS = {
     ("eit.load", "raw_eit"),
-    ("eit.load", "raw_pixel_impedance_signal"),
     ("eit.mdn_filter", "signal"),
     ("eit.mdn_filter", "filtered_eit"),
     ("eit.butterworth_filter", "signal"),
-    ("eit.butterworth_filter", "filtered_eit_signal"),
+    ("eit.butterworth_filter", "filtered_eit"),
     ("eit.detect_rates", "signal"),
     ("eit.global_impedance", "signal"),
     ("eit.regional_impedance", "signal"),
@@ -166,9 +165,8 @@ _IMAGE_ARTIFACTS = {
 }
 _WAVEFORM_ARTIFACTS = {
     ("eit.load", "raw_global_impedance"),
-    ("eit.load", "raw_global_impedance_signal"),
     ("eit.global_impedance", "global_impedance"),
-    ("eit.regional_impedance", "regional_impedance_signal"),
+    ("eit.regional_impedance", "regional_impedance"),
     ("eit.functional_impedance", "functional_impedance"),
     ("eit.detect_breaths", "signal"),
     ("eit.continuous_tiv", "signal"),

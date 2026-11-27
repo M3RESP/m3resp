@@ -142,7 +142,7 @@ def test_mdn_filter_matches_direct_mdn_filter_call(workflow_result):
     filtered_eit = workflow_result.value("filtered_eit")
     np.testing.assert_array_equal(filtered_eit.values, expected.pixel_impedance)
 
-    signal = workflow_result.value("filtered_eit_signal")
+    signal = workflow_result.value("filtered_eit")
     np.testing.assert_array_equal(signal.values, expected.pixel_impedance)
     assert signal.name == "MDN-filtered EIT data (mdn_filtered)"
     assert signal.metadata["label"] == "mdn_filtered"

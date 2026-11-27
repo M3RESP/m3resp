@@ -17,6 +17,7 @@ from typing import Any
 import numpy as np
 
 from m3resp.data.signals import Signal
+from m3resp.processing.captures import capture_value
 from m3resp.processing.filters import ButterworthFilterType, butterworth_filter
 
 #: Public name of the function, stored as the method of each result.
@@ -141,7 +142,8 @@ def butterworth_filter_pixels(
     cutoff_frequency: float | Sequence[float],
     order: int,
     operation: str,
-) -> tuple[Signal, dict[str, Any]]:
+    captures: dict[str, Any] | None = None,
+) -> Signal:
     """Filter each pixel of the pixel impedance along time with a Butterworth filter.
 
     The filter is ``m3resp.processing.filters.butterworth_filter``, run
@@ -157,16 +159,17 @@ def butterworth_filter_pixels(
             band modes.
         order (int): Butterworth order, 1 or more. Above 10 gives a warning.
         operation (str): Name of the calling step or function, for messages.
-
-    Returns:
-        tuple[Signal, dict[str, Any]]: The filtered pixel impedance and the
-            captures. The result is named ``"<Mode>-filtered EIT data"``, with
-            processing state ``"intermediate"`` and method
-            ``"m3resp.eit.processing.butterworth_filter_pixels"``; the
-            metadata of ``pixel_impedance`` is copied. The captures hold
+        captures (dict[str, Any] | None): When a dictionary, it receives
             ``sample_frequency``, the cutoffs in Hz, and the pixel impedance
             before and after the filter as ``unfiltered_data`` and
             ``filtered_data``.
+
+    Returns:
+        Signal: The filtered pixel impedance, named
+            ``"<Mode>-filtered EIT data"``, with processing state
+            ``"intermediate"`` and method
+            ``"m3resp.eit.processing.butterworth_filter_pixels"``. The
+            metadata of ``pixel_impedance`` is copied.
 
     Raises:
         ValueError: If the order is below 1, if a pixel has gaps among
@@ -177,7 +180,6 @@ def butterworth_filter_pixels(
     """
 
     check_eit_butterworth_order(order)
-    captures: dict[str, Any] = {}
     filtered_pixels = filter_pixels_preserving_gaps(
         pixel_impedance.values,
         operation=operation,
@@ -202,6 +204,6 @@ def butterworth_filter_pixels(
         processing_state="intermediate",
         method=METHOD,
     )
-    captures["unfiltered_data"] = pixel_impedance
-    captures["filtered_data"] = filtered
-    return filtered, captures
+    capture_value(captures, "unfiltered_data", pixel_impedance)
+    capture_value(captures, "filtered_data", filtered)
+    return filtered

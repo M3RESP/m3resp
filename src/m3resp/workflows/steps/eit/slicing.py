@@ -181,8 +181,7 @@ def slice_recording(
     Returns:
         dict[str, Any]: ``eit_slice`` (the kept window, see
             `M3Session.slice_eit`) and the cut recording under the names
-            `eit.load` uses: ``raw_eit``, ``raw_global_impedance``,
-            ``raw_global_impedance_signal`` and ``raw_pixel_impedance_signal``.
+            `eit.load` uses: ``raw_eit`` and ``raw_global_impedance``.
     """
 
     summary = session.slice_eit(start_seconds, end_seconds)

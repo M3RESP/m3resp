@@ -256,7 +256,7 @@ def m3resp_results() -> dict[str, Any]:
 def test_m3resp_reader_matches_golden(dataset: str, m3resp_results: dict) -> None:
     result = m3resp_results[dataset]
     golden = _golden(dataset, "reader")
-    pixels = result.value("raw_pixel_impedance_signal")
+    pixels = result.value("raw_eit")
     assert_matches(pixels.time, golden["time"], "time")
     assert_matches(pixels.values, golden["pixel_impedance"], "pixel_impedance")
     assert_matches(
@@ -306,7 +306,7 @@ def test_m3resp_global_impedance_matches_golden(
 ) -> None:
     result = m3resp_results[dataset]
     golden = _golden(dataset, "global_impedance")
-    raw = result.value("raw_global_impedance_signal")
+    raw = result.value("raw_global_impedance")
     assert_matches(raw.time, golden["raw/time"], "raw/time")
     assert_matches(raw.values, golden["raw/values"], "raw/values")
     filtered = result.value("global_impedance")
@@ -332,7 +332,7 @@ def test_m3resp_rates_match_golden(dataset: str, m3resp_results: dict) -> None:
 def test_m3resp_mdn_filter_matches_golden(dataset: str, m3resp_results: dict) -> None:
     result = m3resp_results[dataset]
     golden = _golden(dataset, "mdn_filter")
-    signal = result.value("filtered_eit_signal")
+    signal = result.value("filtered_eit")
     assert_matches(signal.values, golden["pixel_impedance"], "pixel_impedance")
     captures = result.value("filter_captures")
     for key, expected in golden.items():

@@ -51,12 +51,14 @@ def butterworth_filter_pixels(
             among otherwise present samples, or if the cutoffs are invalid.
     """
 
-    filtered, captures = butterworth.butterworth_filter_pixels(
+    captures: dict[str, Any] = {}
+    filtered = butterworth.butterworth_filter_pixels(
         images,
         mode=mode,
         cutoff_frequency=cutoff_frequency,
         order=order,
         operation=operation,
+        captures=captures,
     )
     fields = {
         **eitprocessing_fields(images),

@@ -7,8 +7,8 @@ from typing import Any
 
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult
+from m3resp.eit import processing as eit_processing
 from m3resp.eit.processing import RateDetectionSettings
-from m3resp.eit.processing import detect_rates as detect_rates_of
 from m3resp.eit.processing.rate_detection import METHOD as RATE_FUNCTION
 from m3resp.eit.processing.rate_detection import SUBJECT_TYPES, SubjectType
 from m3resp.workflows.registry import (
@@ -228,7 +228,7 @@ def detect_rates(
         **window,
     )
     captures: dict[str, Any] = {}
-    respiratory_rate_hz, heart_rate_hz = detect_rates_of(
+    respiratory_rate_hz, heart_rate_hz = eit_processing.detect_rates(
         _as_signal(signal, name="signal", step="eit.detect_rates"),
         settings=settings,
         captures=captures if capture else None,
