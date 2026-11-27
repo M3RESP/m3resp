@@ -246,7 +246,7 @@ def test_the_style_modules_load_no_matplotlib_and_no_eitprocessing():
     code = (
         "import sys\n"
         "import m3resp.visualization.pixel_map_style\n"
-        "import m3resp.visualization.plot_data\n"
+        "import m3resp.visualization.eit_plot_data\n"
         "loaded = [name for name in sys.modules\n"
         "          if name.split('.')[0] in ('matplotlib', 'eitprocessing')]\n"
         "print(loaded)\n"

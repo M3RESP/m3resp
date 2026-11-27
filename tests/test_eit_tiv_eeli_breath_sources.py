@@ -230,8 +230,9 @@ def test_on_clock_of_moves_each_modality_by_its_start_time() -> None:
     assert (moved_eit.start_time, moved_eit.end_time) == (eit.start_time, eit.end_time)
 
 
+@pytest.mark.parametrize("time_from_zero", [False, True])
 def test_the_eeli_figure_shows_breaths_of_another_modality_on_the_eit_clock(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, time_from_zero
 ) -> None:
     pytest.importorskip("matplotlib")
     from matplotlib.figure import Figure
@@ -258,12 +259,22 @@ def test_the_eeli_figure_shows_breaths_of_another_modality_on_the_eit_clock(
 
     monkeypatch.setattr(Figure, "savefig", keep_lines)
     save_eit_figures(
-        {"global_impedance": waveform, "eeli_result": result}, tmp_path, session=session
+        {"global_impedance": waveform, "eeli_result": result},
+        tmp_path,
+        session=session,
+        time_from_zero=time_from_zero,
     )
 
     [lines] = lines_of_saved_figures
-    # The x axis is in seconds from the first EIT sample: breath end + 3 s.
-    np.testing.assert_allclose(lines["EELIs"].get_xdata()[:2], [3.0 + 3.0, 5.2 + 3.0])
+    # On the EIT clock, an EELI lies at breath end + 3 s from the first EIT sample.
+    first_time = 0.0 if time_from_zero else waveform.time[0]
+    np.testing.assert_allclose(
+        lines["EELIs"].get_xdata()[:2], np.array([3.0 + 3.0, 5.2 + 3.0]) + first_time
+    )
+    np.testing.assert_allclose(
+        lines["global impedance"].get_xdata(),
+        waveform.time - waveform.time[0] + first_time,
+    )
     assert np.isnan(result.values[2])
     # The mean and the median leave out the breath outside the EIT data.
     mean = lines["EELI mean"].get_ydata()[0]

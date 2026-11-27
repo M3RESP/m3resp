@@ -31,6 +31,7 @@ def save_eit_figures(
     output_dir: str | Path,
     *,
     session: M3Session | None = None,
+    time_from_zero: bool = False,
 ) -> list[Path]:
     """Save available EIT workflow figures as PNG files.
 
@@ -45,6 +46,9 @@ def save_eit_figures(
             breaths of another modality (input ``breaths`` of ``eit.eeli``)
             is placed on the EIT clock with these start times. None places
             each EELI at the breath end time as given.
+        time_from_zero: False gives the global impedance figure the times
+            of the data, the same times as in the results. True starts its
+            time axis at 0 s at the first sample.
 
     Returns:
         list[Path]: Written paths in rate_detection, global_impedance, pixel_tiv
@@ -55,43 +59,43 @@ def save_eit_figures(
         OSError: If a figure cannot be written.
     """
 
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
     figures_dir = Path(output_dir) / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     paths = (
-        _figure_rate_detection(context_values, figures_dir, plt),
-        _figure_global_impedance(context_values, figures_dir, plt, session),
-        _figure_pixel_tiv(context_values, figures_dir, plt),
+        _figure_rate_detection(context_values, figures_dir),
+        _figure_global_impedance(
+            context_values, figures_dir, session, time_from_zero=time_from_zero
+        ),
+        _figure_pixel_tiv(context_values, figures_dir),
     )
     return [path for path in paths if path is not None]
 
 
-def _figure_rate_detection(ctx, figures_dir: Path, plt) -> Path | None:
+def _figure_rate_detection(context, figures_dir: Path) -> Path | None:
     """``plot_rate_detection`` with the rate settings and the rate captures."""
+
+    from matplotlib.figure import Figure
 
     from m3resp.visualization.rate_detection import plot_rate_detection
 
-    settings = ctx.get("rate_detector")
-    captures = ctx.get("rate_captures")
+    settings = context.get("rate_detector")
+    captures = context.get("rate_captures")
     if settings is None or not captures:
         return None
 
-    plt.close("all")
-    fig = plot_rate_detection(settings, **captures)
-    fig.set_size_inches(11, 4.5)
+    fig = plot_rate_detection(settings, fig=Figure(figsize=(11, 4.5)), **captures)
     path = figures_dir / "rate_detection.png"
     fig.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
     return path
 
 
 def _figure_global_impedance(
-    ctx, figures_dir: Path, plt, session: M3Session | None
+    context,
+    figures_dir: Path,
+    session: M3Session | None,
+    *,
+    time_from_zero: bool,
 ) -> Path | None:
     """Global impedance with per-breath TIV segments and EELI reference band.
 
@@ -102,20 +106,23 @@ def _figure_global_impedance(
     The mean, median and SD leave out NaN values (breaths outside the data).
     """
 
-    gi = ctx.get("global_impedance")
+    from matplotlib.figure import Figure
+
+    gi = context.get("global_impedance")
     if gi is None:
         return None
     time = np.asarray(getattr(gi, "time", []), dtype=float)
     values = np.asarray(getattr(gi, "values", []), dtype=float)
     if time.size == 0:
         return None
-    t0 = time[0]
+    t0 = time[0] if time_from_zero else 0.0
     t = time - t0
 
-    fig, ax = plt.subplots(figsize=(11, 4.0))
+    fig = Figure(figsize=(11, 4.0))
+    ax = fig.subplots()
     ax.plot(t, values, color="#185FA5", linewidth=1.0, label="global impedance")
 
-    breath_intervals = ctx.get("breath_intervals")
+    breath_intervals = context.get("breath_intervals")
     breaths = (
         breath_intervals_to_breath_events(breath_intervals)
         if breath_intervals is not None
@@ -147,7 +154,7 @@ def _figure_global_impedance(
         seg_y[2::3] = np.nan
         ax.plot(seg_x, seg_y, color="#2A9D8F", linewidth=2.0, label="TIV")
 
-    eeli = ctx.get("eeli_result")
+    eeli = context.get("eeli_result")
     if eeli is not None:
         # The EELI of each breath is placed at the end of the breath, on the
         # EIT clock.
@@ -181,18 +188,17 @@ def _figure_global_impedance(
             ax.axhline(mean_eeli, color="red", linewidth=1.2, label="EELI mean")
             ax.axhline(median_eeli, color="green", linewidth=1.2, label="EELI median")
 
-    ax.set_xlabel("time (s)")
+    ax.set_xlabel("time from the first sample (s)" if time_from_zero else "time (s)")
     ax.set_ylabel("impedance (a.u.)")
     ax.set_title("Global impedance, detected breaths, TIV & EELI")
     ax.legend(loc="upper right", fontsize=8, ncol=2)
     fig.tight_layout()
     path = figures_dir / "global_impedance.png"
     fig.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
     return path
 
 
-def _figure_pixel_tiv(ctx, figures_dir: Path, plt) -> Path | None:
+def _figure_pixel_tiv(context, figures_dir: Path) -> Path | None:
     """Save the mean pixel TIV map over all breaths as a figure.
 
     The maps are the ``PixelMap``s of ``pixel_tiv_result`` (``eit.pixel_tiv``).
@@ -200,19 +206,20 @@ def _figure_pixel_tiv(ctx, figures_dir: Path, plt) -> Path | None:
     plain map (``viridis``, scale from the smallest to the largest value).
 
     Args:
-        ctx (Mapping[str, Any]): Workflow values with ``pixel_tiv_result``.
+        context (Mapping[str, Any]): Workflow values with ``pixel_tiv_result``.
         figures_dir (Path): Folder for the figure file.
-        plt (Any): The ``matplotlib.pyplot`` module.
 
     Returns:
         Path | None: The path of the saved figure. None when there is no
             ``pixel_tiv_result`` or no map.
     """
 
+    from matplotlib.figure import Figure
+
     from m3resp.visualization.pixel_map_style import pixel_map_style
     from m3resp.visualization.pixel_maps import plot_pixel_map
 
-    pixel_tiv = ctx.get("pixel_tiv_result")
+    pixel_tiv = context.get("pixel_tiv_result")
     if pixel_tiv is None or not pixel_tiv.values:
         return None
     maps = np.asarray([np.asarray(m, dtype=float) for m in pixel_tiv.values])
@@ -222,12 +229,11 @@ def _figure_pixel_tiv(ctx, figures_dir: Path, plt) -> Path | None:
         maps, np.nanmean, name="mean tidal impedance variation"
     )
 
-    plt.close("all")
-    fig, ax = plt.subplots(figsize=(5.0, 4.6))
+    fig = Figure(figsize=(5.0, 4.6))
+    ax = fig.subplots()
     plot_pixel_map(mean_map, ax=ax, colorbar=True, style=pixel_map_style(None))
     ax.set_title(f"Mean pixel TIV over {maps.shape[0]} breaths")
     fig.tight_layout()
     path = figures_dir / "pixel_tiv.png"
     fig.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
     return path

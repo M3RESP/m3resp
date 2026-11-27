@@ -1,4 +1,4 @@
-"""GUI plot data of `m3resp.visualization.plot_data` and the minute image.
+"""GUI plot data of `m3resp.visualization.eit_plot_data` and the minute image.
 
 Every result must go through `json.dumps(..., allow_nan=False)`, with None for
 NaN, and hold the values, shapes, times and units of its input. On the 3
@@ -37,11 +37,7 @@ from m3resp.eit.roi import (
     watershed_lungspace,
 )
 from m3resp.eit.roi.amplitude import pixel_amplitude_per_breath
-from m3resp.visualization.pixel_map_style import (
-    pixel_map_style,
-    scale_limits,
-)
-from m3resp.visualization.plot_data import (
+from m3resp.visualization.eit_plot_data import (
     eit_image_plot_data,
     eit_images_plot_data,
     grid_plot_data,
@@ -50,6 +46,10 @@ from m3resp.visualization.plot_data import (
     pixel_mask_plot_data,
     rate_spectrum_plot_data,
     region_label_positions,
+)
+from m3resp.visualization.pixel_map_style import (
+    pixel_map_style,
+    scale_limits,
 )
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -297,7 +297,7 @@ def test_mean_breath_image_is_the_mean_pixel_tiv_of_the_breaths_inside(dataset):
     pixels, _, breaths = _file(dataset)
     start = breaths[1].start_time - 0.01
     end = breaths[4].end_time + 0.01
-    found = mean_breath_image(pixels, breaths=breaths, start=start, end=end)
+    found = mean_breath_image(pixels, breaths=breaths, start_time=start, end_time=end)
 
     inside = breaths[1:5]
     per_breath = pixel_tidal_impedance_variation(pixels, breaths=inside)
@@ -310,8 +310,8 @@ def test_mean_breath_image_is_the_mean_pixel_tiv_of_the_breaths_inside(dataset):
     assert found.name == "mean_breath_tiv"
     assert found.metadata == {
         "quantity": "tiv",
-        "start": start,
-        "end": end,
+        "start_time": start,
+        "end_time": end,
         "breath_count": 4,
         "tiv_method": "inspiratory",
     }
@@ -333,17 +333,22 @@ def test_mean_breath_image_leaves_out_breaths_partly_outside_and_checks_input():
     pixels, _, breaths = _file(DATASETS[0])
     halfway = (breaths[2].start_time + breaths[2].end_time) / 2
     found = mean_breath_image(
-        pixels, breaths=breaths, start=halfway, end=breaths[5].end_time
+        pixels, breaths=breaths, start_time=halfway, end_time=breaths[5].end_time
     )
     assert found.metadata["breath_count"] == 3
     found = mean_breath_image(
-        pixels, breaths=breaths, start=breaths[0].start_time, end=breaths[0].end_time
+        pixels,
+        breaths=breaths,
+        start_time=breaths[0].start_time,
+        end_time=breaths[0].end_time,
     )
     assert found.metadata["breath_count"] == 1
     with pytest.raises(ValueError, match="No breath lies fully inside"):
-        mean_breath_image(pixels, breaths=breaths, start=halfway, end=halfway + 0.1)
-    with pytest.raises(ValueError, match="start <= end"):
-        mean_breath_image(pixels, breaths=breaths, start=5.0, end=4.0)
+        mean_breath_image(
+            pixels, breaths=breaths, start_time=halfway, end_time=halfway + 0.1
+        )
+    with pytest.raises(ValueError, match="start_time <= end_time"):
+        mean_breath_image(pixels, breaths=breaths, start_time=5.0, end_time=4.0)
     with pytest.raises(TypeError, match="BreathEvent"):
         mean_breath_image(pixels, breaths=[(0.0, 1.0)])
     end = float(pixels.time[-1])
@@ -355,14 +360,14 @@ def test_mean_breath_image_leaves_out_breaths_partly_outside_and_checks_input():
     )
     with pytest.warns(UserWarning, match="partly outside the data"):
         found = mean_breath_image(
-            pixels, breaths=[breaths[0], late], start=0.0, end=end + 10.0
+            pixels, breaths=[breaths[0], late], start_time=0.0, end_time=end + 10.0
         )
     assert found.metadata["breath_count"] == 1
     with (
         pytest.warns(UserWarning, match="partly outside the data"),
         pytest.raises(ValueError, match="has a NaN tiv in all pixels"),
     ):
-        mean_breath_image(pixels, breaths=[late], start=0.0, end=end + 10.0)
+        mean_breath_image(pixels, breaths=[late], start_time=0.0, end_time=end + 10.0)
     expiratory = mean_breath_image(pixels, breaths=breaths, tiv_method="expiratory")
     assert expiratory.metadata["tiv_method"] == "expiratory"
 
@@ -370,14 +375,18 @@ def test_mean_breath_image_leaves_out_breaths_partly_outside_and_checks_input():
 def test_mean_breath_image_with_a_duration_is_the_same_as_with_an_end():
     pixels, _, breaths = _file(DATASETS[0])
     start = breaths[0].start_time
-    by_end = mean_breath_image(pixels, breaths=breaths, start=start, end=start + 10.0)
-    by_duration = mean_breath_image(pixels, breaths=breaths, start=start, duration=10.0)
+    by_end = mean_breath_image(
+        pixels, breaths=breaths, start_time=start, end_time=start + 10.0
+    )
+    by_duration = mean_breath_image(
+        pixels, breaths=breaths, start_time=start, duration=10.0
+    )
 
     assert np.array_equal(by_duration.values, by_end.values, equal_nan=True)
     assert by_duration.metadata == by_end.metadata
-    assert by_duration.metadata["end"] == start + 10.0
-    with pytest.raises(ValueError, match="give end or duration"):
-        mean_breath_image(pixels, breaths=breaths, end=10.0, duration=10.0)
+    assert by_duration.metadata["end_time"] == start + 10.0
+    with pytest.raises(ValueError, match="give end_time or duration"):
+        mean_breath_image(pixels, breaths=breaths, end_time=10.0, duration=10.0)
     with pytest.raises(ValueError, match="duration >= 0"):
         mean_breath_image(pixels, breaths=breaths, duration=-1.0)
 
@@ -415,8 +424,8 @@ def test_mean_breath_amplitude_in_a_window_uses_the_pixel_breaths_inside():
             breaths=breaths,
             quantity="amplitude",
             signal=signal,
-            start=start,
-            end=end,
+            start_time=start,
+            end_time=end,
         )
         per_breath = pixel_amplitude_per_breath(pixels, signal=signal, breaths=breaths)
         expected = np.nanmean(
@@ -586,7 +595,7 @@ def test_grid_plot_data_turns_nan_into_none():
         grid_plot_data(np.array([[-np.inf]]), owner="x")
 
 
-@pytest.mark.parametrize("module", ["plot_data", "pixel_map_style"])
+@pytest.mark.parametrize("module", ["eit_plot_data", "pixel_map_style"])
 def test_the_gui_modules_import_no_adapters_matplotlib_or_eitprocessing(module):
     path = os.path.join(REPO_ROOT, "src", "m3resp", "visualization", f"{module}.py")
     with open(path, encoding="utf-8") as handle:

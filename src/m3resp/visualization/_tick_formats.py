@@ -27,7 +27,11 @@ from matplotlib.ticker import PercentFormatter, ScalarFormatter
 
 
 class AbsolutePercentFormatter(PercentFormatter):
-    """Write numbers as percentages without their sign: -0.5 is "50%"."""
+    """Write numbers as percentages without their sign.
+
+    ``xmax`` is the value of 100%. With ``xmax=1``, -0.5 is "50%"; with the
+    default ``xmax=100``, -0.5 is "0.5%".
+    """
 
     def __call__(self, x: float, pos: int | None = None) -> str:
         """Return the text of one tick."""

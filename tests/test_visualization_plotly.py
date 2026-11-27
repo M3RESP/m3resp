@@ -11,12 +11,12 @@ from m3resp.visualization import (
     plot_session_overview,
     plot_synchronization_comparison,
 )
+from m3resp.visualization._plotly_figures import pixel_map_traces, reduce_points
 from m3resp.visualization.pixel_map_style import (
     pixel_colors,
     pixel_map_style,
     scale_limits,
 )
-from m3resp.visualization.plotly_figures import pixel_map_traces, reduce_points
 
 pytest.importorskip("plotly")
 

@@ -249,13 +249,13 @@ These functions give EIT results as dictionaries of numbers, text, lists and Non
    :toctree: generated
    :nosignatures:
 
-   m3resp.visualization.plot_data.pixel_map_plot_data
-   m3resp.visualization.plot_data.pixel_mask_plot_data
-   m3resp.visualization.plot_data.eit_image_plot_data
-   m3resp.visualization.plot_data.eit_images_plot_data
-   m3resp.visualization.plot_data.lungspace_plot_data
-   m3resp.visualization.plot_data.rate_spectrum_plot_data
-   m3resp.visualization.plot_data.region_label_positions
+   m3resp.visualization.eit_plot_data.pixel_map_plot_data
+   m3resp.visualization.eit_plot_data.pixel_mask_plot_data
+   m3resp.visualization.eit_plot_data.eit_image_plot_data
+   m3resp.visualization.eit_plot_data.eit_images_plot_data
+   m3resp.visualization.eit_plot_data.lungspace_plot_data
+   m3resp.visualization.eit_plot_data.rate_spectrum_plot_data
+   m3resp.visualization.eit_plot_data.region_label_positions
 ```
 
 ## Synthetic data

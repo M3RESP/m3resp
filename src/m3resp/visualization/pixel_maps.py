@@ -49,13 +49,13 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from m3resp.data.pixel_maps import PixelMap, PixelMask
+from m3resp.visualization.eit_plot_data import region_label_positions
 from m3resp.visualization.pixel_map_style import (
     PixelMapStyle,
     normalized_values,
     scale_limits,
     style_of,
 )
-from m3resp.visualization.plot_data import region_label_positions
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -228,7 +228,6 @@ def _add_colorbar(
 ) -> Any:
     """Add the colour bar of the style next to the image."""
 
-    import matplotlib.pyplot as plt
     from matplotlib.ticker import PercentFormatter
 
     from m3resp.visualization._tick_formats import (
@@ -250,7 +249,7 @@ def _add_colorbar(
         elif absolute:
             options["format"] = AbsoluteScalarFormatter()
     options.setdefault("extend", style.extend)
-    return plt.colorbar(image, ax=ax, **options)
+    return ax.figure.colorbar(image, ax=ax, **options)
 
 
 def add_region_labels(

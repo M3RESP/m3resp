@@ -255,7 +255,7 @@ With the same values and settings, the image, the scale ends, the colour of each
 
 `pixel_tiv.png` of `save_eit_figures` is drawn with `plot_pixel_map`, so it is written without eitprocessing. The picture is the same as before.
 
-The GUI reads the maps, masks, EIT images, lung-space captures and rate spectra as plot data, from `m3resp.visualization.plot_data` (see {doc}`../../concepts/pixel-maps`).
+The GUI reads the maps, masks, EIT images, lung-space captures and rate spectra as plot data, from `m3resp.visualization.eit_plot_data` (see {doc}`../../concepts/pixel-maps`).
 
 ## Filter and detect breaths
 

@@ -13,8 +13,8 @@ from m3resp.data.event_data import IntervalData
 from m3resp.data.events import BreathEvent
 from m3resp.synchronization.alignment import align_events_by_modality_offset
 from m3resp.synchronization.start_times import on_clock_of, shared_clock_shifts
-from m3resp.visualization import plotly_figures
-from m3resp.visualization.plotly_figures import EventOverlay, LinePanel
+from m3resp.visualization import _plotly_figures
+from m3resp.visualization._plotly_figures import EventOverlay, LinePanel
 
 BACKENDS = ("matplotlib", "plotly")
 
@@ -78,7 +78,7 @@ def plot_session_overview(
             color, label = _event_style(modality)
             overlay = EventOverlay(session.events.get(event_key, []), color, label)
             panels.append([LinePanel(title, ylabel, time, values, [overlay])])
-        return plotly_figures.line_grid_figure(panels, max_points=max_points)
+        return _plotly_figures.line_grid_figure(panels, max_points=max_points)
 
     from matplotlib import pyplot as plt
 
@@ -179,7 +179,7 @@ def plot_eit_processing_summary(
             np.asarray(signal.values, dtype=float),
             [EventOverlay(session.events.get("eit_breaths", []), color, label)],
         )
-        return plotly_figures.eit_summary_figure(
+        return _plotly_figures.eit_summary_figure(
             panel,
             tiv,
             eeli,
@@ -329,7 +329,7 @@ def plot_synchronization_comparison(
                     ),
                 ]
             )
-        return plotly_figures.line_grid_figure(panels, max_points=max_points)
+        return _plotly_figures.line_grid_figure(panels, max_points=max_points)
 
     from matplotlib import pyplot as plt
 

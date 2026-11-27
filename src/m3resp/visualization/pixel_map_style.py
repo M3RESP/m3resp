@@ -28,11 +28,23 @@ The colour tables come from matplotlib, stored once in
 ``pixel_map_colors.json`` by ``scripts/make_pixel_map_colors.py``. This
 module reads that file, so the PNG figures
 (``m3resp.visualization.pixel_maps``) and the GUI plot data
-(``m3resp.visualization.plot_data``) use the same colours.
+(``m3resp.visualization.eit_plot_data``) use the same colours.
 
 :func:`scale_limits` gives the two ends of the colour scale for a grid of
 values, and :func:`pixel_colors` gives the colour of each pixel, with the
 rules of matplotlib.
+
+The GUI draws pixel maps in the browser (``m3resp.visualization.eit_plot_data``),
+and the interactive figures use Plotly
+(``m3resp.visualization._plotly_figures``). Both work without matplotlib, so
+this module holds a copy of the matplotlib colour maps and norms: the colour
+tables in ``pixel_map_colors.json``, and in :func:`scale_limits` and
+:func:`pixel_colors` the rules that matplotlib uses to give a colour to a
+value (the norm, and the colours below and above the scale and for NaN). The copy depends on the matplotlib version stored in the
+file (``matplotlib_version``) and on the plot settings of eitprocessing
+1.8.7. After a matplotlib update, run ``scripts/make_pixel_map_colors.py``
+again. ``tests/test_pixel_map_style.py`` compares the colours and the scale
+ends with matplotlib and eitprocessing.
 
 ---------------------------------------------------------------------------
 Provenance

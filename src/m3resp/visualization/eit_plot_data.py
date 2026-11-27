@@ -153,13 +153,12 @@ def pixel_mask_plot_data(mask: PixelMask) -> dict[str, Any]:
         raise TypeError(
             f"pixel_mask_plot_data needs a PixelMask, got {type(mask).__name__}."
         )
-    count = mask.included_pixel_count
     return {
         "name": mask.name,
         "shape": list(mask.shape),
         "values": grid_plot_data(mask.values, owner=mask.name),
-        "included_pixel_count": int(count),
-        "included_pixel_fraction": float(count / mask.values.size),
+        "included_pixel_count": mask.included_pixel_count,
+        "included_pixel_fraction": mask.included_pixel_fraction,
         "is_weighted": bool(mask.is_weighted),
         "style": style_plot_data(pixel_map_style("mask"), values=mask.values),
     }

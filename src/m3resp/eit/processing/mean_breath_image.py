@@ -37,8 +37,8 @@ def mean_breath_image(
     *,
     breaths: Sequence[BreathEvent],
     quantity: Literal["tiv", "amplitude"] = "tiv",
-    start: float | None = None,
-    end: float | None = None,
+    start_time: float | None = None,
+    end_time: float | None = None,
     duration: float | None = None,
     signal: Signal | None = None,
     tiv_method: str = "inspiratory",
@@ -47,13 +47,13 @@ def mean_breath_image(
     """Return the mean pixel TIV or pixel amplitude over the breaths in a window.
 
     A breath is inside the window when its start time is at or after
-    ``start`` and its end time is at or before the end of the window. A
+    ``start_time`` and its end time is at or before the end of the window. A
     breath whose value is NaN in every pixel (for example a breath over a
     gap in the time axis) does not count. A pixel that is NaN in every
     breath stays NaN.
 
-    The window ends at ``end``, or at ``start + duration``. For example,
-    ``start=120.0, duration=60.0`` gives the minute image from 120 s to
+    The window ends at ``end_time``, or at ``start_time + duration``. For example,
+    ``start_time=120.0, duration=60.0`` gives the minute image from 120 s to
     180 s.
 
     Args:
@@ -66,12 +66,12 @@ def mean_breath_image(
             of the global breaths, or ``"amplitude"`` for the TIV of each
             pixel with the times of its own breaths ("phase shift" mode, see
             :func:`~m3resp.eit.processing.find_pixel_breaths`).
-        start (float | None): Start of the window in seconds. None is the
+        start_time (float | None): Start of the window in seconds. None is the
             first sample of ``pixels``.
-        end (float | None): End of the window in seconds. None is the last
+        end_time (float | None): End of the window in seconds. None is the last
             sample of ``pixels``, unless ``duration`` is set.
         duration (float | None): Length of the window in seconds, from
-            ``start``. Give ``end`` or ``duration``, not both.
+            ``start_time``. Give ``end_time`` or ``duration``, not both.
         signal (Signal | None): For ``quantity="amplitude"`` only: the
             waveform of the breaths, for example the global impedance. None
             uses the sum of all pixels of each image.
@@ -84,13 +84,13 @@ def mean_breath_image(
     Returns:
         PixelMap: The mean value of each pixel, of kind ``"tiv"`` or
             ``"amplitude"``, in the unit of ``pixels``. ``metadata`` holds
-            ``quantity``, ``start``, ``end`` (seconds), ``breath_count``
+            ``quantity``, ``start_time``, ``end_time`` (seconds), ``breath_count``
             (the breaths in the mean) and ``tiv_method``.
 
     Raises:
         ValueError: If ``quantity`` is unknown, ``pixels`` has no samples,
-            both ``end`` and ``duration`` are set, ``duration`` is negative,
-            ``start`` is after the end of the window, ``signal`` is set with
+            both ``end_time`` and ``duration`` are set, ``duration`` is negative,
+            ``start_time`` is after the end of the window, ``signal`` is set with
             ``quantity="tiv"``, ``signal`` is None and the pixel impedance is masked,
             no breath lies inside the window, or every breath inside has a NaN
             value in all pixels; also the errors of
@@ -115,7 +115,9 @@ def mean_breath_image(
             "mean_breath_image: signal is used only with quantity='amplitude'; "
             "the TIV uses the times of the global breaths."
         )
-    start, end = _window(pixels, start=start, end=end, duration=duration)
+    start_time, end_time = _window(
+        pixels, start_time=start_time, end_time=end_time, duration=duration
+    )
     for breath in breaths:
         if not isinstance(breath, BreathEvent):
             raise TypeError(
@@ -125,11 +127,11 @@ def mean_breath_image(
     inside = [
         index
         for index, breath in enumerate(breaths)
-        if breath.start_time >= start and breath.end_time <= end
+        if breath.start_time >= start_time and breath.end_time <= end_time
     ]
     if not inside:
         raise ValueError(
-            f"No breath lies fully inside the window {start} s to {end} s, so "
+            f"No breath lies fully inside the window {start_time} s to {end_time} s, so "
             "mean_breath_image has no value to average."
         )
 
@@ -147,7 +149,7 @@ def mean_breath_image(
     ]
     if not maps:
         raise ValueError(
-            f"Every breath inside the window {start} s to {end} s has a NaN "
+            f"Every breath inside the window {start_time} s to {end_time} s has a NaN "
             f"{quantity} in all pixels, so mean_breath_image has no value to "
             "average."
         )
@@ -163,8 +165,8 @@ def mean_breath_image(
         kind=quantity,
         metadata={
             "quantity": quantity,
-            "start": start,
-            "end": end,
+            "start_time": start_time,
+            "end_time": end_time,
             "breath_count": len(maps),
             "tiv_method": tiv_method,
         },
@@ -174,8 +176,8 @@ def mean_breath_image(
 def _window(
     pixels: Signal,
     *,
-    start: float | None,
-    end: float | None,
+    start_time: float | None,
+    end_time: float | None,
     duration: float | None,
 ) -> tuple[float, float]:
     """Return the start and the end of the window, in seconds."""
@@ -185,24 +187,24 @@ def _window(
         raise ValueError(
             "mean_breath_image needs pixel impedance with at least one sample."
         )
-    if end is not None and duration is not None:
+    if end_time is not None and duration is not None:
         raise ValueError(
-            "mean_breath_image: give end or duration, not both; "
-            f"got end={end} and duration={duration}."
+            "mean_breath_image: give end_time or duration, not both; "
+            f"got end_time={end_time} and duration={duration}."
         )
-    start = float(time[0]) if start is None else float(start)
+    start_time = float(time[0]) if start_time is None else float(start_time)
     if duration is not None:
         if float(duration) < 0:
             raise ValueError(
                 f"mean_breath_image needs duration >= 0, got duration={duration}."
             )
-        end = start + float(duration)
-    end = float(time[-1]) if end is None else float(end)
-    if start > end:
+        end_time = start_time + float(duration)
+    end_time = float(time[-1]) if end_time is None else float(end_time)
+    if start_time > end_time:
         raise ValueError(
-            f"mean_breath_image needs start <= end, got start={start} and end={end}."
+            f"mean_breath_image needs start_time <= end_time, got start_time={start_time} and end_time={end_time}."
         )
-    return start, end
+    return start_time, end_time
 
 
 def _pixel_breaths_inside(

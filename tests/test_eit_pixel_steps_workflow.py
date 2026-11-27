@@ -345,6 +345,17 @@ def test_the_pixel_tiv_figure_is_written_without_eitprocessing(
     assert paths[0].stat().st_size > 0
 
 
+def test_saved_figures_leave_no_open_pyplot_figure(tmp_path) -> None:
+    plt = pytest.importorskip("matplotlib.pyplot")
+    from m3resp.visualization.eit_figures import save_eit_figures
+
+    plt.close("all")
+
+    save_eit_figures({"pixel_tiv_result": _small_pixel_tiv()}, tmp_path)
+
+    assert plt.get_fignums() == []
+
+
 def test_the_pixel_tiv_figure_equals_the_eitprocessing_picture(tmp_path) -> None:
     """The figure is the picture that eitprocessing ``imshow`` of a plain
     ``PixelMap`` draws (``viridis``), pixel for pixel."""

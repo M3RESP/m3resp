@@ -174,7 +174,7 @@ With a `captures` dictionary, the functions store their intermediate results. Th
 
 `filter_mask_by_size(mask, min_region_size=10, connectivity=1)` keeps the groups of connected pixels of a mask with at least `min_region_size` pixels. With `connectivity=1`, pixels that share an edge are connected; with `2`, also pixels that share a corner. The result holds 1 for the kept pixels, so the weights of a weighted mask are lost. When no group is large enough, it raises `RuntimeError`. The step `eit.roi_filter_by_size` takes a `PixelMask` (for example `watershed_lungspace_result`) or a 2D grid as `mask`; the workflow check refuses other artifact types there.
 
-All lung-space steps store their mask in `session.pixel_masks`. The `metadata` of each mask holds the settings, `breath_count`, `included_pixel_count` and `included_pixel_fraction`.
+All lung-space steps store their mask in `session.pixel_masks`. The `metadata` of each mask holds the settings and `breath_count`. `PixelMask.included_pixel_count` and `PixelMask.included_pixel_fraction` give the number and the fraction of the pixels in the mask.
 
 ## Pixel results per breath
 
@@ -255,7 +255,7 @@ The input `pixel_breaths` takes only a `PixelBreaths`, so the workflow check ref
 
 ## The mean over a time window and the minute image
 
-`m3resp.eit.processing.mean_breath_image(pixels, breaths=breaths, start=..., duration=...)` gives the mean pixel TIV or pixel amplitude over the breaths that lie fully inside a time window, in seconds. A breath is inside when it starts at or after `start` and ends at or before the end of the window. The window ends at `end`, or at `start + duration`. A window of 60 s gives the minute image. Without `start`, `end` and `duration`, the window is the whole recording. When no breath lies inside the window, the function raises `ValueError`.
+`m3resp.eit.processing.mean_breath_image(pixels, breaths=breaths, start_time=..., duration=...)` gives the mean pixel TIV or pixel amplitude over the breaths that lie fully inside a time window, in seconds. A breath is inside when it starts at or after `start_time` and ends at or before the end of the window. The window ends at `end_time`, or at `start_time + duration`. A window of 60 s gives the minute image. Without `start_time`, `end_time` and `duration`, the window is the whole recording. When no breath lies inside the window, the function raises `ValueError`.
 
 `quantity` sets what is averaged:
 
@@ -310,7 +310,7 @@ The arguments `colorbar`, `normalize`, `percentage`, `absolute`, `hide_axes` and
 
 ## Plot data for the GUI
 
-The GUI draws the EIT results in the browser. The functions of `m3resp.visualization.plot_data` give these results as dictionaries of numbers, text, lists, True/False and None, so `json.dumps` writes them as they are. A grid is a list of rows, with None for a NaN pixel. Each picture comes with its style and the two ends of its colour scale.
+The GUI draws the EIT results in the browser. The functions of `m3resp.visualization.eit_plot_data` give these results as dictionaries of numbers, text, lists, True/False and None, so `json.dumps` writes them as they are. A grid is a list of rows, with None for a NaN pixel. Each picture comes with its style and the two ends of its colour scale.
 
 | Function | Plot data |
 |---|---|
@@ -326,7 +326,7 @@ A time outside the time axis of the pixel impedance gives `ValueError`. An infin
 ```python
 import json
 
-from m3resp.visualization.plot_data import eit_image_plot_data, pixel_map_plot_data
+from m3resp.visualization.eit_plot_data import eit_image_plot_data, pixel_map_plot_data
 
 frame = eit_image_plot_data(pixels, time=12.3)
 print(frame["time"], frame["style"]["limits"])
