@@ -1,5 +1,7 @@
 # How to synchronize recordings
 
+This guide puts the EIT, EMG and ventilator recordings of one session on one shared clock, so that M3Resp can compare their breaths.
+
 See {doc}`../concepts/synchronization` for how M3Resp uses {term}`start times <start time>`.
 
 ## Give each recording a start time

@@ -12,7 +12,7 @@
   },
   "name": "emg-full-preprocessing",
   "outputs": {
-    "dir": "output/emg-full-preprocessing",
+    "dir": "output/workflows/emg-full-preprocessing",
     "event_csvs": true,
     "figures": false,
     "mode": "automatic",

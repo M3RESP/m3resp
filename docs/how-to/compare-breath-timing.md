@@ -1,5 +1,7 @@
 # How to compare the breath timing of two modalities
 
+This guide calculates the time between the breaths of two {term}`modalities <modality>`, for example the delay from the EMG breath to the EIT breath.
+
 See {ref}`breath-timing-parameters` for the definition of each timing parameter.
 
 Before you start, synchronize the recordings (see {doc}`synchronize-recordings`) and detect the breaths in each {term}`modality`.

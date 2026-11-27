@@ -4,7 +4,7 @@ Process an EMG recording
 
 In this tutorial, we process one :term:`EMG` recording of the respiratory muscles. We load the file, remove the heart signal, find the breaths and look at the results per breath. At the end, you have the figure below.
 
-You need M3Resp with the EMG integration (``python -m pip install -e ".[emg]"``).
+You need M3Resp with the EMG integration and the interactive figures (``python -m pip install -e ".[emg,interactive]"``).
 """
 
 # %%
@@ -16,14 +16,15 @@ You need M3Resp with the EMG integration (``python -m pip install -e ".[emg]"``)
 # We make an empty :term:`session` and load the EMG file into it. The file is a ``.Poly5`` file.
 
 import os
+from pathlib import Path
 
 from m3resp import M3Session
 
 # The example recordings are in the tests/data folder of the M3Resp source code.
-data_dir = os.environ.get("M3RESP_EXAMPLE_DATA", os.path.join("tests", "data"))
+data_dir = Path(os.environ.get("M3RESP_EXAMPLE_DATA", Path("tests", "data")))
 
 session = M3Session()
-emg_file = os.path.join(data_dir, "m3resp_multimodal_1_emg.Poly5")
+emg_file = data_dir / "m3resp_multimodal_1_emg.Poly5"
 recording = session.load_emg(emg_file)
 
 metadata = recording["metadata"]

@@ -1,8 +1,7 @@
 """Importing this package registers all built-in workflow steps.
 
-Step modules import their upstream dependencies lazily (inside the step
-functions), so importing this package never requires the optional ``eitprocessing``
-or ``resurfemg`` packages.
+Step modules import their upstream dependencies inside the step functions,
+so importing this package never requires the optional ``resurfemg`` package.
 """
 
 from m3resp.workflows.steps import (

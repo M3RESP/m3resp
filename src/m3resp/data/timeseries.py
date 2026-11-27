@@ -76,11 +76,13 @@ class TimeSeries:
         # one element is ambiguous") the moment `values`/`time` hold more
         # than one element - np.array_equal compares element-wise and
         # collapses to a single bool instead.
+        # A NaN at the same place in both arrays counts as equal, so two
+        # copies of an EIT recording with missing pixels are equal.
         if type(other) is not type(self):
             return NotImplemented
         return (
-            np.array_equal(self.values, other.values)
-            and np.array_equal(self.time, other.time)
+            _arrays_equal(self.values, other.values)
+            and _arrays_equal(self.time, other.time)
             and self.sample_frequency == other.sample_frequency
             and self.unit == other.unit
             and self.name == other.name
@@ -123,3 +125,10 @@ class TimeSeries:
             "duration": self.duration,
             "metadata": dict(self.metadata),
         }
+
+
+def _arrays_equal(first: np.ndarray, second: np.ndarray) -> bool:
+    """Compare two arrays; NaN values at the same places count as equal."""
+
+    both_float = first.dtype.kind in "fc" and second.dtype.kind in "fc"
+    return bool(np.array_equal(first, second, equal_nan=both_float))

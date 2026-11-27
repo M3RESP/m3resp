@@ -12,7 +12,7 @@
   },
   "name": "rotarc-breath-duration",
   "outputs": {
-    "dir": "output/rotarc-breath-duration",
+    "dir": "output/workflows/rotarc-breath-duration",
     "event_csvs": true,
     "figures": true,
     "mode": "explicit",

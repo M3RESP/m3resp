@@ -1,6 +1,6 @@
 # How to change the EIT processing settings
 
-`session.preprocess_eit()` filters the {term}`EIT` data, finds the breaths and calculates the results per breath. Give the settings as keyword arguments. The settings go to `EITProcessingAdapter.preprocess`.
+`session.preprocess_eit()` filters the {term}`EIT` data, finds the breaths and calculates the results per breath. Give the settings as keyword arguments. The settings go to `m3resp.eit.processing.preprocess_eit_recording`, which you can also call directly on an `EITRecording`.
 
 ## Change the filter
 
@@ -13,7 +13,7 @@ To select the filter, set `filter_mode`:
 | `"bandpass"` | A Butterworth band-pass filter from `highpass_hz` (default 0.05 Hz) to `lowpass_hz` (default 1.0 Hz). |
 | `"none"` | No filter. |
 
-`filter_order` sets the order of the low-pass and band-pass filters (default 4).
+`filter_order` sets the order of the low-pass and band-pass filters (default 4, 1 or more). An order above 10 gives a warning, because such a high order can give unstable results.
 
 ```python
 session.preprocess_eit(filter_mode="bandpass", highpass_hz=0.05, lowpass_hz=1.0)
@@ -21,7 +21,9 @@ session.preprocess_eit(filter_mode="bandpass", highpass_hz=0.05, lowpass_hz=1.0)
 
 ## Change the rate detection
 
-M3Resp finds the respiratory rate and the heart rate in the raw EIT data. If the patient is a neonate, set `subject_type="neonate"` (default `"adult"`). To change the length of the analysis window, set `welch_window_seconds` (default 30.0 s).
+M3Resp finds the respiratory rate and the heart rate in the raw EIT data. If the patient is a neonate, set `subject_type="neonate"` (default `"adult"`). For other subjects, for example children or animals, set `subject_type=None` and give the four rate limits in Hz: `min_respiratory_rate_hz`, `max_respiratory_rate_hz`, `min_heart_rate_hz` and `max_heart_rate_hz`. With `"adult"` or `"neonate"`, a limit that you give replaces the default of the subject type. To change the length of the analysis window, set `welch_window_seconds` (default 30.0 s).
+
+A rate at the lowest or the highest limit of its range gives a warning, because such a rate is usually wrong. Check the data, or change the range.
 
 ## Change the breath detection
 
@@ -36,12 +38,13 @@ Set a result to `False` to skip it:
 | Setting | Result |
 |---|---|
 | `compute_rates` | Respiratory rate and heart rate, in Hz |
-| `compute_breath_intervals` | The start and end of each breath |
+| `detect_breaths` | The start and end of each breath |
 | `compute_continuous_tiv` | The tidal impedance variation (TIV) of each breath |
 | `compute_eeli` | The end-expiratory lung impedance (EELI) of each breath |
 | `compute_pixel_tiv` | A TIV map per breath, with one value per pixel |
+| `compute_pixel_eeli` | An EELI map per breath, with one value per pixel. Off by default: set it to `True`. |
 
-TIV, EELI and pixel TIV need the breaths. If you set `compute_breath_intervals=False`, also set the three TIV and EELI settings to `False`.
+TIV, EELI, pixel TIV and pixel EELI need the breaths. If you set `detect_breaths=False`, also set the TIV and EELI settings to `False`.
 
 ## Keep more than one result
 

@@ -1,8 +1,8 @@
 """``Signal``: the modality-tagged runtime signal type.
 
-Adapters convert whatever ``eitprocessing``/``resurfemg`` return into
-``Signal`` instances; everything downstream - session storage, workflow
-steps, export - operates on this type.
+The EIT code of m3resp and the adapters give their results as ``Signal``
+instances; everything downstream - session storage, workflow steps, export -
+works on this type.
 """
 
 from __future__ import annotations

@@ -12,7 +12,7 @@
 name: multimodal
 
 outputs:
-  dir: ../../output/multimodal-summary
+  dir: ../../output/workflows/multimodal-summary
   timestamped: true
   summary_json: true
   event_csvs: true

@@ -77,6 +77,7 @@ class TestPixelMask:
 
         np.testing.assert_array_equal(mask.values, [[0.5, np.nan], [1.0, 0.25]])
         assert mask.included_pixel_count == 3
+        assert mask.included_pixel_fraction == 0.75
 
     def test_zero_becomes_nan_with_a_warning(self):
         with pytest.warns(UserWarning, match="keep_zeros=True"):

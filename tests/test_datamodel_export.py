@@ -10,8 +10,8 @@ from __future__ import annotations
 import os
 
 import pytest
+from eit_file_data_cases import stand_in_eit_loader
 
-from m3resp.adapters import EITProcessingAdapter
 from m3resp.core.session import M3Session
 from m3resp.datamodel import (
     DataModelRecorder,
@@ -40,9 +40,7 @@ def _recorded_store() -> DataModelStore:
     """A store recorded from a session: its records link up, but it has no
     wall-clock start times or file checksums yet."""
 
-    session = M3Session(
-        eit_adapter=EITProcessingAdapter(loader=lambda path, **kwargs: {"path": path})
-    )
+    session = M3Session(eit_loader=stand_in_eit_loader)
     store = DataModelStore()
     session.datamodel = DataModelRecorder(session, store)
     # A made-up file name: the stand-in loader above never opens it.

@@ -11,7 +11,12 @@ from m3resp.visualization import (
     plot_session_overview,
     plot_synchronization_comparison,
 )
-from m3resp.visualization.plotly_figures import reduce_points
+from m3resp.visualization._plotly_figures import pixel_map_traces, reduce_points
+from m3resp.visualization.pixel_map_style import (
+    pixel_colors,
+    pixel_map_style,
+    scale_limits,
+)
 
 pytest.importorskip("plotly")
 
@@ -122,7 +127,7 @@ def test_plotly_eit_summary_has_signal_tiv_eeli_and_pixel_map():
         "filtered_global_impedance": SimpleNamespace(
             time=[0.0, 0.05, 0.1, 0.15],
             values=[1.0, 3.0, 2.0, 1.0],
-            label="impedance (a.u.)",
+            name="impedance (a.u.)",
         ),
         "continuous_tiv": FakeSparse([0.05], [2.0]),
         "eeli": FakeSparse([], []),
@@ -139,13 +144,81 @@ def test_plotly_eit_summary_has_signal_tiv_eeli_and_pixel_map():
         "EELI",
         "Mean pixel TIV",
     ]
-    signal, tiv, pixel_map = fig.data
+    signal, tiv, background, pixel_map = fig.data
     assert list(signal.y) == [1.0, 3.0, 2.0, 1.0]
     assert list(tiv.y) == [2.0]
+    assert np.array_equal(np.asarray(background.z), np.zeros((2, 3)))
     assert np.array_equal(np.asarray(pixel_map.z), 2 * np.ones((2, 3)))
+    assert pixel_map.colorbar.title.text == "TIV (a.u.)"
     assert fig.layout.yaxis.title.text == "impedance (a.u.)"
     # EELI has no values, so its panel has no axes.
     assert fig.layout.xaxis3.visible is False
+
+
+def rgba_of(text: str) -> tuple[float, ...]:
+    """Red, green and blue (0 to 255) and alpha of a plotly colour text."""
+
+    return tuple(float(part) for part in text.removeprefix("rgba(")[:-1].split(","))
+
+
+def plotly_pixel_color(trace, value: float) -> tuple[float, ...]:
+    """The colour plotly gives a value in a layer with a step colour scale."""
+
+    position = (value - trace.zmin) / (trace.zmax - trace.zmin)
+    steps = len(trace.colorscale) // 2
+    step = min(int(position * steps), steps - 1)
+    return rgba_of(trace.colorscale[2 * step][1])
+
+
+def test_plotly_pixel_map_has_the_matplotlib_colours_of_the_tiv_style():
+    style = pixel_map_style("tiv")
+    values = np.array([[0.0, 0.5, 1.0], [2.0, -0.5, np.nan]])
+
+    background, pixel_map, under = pixel_map_traces(values, style=style)
+
+    expected = np.round(pixel_colors(style, values=values) * 255)
+    assert (pixel_map.zmin, pixel_map.zmax) == scale_limits(style, values=values)
+    for row, column in [(0, 0), (0, 1), (0, 2), (1, 0)]:
+        color = plotly_pixel_color(pixel_map, values[row, column])
+        assert color[:3] == tuple(expected[row, column, :3])
+    # The negative pixel is purple, on top of the colour scale.
+    assert np.isnan(pixel_map.z[1][1])
+    assert under.z[1][1] == -0.5
+    assert rgba_of(under.colorscale[0][1]) == (128.0, 0.0, 128.0, 1.0)
+    # The NaN pixel shows the grey background.
+    assert rgba_of(background.colorscale[0][1]) == (169.0, 169.0, 169.0, 1.0)
+    assert np.isnan(pixel_map.z[1][2]) and np.isnan(under.z[1][2])
+    assert pixel_map.colorbar.title.text == "TIV (a.u.)"
+
+
+def test_plotly_pixel_map_of_a_mask_style_is_an_error():
+    with pytest.raises(ValueError, match="no plotly version"):
+        pixel_map_traces(np.ones((2, 2)), style=pixel_map_style("mask"))
+
+
+def test_matplotlib_eit_summary_has_the_tiv_colours():
+    pytest.importorskip("matplotlib")
+    import matplotlib.pyplot as plt
+
+    session = M3Session()
+    session.processed["eit"] = {
+        "filtered_global_impedance": SimpleNamespace(
+            time=[0.0, 0.05, 0.1], values=[1.0, 3.0, 1.0], name="impedance (a.u.)"
+        ),
+        "pixel_tiv": SimpleNamespace(
+            values=[np.array([[0.0, 1.0], [-1.0, np.nan]]), np.ones((2, 2))],
+        ),
+    }
+
+    fig = plot_eit_processing_summary(session)
+
+    image = fig.axes[3].images[0]
+    mean = np.array([[0.5, 1.0], [0.0, 1.0]])
+    drawn = image.cmap(image.norm(np.ma.masked_invalid(mean)))
+    expected = pixel_colors(pixel_map_style("tiv"), values=mean)
+    assert np.allclose(drawn, expected)
+    assert image.colorbar.ax.get_ylabel() == "TIV (a.u.)"
+    plt.close(fig)
 
 
 def test_reduce_points_keeps_the_lowest_and_highest_value_of_each_bin():

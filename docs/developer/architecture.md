@@ -4,14 +4,14 @@ This page shows how the M3Resp code is organized: the two kinds of data objects,
 
 ## The path of the data
 
-A recording goes through an adapter into the session. The data model is a second, optional record of the same results:
+A recording goes through the M3Resp EIT readers or an adapter into the session. The data model is a second, optional record of the same results:
 
 ```text
 recording file
     |
     v
-adapter (EITProcessingAdapter, ReSurfEMGAdapter, VentilatorAdapter)
-    |   calls eitprocessing or resurfemg, and changes the results into Layer 1 objects
+m3resp.eit (EIT), or an adapter (ReSurfEMGAdapter, VentilatorAdapter)
+    |   reads and processes EIT with M3Resp code, or calls resurfemg; gives Layer 1 objects
     v
 Layer 1: objects of a running analysis (m3resp.data)
     Signal, ParameterResult, QualityFlag, BreathEvent, IntervalData, LinkedBreath, ...
@@ -59,10 +59,11 @@ src/m3resp/
 ├── data/               Layer 1: Signal, TimeSeries, events and breaths, IntervalData, ParameterResult,
 │                           QualityFlag, LinkedBreath, PixelMap, ProcessingStep, units, categories
 ├── datamodel/          Layer 2: records, DataModelStore, DataModelRecorder, validate_store, export_store
-├── adapters/           the connection to eitprocessing and resurfemg (see adapters.md)
-│   ├── eitprocessing_adapter/
+├── adapters/           the connection to resurfemg and the ventilator sources (see adapters.md)
 │   ├── resurfemg_adapter/    split by task: ECG, baseline, quality, defaults
 │   └── ventilator_adapter/   reads ventilator data from EMG, EIT and ventilator files
+├── eit/                EIT code: io/ (vendor file readers, join), processing/ (filters, impedance,
+│                           rates, breaths, TIV, EELI, preprocess), roi/ (regions of interest)
 ├── processing/         signal tools for all modalities: filters, peaks, windows and envelopes,
 │                           intervals, metrics, ECG removal, ventilator waveforms, slicing,
 │                           interpolation onto other time points, captures (optional extra results)
@@ -82,7 +83,8 @@ src/m3resp/
 
 | You add | Put it in |
 |---|---|
-| A function of `eitprocessing` or `resurfemg` | A method on the adapter, which changes the result into Layer 1 objects with `to_signals`, `to_parameters` or `to_quality_flags`. See {doc}`adapters`. |
+| An EIT calculation | `eit/processing/` or `eit/roi/`, as a function that takes and returns Layer 1 objects. |
+| A function of `resurfemg` | A method on the adapter, which changes the result into Layer 1 objects with `to_signals`, `to_parameters` or `to_quality_flags`. See {doc}`adapters`. |
 | A new calculated value | A `ParameterResult`, or an `IntervalData` for one value per breath. |
 | A signal tool that more than one modality uses | `processing/` |
 | A step for workflow files | A module in `workflows/steps/`, with `@register_step`. See {doc}`../how-to/add-a-step`. |

@@ -46,7 +46,6 @@ def _respiratory_wave(fs: float = 20.0, duration_seconds: float = 60.0):
 
 
 def test_eit_peak_primitives_match_breath_detection_private_steps():
-    _add_sibling_checkout_to_path("eitprocessing")
     pytest.importorskip("eitprocessing")
     from eitprocessing.features.breath_detection import BreathDetection
     from eitprocessing.features.moving_average import MovingAverage

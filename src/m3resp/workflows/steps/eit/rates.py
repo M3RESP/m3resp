@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Literal
+from typing import Any
 
 from m3resp.core.session import M3Session
 from m3resp.data import ParameterResult
+from m3resp.eit import processing as eit_processing
+from m3resp.eit.processing import RateDetectionSettings
+from m3resp.eit.processing.rate_detection import METHOD as RATE_FUNCTION
+from m3resp.eit.processing.rate_detection import SUBJECT_TYPES, SubjectType
 from m3resp.workflows.registry import (
     StepArtifact,
     StepParameter,
@@ -14,9 +18,9 @@ from m3resp.workflows.registry import (
 )
 
 from ._shared import (
-    _EITPROCESSING,
     _SESSION_ARTIFACT,
-    _upstream_metadata,
+    _as_signal,
+    _step_provenance,
 )
 
 
@@ -32,18 +36,16 @@ from ._shared import (
         "heart_rate_result",
     ),
     summary="Estimate respiratory and heart rate from an EIT signal.",
-    description="Estimate respiratory and heart rate from an EIT signal via eitprocessing's RateDetection.",
+    description="Estimate respiratory and heart rate from the frequency spectra of the pixel impedance (m3resp.eit.processing.detect_rates).",
     category="detection",
     modality="eit",
-    optional_packages=_EITPROCESSING,
     session_writes=("session.parameter_results",),
     input_artifacts=(
         StepArtifact(
             name="signal",
             artifact_type="eit_pixel_signal",
             default_context_key="selected_eit",
-            description="EIT signal (typically the detection-window slice) to estimate rates from.",
-            compatibility_only=True,
+            description="Pixel impedance, typically the detection-window slice, to estimate rates from.",
         ),
         _SESSION_ARTIFACT,
     ),
@@ -52,8 +54,12 @@ from ._shared import (
             name="subject_type",
             value_type="choice",
             default="adult",
-            choices=("adult", "neonate"),
-            description="Subject type; changes the expected respiratory/heart rate search bands.",
+            choices=SUBJECT_TYPES,
+            description=(
+                "Subject type; sets the default ranges of the breathing rate "
+                "and the heart rate. Set it to null (for example for children "
+                "or animals) and give all four rate limits."
+            ),
         ),
         StepParameter(
             name="welch_window_seconds",
@@ -63,8 +69,56 @@ from ._shared import (
             unit="s",
             minimum=10,
             description=(
-                "Welch power-spectrum window length. Left unset, the detector "
-                "uses its own default of 30 s; it rejects anything below 10 s."
+                "Welch power-spectrum window length. Left unset, it is 30 s; "
+                "the shortest allowed window is 10 s."
+            ),
+        ),
+        StepParameter(
+            name="min_respiratory_rate_hz",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="Hz",
+            minimum=0,
+            description=(
+                "Lowest breathing rate in Hz (per minute / 60). Left unset, the "
+                "default of subject_type."
+            ),
+        ),
+        StepParameter(
+            name="max_respiratory_rate_hz",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="Hz",
+            minimum=0,
+            description=(
+                "Highest breathing rate in Hz (per minute / 60). Left unset, the "
+                "default of subject_type."
+            ),
+        ),
+        StepParameter(
+            name="min_heart_rate_hz",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="Hz",
+            minimum=0,
+            description=(
+                "Lowest heart rate in Hz (per minute / 60). Left unset, the "
+                "default of subject_type."
+            ),
+        ),
+        StepParameter(
+            name="max_heart_rate_hz",
+            value_type="number",
+            required=False,
+            default=None,
+            unit="Hz",
+            minimum=0,
+            description=(
+                "Highest heart rate in Hz (per minute / 60). Left unset, the "
+                "default of subject_type."
             ),
         ),
         StepParameter(
@@ -91,9 +145,8 @@ from ._shared import (
         StepArtifact(
             name="rate_detector",
             artifact_type="eit_rate_detector",
-            description="Configured upstream RateDetection instance, reusable by later steps.",
+            description="The settings of the rate detection (RateDetectionSettings), for the rate figure.",
             public=False,
-            compatibility_only=True,
         ),
         StepArtifact(
             name="rate_captures",
@@ -120,60 +173,106 @@ def detect_rates(
     signal: Any,
     *,
     session: M3Session,
-    subject_type: Literal["adult", "neonate"] = "adult",
+    subject_type: SubjectType | None = "adult",
     welch_window_seconds: float | None = None,
+    min_respiratory_rate_hz: float | None = None,
+    max_respiratory_rate_hz: float | None = None,
+    min_heart_rate_hz: float | None = None,
+    max_heart_rate_hz: float | None = None,
     capture: bool = False,
 ) -> dict[str, Any]:
-    rates = session.eit_adapter.detect_rates(
-        signal,
-        subject_type=subject_type,
-        welch_window_seconds=welch_window_seconds,
-        capture=capture,
+    """Find the breathing rate and the heart rate of the pixel impedance.
+
+    The rates come from ``m3resp.eit.processing.detect_rates``. Both rates go
+    to ``session.parameter_results``.
+
+    Args:
+        signal (Any): Pixel impedance as a ``Signal``, time in seconds.
+        session (M3Session): Session that stores the rates.
+        subject_type (SubjectType | None): ``"adult"`` or ``"neonate"``
+            sets the default rate ranges. With None, give all four limits.
+        welch_window_seconds (float | None): Length of one Welch window in
+            seconds. None gives 30 s.
+        min_respiratory_rate_hz (float | None): Lowest breathing rate in Hz.
+            None gives the default of ``subject_type``.
+        max_respiratory_rate_hz (float | None): Highest breathing rate in Hz.
+            None gives the default of ``subject_type``.
+        min_heart_rate_hz (float | None): Lowest heart rate in Hz. None gives
+            the default of ``subject_type``.
+        max_heart_rate_hz (float | None): Highest heart rate in Hz. None
+            gives the default of ``subject_type``.
+        capture (bool): If True, also return the spectra for the rate figure
+            and give no warning about data shorter than the Welch window.
+
+    Returns:
+        dict[str, Any]: ``respiratory_rate_hz`` and ``heart_rate_hz`` in Hz,
+            ``rate_detector`` (the ``RateDetectionSettings``),
+            ``rate_captures`` (the spectra, empty when ``capture`` is False)
+            and the two rates as ``ParameterResult``s.
+
+    Raises:
+        TypeError: If ``signal`` is not a ``Signal``.
+        ValueError: If a setting is invalid, or if a rate is NaN.
+    """
+
+    # Without a window length, the settings keep their own default.
+    window: dict[str, Any] = {}
+    if welch_window_seconds is not None:
+        window["welch_window"] = welch_window_seconds
+    settings = RateDetectionSettings(
+        subject_type,
+        min_respiratory_rate=min_respiratory_rate_hz,
+        max_respiratory_rate=max_respiratory_rate_hz,
+        min_heart_rate=min_heart_rate_hz,
+        max_heart_rate=max_heart_rate_hz,
+        **window,
     )
-    respiratory_rate_hz = rates["respiratory_rate_hz"]
-    heart_rate_hz = rates["heart_rate_hz"]
+    captures: dict[str, Any] = {}
+    respiratory_rate_hz, heart_rate_hz = eit_processing.detect_rates(
+        _as_signal(signal, name="signal", step="eit.detect_rates"),
+        settings=settings,
+        captures=captures if capture else None,
+        suppress_length_warnings=capture,
+    )
     for name, value in (
         ("respiratory_rate_hz", respiratory_rate_hz),
         ("heart_rate_hz", heart_rate_hz),
     ):
-        # NaN means no rate could be estimated. With eitprocessing's own
-        # detector this is the only failure that can occur: the rate is drawn
-        # from the search band and its parabolic refinement shifts it by less
-        # than half a frequency bin, so it cannot come back zero or negative,
-        # but a frequency bin in which no pixel was measured leaves NaN in the
-        # averaged pixel power spectrum and the refinement carries it through.
+        # NaN means no rate could be estimated. This is the only failure that
+        # can occur: the rate comes from the search band and the parabola
+        # refinement moves it by less than half a frequency step, so it stays
+        # above zero. A frequency step in which no pixel was measured leaves
+        # NaN in the averaged pixel spectrum, and the refinement keeps it.
         if math.isnan(value):
             raise ValueError(
                 f"eit.detect_rates could not estimate a {name}: the detector "
                 "returned NaN, which happens when the power spectrum has no "
                 "measured pixels in the frequency band being searched. Check "
                 "that the signal covers enough breaths and that the subject "
-                "type matches the expected rate range."
-            )
-        # A rate outside the search band cannot come from eitprocessing, but
-        # this step runs against whichever detector `session.eit_adapter`
-        # wraps, and a substituted or custom one is under no such constraint.
-        if not math.isfinite(value) or value <= 0:
-            raise ValueError(
-                f"eit.detect_rates produced an implausible {name}: {value!r}. "
-                "A rate must be finite and greater than zero."
+                "type or the rate limits match the expected rates."
             )
 
-    metadata = _upstream_metadata(
-        source_function="eitprocessing.features.rate_detection.RateDetection.apply",
+    metadata = _step_provenance(
+        source_function=RATE_FUNCTION,
         operation="eit.detect_rates",
         parameters={
             "subject_type": subject_type,
             "welch_window_seconds": welch_window_seconds,
+            "min_respiratory_rate_hz": min_respiratory_rate_hz,
+            "max_respiratory_rate_hz": max_respiratory_rate_hz,
+            "min_heart_rate_hz": min_heart_rate_hz,
+            "max_heart_rate_hz": max_heart_rate_hz,
             "capture": capture,
         },
+        source_package="m3resp",
+        implementation="m3resp.eit.processing.rate_detection",
     )
     respiratory_rate_result = ParameterResult(
         name="respiratory_rate",
         value=respiratory_rate_hz,
         modality="eit",
         unit="Hz",
-        method="eitprocessing.RateDetection",
+        method=RATE_FUNCTION,
         metadata=dict(metadata),
     )
     heart_rate_result = ParameterResult(
@@ -181,7 +280,7 @@ def detect_rates(
         value=heart_rate_hz,
         modality="eit",
         unit="Hz",
-        method="eitprocessing.RateDetection",
+        method=RATE_FUNCTION,
         metadata=dict(metadata),
     )
     session.parameter_results.add(respiratory_rate_result)
@@ -190,8 +289,8 @@ def detect_rates(
     return {
         "respiratory_rate_hz": respiratory_rate_hz,
         "heart_rate_hz": heart_rate_hz,
-        "rate_detector": rates["rate_detector"],
-        "rate_captures": rates["rate_captures"],
+        "rate_detector": settings,
+        "rate_captures": captures,
         "respiratory_rate_result": respiratory_rate_result,
         "heart_rate_result": heart_rate_result,
         "_provenance": metadata,

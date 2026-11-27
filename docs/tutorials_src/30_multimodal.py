@@ -14,20 +14,21 @@ You need M3Resp with the EIT and EMG integrations (``python -m pip install -e ".
 # We load the three files into one :term:`session`. The ventilator file is a separate recording with its own clock, so we set ``source="ventilator"``.
 
 import os
+from pathlib import Path
 
 from m3resp import M3Session
 
 # The example recordings are in the tests/data folder of the M3Resp source code.
-data_dir = os.environ.get("M3RESP_EXAMPLE_DATA", os.path.join("tests", "data"))
+data_dir = Path(os.environ.get("M3RESP_EXAMPLE_DATA", Path("tests", "data")))
 
 session = M3Session()
 session.load_eit(
-    os.path.join(data_dir, "m3resp_multimodal_1_eit_draeger.bin"),
+    data_dir / "m3resp_multimodal_1_eit_draeger.bin",
     vendor="draeger",
 )
-session.load_emg(os.path.join(data_dir, "m3resp_multimodal_1_emg.Poly5"))
+session.load_emg(data_dir / "m3resp_multimodal_1_emg.Poly5")
 session.load_ventilator(
-    os.path.join(data_dir, "m3resp_multimodal_1_ventilator.Poly5"),
+    data_dir / "m3resp_multimodal_1_ventilator.Poly5",
     source="ventilator",
 )
 

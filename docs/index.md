@@ -1,238 +1,235 @@
 ---
-html_theme.sidebar_primary.remove: true
 html_theme.sidebar_secondary.remove: true
+sd_hide_title: true
 ---
 
-# M3Resp documentation
+# M3Resp: respiratory signal integration for multimodal analysis
 
-:::::::{div} m3-hero
-::::::{div} m3-hero-copy
-:::{div} m3-eyebrow
-// MULTIMODAL RESPIRATORY RESEARCH · v{{ m3resp_version }}
-:::
+<div id="hero">
 
-## Respiratory signal integration for reproducible multimodal analysis.
+<div id="hero-left">
+  <h2>M3Resp</h2>
+  <h3>Respiratory signal integration for multimodal analysis</h3>
+  <p>M3Resp is a Python library that brings electrical impedance tomography (EIT), respiratory muscle EMG and ventilator recordings into one workflow. It synchronizes the recordings, finds the breaths in each signal and calculates breath parameters.</p>
 
-Bring electrical impedance tomography (EIT), respiratory muscle electromyography (EMG) and ventilator recordings of pressure, flow and volume into one shared scientific workflow.
+<div class="homepage-button-container">
+  <div class="homepage-button-container-row">
+      <a href="getting-started.html" class="homepage-button primary-button">Get Started</a>
+      <a href="tutorials/index.html" class="homepage-button secondary-button">See Tutorials</a>
+  </div>
+  <div class="homepage-button-container-row">
+      <a href="api/index.html" class="homepage-button-link">See API Reference →</a>
+  </div>
+</div>
+</div>
 
-::::{div} m3-actions
-:::{button-ref} getting-started
-:ref-type: doc
-:color: primary
-:class: m3-primary-button
+<div id="hero-right">
 
-Get started
-:::
-
-:::{button-ref} tutorials/index
-:ref-type: doc
-:color: light
-:outline:
-:class: m3-secondary-button
-
-Explore tutorials
-:::
-::::
-::::::
-
-::::::{div} m3-hero-visual
-```{image} _static/m3-signal-monitor-light.svg
-:alt: Schematic of three respiratory signals on one shared time axis. EIT global impedance, respiratory muscle EMG and ventilator airway pressure each show four breaths, and dashed lines mark the start of each breath in all three signals.
-:class: m3-monitor only-light
-```
-
-```{image} _static/m3-signal-monitor.svg
-:alt: Schematic of three respiratory signals on one shared time axis. EIT global impedance, respiratory muscle EMG and ventilator airway pressure each show four breaths, and dashed lines mark the start of each breath in all three signals.
-:class: m3-monitor only-dark
-```
-::::::
-
-::::::{div} m3-stats
-:::{div} m3-stat
-Modalities
-
-EIT · EMG · VENT
-:::
-
-:::{div} m3-stat
-Workflow files
-
-YAML · JSON
-:::
-
-:::{div} m3-stat
-Python
-
-3.12 or newer
-:::
-
-:::{div} m3-stat
-License
-
-Apache-2.0
-:::
-::::::
-:::::::
-
-## How a workflow runs
-
-A workflow is a YAML file with an ordered list of steps. A typical multimodal workflow goes through these five stages.
-
-::::::{div} m3-stages
-:::::{div} m3-stage
-:::{div} m3-stage-index
-01
-:::
-
-**Load**
-
-Read the EIT, EMG and ventilator recordings into one session.
-
-`eit.load` `emg.load` `ventilator.load`
-:::::
-
-:::::{div} m3-stage
-:::{div} m3-stage-index
-02
-:::
-
-**Synchronize**
-
-Put the start time of each recording on a shared clock.
-
-`sync.raw_modalities`
-:::::
-
-:::::{div} m3-stage
-:::{div} m3-stage-index
-03
-:::
-
-**Clean**
-
-Remove the heart signal and filter each signal.
-
-`eit.mdn_filter` `emg.ecg_gating`
-:::::
-
-:::::{div} m3-stage
-:::{div} m3-stage-index
-04
-:::
-
-**Detect breaths**
-
-Find the breaths in each signal.
-
-`eit.detect_breaths` `emg.detect_breaths` `ventilator.detect_breaths`
-:::::
-
-:::::{div} m3-stage
-:::{div} m3-stage-index
-05
-:::
-
-**Compute and export**
-
-Calculate breath parameters and write the results to files.
-
-`eit.eeli` `emg.time_product` `export.session_summary`
-:::::
-::::::
-
-## Choose your path
-
-Start with the installation, a tutorial or the workflow reference.
-
-::::{grid} 1 2 3 3
+::::::{grid} 1 2 2 2
 :gutter: 3
-:class-container: m3-card-grid
 
-:::{grid-item-card} New to M3Resp?
-:link: getting-started
+:::::{grid-item-card}
+:link: tutorials/10_eit_only
 :link-type: doc
-:class-card: m3-path-card
+:shadow: none
+:class-card: example-gallery
 
-Install M3Resp and its EIT and EMG packages, and run your first workflow.
-
-**Start here →**
+:::{div} example-img-plot-overlay
+Breaths found in the EIT global impedance
 :::
 
-:::{grid-item-card} Process respiratory data
-:link: tutorials/index
-:link-type: doc
-:class-card: m3-path-card
-
-Follow a complete EIT, EMG or multimodal analysis of the synthetic recordings.
-
-**View tutorials →**
+:::{image} _static/miniatures/eit_global_impedance.png
+:alt: EIT global impedance with a green line at each breath that M3Resp found.
 :::
-
-:::{grid-item-card} Design a workflow
-:link: workflows
-:link-type: doc
-:class-card: m3-path-card
-
-Write a workflow file, list the processing steps and check the file before a run.
-
-**Workflow reference →**
-:::
-::::
-
-## How these pages are organized
-
-- {doc}`Tutorials <tutorials/index>` take you step by step through one complete analysis. Start here if you are new to M3Resp.
-- {doc}`How-to guides <how-to/index>` show how to do one task, for example to change the EMG filter or to export the results.
-- {doc}`Concepts <concepts/index>` explain what each scientific object is and why M3Resp works the way it does.
-- The {doc}`workflow reference <workflows>` and the {doc}`API reference <api/index>` describe each workflow step and each Python function and class.
-
-## Help and citation
-
-- {doc}`get-help` shows how to read an error message and where to ask a question or report a problem.
-- {doc}`cite` gives the citation data of M3Resp and of the EIT and EMG packages.
-
-::::::{div} m3-next-step
-:::::{div} m3-next-copy
-### From first recording to structured results
-
-The concept guides explain each scientific object. Use the public API to call M3Resp from your own analysis code.
-
-::::{div} m3-next-actions
-:::{button-ref} concepts/index
-:ref-type: doc
-:color: primary
-:outline:
-
-Concept guides
-:::
-
-:::{button-ref} api/index
-:ref-type: doc
-:color: primary
-:outline:
-
-Public API
-:::
-
-:::{button-link} https://github.com/M3RESP/m3resp#documentation
-:color: primary
-:outline:
-
-Docs on GitHub
-:::
-::::
 :::::
 
-:::::{div} m3-terminal
-```bash
-# List the available processing steps
-m3resp steps
+:::::{grid-item-card}
+:link: concepts/pixel-maps
+:link-type: doc
+:shadow: none
+:class-card: example-gallery
 
-# Run the example multimodal workflow
-m3resp run examples/multimodal_example/multimodal.workflow.yaml
-```
+:::{div} example-img-plot-overlay
+Map of the mean tidal impedance variation (TIV) of each EIT pixel
+:::
+
+:::{image} _static/miniatures/eit_pixel_tiv_map.png
+:alt: Map of the mean TIV of each EIT pixel, with the two lungs in light blue and white.
+:::
+:::::
+
+:::::{grid-item-card}
+:link: concepts/parameters
+:link-type: doc
+:shadow: none
+:class-card: example-gallery
+
+:::{div} example-img-plot-overlay
+TIV of each breath during the recording
+:::
+
+:::{image} _static/miniatures/eit_tiv.png
+:alt: TIV of each breath against time.
+:::
+:::::
+
+:::::{grid-item-card}
+:link: tutorials/20_emg_only
+:link-type: doc
+:shadow: none
+:class-card: example-gallery
+
+:::{div} example-img-plot-overlay
+Raw EMG with the heart signal and the breaths that M3Resp found
+:::
+
+:::{image} _static/miniatures/emg_raw.png
+:alt: Raw EMG signal with heart beats and a red line at each breath.
+:::
+:::::
+
+:::::{grid-item-card}
+:link: tutorials/20_emg_only
+:link-type: doc
+:shadow: none
+:class-card: example-gallery
+
+:::{div} example-img-plot-overlay
+EMG envelope after the heart signal is removed
+:::
+
+:::{image} _static/miniatures/emg_envelope.png
+:alt: EMG envelope with one peak at each breath and a red line at each breath.
+:::
+:::::
+
+:::::{grid-item-card}
+:link: how-to/synchronize-recordings
+:link-type: doc
+:shadow: none
+:class-card: example-gallery
+
+:::{div} example-img-plot-overlay
+Ventilator pressure on the shared clock of the session
+:::
+
+:::{image} _static/miniatures/ventilator_pressure_synchronized.png
+:alt: Ventilator airway pressure after synchronization.
+:::
 :::::
 ::::::
+
+</div>
+</div>
+
+# Key Features
+
+:::::{grid} 1 1 2 2
+:gutter: 5
+
+::::{grid-item-card}
+:shadow: none
+:class-card: sd-border-0
+
+:::{image} _static/features/feature_recordings.svg
+:alt: Four coloured shapes.
+:::
+
+:::{div} key-features-text
+<strong>Three Recording Types</strong><br/>
+Loads EIT, respiratory muscle EMG and ventilator recordings into one {doc}`session <concepts/session>`.
+:::
+::::
+
+::::{grid-item-card}
+:shadow: none
+:class-card: sd-border-0
+
+:::{image} _static/features/feature_synchronization.svg
+:alt: Three signals with dashed lines at the same times.
+:::
+
+:::{div} key-features-text
+<strong>One Shared Clock</strong><br/>
+Puts the recordings on one time axis, so that you can compare the breaths of each signal. See {doc}`concepts/synchronization`.
+:::
+::::
+
+::::{grid-item-card}
+:shadow: none
+:class-card: sd-border-0
+
+:::{image} _static/features/feature_cleaning.svg
+:alt: A noisy signal above a clean signal.
+:::
+
+:::{div} key-features-text
+<strong>Signal Cleaning</strong><br/>
+Removes the heart signal (ECG) from the EMG, filters each signal and calculates the EMG envelope.
+:::
+::::
+
+::::{grid-item-card}
+:shadow: none
+:class-card: sd-border-0
+
+:::{image} _static/features/feature_breaths.svg
+:alt: A breathing signal with a mark at the start of each breath.
+:::
+
+:::{div} key-features-text
+<strong>Breaths and Parameters</strong><br/>
+Finds the breaths in each signal and calculates {doc}`breath parameters <concepts/parameters>`, for example TIV and the end-expiratory lung impedance (EELI).
+:::
+::::
+
+::::{grid-item-card}
+:shadow: none
+:class-card: sd-border-0
+
+:::{image} _static/features/feature_pixel_maps.svg
+:alt: A grid of coloured squares with two bright areas.
+:::
+
+:::{div} key-features-text
+<strong>EIT Pixel Maps</strong><br/>
+Calculates EIT parameters for each pixel and shows them as a {doc}`map of the lungs <concepts/pixel-maps>`.
+:::
+::::
+
+::::{grid-item-card}
+:shadow: none
+:class-card: sd-border-0
+
+:::{image} _static/features/feature_workflows.svg
+:alt: Three steps in a column above three result files.
+:::
+
+:::{div} key-features-text
+<strong>Workflow Files</strong><br/>
+Runs the steps of a {doc}`YAML workflow file <workflows>` from the command line and writes the results to files, with a {doc}`record of each step <concepts/provenance>`.
+:::
+::::
+:::::
+
+# Support M3Resp
+
+::::{grid} 1 1 2 2
+
+:::{grid-item}
+
+<h3>Contributions</h3>
+
+Contributions and bug reports are welcome at [the GitHub repository](https://github.com/M3RESP/m3resp). The {doc}`developer guide <developer/index>` helps you through the process. For questions, see {doc}`get-help`.
+:::
+
+:::{grid-item}
+
+<h3>Citation</h3>
+
+If you use M3Resp in a paper, please cite it. See {doc}`cite` for the citation in APA and BibTeX format.
+:::
+::::
 
 ```{toctree}
 :hidden:

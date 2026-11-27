@@ -40,30 +40,37 @@ def register_ventilator_loader(
 ) -> None:
     """Register a reader for ventilator files with the given extension.
 
-    ``loader(path, **kwargs)`` should return the ``{"array", "metadata"}``
-    payload shape the built-in sEMG-file path produces, unless
-    ``source="eit"``, in which case it should return an
-    `eitprocessing`-Sequence-shaped object (anything with ``.continuous_data``)
-    matching the EIT path - `VentilatorAdapter.load` unpacks it the same way
-    either source arrived.
+    After the registration, ``VentilatorAdapter.load`` and
+    ``M3Session.load_ventilator`` read every file with this extension with
+    ``loader``. The registration holds for every session until Python stops.
+    With ``source="eit"`` or ``source="emg"`` in the load call, the built-in
+    readers read the file.
 
-    `source` decides which clock the loaded channels are treated as sharing
-    (see `_core.resolve_ventilator_source`): ``"eit"``/``"emg"`` for a format
-    that is itself carried inside that modality's own file, ``"ventilator"``
-    (the default) for a standalone export whose alignment is independent. Get
-    this wrong and synchronization will crop the channels against the wrong
-    clock, so default to ``"ventilator"`` unless the format is genuinely
-    hosted inside an EIT or sEMG file.
+    For ``source="ventilator"`` or ``"emg"``, ``loader(path, **kwargs)``
+    returns ``{"array": ..., "metadata": {"fs": ..., "labels": [...],
+    "units": [...]}}``: the samples with one row per channel, the samples per
+    second in Hz, and one label and one unit per row. The labels give the
+    channels, for example ``"Paw"`` the airway pressure. For
+    ``source="eit"``, it returns an ``EITRecording`` or ``EITFileData`` with
+    the ventilator waveforms in ``signals``.
 
-    A registered extension is read by this loader whenever `VentilatorAdapter`
-    is asked to load a file with that extension and no explicit ``source=``
-    was passed - an explicit ``source=`` bypasses the registry and forces the
-    corresponding built-in path instead, the same way an explicit channel
-    index overrides label-based resolution in `split_channels`.
+    Example:
+        ``register_ventilator_loader(".csv", read_ventilator_csv)``. The docs
+        guide "How to read a ventilator file in another format" gives
+        ``read_ventilator_csv``.
 
-    The registration lasts for the current process, is not tied to any one
-    `VentilatorAdapter` instance, and is not persisted - call this once at
-    startup (or wherever the format is first needed) rather than per session.
+    Args:
+        extension (str): The file extension, with or without the dot, in
+            upper or lower case.
+        loader (Callable[..., Any]): The function that reads one file.
+        source (str): The clock of the channels. ``"ventilator"`` (default):
+            the file has its own clock. ``"eit"`` or ``"emg"``: the format
+            holds the ventilator data of an EIT or EMG recording, and the
+            channels have the clock of that recording.
+
+    Raises:
+        ValueError: If ``source`` is not ``"eit"``, ``"emg"`` or
+            ``"ventilator"``.
     """
 
     if source not in _VALID_SOURCES:

@@ -14,7 +14,7 @@ from m3resp.data.signals import ProcessingState
 
 from ._breaths import iter_ventilator_detections, normalize_ventilator_breath
 from ._channels import CHANNEL_CATEGORIES
-from ._eit_source import DEFAULT_EIT_CHANNELS, ventilator_payload_from_sequence
+from ._eit_source import DEFAULT_EIT_CHANNELS, ventilator_payload_from_eit
 from ._loaders import registered_ventilator_loader
 from ._protocols import _DefaultsProtocol
 
@@ -76,8 +76,8 @@ class _CoreMixin:
           :class:`~m3resp.adapters.resurfemg_adapter.ReSurfEMGAdapter`;
         * an EIT ``*.bin``, where the device stores ventilator waveforms
           beside the impedance frames (Draeger Medibus fields, Timpel columns),
-          read through :class:`~m3resp.adapters.eitprocessing_adapter.EITProcessingAdapter`
-          and unpacked by :mod:`._eit_source`;
+          read by :func:`m3resp.modalities.eit.load` and unpacked by
+          :mod:`._eit_source`;
         * a third-party format neither of the above knows about, read by a
           reader registered via :func:`~._loaders.register_ventilator_loader`.
 
@@ -96,7 +96,7 @@ class _CoreMixin:
         for the EIT one. A registered third-party loader is not per instance -
         it is used automatically wherever its extension is loaded. All three
         return the same ``{"array", "metadata"}`` payload (or, for the EIT
-        source, an object `_eit_source` can unpack into one), so nothing
+        source, an ``EITRecording`` or ``EITFileData``), so nothing
         downstream of loading needs to know which source a recording came
         from - except synchronization, which does: waveforms read out of the
         EIT or sEMG file share that modality's clock, which is what `source`
@@ -112,8 +112,8 @@ class _CoreMixin:
                     reader_kwargs = dict(kwargs)
                     reader_kwargs.pop("ventilator_channels", None)
                     reader_kwargs.pop("fs", None)
-                    sequence = loader(str(path), **reader_kwargs)
-                    return self._eit_payload(sequence, **kwargs)
+                    recording = loader(str(path), **reader_kwargs)
+                    return self._eit_payload(recording, **kwargs)
                 return loader(str(path), **kwargs)
 
         source = resolve_ventilator_source(path, explicit_source)
@@ -136,20 +136,20 @@ class _CoreMixin:
         eit_kwargs.pop("fs", None)
 
         if self._eit_loader is not None:
-            sequence = self._eit_loader(path, **eit_kwargs)
+            recording = self._eit_loader(path, **eit_kwargs)
         else:
-            from m3resp.adapters.eitprocessing_adapter import EITProcessingAdapter
+            from m3resp.modalities.eit import load
 
-            sequence = EITProcessingAdapter().load(str(path), **eit_kwargs)
+            recording = load(path, **eit_kwargs)
 
-        return self._eit_payload(sequence, **kwargs)
+        return self._eit_payload(recording, **kwargs)
 
-    def _eit_payload(self, sequence: Any, **kwargs: Any) -> dict[str, Any]:
-        """Unpack an already-loaded EIT sequence into a ventilator payload."""
+    def _eit_payload(self, recording: Any, **kwargs: Any) -> dict[str, Any]:
+        """Unpack a loaded EIT recording into a ventilator payload."""
 
         channels = kwargs.get("ventilator_channels", DEFAULT_EIT_CHANNELS)
         fs = kwargs.get("fs")
-        return ventilator_payload_from_sequence(sequence, channels=channels, fs=fs)
+        return ventilator_payload_from_eit(recording, channels=channels, fs=fs)
 
     def preprocess(self, recording: Any, **kwargs: Any) -> Any:
         """Split into channels and filter, or defer to a provided callable."""

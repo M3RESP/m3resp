@@ -12,7 +12,7 @@
   },
   "name": "eit-full-preprocessing",
   "outputs": {
-    "dir": "output/eit-full-preprocessing",
+    "dir": "output/workflows/eit-full-preprocessing",
     "event_csvs": true,
     "figures": true,
     "mode": "automatic",
@@ -165,7 +165,7 @@
     {
       "id": "roi_filter_by_size",
       "in": {
-        "mask": "watershed_lungspace_mask"
+        "mask": "watershed_lungspace_result"
       },
       "out": {},
       "uses": "eit.roi_filter_by_size",

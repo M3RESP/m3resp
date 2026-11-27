@@ -17,7 +17,7 @@ If you do not know where a change belongs, open an issue and ask.
 ## Kinds of contributions
 
 - Questions: open an issue with the label "Question".
-- Bug reports: open an issue with the "Bug report" form. Give the versions of M3Resp, Python, `eitprocessing` and `resurfemg`, your operating system, and a short example. Use synthetic data in the example, never patient recordings.
+- Bug reports: open an issue with the "Bug report" form. Give the versions of M3Resp, Python and `resurfemg`, your operating system, and a short example. Use synthetic data in the example, never patient recordings.
 - Code changes: open a pull request. For a change larger than a small fix, open an issue first, so that we can agree on the approach.
 - Documentation: changes to the documentation are welcome. See the documentation section below.
 
@@ -59,6 +59,8 @@ mypy src
 ```
 
 With uv: `uv run pytest` and `uv run mypy src`.
+
+The tests that compare M3Resp with eitprocessing have the marker `reference`. Without eitprocessing, pytest skips them. To run them, install the `reference` option (`python -m pip install -e ".[all,dev,reference]"`) and run `pytest -m reference`.
 
 Write docstrings and comments as `AGENTS.md` describes. See the [testing page](docs/developer/testing.md) for the groups of tests.
 

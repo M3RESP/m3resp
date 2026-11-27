@@ -1,5 +1,7 @@
 # How to export the results of a session
 
+This guide writes the results of a {term}`session` to files. You can write all results in one call or only some of them, from Python or from a workflow file.
+
 ## Write all results to a folder
 
 To write all results of a {term}`session` to files, call `export_summary` with the path of your results folder:

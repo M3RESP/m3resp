@@ -14,8 +14,9 @@ class EITPreset(Preset):
     """Preprocess loaded EIT data and store its detected breaths.
 
     Runs ``session.preprocess_eit`` followed by ``session.detect_eit_breaths``.
-    The default EIT adapter also computes breath-related results during
-    preprocessing, according to the selected options.
+    The preprocessing (``m3resp.eit.processing.preprocess_eit_recording``)
+    also computes breath results, such as rates, TIV and EELI, when the
+    options ask for them.
 
     Attributes:
         name: Registered preset name, ``"eit"``.

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140" role="img" aria-label="Three recording types">
+  <circle cx="42" cy="44" r="24" fill="#0b7591"/>
+  <rect x="78" y="22" width="44" height="44" rx="4" fill="#00c0bf"/>
+  <polygon points="44,82 70,124 18,124" fill="#00c0bf"/>
+  <rect x="78" y="82" width="44" height="42" rx="21" fill="#18a0b5"/>
+</svg>

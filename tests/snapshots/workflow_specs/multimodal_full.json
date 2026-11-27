@@ -13,7 +13,7 @@
   },
   "name": "multimodal-full",
   "outputs": {
-    "dir": "output/multimodal-full-summary",
+    "dir": "output/workflows/multimodal-full-summary",
     "event_csvs": true,
     "figures": true,
     "mode": "automatic",
@@ -188,7 +188,7 @@
     {
       "id": "roi_filter_by_size",
       "in": {
-        "mask": "watershed_lungspace_mask"
+        "mask": "watershed_lungspace_result"
       },
       "out": {},
       "uses": "eit.roi_filter_by_size",
